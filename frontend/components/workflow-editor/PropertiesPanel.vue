@@ -1,0 +1,1774 @@
+<script setup lang="ts">
+import type { Step, StepType, BlockDefinition, InputPort, OutputPort } from '~/types/api'
+
+const { t } = useI18n()
+const blocks = useBlocks()
+
+const props = defineProps<{
+  step: Step | null
+  readonlyMode?: boolean
+  saving?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'save', data: { name: string; type: StepType; config: Record<string, any> }): void
+  (e: 'delete'): void
+}>()
+
+// Form state
+const formName = ref('')
+const formType = ref<StepType>('tool')
+const formConfig = ref<Record<string, any>>({})
+
+// Watch for step changes and reset form
+watch(() => props.step, (newStep) => {
+  if (newStep) {
+    formName.value = newStep.name
+    formType.value = newStep.type
+    formConfig.value = { ...(newStep.config as Record<string, any>) }
+  } else {
+    formName.value = ''
+    formType.value = 'tool'
+    formConfig.value = {}
+  }
+}, { immediate: true, deep: true })
+
+// Step type descriptions (computed for i18n reactivity)
+const stepTypeDescriptions = computed(() => ({
+  start: t('editor.stepTypes.startDesc'),
+  llm: t('editor.stepTypes.llmDesc'),
+  tool: t('editor.stepTypes.toolDesc'),
+  condition: t('editor.stepTypes.conditionDesc'),
+  switch: t('editor.stepTypes.switchDesc'),
+  map: t('editor.stepTypes.mapDesc'),
+  join: t('editor.stepTypes.joinDesc'),
+  subflow: t('editor.stepTypes.subflowDesc'),
+  loop: t('editor.stepTypes.loopDesc'),
+  wait: t('editor.stepTypes.waitDesc'),
+  function: t('editor.stepTypes.functionDesc'),
+  router: t('editor.stepTypes.routerDesc'),
+  human_in_loop: t('editor.stepTypes.humanInLoopDesc'),
+  filter: t('editor.stepTypes.filterDesc'),
+  split: t('editor.stepTypes.splitDesc'),
+  aggregate: t('editor.stepTypes.aggregateDesc'),
+  error: t('editor.stepTypes.errorDesc'),
+  note: t('editor.stepTypes.noteDesc')
+} as Record<StepType, string>))
+
+// Step type colors (matching DagEditor)
+const stepTypeColors: Record<StepType, string> = {
+  start: '#10b981',
+  llm: '#3b82f6',
+  tool: '#22c55e',
+  condition: '#f59e0b',
+  switch: '#eab308',
+  map: '#8b5cf6',
+  join: '#6366f1',
+  subflow: '#ec4899',
+  loop: '#14b8a6',
+  wait: '#64748b',
+  function: '#f97316',
+  router: '#a855f7',
+  human_in_loop: '#ef4444',
+  filter: '#06b6d4',
+  split: '#0ea5e9',
+  aggregate: '#0284c7',
+  error: '#dc2626',
+  note: '#9ca3af'
+}
+
+// Check if step is a start node (cannot be deleted)
+const isStartNode = computed(() => props.step?.type === 'start')
+
+function handleSave() {
+  emit('save', {
+    name: formName.value,
+    type: formType.value,
+    config: formConfig.value
+  })
+}
+
+function handleDelete() {
+  if (confirm(t('editor.confirmDeleteStep'))) {
+    emit('delete')
+  }
+}
+
+// Available adapters for tool step (computed for i18n reactivity)
+const adapters = computed(() => [
+  { id: 'mock', name: t('stepConfig.tool.adapters.mock'), description: t('stepConfig.tool.adapters.mockDesc') },
+  { id: 'openai', name: t('stepConfig.tool.adapters.openai'), description: t('stepConfig.tool.adapters.openaiDesc') },
+  { id: 'anthropic', name: t('stepConfig.tool.adapters.anthropic'), description: t('stepConfig.tool.adapters.anthropicDesc') },
+  { id: 'http', name: t('stepConfig.tool.adapters.http'), description: t('stepConfig.tool.adapters.httpDesc') },
+])
+
+// Available models by provider
+const modelsByProvider: Record<string, { id: string; name: string }[]> = {
+  openai: [
+    { id: 'gpt-4', name: 'GPT-4' },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+  ],
+  anthropic: [
+    { id: 'claude-3-opus', name: 'Claude 3 Opus' },
+    { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet' },
+    { id: 'claude-3-haiku', name: 'Claude 3 Haiku' },
+  ],
+  mock: [
+    { id: 'mock', name: 'Mock Model' },
+  ],
+}
+
+// Get available models for current provider
+const availableModels = computed(() => {
+  const provider = formConfig.value.provider || 'mock'
+  return modelsByProvider[provider] || modelsByProvider.mock
+})
+
+// Watch provider changes to reset model
+watch(() => formConfig.value.provider, (newProvider) => {
+  if (newProvider && modelsByProvider[newProvider]) {
+    formConfig.value.model = modelsByProvider[newProvider][0]?.id || ''
+  }
+})
+
+// Block definition for current step type
+const currentBlockDef = ref<BlockDefinition | null>(null)
+const loadingBlockDef = ref(false)
+
+// Fetch block definition when step type changes
+watch(() => formType.value, async (newType) => {
+  if (newType) {
+    loadingBlockDef.value = true
+    try {
+      const response = await blocks.get(newType)
+      currentBlockDef.value = response.data
+    } catch {
+      currentBlockDef.value = null
+    } finally {
+      loadingBlockDef.value = false
+    }
+  } else {
+    currentBlockDef.value = null
+  }
+}, { immediate: true })
+
+// Helper to format schema type for display
+function formatSchemaType(schema: object | undefined): string {
+  if (!schema) return 'any'
+  const s = schema as Record<string, unknown>
+  if (s.type === 'array' && s.items) {
+    const items = s.items as Record<string, unknown>
+    return `${items.type || 'any'}[]`
+  }
+  return String(s.type || 'any')
+}
+
+// Switch cases management
+const switchCases = computed({
+  get: () => {
+    const cases = formConfig.value.cases as Array<{ name: string; expression: string; is_default?: boolean }> || []
+    return cases
+  },
+  set: (val) => {
+    formConfig.value.cases = val
+  }
+})
+
+function addSwitchCase() {
+  const cases = [...(formConfig.value.cases as Array<{ name: string; expression: string; is_default?: boolean }> || [])]
+  const newIndex = cases.length + 1
+  cases.push({
+    name: `case_${newIndex}`,
+    expression: '',
+    is_default: false
+  })
+  formConfig.value.cases = cases
+}
+
+function removeSwitchCase(index: number) {
+  const cases = [...(formConfig.value.cases as Array<{ name: string; expression: string; is_default?: boolean }> || [])]
+  cases.splice(index, 1)
+  formConfig.value.cases = cases
+}
+
+function updateSwitchCase(index: number, field: 'name' | 'expression' | 'is_default', value: string | boolean) {
+  const cases = [...(formConfig.value.cases as Array<{ name: string; expression: string; is_default?: boolean }> || [])]
+  if (cases[index]) {
+    if (field === 'is_default') {
+      // Only one case can be default
+      cases.forEach((c, i) => {
+        c.is_default = i === index ? Boolean(value) : false
+      })
+    } else {
+      (cases[index] as Record<string, string | boolean>)[field] = value
+    }
+    formConfig.value.cases = cases
+  }
+}
+
+// Helper to get case display name (avoids template literal in template)
+function getCaseDisplayName(caseName: string, index: number): string {
+  return caseName || 'case_' + (index + 1)
+}
+
+// Expression helper insertions (avoids escaped quotes in template)
+function insertExpression(expr: string) {
+  formConfig.value.expression = (formConfig.value.expression || '') + expr
+}
+const expressionTemplates = {
+  equals: '$.field == "value"',
+  notEquals: '$.field != "value"',
+  greaterThan: '$.field > 0',
+  lessThan: '$.field < 0',
+  exists: '$.field'
+}
+</script>
+
+<template>
+  <div class="properties-panel">
+    <!-- Empty State -->
+    <div v-if="!step" class="properties-empty">
+      <div class="empty-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
+          <path d="M12 12l8-4.5"/>
+          <path d="M12 12v9"/>
+          <path d="M12 12L4 7.5"/>
+        </svg>
+      </div>
+      <p class="empty-title">{{ t('editor.noStepSelected') }}</p>
+      <p class="empty-desc">{{ t('editor.selectStepHint') }}</p>
+
+      <!-- Quick Tips -->
+      <div class="empty-tips">
+        <div class="empty-tips-title">{{ t('editor.quickTips') }}</div>
+        <ul class="empty-tips-list">
+          <li>
+            <span class="tip-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14"/>
+                <path d="M12 5v14"/>
+              </svg>
+            </span>
+            {{ t('editor.tipDragBlock') }}
+          </li>
+          <li>
+            <span class="tip-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </span>
+            {{ t('editor.tipConnectNodes') }}
+          </li>
+          <li>
+            <span class="tip-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              </svg>
+            </span>
+            {{ t('editor.tipClickToSelect') }}
+          </li>
+        </ul>
+      </div>
+
+      <!-- Keyboard Shortcuts -->
+      <div class="empty-shortcuts">
+        <div class="empty-shortcuts-title">{{ t('editor.keyboardShortcuts') }}</div>
+        <div class="shortcut-item">
+          <kbd>Delete</kbd>
+          <span>{{ t('editor.shortcutDelete') }}</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Esc</kbd>
+          <span>{{ t('editor.shortcutDeselect') }}</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Ctrl</kbd> + <kbd>C</kbd>
+          <span>{{ t('editor.shortcutCopy') }}</span>
+        </div>
+        <div class="shortcut-item">
+          <kbd>Ctrl</kbd> + <kbd>V</kbd>
+          <span>{{ t('editor.shortcutPaste') }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step Properties -->
+    <template v-else>
+      <div class="properties-header">
+        <div class="header-color" :style="{ backgroundColor: stepTypeColors[step.type] }" />
+        <div class="header-info">
+          <h3 class="header-title">{{ readonlyMode ? t('editor.viewStep') : t('editor.editStep') }}</h3>
+          <span class="header-type">{{ step.type }}</span>
+        </div>
+      </div>
+
+      <div class="properties-body">
+        <!-- Basic Information -->
+        <div class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.basicInfo') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.stepName') }}</label>
+            <input
+              v-model="formName"
+              type="text"
+              class="form-input"
+              :placeholder="t('stepConfig.stepNamePlaceholder')"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.stepType') }}</label>
+            <select
+              v-model="formType"
+              class="form-input"
+              :disabled="readonlyMode || isStartNode"
+            >
+              <optgroup :label="t('editor.categories.ai')">
+                <option value="llm">{{ t('editor.stepTypes.llm') }}</option>
+                <option value="router">{{ t('editor.stepTypes.router') }}</option>
+              </optgroup>
+              <optgroup :label="t('editor.categories.logic')">
+                <option value="condition">{{ t('editor.stepTypes.condition') }}</option>
+                <option value="switch">{{ t('editor.stepTypes.switch') }}</option>
+                <option value="loop">{{ t('editor.stepTypes.loop') }}</option>
+                <option value="map">{{ t('editor.stepTypes.map') }}</option>
+                <option value="join">{{ t('editor.stepTypes.join') }}</option>
+              </optgroup>
+              <optgroup :label="t('editor.categories.data')">
+                <option value="filter">{{ t('editor.stepTypes.filter') }}</option>
+                <option value="split">{{ t('editor.stepTypes.split') }}</option>
+                <option value="aggregate">{{ t('editor.stepTypes.aggregate') }}</option>
+              </optgroup>
+              <optgroup :label="t('editor.categories.integration')">
+                <option value="tool">{{ t('editor.stepTypes.tool') }}</option>
+                <option value="function">{{ t('editor.stepTypes.function') }}</option>
+                <option value="subflow">{{ t('editor.stepTypes.subflow') }}</option>
+              </optgroup>
+              <optgroup :label="t('editor.categories.control')">
+                <option value="wait">{{ t('editor.stepTypes.wait') }}</option>
+                <option value="human_in_loop">{{ t('editor.stepTypes.humanInLoop') }}</option>
+                <option value="error">{{ t('editor.stepTypes.error') }}</option>
+              </optgroup>
+              <optgroup :label="t('editor.categories.utility')">
+                <option value="note">{{ t('editor.stepTypes.note') }}</option>
+              </optgroup>
+            </select>
+            <p class="form-hint">{{ stepTypeDescriptions[formType] }}</p>
+          </div>
+        </div>
+
+        <!-- LLM Configuration -->
+        <div v-if="formType === 'llm'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.llm.title') }}</h4>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('stepConfig.llm.provider') }}</label>
+              <select
+                v-model="formConfig.provider"
+                class="form-input"
+                :disabled="readonlyMode"
+              >
+                <option value="mock">{{ t('stepConfig.tool.adapters.mock') }}</option>
+                <option value="openai">{{ t('stepConfig.tool.adapters.openai') }}</option>
+                <option value="anthropic">{{ t('stepConfig.tool.adapters.anthropic') }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('stepConfig.llm.model') }}</label>
+              <select
+                v-model="formConfig.model"
+                class="form-input"
+                :disabled="readonlyMode"
+              >
+                <option v-for="model in availableModels" :key="model.id" :value="model.id">
+                  {{ model.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.llm.systemPrompt') }}</label>
+            <textarea
+              v-model="formConfig.system_prompt"
+              class="form-input form-textarea"
+              rows="3"
+              :placeholder="t('stepConfig.llm.systemPromptPlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.llm.userPrompt') }}</label>
+            <textarea
+              v-model="formConfig.prompt"
+              class="form-input form-textarea code-input"
+              rows="4"
+              :placeholder="t('stepConfig.llm.userPromptPlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+            <p class="form-hint">{{ t('stepConfig.llm.userPromptHint') }}</p>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('stepConfig.llm.temperature') }}</label>
+              <input
+                v-model.number="formConfig.temperature"
+                type="number"
+                class="form-input"
+                min="0"
+                max="2"
+                step="0.1"
+                placeholder="0.7"
+                :disabled="readonlyMode"
+              >
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('stepConfig.llm.maxTokens') }}</label>
+              <input
+                v-model.number="formConfig.max_tokens"
+                type="number"
+                class="form-input"
+                min="1"
+                max="128000"
+                placeholder="4096"
+                :disabled="readonlyMode"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Tool Configuration -->
+        <div v-if="formType === 'tool'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.tool.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.tool.adapter') }}</label>
+            <div class="adapter-grid">
+              <label
+                v-for="adapter in adapters"
+                :key="adapter.id"
+                :class="['adapter-option', { selected: formConfig.adapter_id === adapter.id }]"
+              >
+                <input
+                  v-model="formConfig.adapter_id"
+                  type="radio"
+                  :value="adapter.id"
+                  :disabled="readonlyMode"
+                >
+                <div class="adapter-info">
+                  <div class="adapter-name">{{ adapter.name }}</div>
+                  <div class="adapter-desc">{{ adapter.description }}</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div v-if="formConfig.adapter_id === 'http'" class="form-group">
+            <label class="form-label">{{ t('stepConfig.tool.httpEndpoint') }}</label>
+            <input
+              v-model="formConfig.url"
+              type="url"
+              class="form-input"
+              :placeholder="t('stepConfig.tool.httpEndpointPlaceholder')"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div v-if="formConfig.adapter_id === 'http'" class="form-group">
+            <label class="form-label">{{ t('stepConfig.tool.httpMethod') }}</label>
+            <select
+              v-model="formConfig.method"
+              class="form-input"
+              :disabled="readonlyMode"
+            >
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Condition Configuration -->
+        <div v-if="formType === 'condition'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.condition.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.condition.expression') }}</label>
+            <textarea
+              v-model="formConfig.expression"
+              class="form-input form-textarea code-input"
+              rows="2"
+              :placeholder="t('stepConfig.condition.expressionPlaceholder')"
+              :disabled="readonlyMode"
+            />
+            <p class="form-hint">{{ t('stepConfig.condition.expressionHint') }}</p>
+          </div>
+
+          <!-- Expression helpers -->
+          <div class="expression-helpers">
+            <span class="helper-label">{{ t('stepConfig.expressionHelpers.title') }}:</span>
+            <div class="helper-chips">
+              <button type="button" class="helper-chip" :disabled="readonlyMode" @click="insertExpression(expressionTemplates.equals)">
+                ==
+              </button>
+              <button type="button" class="helper-chip" :disabled="readonlyMode" @click="insertExpression(expressionTemplates.notEquals)">
+                !=
+              </button>
+              <button type="button" class="helper-chip" :disabled="readonlyMode" @click="insertExpression(expressionTemplates.greaterThan)">
+                &gt;
+              </button>
+              <button type="button" class="helper-chip" :disabled="readonlyMode" @click="insertExpression(expressionTemplates.lessThan)">
+                &lt;
+              </button>
+              <button type="button" class="helper-chip" :disabled="readonlyMode" @click="insertExpression(expressionTemplates.exists)">
+                {{ t('stepConfig.expressionHelpers.exists') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Output ports display -->
+          <div class="output-ports-preview">
+            <div class="ports-header">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>{{ t('stepConfig.outputPorts') }}</span>
+            </div>
+            <div class="condition-preview">
+              <div class="condition-branch">
+                <span class="branch-label branch-true">{{ t('stepConfig.condition.trueBranch') }}</span>
+                <span class="branch-type">boolean</span>
+                <span class="branch-desc">{{ t('stepConfig.condition.trueBranchDesc') }}</span>
+              </div>
+              <div class="condition-branch">
+                <span class="branch-label branch-false">{{ t('stepConfig.condition.falseBranch') }}</span>
+                <span class="branch-type">boolean</span>
+                <span class="branch-desc">{{ t('stepConfig.condition.falseBranchDesc') }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Switch Configuration -->
+        <div v-if="formType === 'switch'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.switch.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.switch.expression') }}</label>
+            <input
+              v-model="formConfig.expression"
+              type="text"
+              class="form-input code-input"
+              placeholder="$.status"
+              :disabled="readonlyMode"
+            >
+            <p class="form-hint">{{ t('stepConfig.switch.expressionHint') }}</p>
+          </div>
+
+          <!-- Cases list -->
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.switch.cases') }}</label>
+            <div class="switch-cases-list">
+              <div
+                v-for="(switchCase, index) in switchCases"
+                :key="index"
+                class="switch-case-item"
+              >
+                <div class="switch-case-header">
+                  <input
+                    :value="switchCase.name"
+                    type="text"
+                    class="form-input case-name-input"
+                    :placeholder="t('stepConfig.switch.caseNamePlaceholder')"
+                    :disabled="readonlyMode"
+                    @input="updateSwitchCase(index, 'name', ($event.target as HTMLInputElement).value)"
+                  >
+                  <button
+                    v-if="!readonlyMode"
+                    type="button"
+                    class="btn-icon btn-remove-case"
+                    :title="t('common.delete')"
+                    @click="removeSwitchCase(index)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+                <input
+                  :value="switchCase.expression"
+                  type="text"
+                  class="form-input code-input"
+                  :placeholder="t('stepConfig.switch.caseExpressionPlaceholder')"
+                  :disabled="readonlyMode"
+                  @input="updateSwitchCase(index, 'expression', ($event.target as HTMLInputElement).value)"
+                >
+                <label class="form-checkbox case-default-checkbox">
+                  <input
+                    type="checkbox"
+                    :checked="switchCase.is_default"
+                    :disabled="readonlyMode"
+                    @change="updateSwitchCase(index, 'is_default', ($event.target as HTMLInputElement).checked)"
+                  >
+                  <span>{{ t('stepConfig.switch.isDefault') }}</span>
+                </label>
+              </div>
+
+              <button
+                v-if="!readonlyMode"
+                type="button"
+                class="btn btn-add-case"
+                @click="addSwitchCase"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                {{ t('stepConfig.switch.addCase') }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Output ports preview -->
+          <div v-if="switchCases.length > 0" class="output-ports-preview">
+            <div class="ports-header">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>{{ t('stepConfig.outputPorts') }}</span>
+            </div>
+            <div class="switch-ports-list">
+              <div v-for="(switchCase, index) in switchCases" :key="index" class="switch-port-item">
+                <span :class="['branch-label', switchCase.is_default ? 'branch-default' : 'branch-case']">
+                  {{ getCaseDisplayName(switchCase.name, index) }}
+                </span>
+                <span class="branch-type">any</span>
+                <span v-if="switchCase.is_default" class="branch-desc">({{ t('stepConfig.switch.defaultBranch') }})</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loop Configuration -->
+        <div v-if="formType === 'loop'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.loop.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.loop.loopType') }}</label>
+            <select
+              v-model="formConfig.loop_type"
+              class="form-input"
+              :disabled="readonlyMode"
+            >
+              <option value="for">{{ t('stepConfig.loop.for') }}</option>
+              <option value="forEach">{{ t('stepConfig.loop.forEach') }}</option>
+              <option value="while">{{ t('stepConfig.loop.while') }}</option>
+              <option value="doWhile">{{ t('stepConfig.loop.doWhile') }}</option>
+            </select>
+          </div>
+
+          <div v-if="formConfig.loop_type === 'for'" class="form-group">
+            <label class="form-label">{{ t('stepConfig.loop.count') }}</label>
+            <input
+              v-model.number="formConfig.count"
+              type="number"
+              class="form-input"
+              min="1"
+              max="1000"
+              placeholder="10"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div v-if="formConfig.loop_type === 'forEach'" class="form-group">
+            <label class="form-label">{{ t('stepConfig.loop.inputPath') }}</label>
+            <input
+              v-model="formConfig.input_path"
+              type="text"
+              class="form-input code-input"
+              :placeholder="t('stepConfig.loop.inputPathPlaceholder')"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div v-if="formConfig.loop_type === 'while' || formConfig.loop_type === 'doWhile'" class="form-group">
+            <label class="form-label">{{ t('stepConfig.loop.continueCondition') }}</label>
+            <input
+              v-model="formConfig.condition"
+              type="text"
+              class="form-input code-input"
+              :placeholder="t('stepConfig.loop.continueConditionPlaceholder')"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.loop.maxIterations') }}</label>
+            <input
+              v-model.number="formConfig.max_iterations"
+              type="number"
+              class="form-input"
+              min="1"
+              max="1000"
+              placeholder="100"
+              :disabled="readonlyMode"
+            >
+          </div>
+        </div>
+
+        <!-- Wait Configuration -->
+        <div v-if="formType === 'wait'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.wait.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.wait.duration') }}</label>
+            <input
+              v-model.number="formConfig.duration_ms"
+              type="number"
+              class="form-input"
+              min="0"
+              max="3600000"
+              placeholder="5000"
+              :disabled="readonlyMode"
+            >
+            <p class="form-hint">{{ t('stepConfig.wait.durationHint') }}</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.wait.until') }}</label>
+            <input
+              v-model="formConfig.until"
+              type="datetime-local"
+              class="form-input"
+              :disabled="readonlyMode"
+            >
+          </div>
+        </div>
+
+        <!-- Function Configuration -->
+        <div v-if="formType === 'function'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.function.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.function.code') }}</label>
+            <textarea
+              v-model="formConfig.code"
+              class="form-input form-textarea code-input"
+              rows="8"
+              :placeholder="t('stepConfig.function.codePlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.function.timeout') }}</label>
+            <input
+              v-model.number="formConfig.timeout_ms"
+              type="number"
+              class="form-input"
+              min="100"
+              max="30000"
+              placeholder="5000"
+              :disabled="readonlyMode"
+            >
+          </div>
+        </div>
+
+        <!-- Router Configuration -->
+        <div v-if="formType === 'router'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.router.title') }}</h4>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('stepConfig.llm.provider') }}</label>
+              <select
+                v-model="formConfig.provider"
+                class="form-input"
+                :disabled="readonlyMode"
+              >
+                <option value="mock">{{ t('stepConfig.tool.adapters.mock') }}</option>
+                <option value="openai">{{ t('stepConfig.tool.adapters.openai') }}</option>
+                <option value="anthropic">{{ t('stepConfig.tool.adapters.anthropic') }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('stepConfig.llm.model') }}</label>
+              <input
+                v-model="formConfig.model"
+                type="text"
+                class="form-input"
+                placeholder="gpt-4o-mini"
+                :disabled="readonlyMode"
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.router.classificationPrompt') }}</label>
+            <textarea
+              v-model="formConfig.prompt"
+              class="form-input form-textarea"
+              rows="3"
+              :placeholder="t('stepConfig.router.classificationPromptPlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.router.routes') }}</label>
+            <textarea
+              v-model="formConfig.routes_json"
+              class="form-input form-textarea code-input"
+              rows="4"
+              :placeholder="t('stepConfig.router.routesPlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+          </div>
+        </div>
+
+        <!-- Human in Loop Configuration -->
+        <div v-if="formType === 'human_in_loop'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.humanInLoop.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.humanInLoop.instructions') }}</label>
+            <textarea
+              v-model="formConfig.instructions"
+              class="form-input form-textarea"
+              rows="3"
+              :placeholder="t('stepConfig.humanInLoop.instructionsPlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.humanInLoop.timeoutHours') }}</label>
+            <input
+              v-model.number="formConfig.timeout_hours"
+              type="number"
+              class="form-input"
+              min="1"
+              max="168"
+              placeholder="24"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-checkbox">
+              <input
+                v-model="formConfig.approval_url"
+                type="checkbox"
+                :disabled="readonlyMode"
+              >
+              <span>{{ t('stepConfig.humanInLoop.generateApprovalUrl') }}</span>
+            </label>
+          </div>
+
+          <div class="info-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>{{ t('stepConfig.humanInLoop.testModeNote') }}</span>
+          </div>
+        </div>
+
+        <!-- Map Configuration -->
+        <div v-if="formType === 'map'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.map.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.map.inputPath') }}</label>
+            <input
+              v-model="formConfig.input_path"
+              type="text"
+              class="form-input code-input"
+              :placeholder="t('stepConfig.map.inputPathPlaceholder')"
+              :disabled="readonlyMode"
+            >
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.map.parallelism') }}</label>
+            <input
+              v-model.number="formConfig.parallel"
+              type="number"
+              class="form-input"
+              min="1"
+              max="100"
+              placeholder="10"
+              :disabled="readonlyMode"
+            >
+          </div>
+        </div>
+
+        <!-- Subflow Configuration -->
+        <div v-if="formType === 'subflow'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.subflow.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.subflow.workflowId') }}</label>
+            <input
+              v-model="formConfig.workflow_id"
+              type="text"
+              class="form-input code-input"
+              :placeholder="t('stepConfig.subflow.workflowIdPlaceholder')"
+              :disabled="readonlyMode"
+            >
+          </div>
+        </div>
+
+        <!-- Join Configuration -->
+        <div v-if="formType === 'join'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.join.title') }}</h4>
+          <p class="form-hint">{{ t('stepConfig.join.description') }}</p>
+        </div>
+
+        <!-- Start Configuration -->
+        <div v-if="formType === 'start'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.start.title') }}</h4>
+          <div class="start-info-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="start-icon">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <div class="start-info-content">
+              <p class="start-info-title">{{ t('stepConfig.start.entryPoint') }}</p>
+              <p class="start-info-desc">{{ t('stepConfig.start.description') }}</p>
+            </div>
+          </div>
+          <div class="start-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>{{ t('stepConfig.start.cannotDelete') }}</span>
+          </div>
+        </div>
+
+        <!-- I/O Ports Section (for blocks with typed ports) -->
+        <div v-if="currentBlockDef && (currentBlockDef.input_ports?.length > 1 || currentBlockDef.output_ports?.length > 1)" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.ioPorts.title') }}</h4>
+
+          <!-- Input Ports -->
+          <div v-if="currentBlockDef.input_ports?.length > 1" class="io-ports-group">
+            <div class="ports-header">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+              <span>{{ t('stepConfig.ioPorts.inputs') }}</span>
+            </div>
+            <div class="ports-list">
+              <div v-for="port in currentBlockDef.input_ports" :key="port.name" class="port-item">
+                <span class="port-name">{{ port.label }}</span>
+                <code class="port-type">{{ formatSchemaType(port.schema) }}</code>
+                <span v-if="port.required" class="port-required">*</span>
+                <span v-if="port.description" class="port-desc">{{ port.description }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Output Ports (for blocks not covered by specific config sections) -->
+          <div v-if="currentBlockDef.output_ports?.length > 1 && !['condition', 'switch', 'human_in_loop'].includes(formType)" class="io-ports-group">
+            <div class="ports-header">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+              <span>{{ t('stepConfig.ioPorts.outputs') }}</span>
+            </div>
+            <div class="ports-list">
+              <div v-for="port in currentBlockDef.output_ports" :key="port.name" class="port-item">
+                <span :class="['port-name', { 'port-default': port.is_default }]">{{ port.label }}</span>
+                <code class="port-type">{{ formatSchemaType(port.schema) }}</code>
+                <span v-if="port.is_default" class="port-default-badge">{{ t('stepConfig.ioPorts.default') }}</span>
+                <span v-if="port.description" class="port-desc">{{ port.description }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metadata -->
+        <div class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.metadata') }}</h4>
+          <div class="metadata-item">
+            <span class="metadata-label">{{ t('stepConfig.stepId') }}</span>
+            <code class="metadata-value">{{ step.id }}</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer with actions -->
+      <div class="properties-footer">
+        <button
+          v-if="!readonlyMode && !isStartNode"
+          class="btn btn-danger-outline"
+          :disabled="saving"
+          @click="handleDelete"
+        >
+          {{ t('common.delete') }}
+        </button>
+        <div class="footer-spacer" />
+        <button
+          v-if="!readonlyMode"
+          class="btn btn-primary"
+          :disabled="saving"
+          @click="handleSave"
+        >
+          {{ saving ? t('common.saving') : t('common.save') }}
+        </button>
+      </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-surface);
+}
+
+/* Empty State */
+.properties-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+  text-align: center;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.empty-icon {
+  color: var(--color-primary);
+  opacity: 0.6;
+  margin-bottom: 1rem;
+  margin-top: 1rem;
+}
+
+.empty-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.empty-desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.5rem;
+  line-height: 1.5;
+}
+
+/* Quick Tips */
+.empty-tips {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.empty-tips-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #0369a1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.empty-tips-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.empty-tips-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #0c4a6e;
+  padding: 0.375rem 0;
+}
+
+.tip-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: white;
+  border-radius: 4px;
+  color: #0284c7;
+  flex-shrink: 0;
+}
+
+/* Keyboard Shortcuts */
+.empty-shortcuts {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.empty-shortcuts-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  padding: 0.25rem 0;
+}
+
+.shortcut-item kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  padding: 0.125rem 0.375rem;
+  font-family: inherit;
+  font-size: 0.625rem;
+  font-weight: 500;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.shortcut-item span {
+  margin-left: auto;
+  color: var(--color-text);
+}
+
+/* Header */
+.properties-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.header-color {
+  width: 4px;
+  height: 32px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.header-info {
+  flex: 1;
+}
+
+.header-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.header-type {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Body */
+.properties-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+/* Form Sections */
+.form-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.form-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Form Elements */
+.form-group {
+  margin-bottom: 0.875rem;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: 0.375rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: white;
+  color: var(--color-text);
+  transition: border-color 0.15s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-input:disabled {
+  background: var(--color-surface);
+  cursor: not-allowed;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.code-input {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+}
+
+.form-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.form-hint code {
+  background: var(--color-surface);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.625rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* Adapter Grid */
+.adapter-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.adapter-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.adapter-option:hover {
+  border-color: var(--color-primary);
+}
+
+.adapter-option.selected {
+  border-color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.adapter-option input {
+  margin-top: 0.125rem;
+}
+
+.adapter-info {
+  flex: 1;
+}
+
+.adapter-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.adapter-desc {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.125rem;
+}
+
+/* Condition Preview */
+.condition-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-background);
+  border-radius: 6px;
+}
+
+.condition-branch {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.branch-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+}
+
+.branch-true {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.branch-false {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.branch-desc {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+/* Checkbox */
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.form-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Info Box */
+.info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  margin-top: 0.75rem;
+  font-size: 0.6875rem;
+  color: #1e40af;
+}
+
+.info-box svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+/* Start Node Info Box */
+.start-info-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+}
+
+.start-icon {
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.start-info-content {
+  flex: 1;
+}
+
+.start-info-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #047857;
+  margin: 0 0 0.25rem 0;
+}
+
+.start-info-desc {
+  font-size: 0.75rem;
+  color: #065f46;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Start Warning */
+.start-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  margin-top: 0.75rem;
+  font-size: 0.6875rem;
+  color: #92400e;
+}
+
+.start-warning svg {
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
+/* Metadata */
+.metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.metadata-label {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.metadata-value {
+  font-size: 0.6875rem;
+  background: var(--color-background);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+/* Footer */
+.properties-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.footer-spacer {
+  flex: 1;
+}
+
+/* Button Variants */
+.btn-danger-outline {
+  background: white;
+  border: 1px solid #fecaca;
+  color: var(--color-error);
+}
+
+.btn-danger-outline:hover {
+  background: #fef2f2;
+  border-color: var(--color-error);
+}
+
+/* Scrollbar */
+.properties-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.properties-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.properties-body::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+.properties-body::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* Expression Helpers */
+.expression-helpers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: var(--color-background);
+  border-radius: 6px;
+}
+
+.helper-label {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+.helper-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.helper-chip {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-family: 'SF Mono', Monaco, monospace;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.helper-chip:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.helper-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Output Ports Preview */
+.output-ports-preview {
+  margin-top: 0.75rem;
+}
+
+.ports-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.branch-type {
+  font-size: 0.625rem;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+/* Switch Cases */
+.switch-cases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.switch-case-item {
+  padding: 0.75rem;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.switch-case-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.case-name-input {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: all 0.15s;
+}
+
+.btn-remove-case:hover {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: var(--color-error);
+}
+
+.case-default-checkbox {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.btn-add-case {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px dashed var(--color-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-add-case:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.switch-ports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: var(--color-background);
+  border-radius: 6px;
+}
+
+.switch-port-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.branch-case {
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.branch-default {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* I/O Ports Section */
+.io-ports-group {
+  margin-bottom: 0.75rem;
+}
+
+.io-ports-group:last-child {
+  margin-bottom: 0;
+}
+
+.ports-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  background: var(--color-background);
+  border-radius: 6px;
+}
+
+.port-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.25rem 0;
+}
+
+.port-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.port-name.port-default {
+  color: var(--color-primary);
+}
+
+.port-type {
+  font-size: 0.625rem;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.port-required {
+  font-size: 0.75rem;
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.port-desc {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  width: 100%;
+}
+
+.port-default-badge {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.125rem 0.375rem;
+  background: #e0e7ff;
+  color: #4f46e5;
+  border-radius: 3px;
+}
+</style>

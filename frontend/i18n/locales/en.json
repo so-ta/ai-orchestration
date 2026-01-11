@@ -1,0 +1,501 @@
+{
+  "common": {
+    "save": "Save",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "create": "Create",
+    "close": "Close",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "retry": "Retry",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "search": "Search",
+    "filter": "Filter",
+    "actions": "Actions",
+    "status": "Status",
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "version": "Version",
+    "createdAt": "Created At",
+    "updatedAt": "Updated At",
+    "noData": "No data",
+    "error": "Error",
+    "success": "Success"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "workflows": "Workflows",
+    "runs": "Runs",
+    "schedules": "Schedules",
+    "settings": "Settings",
+    "login": "Login",
+    "logout": "Logout",
+    "developmentMode": "Development mode"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome to AI Orchestration",
+    "welcomeDesc": "A platform for visually designing, executing, and monitoring DAG workflows.",
+    "quickActions": "Quick Actions",
+    "createWorkflow": "Create Workflow",
+    "viewRuns": "View Runs",
+    "recentWorkflows": "Recent Workflows",
+    "recentRuns": "Recent Runs",
+    "stats": {
+      "totalWorkflows": "Total Workflows",
+      "publishedWorkflows": "Published",
+      "totalRuns": "Total Runs",
+      "successRate": "Success Rate",
+      "activeRuns": "Active Runs",
+      "currentlyExecuting": "Currently executing",
+      "completedToday": "Completed Today",
+      "failed": "failed",
+      "allSuccessful": "All successful",
+      "avgDuration": "Avg Duration",
+      "perWorkflowRun": "Per workflow run"
+    },
+    "manageWorkflows": "Manage Workflows",
+    "executeWorkflowHint": "Execute a workflow to see runs here",
+    "triggers": {
+      "manual": "Manual",
+      "webhook": "Webhook",
+      "schedule": "Schedule"
+    }
+  },
+  "workflows": {
+    "title": "Workflows",
+    "subtitle": "Create and manage your workflow automations",
+    "newWorkflow": "New Workflow",
+    "createWorkflow": "Create Workflow",
+    "editWorkflow": "Edit Workflow",
+    "deleteWorkflow": "Delete Workflow",
+    "publish": "Publish",
+    "unpublish": "Unpublish",
+    "testRun": "Test Run",
+    "run": "Run",
+    "running": "Starting...",
+    "duplicate": "Duplicate",
+    "steps": "Steps",
+    "stepsCount": "{count} steps",
+    "noWorkflows": "No workflows",
+    "noWorkflowsYet": "No workflows yet",
+    "createFirst": "Create your first workflow",
+    "createFirstDesc": "Create your first workflow to get started with automation",
+    "noMatchingWorkflows": "No matching workflows",
+    "noMatchingDesc": "Try adjusting your search or filter criteria",
+    "clearFilters": "Clear Filters",
+    "status": {
+      "draft": "Draft",
+      "published": "Published"
+    },
+    "confirmDelete": "Are you sure you want to delete this workflow? This action cannot be undone.",
+    "confirmSave": "Save this workflow? This will create a new version (v{version}).",
+    "confirmDiscardDraft": "Discard draft changes? This will restore the last saved version.",
+    "saveDraft": "Save Draft",
+    "discardDraft": "Discard Draft",
+    "hasDraft": "Has Draft",
+    "selectVersion": "Select Version",
+    "latestVersion": "Latest (v{version})",
+    "specificVersion": "Version {version}",
+    "runWithVersion": "Run with selected version",
+    "form": {
+      "name": "Workflow Name",
+      "namePlaceholder": "Enter workflow name",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter workflow description (optional)"
+    },
+    "table": {
+      "name": "Name",
+      "status": "Status",
+      "version": "Version",
+      "lastUpdated": "Last Updated",
+      "actions": "Actions"
+    },
+    "stats": {
+      "total": "Total",
+      "published": "Published",
+      "draft": "Draft"
+    },
+    "loading": "Loading workflows...",
+    "loadFailed": "Failed to load workflows",
+    "searchPlaceholder": "Search workflows...",
+    "refresh": "Refresh",
+    "tabs": {
+      "editor": "Editor",
+      "history": "Run History"
+    },
+    "runHistory": {
+      "title": "Run History",
+      "version": "Version",
+      "noRuns": "No runs yet",
+      "noRunsDesc": "Execute this workflow to see run history"
+    }
+  },
+  "editor": {
+    "blocks": "Blocks",
+    "dragToCanvas": "Drag to canvas",
+    "dropHint": "Drag blocks here or click to add",
+    "noStepSelected": "No step selected",
+    "selectStepHint": "Select a step to edit its properties, or drag a block from the palette",
+    "editStep": "Edit Step",
+    "viewStep": "View Step",
+    "confirmDeleteStep": "Are you sure you want to delete this step? This will also remove all connected edges.",
+    "loading": "Loading workflow...",
+    "loadFailed": "Failed to load workflow",
+    "noDescription": "No description",
+    "stepsCount": "{count} steps",
+    "categories": {
+      "ai": "AI",
+      "logic": "Logic",
+      "data": "Data",
+      "integration": "Integration",
+      "control": "Control",
+      "utility": "Utility"
+    },
+    "autoLayout": "Auto Layout",
+    "stepTypes": {
+      "start": "Start",
+      "startDesc": "Workflow entry point",
+      "llm": "LLM",
+      "llmDesc": "Execute AI model with prompt",
+      "router": "Router",
+      "routerDesc": "AI-powered dynamic routing",
+      "condition": "Condition",
+      "conditionDesc": "Branch based on expression",
+      "loop": "Loop",
+      "loopDesc": "Iterate with for/forEach/while",
+      "map": "Map",
+      "mapDesc": "Process array in parallel",
+      "join": "Join",
+      "joinDesc": "Merge multiple branches",
+      "tool": "Tool",
+      "toolDesc": "Call external tool or API",
+      "function": "Function",
+      "functionDesc": "Execute custom JavaScript",
+      "subflow": "Subflow",
+      "subflowDesc": "Execute another workflow",
+      "wait": "Wait",
+      "waitDesc": "Pause for duration",
+      "humanInLoop": "Human in Loop",
+      "humanInLoopDesc": "Wait for human approval",
+      "switch": "Switch",
+      "switchDesc": "Multi-branch routing",
+      "filter": "Filter",
+      "filterDesc": "Filter items by condition",
+      "split": "Split",
+      "splitDesc": "Split into batches",
+      "aggregate": "Aggregate",
+      "aggregateDesc": "Aggregate data operations",
+      "error": "Error",
+      "errorDesc": "Stop workflow with error",
+      "note": "Note",
+      "noteDesc": "Documentation/comment"
+    },
+    "quickTips": "Quick Tips",
+    "tipDragBlock": "Drag a block from the palette to add a step",
+    "tipConnectNodes": "Drag from a handle to connect steps",
+    "tipClickToSelect": "Click on a step to edit its properties",
+    "keyboardShortcuts": "Keyboard Shortcuts",
+    "shortcutDelete": "Delete step",
+    "shortcutDeselect": "Deselect",
+    "shortcutCopy": "Copy step",
+    "shortcutPaste": "Paste step"
+  },
+  "stepConfig": {
+    "basicInfo": "Basic Information",
+    "stepName": "Step Name",
+    "stepNamePlaceholder": "Enter step name",
+    "stepType": "Step Type",
+    "metadata": "Metadata",
+    "stepId": "Step ID",
+    "llm": {
+      "title": "LLM Configuration",
+      "provider": "Provider",
+      "model": "Model",
+      "systemPrompt": "System Prompt",
+      "systemPromptPlaceholder": "You are a helpful assistant...",
+      "userPrompt": "User Prompt Template",
+      "userPromptPlaceholder": "Process the following input: [$.input]",
+      "userPromptHint": "Use [$.field] to reference input data",
+      "temperature": "Temperature",
+      "maxTokens": "Max Tokens"
+    },
+    "tool": {
+      "title": "Tool Configuration",
+      "adapter": "Adapter",
+      "adapters": {
+        "mock": "Mock (Testing)",
+        "mockDesc": "Returns mock responses for testing",
+        "openai": "OpenAI",
+        "openaiDesc": "GPT-4, GPT-3.5-turbo models",
+        "anthropic": "Anthropic",
+        "anthropicDesc": "Claude models",
+        "http": "HTTP Request",
+        "httpDesc": "Generic HTTP/REST API calls"
+      },
+      "httpEndpoint": "HTTP Endpoint",
+      "httpEndpointPlaceholder": "https://api.example.com/endpoint",
+      "httpMethod": "HTTP Method"
+    },
+    "condition": {
+      "title": "Condition Configuration",
+      "expression": "Expression",
+      "expressionPlaceholder": "$.category == \"technical\"",
+      "expressionHint": "Use JSONPath syntax. Examples: $.field == \"value\", $.count > 10",
+      "trueBranch": "True",
+      "trueBranchDesc": "When expression evaluates to true",
+      "falseBranch": "False",
+      "falseBranchDesc": "When expression evaluates to false"
+    },
+    "loop": {
+      "title": "Loop Configuration",
+      "loopType": "Loop Type",
+      "for": "For (Fixed Count)",
+      "forEach": "ForEach (Array)",
+      "while": "While (Condition)",
+      "doWhile": "Do-While (Condition)",
+      "count": "Iteration Count",
+      "inputPath": "Input Array Path",
+      "inputPathPlaceholder": "$.items",
+      "continueCondition": "Continue Condition",
+      "continueConditionPlaceholder": "$.index < 10",
+      "maxIterations": "Max Iterations (Safety Limit)"
+    },
+    "wait": {
+      "title": "Wait Configuration",
+      "duration": "Duration (milliseconds)",
+      "durationHint": "Time to wait in milliseconds (max 1 hour)",
+      "until": "Or Wait Until"
+    },
+    "function": {
+      "title": "Function Configuration",
+      "code": "JavaScript Code",
+      "codePlaceholder": "// Access input via 'input' variable\nconst result = input.value * 2;\nreturn result;",
+      "timeout": "Timeout (ms)"
+    },
+    "router": {
+      "title": "Router Configuration",
+      "classificationPrompt": "Classification Prompt",
+      "classificationPromptPlaceholder": "Based on the input, classify which route...",
+      "routes": "Routes (JSON)",
+      "routesPlaceholder": "Example: name=support, description=Customer support"
+    },
+    "humanInLoop": {
+      "title": "Human in Loop Configuration",
+      "instructions": "Instructions for Approver",
+      "instructionsPlaceholder": "Please review the following data...",
+      "timeoutHours": "Timeout (hours)",
+      "generateApprovalUrl": "Generate approval URL",
+      "testModeNote": "In test mode, this step will auto-approve. In production, it will wait for human input."
+    },
+    "map": {
+      "title": "Map Configuration",
+      "inputPath": "Input Array Path",
+      "inputPathPlaceholder": "$.items",
+      "parallelism": "Parallelism"
+    },
+    "subflow": {
+      "title": "Subflow Configuration",
+      "workflowId": "Workflow ID",
+      "workflowIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    },
+    "join": {
+      "title": "Join Configuration",
+      "description": "Join step merges outputs from multiple branches. No additional configuration needed."
+    },
+    "start": {
+      "title": "Start Configuration",
+      "entryPoint": "Workflow Entry Point",
+      "description": "This is the entry point for your workflow. All execution begins from this step and flows through connected nodes.",
+      "cannotDelete": "Start nodes cannot be deleted. Every workflow must have an entry point."
+    },
+    "switch": {
+      "title": "Switch Configuration",
+      "mode": "Mode",
+      "rules": "Rules",
+      "expression": "Expression",
+      "expressionHint": "Value to match against cases (e.g., $.status)",
+      "cases": "Cases",
+      "caseName": "Case Name",
+      "caseNamePlaceholder": "case_1",
+      "caseExpression": "Condition",
+      "caseExpressionPlaceholder": "$.status == \"active\"",
+      "isDefault": "Default Case",
+      "addCase": "Add Case",
+      "defaultBranch": "Default"
+    },
+    "expressionHelpers": {
+      "title": "Insert expression",
+      "exists": "exists"
+    },
+    "outputPorts": "Output Branches",
+    "ioPorts": {
+      "title": "I/O Ports",
+      "inputs": "Input Ports",
+      "outputs": "Output Ports",
+      "default": "default"
+    },
+    "filter": {
+      "title": "Filter Configuration",
+      "expression": "Filter Expression",
+      "expressionPlaceholder": "$.value > 100",
+      "expressionHint": "Items matching this condition will pass through",
+      "keepAll": "Keep All Mode",
+      "keepAllHint": "If true, keeps or removes all items based on single evaluation"
+    },
+    "split": {
+      "title": "Split Configuration",
+      "batchSize": "Batch Size",
+      "batchSizeHint": "Number of items per batch (1 = process one at a time)",
+      "inputPath": "Input Array Path",
+      "inputPathPlaceholder": "$.items"
+    },
+    "aggregate": {
+      "title": "Aggregate Configuration",
+      "groupBy": "Group By Field",
+      "groupByPlaceholder": "$.category",
+      "operations": "Operations",
+      "operation": "Operation",
+      "field": "Field",
+      "outputField": "Output Field",
+      "separator": "Separator (for concat)",
+      "addOperation": "Add Operation",
+      "operationTypes": {
+        "count": "Count",
+        "sum": "Sum",
+        "avg": "Average",
+        "min": "Minimum",
+        "max": "Maximum",
+        "first": "First",
+        "last": "Last",
+        "concat": "Concatenate"
+      }
+    },
+    "error": {
+      "title": "Error Configuration",
+      "errorType": "Error Type",
+      "errorTypePlaceholder": "validation",
+      "errorMessage": "Error Message",
+      "errorMessagePlaceholder": "Validation failed: invalid input",
+      "errorCode": "Error Code",
+      "errorCodePlaceholder": "E001"
+    },
+    "note": {
+      "title": "Note Configuration",
+      "content": "Note Content",
+      "contentPlaceholder": "Add documentation or comments about this part of the workflow...",
+      "color": "Note Color",
+      "description": "Notes are for documentation only and do not affect workflow execution."
+    }
+  },
+  "runs": {
+    "title": "Runs",
+    "subtitle": "Monitor and track workflow executions",
+    "newRun": "New Run",
+    "runDetails": "Run Details",
+    "stepExecutions": "Step Executions",
+    "input": "Input",
+    "output": "Output",
+    "logs": "Logs",
+    "noRuns": "No runs",
+    "noRunsYet": "No runs yet",
+    "noRunsDesc": "Execute a workflow to see runs here",
+    "noMatchingRuns": "No matching runs",
+    "noMatchingDesc": "Try adjusting your filter criteria",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "mode": {
+      "test": "Test",
+      "production": "Production"
+    },
+    "duration": "Duration",
+    "startedAt": "Started At",
+    "completedAt": "Completed At",
+    "table": {
+      "workflow": "Workflow",
+      "status": "Status",
+      "mode": "Mode",
+      "duration": "Duration",
+      "triggeredBy": "Triggered By",
+      "created": "Created"
+    },
+    "stats": {
+      "total": "Total",
+      "active": "Active",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "filters": {
+      "workflow": "Workflow",
+      "allWorkflows": "All Workflows",
+      "status": "Status",
+      "mode": "Mode"
+    },
+    "activeCount": "{count} active",
+    "resultsCount": "{filtered} of {total} runs",
+    "loading": "Loading runs...",
+    "loadFailed": "Failed to load runs",
+    "viewWorkflows": "View Workflows",
+    "view": "View"
+  },
+  "schedules": {
+    "title": "Schedules",
+    "newSchedule": "New Schedule",
+    "noSchedules": "No schedules",
+    "cronExpression": "Cron Expression",
+    "nextRun": "Next Run",
+    "lastRun": "Last Run",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "language": "Language",
+    "theme": "Theme",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "apiKeys": "API Keys",
+    "integrations": "Integrations",
+    "account": "Account",
+    "notifications": "Notifications",
+    "team": "Team",
+    "timezone": "Timezone",
+    "dateFormat": "Date Format",
+    "notificationSettings": "Notification Settings",
+    "emailOnFailure": "Email on workflow failure",
+    "emailOnSuccess": "Email on workflow success",
+    "slackWebhook": "Slack Webhook URL",
+    "slackWebhookHint": "Receive notifications in your Slack channel",
+    "apiKeysDesc": "Configure API keys for LLM providers. Keys are encrypted and stored securely.",
+    "openaiApiKey": "OpenAI API Key",
+    "anthropicApiKey": "Anthropic API Key",
+    "apiKeysDevNote": "Note: In the current development setup, API keys are configured via environment variables. This UI will be functional when the settings API is implemented.",
+    "teamMembers": "Team Members",
+    "teamComingSoon": "Team management coming soon.",
+    "teamComingSoonDesc": "Invite team members and manage their roles and permissions."
+  },
+  "errors": {
+    "generic": "An error occurred",
+    "notFound": "Not found",
+    "unauthorized": "Authentication required",
+    "forbidden": "Access denied",
+    "validation": "Please check your input",
+    "network": "Network error occurred",
+    "loadFailed": "Failed to load",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete"
+  }
+}

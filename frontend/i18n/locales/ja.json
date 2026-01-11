@@ -1,0 +1,501 @@
+{
+  "common": {
+    "save": "保存",
+    "delete": "削除",
+    "cancel": "キャンセル",
+    "edit": "編集",
+    "create": "作成",
+    "close": "閉じる",
+    "loading": "読み込み中...",
+    "saving": "保存中...",
+    "retry": "再試行",
+    "confirm": "確認",
+    "yes": "はい",
+    "no": "いいえ",
+    "search": "検索",
+    "filter": "フィルター",
+    "actions": "アクション",
+    "status": "ステータス",
+    "name": "名前",
+    "description": "説明",
+    "type": "タイプ",
+    "version": "バージョン",
+    "createdAt": "作成日時",
+    "updatedAt": "更新日時",
+    "noData": "データがありません",
+    "error": "エラー",
+    "success": "成功"
+  },
+  "nav": {
+    "dashboard": "ダッシュボード",
+    "workflows": "ワークフロー",
+    "runs": "実行履歴",
+    "schedules": "スケジュール",
+    "settings": "設定",
+    "login": "ログイン",
+    "logout": "ログアウト",
+    "developmentMode": "開発モード"
+  },
+  "dashboard": {
+    "title": "ダッシュボード",
+    "welcome": "AI Orchestration へようこそ",
+    "welcomeDesc": "DAGワークフローを視覚的に設計・実行・監視するプラットフォームです。",
+    "quickActions": "クイックアクション",
+    "createWorkflow": "ワークフローを作成",
+    "viewRuns": "実行履歴を表示",
+    "recentWorkflows": "最近のワークフロー",
+    "recentRuns": "最近の実行",
+    "stats": {
+      "totalWorkflows": "ワークフロー数",
+      "publishedWorkflows": "公開済み",
+      "totalRuns": "総実行数",
+      "successRate": "成功率",
+      "activeRuns": "アクティブな実行",
+      "currentlyExecuting": "現在実行中",
+      "completedToday": "本日完了",
+      "failed": "失敗",
+      "allSuccessful": "すべて成功",
+      "avgDuration": "平均実行時間",
+      "perWorkflowRun": "ワークフロー実行あたり"
+    },
+    "manageWorkflows": "ワークフロー管理",
+    "executeWorkflowHint": "ワークフローを実行するとここに表示されます",
+    "triggers": {
+      "manual": "手動",
+      "webhook": "Webhook",
+      "schedule": "スケジュール"
+    }
+  },
+  "workflows": {
+    "title": "ワークフロー",
+    "subtitle": "ワークフロー自動化の作成と管理",
+    "newWorkflow": "新規ワークフロー",
+    "createWorkflow": "ワークフローを作成",
+    "editWorkflow": "ワークフローを編集",
+    "deleteWorkflow": "ワークフローを削除",
+    "publish": "公開",
+    "unpublish": "非公開",
+    "testRun": "テスト実行",
+    "run": "実行",
+    "running": "開始中...",
+    "duplicate": "複製",
+    "steps": "ステップ",
+    "stepsCount": "{count} ステップ",
+    "noWorkflows": "ワークフローがありません",
+    "noWorkflowsYet": "ワークフローがありません",
+    "createFirst": "最初のワークフローを作成しましょう",
+    "createFirstDesc": "自動化を始めるために最初のワークフローを作成してください",
+    "noMatchingWorkflows": "一致するワークフローがありません",
+    "noMatchingDesc": "検索条件やフィルターを調整してください",
+    "clearFilters": "フィルターをクリア",
+    "status": {
+      "draft": "下書き",
+      "published": "公開済み"
+    },
+    "confirmDelete": "このワークフローを削除しますか？この操作は取り消せません。",
+    "confirmSave": "ワークフローを保存しますか？新しいバージョン（v{version}）が作成されます。",
+    "confirmDiscardDraft": "下書きの変更を破棄しますか？最後に保存したバージョンに戻ります。",
+    "saveDraft": "下書き保存",
+    "discardDraft": "下書きを破棄",
+    "hasDraft": "下書きあり",
+    "selectVersion": "バージョンを選択",
+    "latestVersion": "最新（v{version}）",
+    "specificVersion": "バージョン {version}",
+    "runWithVersion": "選択したバージョンで実行",
+    "form": {
+      "name": "ワークフロー名",
+      "namePlaceholder": "ワークフロー名を入力",
+      "description": "説明",
+      "descriptionPlaceholder": "ワークフローの説明を入力（任意）"
+    },
+    "table": {
+      "name": "名前",
+      "status": "ステータス",
+      "version": "バージョン",
+      "lastUpdated": "最終更新",
+      "actions": "アクション"
+    },
+    "stats": {
+      "total": "合計",
+      "published": "公開済み",
+      "draft": "下書き"
+    },
+    "loading": "ワークフローを読み込み中...",
+    "loadFailed": "ワークフローの読み込みに失敗しました",
+    "searchPlaceholder": "ワークフローを検索...",
+    "refresh": "更新",
+    "tabs": {
+      "editor": "エディタ",
+      "history": "実行履歴"
+    },
+    "runHistory": {
+      "title": "実行履歴",
+      "version": "バージョン",
+      "noRuns": "実行履歴がありません",
+      "noRunsDesc": "このワークフローを実行すると履歴が表示されます"
+    }
+  },
+  "editor": {
+    "blocks": "ブロック",
+    "dragToCanvas": "キャンバスにドラッグ",
+    "dropHint": "ブロックをここにドラッグ、またはクリックで追加",
+    "noStepSelected": "ステップが選択されていません",
+    "selectStepHint": "ステップを選択してプロパティを編集、またはパレットからブロックをドラッグしてください",
+    "editStep": "ステップを編集",
+    "viewStep": "ステップを表示",
+    "confirmDeleteStep": "このステップを削除しますか？接続されているすべてのエッジも削除されます。",
+    "loading": "ワークフローを読み込み中...",
+    "loadFailed": "ワークフローの読み込みに失敗しました",
+    "noDescription": "説明なし",
+    "stepsCount": "{count} ステップ",
+    "categories": {
+      "ai": "AI",
+      "logic": "ロジック",
+      "data": "データ",
+      "integration": "統合",
+      "control": "制御",
+      "utility": "ユーティリティ"
+    },
+    "autoLayout": "自動整形",
+    "stepTypes": {
+      "start": "スタート",
+      "startDesc": "ワークフローのエントリーポイント",
+      "llm": "LLM",
+      "llmDesc": "AIモデルでプロンプトを実行",
+      "router": "ルーター",
+      "routerDesc": "AI駆動の動的ルーティング",
+      "condition": "条件分岐",
+      "conditionDesc": "条件式に基づいて分岐",
+      "loop": "ループ",
+      "loopDesc": "for/forEach/whileでイテレーション",
+      "map": "マップ",
+      "mapDesc": "配列を並列処理",
+      "join": "ジョイン",
+      "joinDesc": "複数のブランチをマージ",
+      "tool": "ツール",
+      "toolDesc": "外部ツールまたはAPIを呼び出し",
+      "function": "ファンクション",
+      "functionDesc": "カスタムJavaScriptを実行",
+      "subflow": "サブフロー",
+      "subflowDesc": "別のワークフローを実行",
+      "wait": "待機",
+      "waitDesc": "指定時間一時停止",
+      "humanInLoop": "ヒューマンインループ",
+      "humanInLoopDesc": "人間の承認を待機",
+      "switch": "スイッチ",
+      "switchDesc": "マルチブランチルーティング",
+      "filter": "フィルター",
+      "filterDesc": "条件でアイテムをフィルタリング",
+      "split": "分割",
+      "splitDesc": "バッチに分割",
+      "aggregate": "集計",
+      "aggregateDesc": "データ集計操作",
+      "error": "エラー",
+      "errorDesc": "エラーでワークフローを停止",
+      "note": "ノート",
+      "noteDesc": "ドキュメント/コメント"
+    },
+    "quickTips": "クイックヒント",
+    "tipDragBlock": "パレットからブロックをドラッグしてステップを追加",
+    "tipConnectNodes": "ハンドルからドラッグしてステップを接続",
+    "tipClickToSelect": "ステップをクリックしてプロパティを編集",
+    "keyboardShortcuts": "キーボードショートカット",
+    "shortcutDelete": "ステップを削除",
+    "shortcutDeselect": "選択解除",
+    "shortcutCopy": "ステップをコピー",
+    "shortcutPaste": "ステップを貼り付け"
+  },
+  "stepConfig": {
+    "basicInfo": "基本情報",
+    "stepName": "ステップ名",
+    "stepNamePlaceholder": "ステップ名を入力",
+    "stepType": "ステップタイプ",
+    "metadata": "メタデータ",
+    "stepId": "ステップID",
+    "llm": {
+      "title": "LLM設定",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "systemPrompt": "システムプロンプト",
+      "systemPromptPlaceholder": "あなたは親切なアシスタントです...",
+      "userPrompt": "ユーザープロンプトテンプレート",
+      "userPromptPlaceholder": "以下の入力を処理してください: [$.input]",
+      "userPromptHint": "[$.field]で入力データを参照できます",
+      "temperature": "温度",
+      "maxTokens": "最大トークン"
+    },
+    "tool": {
+      "title": "ツール設定",
+      "adapter": "アダプター",
+      "adapters": {
+        "mock": "Mock（テスト用）",
+        "mockDesc": "テスト用のモックレスポンスを返します",
+        "openai": "OpenAI",
+        "openaiDesc": "GPT-4、GPT-3.5-turbo モデル",
+        "anthropic": "Anthropic",
+        "anthropicDesc": "Claude モデル",
+        "http": "HTTPリクエスト",
+        "httpDesc": "汎用HTTP/REST API呼び出し"
+      },
+      "httpEndpoint": "HTTPエンドポイント",
+      "httpEndpointPlaceholder": "https://api.example.com/endpoint",
+      "httpMethod": "HTTPメソッド"
+    },
+    "condition": {
+      "title": "条件分岐設定",
+      "expression": "条件式",
+      "expressionPlaceholder": "$.category == \"technical\"",
+      "expressionHint": "JSONPath構文を使用。例: $.field == \"value\"、$.count > 10",
+      "trueBranch": "True",
+      "trueBranchDesc": "条件式がtrueの場合",
+      "falseBranch": "False",
+      "falseBranchDesc": "条件式がfalseの場合"
+    },
+    "loop": {
+      "title": "ループ設定",
+      "loopType": "ループタイプ",
+      "for": "For（固定回数）",
+      "forEach": "ForEach（配列）",
+      "while": "While（条件）",
+      "doWhile": "Do-While（条件）",
+      "count": "イテレーション回数",
+      "inputPath": "入力配列パス",
+      "inputPathPlaceholder": "$.items",
+      "continueCondition": "継続条件",
+      "continueConditionPlaceholder": "$.index < 10",
+      "maxIterations": "最大イテレーション（安全制限）"
+    },
+    "wait": {
+      "title": "待機設定",
+      "duration": "待機時間（ミリ秒）",
+      "durationHint": "ミリ秒単位の待機時間（最大1時間）",
+      "until": "または指定時刻まで待機"
+    },
+    "function": {
+      "title": "ファンクション設定",
+      "code": "JavaScriptコード",
+      "codePlaceholder": "// 'input' 変数で入力にアクセス\nconst result = input.value * 2;\nreturn result;",
+      "timeout": "タイムアウト（ミリ秒）"
+    },
+    "router": {
+      "title": "ルーター設定",
+      "classificationPrompt": "分類プロンプト",
+      "classificationPromptPlaceholder": "入力に基づいて、どのルートに分類するか...",
+      "routes": "ルート（JSON）",
+      "routesPlaceholder": "例: name=support, description=カスタマーサポート"
+    },
+    "humanInLoop": {
+      "title": "ヒューマンインループ設定",
+      "instructions": "承認者への指示",
+      "instructionsPlaceholder": "以下のデータを確認してください...",
+      "timeoutHours": "タイムアウト（時間）",
+      "generateApprovalUrl": "承認URLを生成",
+      "testModeNote": "テストモードでは自動承認されます。本番モードでは人間の入力を待機します。"
+    },
+    "map": {
+      "title": "マップ設定",
+      "inputPath": "入力配列パス",
+      "inputPathPlaceholder": "$.items",
+      "parallelism": "並列数"
+    },
+    "subflow": {
+      "title": "サブフロー設定",
+      "workflowId": "ワークフローID",
+      "workflowIdPlaceholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    },
+    "join": {
+      "title": "ジョイン設定",
+      "description": "ジョインステップは複数のブランチの出力をマージします。追加の設定は不要です。"
+    },
+    "start": {
+      "title": "スタート設定",
+      "entryPoint": "ワークフローエントリーポイント",
+      "description": "これはワークフローのエントリーポイントです。すべての実行はこのステップから始まり、接続されたノードに流れます。",
+      "cannotDelete": "スタートノードは削除できません。すべてのワークフローにはエントリーポイントが必要です。"
+    },
+    "switch": {
+      "title": "スイッチ設定",
+      "mode": "モード",
+      "rules": "ルール",
+      "expression": "式",
+      "expressionHint": "ケースとマッチさせる値（例: $.status）",
+      "cases": "ケース",
+      "caseName": "ケース名",
+      "caseNamePlaceholder": "case_1",
+      "caseExpression": "条件",
+      "caseExpressionPlaceholder": "$.status == \"active\"",
+      "isDefault": "デフォルトケース",
+      "addCase": "ケースを追加",
+      "defaultBranch": "デフォルト"
+    },
+    "expressionHelpers": {
+      "title": "式を挿入",
+      "exists": "存在確認"
+    },
+    "outputPorts": "出力ブランチ",
+    "ioPorts": {
+      "title": "入出力ポート",
+      "inputs": "入力ポート",
+      "outputs": "出力ポート",
+      "default": "デフォルト"
+    },
+    "filter": {
+      "title": "フィルター設定",
+      "expression": "フィルター式",
+      "expressionPlaceholder": "$.value > 100",
+      "expressionHint": "この条件に一致するアイテムが通過します",
+      "keepAll": "全体判定モード",
+      "keepAllHint": "trueの場合、単一の評価結果に基づいてすべてのアイテムを保持または削除"
+    },
+    "split": {
+      "title": "分割設定",
+      "batchSize": "バッチサイズ",
+      "batchSizeHint": "バッチごとのアイテム数（1 = 1つずつ処理）",
+      "inputPath": "入力配列パス",
+      "inputPathPlaceholder": "$.items"
+    },
+    "aggregate": {
+      "title": "集計設定",
+      "groupBy": "グループ化フィールド",
+      "groupByPlaceholder": "$.category",
+      "operations": "操作",
+      "operation": "操作",
+      "field": "フィールド",
+      "outputField": "出力フィールド",
+      "separator": "区切り文字（concatの場合）",
+      "addOperation": "操作を追加",
+      "operationTypes": {
+        "count": "カウント",
+        "sum": "合計",
+        "avg": "平均",
+        "min": "最小値",
+        "max": "最大値",
+        "first": "最初",
+        "last": "最後",
+        "concat": "連結"
+      }
+    },
+    "error": {
+      "title": "エラー設定",
+      "errorType": "エラータイプ",
+      "errorTypePlaceholder": "validation",
+      "errorMessage": "エラーメッセージ",
+      "errorMessagePlaceholder": "検証失敗: 無効な入力",
+      "errorCode": "エラーコード",
+      "errorCodePlaceholder": "E001"
+    },
+    "note": {
+      "title": "ノート設定",
+      "content": "ノート内容",
+      "contentPlaceholder": "ワークフローのこの部分についてのドキュメントやコメントを追加...",
+      "color": "ノートの色",
+      "description": "ノートはドキュメント用であり、ワークフローの実行には影響しません。"
+    }
+  },
+  "runs": {
+    "title": "実行履歴",
+    "subtitle": "ワークフローの実行を監視・追跡",
+    "newRun": "新規実行",
+    "runDetails": "実行詳細",
+    "stepExecutions": "ステップ実行",
+    "input": "入力",
+    "output": "出力",
+    "logs": "ログ",
+    "noRuns": "実行履歴がありません",
+    "noRunsYet": "実行履歴がありません",
+    "noRunsDesc": "ワークフローを実行するとここに表示されます",
+    "noMatchingRuns": "一致する実行がありません",
+    "noMatchingDesc": "フィルター条件を調整してください",
+    "status": {
+      "pending": "待機中",
+      "running": "実行中",
+      "completed": "完了",
+      "failed": "失敗",
+      "cancelled": "キャンセル"
+    },
+    "mode": {
+      "test": "テスト",
+      "production": "本番"
+    },
+    "duration": "実行時間",
+    "startedAt": "開始時刻",
+    "completedAt": "完了時刻",
+    "table": {
+      "workflow": "ワークフロー",
+      "status": "ステータス",
+      "mode": "モード",
+      "duration": "実行時間",
+      "triggeredBy": "トリガー元",
+      "created": "作成日時"
+    },
+    "stats": {
+      "total": "合計",
+      "active": "アクティブ",
+      "completed": "完了",
+      "failed": "失敗"
+    },
+    "filters": {
+      "workflow": "ワークフロー",
+      "allWorkflows": "すべてのワークフロー",
+      "status": "ステータス",
+      "mode": "モード"
+    },
+    "activeCount": "{count} 件アクティブ",
+    "resultsCount": "{total} 件中 {filtered} 件表示",
+    "loading": "実行履歴を読み込み中...",
+    "loadFailed": "実行履歴の読み込みに失敗しました",
+    "viewWorkflows": "ワークフローを表示",
+    "view": "詳細"
+  },
+  "schedules": {
+    "title": "スケジュール",
+    "newSchedule": "新規スケジュール",
+    "noSchedules": "スケジュールがありません",
+    "cronExpression": "Cron式",
+    "nextRun": "次回実行",
+    "lastRun": "前回実行",
+    "enabled": "有効",
+    "disabled": "無効"
+  },
+  "settings": {
+    "title": "設定",
+    "general": "一般",
+    "language": "言語",
+    "theme": "テーマ",
+    "themes": {
+      "light": "ライト",
+      "dark": "ダーク",
+      "system": "システム設定に従う"
+    },
+    "apiKeys": "APIキー",
+    "integrations": "連携",
+    "account": "アカウント",
+    "notifications": "通知",
+    "team": "チーム",
+    "timezone": "タイムゾーン",
+    "dateFormat": "日付形式",
+    "notificationSettings": "通知設定",
+    "emailOnFailure": "ワークフロー失敗時にメール通知",
+    "emailOnSuccess": "ワークフロー成功時にメール通知",
+    "slackWebhook": "Slack Webhook URL",
+    "slackWebhookHint": "Slackチャンネルで通知を受信",
+    "apiKeysDesc": "LLMプロバイダーのAPIキーを設定します。キーは暗号化されて安全に保存されます。",
+    "openaiApiKey": "OpenAI APIキー",
+    "anthropicApiKey": "Anthropic APIキー",
+    "apiKeysDevNote": "注意: 現在の開発環境では、APIキーは環境変数で設定されています。設定APIが実装されると、このUIが有効になります。",
+    "teamMembers": "チームメンバー",
+    "teamComingSoon": "チーム管理機能は近日公開予定です。",
+    "teamComingSoonDesc": "チームメンバーを招待し、役割と権限を管理できます。"
+  },
+  "errors": {
+    "generic": "エラーが発生しました",
+    "notFound": "見つかりませんでした",
+    "unauthorized": "認証が必要です",
+    "forbidden": "アクセス権限がありません",
+    "validation": "入力内容を確認してください",
+    "network": "ネットワークエラーが発生しました",
+    "loadFailed": "読み込みに失敗しました",
+    "saveFailed": "保存に失敗しました",
+    "deleteFailed": "削除に失敗しました"
+  }
+}

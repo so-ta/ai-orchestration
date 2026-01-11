@@ -1,0 +1,728 @@
+openapi: 3.0.3
+info:
+  title: AI Orchestration API
+  description: |
+    LLM/ツールを組み合わせたDAGワークフローを設計・実行・監視するAPIです。
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Workflows
+    description: ワークフロー管理
+  - name: Steps
+    description: ステップ管理
+  - name: Edges
+    description: エッジ（ステップ間接続）管理
+  - name: Runs
+    description: 実行管理
+  - name: Schedules
+    description: スケジュール管理
+  - name: Adapters
+    description: アダプタ情報
+  - name: Health
+    description: ヘルスチェック
+
+paths:
+  /workflows:
+    get:
+      tags: [Workflows]
+      summary: ワークフロー一覧取得
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Workflow'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Workflows]
+      summary: ワークフロー作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkflowRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Workflow'
+
+  /workflows/{id}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Workflows]
+      summary: ワークフロー詳細取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WorkflowWithDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Workflows]
+      summary: ワークフロー更新（draftのみ）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkflowRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Workflow'
+    delete:
+      tags: [Workflows]
+      summary: ワークフロー削除
+      responses:
+        '204':
+          description: 削除成功
+
+  /workflows/{id}/publish:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [Workflows]
+      summary: ワークフロー公開
+      responses:
+        '200':
+          description: 公開成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/WorkflowWithDetails'
+
+  /workflows/{id}/steps:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Steps]
+      summary: ステップ一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Step'
+    post:
+      tags: [Steps]
+      summary: ステップ追加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStepRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Step'
+
+  /workflows/{id}/steps/{stepId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/StepId'
+    put:
+      tags: [Steps]
+      summary: ステップ更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStepRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Step'
+    delete:
+      tags: [Steps]
+      summary: ステップ削除
+      responses:
+        '204':
+          description: 削除成功
+
+  /workflows/{id}/edges:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Edges]
+      summary: エッジ一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Edge'
+    post:
+      tags: [Edges]
+      summary: エッジ追加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEdgeRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Edge'
+
+  /workflows/{id}/edges/{edgeId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/EdgeId'
+    delete:
+      tags: [Edges]
+      summary: エッジ削除
+      responses:
+        '204':
+          description: 削除成功
+
+  /workflows/{id}/runs:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Runs]
+      summary: 実行一覧取得
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Run'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+    post:
+      tags: [Runs]
+      summary: ワークフロー実行
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRunRequest'
+      responses:
+        '201':
+          description: 実行開始
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Run'
+
+  /runs/{runId}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Runs]
+      summary: 実行詳細取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RunWithDetails'
+
+  /runs/{runId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Runs]
+      summary: 実行キャンセル
+      responses:
+        '200':
+          description: キャンセル成功
+
+  /adapters:
+    get:
+      tags: [Adapters]
+      summary: アダプタ一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Adapter'
+
+  /health:
+    get:
+      tags: [Health]
+      summary: ヘルスチェック
+      security: []
+      responses:
+        '200':
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthCheck'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    WorkflowId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StepId:
+      name: stepId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EdgeId:
+      name: edgeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Workflow:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        version:
+          type: integer
+        published_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WorkflowWithDetails:
+      allOf:
+        - $ref: '#/components/schemas/Workflow'
+        - type: object
+          properties:
+            steps:
+              type: array
+              items:
+                $ref: '#/components/schemas/Step'
+            edges:
+              type: array
+              items:
+                $ref: '#/components/schemas/Edge'
+
+    CreateWorkflowRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+        input_schema:
+          type: object
+
+    UpdateWorkflowRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+
+    Step:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [llm, tool, condition, map, join, subflow]
+        config:
+          type: object
+        position_x:
+          type: integer
+        position_y:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateStepRequest:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [llm, tool, condition, map, join, subflow]
+        config:
+          type: object
+        position:
+          type: object
+          properties:
+            x:
+              type: integer
+            y:
+              type: integer
+
+    UpdateStepRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+        position:
+          type: object
+          properties:
+            x:
+              type: integer
+            y:
+              type: integer
+
+    Edge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        source_step_id:
+          type: string
+          format: uuid
+        target_step_id:
+          type: string
+          format: uuid
+        condition:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CreateEdgeRequest:
+      type: object
+      required: [source_step_id, target_step_id]
+      properties:
+        source_step_id:
+          type: string
+          format: uuid
+        target_step_id:
+          type: string
+          format: uuid
+        condition:
+          type: string
+          description: 条件式（例: $.result == true）
+
+    Run:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        mode:
+          type: string
+          enum: [test, production]
+        input:
+          type: object
+        output:
+          type: object
+        error:
+          type: string
+        triggered_by:
+          type: string
+          enum: [manual, schedule, webhook]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    RunWithDetails:
+      allOf:
+        - $ref: '#/components/schemas/Run'
+        - type: object
+          properties:
+            step_runs:
+              type: array
+              items:
+                $ref: '#/components/schemas/StepRun'
+
+    StepRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        step_id:
+          type: string
+          format: uuid
+        step_name:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed, skipped]
+        attempt:
+          type: integer
+        input:
+          type: object
+        output:
+          type: object
+        error:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+
+    CreateRunRequest:
+      type: object
+      properties:
+        input:
+          type: object
+        mode:
+          type: string
+          enum: [test, production]
+          default: production
+
+    Adapter:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+        components:
+          type: object
+          additionalProperties:
+            type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+  responses:
+    NotFound:
+      description: リソースが見つかりません
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+    ValidationError:
+      description: バリデーションエラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

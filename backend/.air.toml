@@ -1,0 +1,62 @@
+# Air configuration for Go hot reload
+# Documentation: https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Entrypoint (replaces deprecated bin)
+full_bin = "./tmp/api"
+# Build command
+cmd = "go build -o ./tmp/api ./cmd/api"
+# Watch these extensions
+include_ext = ["go", "tpl", "tmpl", "html"]
+# Exclude directories
+exclude_dir = ["assets", "tmp", "vendor", "testdata", "node_modules"]
+# Exclude files
+exclude_file = []
+# Exclude regex patterns
+exclude_regex = ["_test.go"]
+# Exclude unchanged files
+exclude_unchanged = false
+# Follow symlinks
+follow_symlink = false
+# Log file
+log = "build-errors.log"
+# Poll interval (ms) when using polling
+poll = false
+poll_interval = 0
+# Delay before rebuild (ms)
+delay = 500
+# Stop running old binary on build error
+stop_on_error = false
+# Send interrupt signal before killing process
+send_interrupt = true
+# Delay after sending interrupt (ms)
+kill_delay = 500
+# Rerun binary with previous arguments after rebuild
+rerun = false
+rerun_delay = 500
+# Arguments to pass to the binary
+args_bin = []
+
+[log]
+# Show log time
+time = false
+# Only show main log
+main_only = false
+
+[color]
+# Customize colors
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[misc]
+# Delete tmp directory on exit
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = true
+keep_scroll = true

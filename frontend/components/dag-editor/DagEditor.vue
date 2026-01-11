@@ -1,0 +1,2538 @@
+<script setup lang="ts">
+import { VueFlow, useVueFlow, Handle, Position, MarkerType, type Node, type Edge as FlowEdge } from '@vue-flow/core'
+import { MiniMap } from '@vue-flow/minimap'
+import { Controls } from '@vue-flow/controls'
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/minimap/dist/style.css'
+import '@vue-flow/controls/dist/style.css'
+import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType } from '~/types/api'
+
+const props = defineProps<{
+  steps: Step[]
+  edges: Edge[]
+  blockGroups?: BlockGroup[]  // Block groups for control flow constructs
+  readonly?: boolean
+  selectedStepId?: string | null
+  selectedGroupId?: string | null  // Selected block group
+  stepRuns?: StepRun[]  // Optional: for showing step execution status
+  blockDefinitions?: BlockDefinition[] // Block definitions for output ports
+}>()
+
+// Pushed block info for boundary violations (pushed outside)
+interface PushedBlock {
+  stepId: string
+  position: { x: number; y: number }
+}
+
+// Added block info for blocks that should be added to the group (pushed inside)
+interface AddedBlock {
+  stepId: string
+  position: { x: number; y: number }
+  role: string
+}
+
+// Moved group info for groups that were pushed by blocks
+interface MovedGroup {
+  groupId: string
+  position: { x: number; y: number }
+  delta: { x: number; y: number }
+}
+
+const emit = defineEmits<{
+  (e: 'step:select', step: Step): void
+  (e: 'step:update', stepId: string, position: { x: number; y: number }, movedGroups?: MovedGroup[]): void
+  (e: 'step:drop', data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: string }): void
+  (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: string, movedGroups?: MovedGroup[]): void
+  (e: 'edge:add', source: string, target: string, sourcePort?: string, targetPort?: string): void
+  (e: 'edge:delete', edgeId: string): void
+  (e: 'pane:click'): void
+  (e: 'step:showDetails', stepRun: StepRun): void
+  // Block group events
+  (e: 'group:select', group: BlockGroup): void
+  (e: 'group:update', groupId: string, updates: { position?: { x: number; y: number }; size?: { width: number; height: number } }): void
+  (e: 'group:drop', data: { type: BlockGroupType; name: string; position: { x: number; y: number } }): void
+  // Group move complete - includes delta for updating internal blocks, pushed/added blocks, and cascaded group movements
+  (e: 'group:move-complete', groupId: string, data: {
+    position: { x: number; y: number }
+    delta: { x: number; y: number }
+    pushedBlocks: PushedBlock[]
+    addedBlocks: AddedBlock[]
+    movedGroups: MovedGroup[]
+  }): void
+}>()
+
+const { onConnect, onNodeDragStop, onPaneClick, project, updateNode } = useVueFlow()
+
+// Drag state
+const isDragOver = ref(false)
+
+// Create a map of step ID to step run for quick lookup
+const stepRunMap = computed(() => {
+  const map = new Map<string, StepRun>()
+  if (props.stepRuns) {
+    for (const run of props.stepRuns) {
+      map.set(run.step_id, run)
+    }
+  }
+  return map
+})
+
+// Create a map of block slug to input ports
+const inputPortsMap = computed(() => {
+  const map = new Map<string, InputPort[]>()
+  if (props.blockDefinitions) {
+    for (const block of props.blockDefinitions) {
+      map.set(block.slug, block.input_ports || [])
+    }
+  }
+  return map
+})
+
+// Create a map of block slug to output ports
+const outputPortsMap = computed(() => {
+  const map = new Map<string, OutputPort[]>()
+  if (props.blockDefinitions) {
+    for (const block of props.blockDefinitions) {
+      map.set(block.slug, block.output_ports || [])
+    }
+  }
+  return map
+})
+
+// Get input ports for a step type
+function getInputPorts(stepType: string): InputPort[] {
+  const ports = inputPortsMap.value.get(stepType)
+  if (ports && ports.length > 0) {
+    return ports
+  }
+  // Default single input port
+  return [{ name: 'input', label: 'Input', required: true }]
+}
+
+// Get output ports for a step type (or step for dynamic ports like switch)
+function getOutputPorts(stepType: string, step?: Step): OutputPort[] {
+  const config = step?.config as Record<string, unknown> | undefined
+
+  // Special handling for switch blocks - generate dynamic ports from cases
+  if (stepType === 'switch' && config?.cases) {
+    const cases = config.cases as Array<{ name: string; expression?: string; is_default?: boolean }>
+    const dynamicPorts: OutputPort[] = []
+
+    for (const caseItem of cases) {
+      if (caseItem.is_default) {
+        dynamicPorts.push({
+          name: 'default',
+          label: 'Default',
+          is_default: true,
+        })
+      } else {
+        dynamicPorts.push({
+          name: caseItem.name || `case_${dynamicPorts.length + 1}`,
+          label: caseItem.name || `Case ${dynamicPorts.length + 1}`,
+          is_default: false,
+        })
+      }
+    }
+
+    // If no cases defined, return default port
+    if (dynamicPorts.length === 0) {
+      return [{ name: 'default', label: 'Default', is_default: true }]
+    }
+
+    return dynamicPorts
+  }
+
+  // Special handling for router blocks - generate dynamic ports from routes
+  if (stepType === 'router' && config?.routes) {
+    const routes = config.routes as Array<{ name: string; description?: string }>
+    const dynamicPorts: OutputPort[] = [
+      { name: 'default', label: 'Default', is_default: true }
+    ]
+
+    for (const route of routes) {
+      dynamicPorts.push({
+        name: route.name,
+        label: route.name,
+        is_default: false,
+      })
+    }
+
+    return dynamicPorts
+  }
+
+  const ports = outputPortsMap.value.get(stepType)
+  if (ports && ports.length > 0) {
+    return ports
+  }
+  // Default single output port
+  return [{ name: 'output', label: 'Output', is_default: true }]
+}
+
+// Check if a step type has multiple inputs
+function hasMultipleInputs(stepType: string): boolean {
+  const ports = getInputPorts(stepType)
+  return ports.length > 1
+}
+
+// Check if a step type has multiple outputs
+function hasMultipleOutputs(stepType: string): boolean {
+  const ports = getOutputPorts(stepType)
+  return ports.length > 1
+}
+
+// Get block group color based on type
+function getGroupColor(type: BlockGroupType): string {
+  const colors: Record<BlockGroupType, string> = {
+    parallel: '#8b5cf6',    // Purple
+    try_catch: '#ef4444',   // Red
+    if_else: '#f59e0b',     // Amber
+    switch_case: '#eab308', // Yellow
+    foreach: '#22c55e',     // Green
+    while: '#14b8a6',       // Teal
+  }
+  return colors[type] || '#64748b'
+}
+
+// Get block group icon
+function getGroupIcon(type: BlockGroupType): string {
+  const icons: Record<BlockGroupType, string> = {
+    parallel: '⫲',
+    try_catch: '⚡',
+    if_else: '◇',
+    switch_case: '⟍',
+    foreach: '∀',
+    while: '↻',
+  }
+  return icons[type] || '▢'
+}
+
+// Get group label suffix based on type
+function getGroupTypeLabel(type: BlockGroupType): string {
+  const labels: Record<BlockGroupType, string> = {
+    parallel: 'Parallel',
+    try_catch: 'Try-Catch',
+    if_else: 'If-Else',
+    switch_case: 'Switch',
+    foreach: 'ForEach',
+    while: 'While',
+  }
+  return labels[type] || type
+}
+
+// Group output port definitions
+interface GroupPort {
+  name: string
+  label: string
+  color: string
+}
+
+const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
+  parallel: [
+    { name: 'complete', label: 'Complete', color: '#22c55e' },
+    { name: 'error', label: 'Error', color: '#ef4444' },
+  ],
+  try_catch: [
+    { name: 'success', label: 'Success', color: '#22c55e' },
+    { name: 'caught', label: 'Caught', color: '#f59e0b' },
+    { name: 'uncaught', label: 'Uncaught', color: '#ef4444' },
+  ],
+  if_else: [
+    { name: 'complete', label: 'Complete', color: '#22c55e' },
+  ],
+  switch_case: [
+    { name: 'complete', label: 'Complete', color: '#22c55e' },
+  ],
+  foreach: [
+    { name: 'complete', label: 'Complete', color: '#22c55e' },
+    { name: 'error', label: 'Error', color: '#ef4444' },
+  ],
+  while: [
+    { name: 'complete', label: 'Complete', color: '#22c55e' },
+    { name: 'max_iterations', label: 'Max Reached', color: '#f59e0b' },
+  ],
+}
+
+// Get group output ports
+function getGroupOutputPorts(type: BlockGroupType): GroupPort[] {
+  return GROUP_OUTPUT_PORTS[type] || [{ name: 'complete', label: 'Complete', color: '#22c55e' }]
+}
+
+// Multi-section zone configuration
+interface GroupZone {
+  role: string
+  label: string
+  // Position as percentage of content area (after header)
+  top: number
+  bottom: number
+  left: number
+  right: number
+}
+
+const GROUP_ZONES: Record<BlockGroupType, GroupZone[] | null> = {
+  parallel: null, // Single body zone
+  try_catch: [
+    { role: 'try', label: 'TRY', top: 0, bottom: 0.55, left: 0, right: 1 },
+    { role: 'catch', label: 'CATCH', top: 0.55, bottom: 1, left: 0, right: 1 },
+  ],
+  if_else: [
+    { role: 'then', label: 'THEN', top: 0, bottom: 1, left: 0, right: 0.48 },
+    { role: 'else', label: 'ELSE', top: 0, bottom: 1, left: 0.52, right: 1 },
+  ],
+  switch_case: null,
+  foreach: null,
+  while: null,
+}
+
+// Get zones for a group type
+function getGroupZones(type: BlockGroupType): GroupZone[] | null {
+  return GROUP_ZONES[type] || null
+}
+
+// Check if group has multiple zones
+function hasMultipleZones(type: BlockGroupType): boolean {
+  return GROUP_ZONES[type] !== null
+}
+
+// Constants for group layout
+const GROUP_HEADER_HEIGHT = 32
+const GROUP_PADDING = 10
+const GROUP_BOUNDARY_WIDTH = 20
+
+// Default step node size (used as fallback when actual size is not available)
+const DEFAULT_STEP_NODE_WIDTH = 150
+const DEFAULT_STEP_NODE_HEIGHT = 60
+
+// Default group size for new groups
+const DEFAULT_GROUP_WIDTH = 400
+const DEFAULT_GROUP_HEIGHT = 300
+
+// Drop zone result interface
+interface DropZoneResult {
+  group: BlockGroup | null
+  zone: 'inside' | 'boundary' | 'outside'
+  role?: string
+}
+
+// Determine role based on position within multi-section group
+function determineRoleInGroup(x: number, y: number, group: BlockGroup): string {
+  const zones = getGroupZones(group.type)
+  if (!zones) return 'body'
+
+  // Calculate content area dimensions
+  const contentLeft = group.position_x + GROUP_PADDING
+  const contentTop = group.position_y + GROUP_HEADER_HEIGHT + GROUP_PADDING
+  const contentWidth = group.width - GROUP_PADDING * 2
+  const contentHeight = group.height - GROUP_HEADER_HEIGHT - GROUP_PADDING * 2
+
+  // Normalize position to content area (0-1)
+  const normalizedX = (x - contentLeft) / contentWidth
+  const normalizedY = (y - contentTop) / contentHeight
+
+  // Find which zone contains this position
+  for (const zone of zones) {
+    if (normalizedX >= zone.left && normalizedX <= zone.right &&
+        normalizedY >= zone.top && normalizedY <= zone.bottom) {
+      return zone.role
+    }
+  }
+
+  // Default to first zone's role
+  return zones[0]?.role || 'body'
+}
+
+// Find which group contains the given position and determine zone
+// Considers the full bounding box of the block (not just the position point)
+function findDropZone(
+  x: number,
+  y: number,
+  blockWidth: number = DEFAULT_STEP_NODE_WIDTH,
+  blockHeight: number = DEFAULT_STEP_NODE_HEIGHT,
+  excludeGroupId?: string  // Exclude this group from checking (used when dragging a group)
+): DropZoneResult {
+  if (!props.blockGroups) return { group: null, zone: 'outside' }
+
+  // Block bounding box
+  const blockLeft = x
+  const blockRight = x + blockWidth
+  const blockTop = y
+  const blockBottom = y + blockHeight
+
+  // Check groups in reverse order (later groups are on top)
+  for (let i = props.blockGroups.length - 1; i >= 0; i--) {
+    const group = props.blockGroups[i]
+
+    // Skip excluded group
+    if (excludeGroupId && group.id === excludeGroupId) continue
+
+    // Group outer bounds
+    const outerLeft = group.position_x
+    const outerRight = group.position_x + group.width
+    const outerTop = group.position_y
+    const outerBottom = group.position_y + group.height
+
+    // Check if any part of the block overlaps with the group's outer bounds
+    const overlapsOuterBounds =
+      blockRight > outerLeft && blockLeft < outerRight &&
+      blockBottom > outerTop && blockTop < outerBottom
+
+    if (!overlapsOuterBounds) continue
+
+    // Valid inside area (where the entire block must fit)
+    const innerLeft = group.position_x + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+    const innerRight = group.position_x + group.width - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+    const innerTop = group.position_y + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+    const innerBottom = group.position_y + group.height - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+
+    // Check if the ENTIRE block fits within the valid inner area
+    const entireBlockInside =
+      blockLeft >= innerLeft && blockRight <= innerRight &&
+      blockTop >= innerTop && blockBottom <= innerBottom
+
+    if (entireBlockInside) {
+      // Determine role based on block center position for multi-section groups
+      const centerX = x + blockWidth / 2
+      const centerY = y + blockHeight / 2
+      const role = determineRoleInGroup(centerX, centerY, group)
+      return { group, zone: 'inside', role }
+    }
+
+    // Block overlaps with group but doesn't fully fit in inner area = boundary zone
+    return { group, zone: 'boundary' }
+  }
+
+  return { group: null, zone: 'outside' }
+}
+
+// Legacy function for backward compatibility
+function findGroupAtPosition(x: number, y: number): BlockGroup | null {
+  const result = findDropZone(x, y)
+  return result.zone === 'inside' ? result.group : null
+}
+
+// Snap position to valid location (inside or outside group, not on boundary)
+// Returns the closest non-boundary position where the entire block fits
+function snapToValidPosition(
+  x: number,
+  y: number,
+  group: BlockGroup,
+  blockWidth: number = DEFAULT_STEP_NODE_WIDTH,
+  blockHeight: number = DEFAULT_STEP_NODE_HEIGHT
+): { x: number; y: number; inside: boolean } {
+  // Valid inside area bounds (where the block's top-left corner can be placed
+  // so that the entire block fits within the inner area)
+  const innerLeft = group.position_x + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+  const innerRight = group.position_x + group.width - GROUP_PADDING - GROUP_BOUNDARY_WIDTH - blockWidth
+  const innerTop = group.position_y + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+  const innerBottom = group.position_y + group.height - GROUP_PADDING - GROUP_BOUNDARY_WIDTH - blockHeight
+
+  // Check if inner area is large enough to contain the block
+  const canFitInside = innerRight >= innerLeft && innerBottom >= innerTop
+
+  if (canFitInside) {
+    // Calculate clamped inside position
+    const insideX = Math.max(innerLeft, Math.min(x, innerRight))
+    const insideY = Math.max(innerTop, Math.min(y, innerBottom))
+    const distToInside = Math.sqrt(Math.pow(x - insideX, 2) + Math.pow(y - insideY, 2))
+
+    // Calculate outside positions (block completely outside the group)
+    const outsideGap = 20 // Gap between block and group when outside
+    const edgeDistances = [
+      { edge: 'left', dist: Math.abs(x - (group.position_x - blockWidth - outsideGap)),
+        outX: group.position_x - blockWidth - outsideGap, outY: y },
+      { edge: 'right', dist: Math.abs(x - (group.position_x + group.width + outsideGap)),
+        outX: group.position_x + group.width + outsideGap, outY: y },
+      { edge: 'top', dist: Math.abs(y - (group.position_y - blockHeight - outsideGap)),
+        outX: x, outY: group.position_y - blockHeight - outsideGap },
+      { edge: 'bottom', dist: Math.abs(y - (group.position_y + group.height + outsideGap)),
+        outX: x, outY: group.position_y + group.height + outsideGap },
+    ]
+
+    // Find closest outside position
+    edgeDistances.sort((a, b) => a.dist - b.dist)
+    const closestEdge = edgeDistances[0]
+    const distToOutside = closestEdge.dist
+
+    // Snap to the closer valid position
+    if (distToInside <= distToOutside) {
+      return { x: insideX, y: insideY, inside: true }
+    } else {
+      return { x: closestEdge.outX, y: closestEdge.outY, inside: false }
+    }
+  } else {
+    // Block doesn't fit inside - must snap to outside
+    const outsideGap = 20
+    const edgeDistances = [
+      { edge: 'left', dist: Math.abs(x - (group.position_x - blockWidth - outsideGap)),
+        outX: group.position_x - blockWidth - outsideGap, outY: y },
+      { edge: 'right', dist: Math.abs(x - (group.position_x + group.width + outsideGap)),
+        outX: group.position_x + group.width + outsideGap, outY: y },
+      { edge: 'top', dist: Math.abs(y - (group.position_y - blockHeight - outsideGap)),
+        outX: x, outY: group.position_y - blockHeight - outsideGap },
+      { edge: 'bottom', dist: Math.abs(y - (group.position_y + group.height + outsideGap)),
+        outX: x, outY: group.position_y + group.height + outsideGap },
+    ]
+
+    edgeDistances.sort((a, b) => a.dist - b.dist)
+    const closestEdge = edgeDistances[0]
+    return { x: closestEdge.outX, y: closestEdge.outY, inside: false }
+  }
+}
+
+// Calculate new position for a group to avoid collision with a block
+// The group is pushed away from the block in the direction that requires minimum movement
+function pushGroupAwayFromBlock(
+  group: BlockGroup,
+  blockX: number,
+  blockY: number,
+  blockWidth: number,
+  blockHeight: number
+): { x: number; y: number; deltaX: number; deltaY: number } {
+  const outsideGap = 20
+
+  // Calculate how much overlap exists in each direction
+  const blockLeft = blockX
+  const blockRight = blockX + blockWidth
+  const blockTop = blockY
+  const blockBottom = blockY + blockHeight
+
+  const groupLeft = group.position_x
+  const groupRight = group.position_x + group.width
+  const groupTop = group.position_y
+  const groupBottom = group.position_y + group.height
+
+  // Calculate minimum push distance for each direction
+  const pushDistances = [
+    { dir: 'left', dist: groupRight - blockLeft + outsideGap, newX: blockLeft - group.width - outsideGap, newY: group.position_y },
+    { dir: 'right', dist: blockRight - groupLeft + outsideGap, newX: blockRight + outsideGap, newY: group.position_y },
+    { dir: 'up', dist: groupBottom - blockTop + outsideGap, newX: group.position_x, newY: blockTop - group.height - outsideGap },
+    { dir: 'down', dist: blockBottom - groupTop + outsideGap, newX: group.position_x, newY: blockBottom + outsideGap },
+  ]
+
+  // Find the direction with minimum push distance
+  pushDistances.sort((a, b) => a.dist - b.dist)
+  const minPush = pushDistances[0]
+
+  return {
+    x: minPush.newX,
+    y: minPush.newY,
+    deltaX: minPush.newX - group.position_x,
+    deltaY: minPush.newY - group.position_y,
+  }
+}
+
+// Check if a block collides with any group's boundary (excluding specified groups)
+function findGroupBoundaryCollision(
+  blockX: number,
+  blockY: number,
+  blockWidth: number,
+  blockHeight: number,
+  excludeGroupIds: Set<string>,
+  groupPositions: Map<string, { x: number; y: number }>  // Current positions (may be updated during cascade)
+): BlockGroup | null {
+  if (!props.blockGroups) return null
+
+  const blockLeft = blockX
+  const blockRight = blockX + blockWidth
+  const blockTop = blockY
+  const blockBottom = blockY + blockHeight
+
+  for (const group of props.blockGroups) {
+    if (excludeGroupIds.has(group.id)) continue
+
+    // Get current position (may have been moved during cascade)
+    const pos = groupPositions.get(group.id) || { x: group.position_x, y: group.position_y }
+
+    const outerLeft = pos.x
+    const outerRight = pos.x + group.width
+    const outerTop = pos.y
+    const outerBottom = pos.y + group.height
+
+    // Check if block overlaps with group's outer bounds
+    const overlapsGroup =
+      blockRight > outerLeft && blockLeft < outerRight &&
+      blockBottom > outerTop && blockTop < outerBottom
+
+    if (!overlapsGroup) continue
+
+    // Check if block is fully inside the valid inner area
+    const innerLeft = pos.x + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+    const innerRight = pos.x + group.width - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+    const innerTop = pos.y + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+    const innerBottom = pos.y + group.height - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+
+    const fullyInside =
+      blockLeft >= innerLeft && blockRight <= innerRight &&
+      blockTop >= innerTop && blockBottom <= innerBottom
+
+    // If on boundary (overlaps but not fully inside), return this group
+    if (!fullyInside) {
+      return group
+    }
+  }
+
+  return null
+}
+
+// Check if a group collides with another group (excluding specified groups)
+function findGroupCollision(
+  groupX: number,
+  groupY: number,
+  groupWidth: number,
+  groupHeight: number,
+  excludeGroupIds: Set<string>,
+  groupPositions: Map<string, { x: number; y: number }>,
+  groupSizes?: Map<string, { width: number; height: number }>
+): BlockGroup | null {
+  if (!props.blockGroups) return null
+
+  const gap = 10  // Minimum gap between groups
+
+  for (const group of props.blockGroups) {
+    if (excludeGroupIds.has(group.id)) continue
+
+    const pos = groupPositions.get(group.id) || { x: group.position_x, y: group.position_y }
+    // Use tracked size if available, otherwise use group's stored size
+    const size = groupSizes?.get(group.id) || { width: group.width, height: group.height }
+
+    // Check if groups overlap (with gap consideration)
+    const overlaps =
+      groupX < pos.x + size.width + gap &&
+      groupX + groupWidth + gap > pos.x &&
+      groupY < pos.y + size.height + gap &&
+      groupY + groupHeight + gap > pos.y
+
+    if (overlaps) {
+      return group
+    }
+  }
+
+  return null
+}
+
+// Push direction type for unified cascade direction
+type PushDirection = 'left' | 'right' | 'up' | 'down'
+
+// Determine push direction based on relative positions
+function determinePushDirection(
+  pushedCenterX: number,
+  pushedCenterY: number,
+  pusherCenterX: number,
+  pusherCenterY: number
+): PushDirection {
+  const dirX = pushedCenterX - pusherCenterX
+  const dirY = pushedCenterY - pusherCenterY
+
+  if (Math.abs(dirX) > Math.abs(dirY)) {
+    return dirX > 0 ? 'right' : 'left'
+  } else {
+    return dirY > 0 ? 'down' : 'up'
+  }
+}
+
+// Generic function to calculate push position
+// When fixedDirection is provided, always push in that direction (for cascade consistency)
+// Returns the new position, delta, and the direction used
+function calculatePushPosition(
+  pushedX: number,
+  pushedY: number,
+  pushedWidth: number,
+  pushedHeight: number,
+  pusherX: number,
+  pusherY: number,
+  pusherWidth: number,
+  pusherHeight: number,
+  fixedDirection?: PushDirection
+): { x: number; y: number; deltaX: number; deltaY: number; direction: PushDirection } {
+  const gap = 20  // Gap after pushing
+
+  // Calculate center points
+  const pushedCenterX = pushedX + pushedWidth / 2
+  const pushedCenterY = pushedY + pushedHeight / 2
+  const pusherCenterX = pusherX + pusherWidth / 2
+  const pusherCenterY = pusherY + pusherHeight / 2
+
+  // Use fixed direction if provided, otherwise determine from relative positions
+  const direction = fixedDirection ?? determinePushDirection(
+    pushedCenterX, pushedCenterY, pusherCenterX, pusherCenterY
+  )
+
+  // Calculate new position based on direction
+  let newX = pushedX
+  let newY = pushedY
+
+  switch (direction) {
+    case 'left':
+      newX = pusherX - pushedWidth - gap
+      break
+    case 'right':
+      newX = pusherX + pusherWidth + gap
+      break
+    case 'up':
+      newY = pusherY - pushedHeight - gap
+      break
+    case 'down':
+      newY = pusherY + pusherHeight + gap
+      break
+  }
+
+  return {
+    x: newX,
+    y: newY,
+    deltaX: newX - pushedX,
+    deltaY: newY - pushedY,
+    direction,
+  }
+}
+
+// Push a group away from another group
+function pushGroupAwayFromGroup(
+  pushedGroup: BlockGroup,
+  pushedGroupPos: { x: number; y: number },
+  pusherGroup: { x: number; y: number; width: number; height: number }
+): { x: number; y: number; deltaX: number; deltaY: number } {
+  return calculatePushPosition(
+    pushedGroupPos.x, pushedGroupPos.y, pushedGroup.width, pushedGroup.height,
+    pusherGroup.x, pusherGroup.y, pusherGroup.width, pusherGroup.height
+  )
+}
+
+// Process cascade group push when a block is pushed out and collides with other groups
+// Returns an array of moved groups with their new positions
+function processCascadeGroupPush(
+  blockX: number,
+  blockY: number,
+  blockWidth: number,
+  blockHeight: number,
+  excludeGroupIds: Set<string>
+): MovedGroup[] {
+  if (!props.blockGroups) return []
+
+  const movedGroups: MovedGroup[] = []
+  const processedGroups = new Set<string>(excludeGroupIds)
+  const groupPositions = new Map<string, { x: number; y: number }>()
+  const groupSizes = new Map<string, { width: number; height: number }>()
+
+  // Initialize group positions and sizes
+  for (const group of props.blockGroups) {
+    groupPositions.set(group.id, { x: group.position_x, y: group.position_y })
+    groupSizes.set(group.id, { width: group.width, height: group.height })
+  }
+
+  // Track cascade direction - determined by the first push
+  let cascadeDirection: PushDirection | null = null
+
+  // Queue of items to process: can be block or group
+  interface PushItem {
+    type: 'block' | 'group'
+    x: number
+    y: number
+    width: number
+    height: number
+    groupId?: string  // Only for group type
+  }
+
+  const pushQueue: PushItem[] = [{
+    type: 'block',
+    x: blockX,
+    y: blockY,
+    width: blockWidth,
+    height: blockHeight,
+  }]
+
+  const MAX_CASCADE_DEPTH = 10
+  let cascadeDepth = 0
+
+  while (pushQueue.length > 0 && cascadeDepth < MAX_CASCADE_DEPTH) {
+    cascadeDepth++
+    const item = pushQueue.shift()!
+
+    // Find groups that collide with this item
+    const collidingGroup = findGroupCollision(
+      item.x, item.y, item.width, item.height,
+      processedGroups, groupPositions, groupSizes
+    )
+
+    if (!collidingGroup) continue
+
+    // Mark as processed
+    processedGroups.add(collidingGroup.id)
+
+    // Get current position and size
+    const currentPos = groupPositions.get(collidingGroup.id) || { x: collidingGroup.position_x, y: collidingGroup.position_y }
+    const currentSize = groupSizes.get(collidingGroup.id) || { width: collidingGroup.width, height: collidingGroup.height }
+
+    // Calculate push position using cascade direction
+    const pushResult = calculatePushPosition(
+      currentPos.x, currentPos.y, currentSize.width, currentSize.height,
+      item.x, item.y, item.width, item.height,
+      cascadeDirection ?? undefined
+    )
+
+    // Set cascade direction if this is the first push
+    if (!cascadeDirection) {
+      cascadeDirection = pushResult.direction
+    }
+
+    // Update position tracking
+    groupPositions.set(collidingGroup.id, { x: pushResult.x, y: pushResult.y })
+
+    // Add to moved groups
+    movedGroups.push({
+      groupId: collidingGroup.id,
+      position: { x: pushResult.x, y: pushResult.y },
+      delta: { x: pushResult.deltaX, y: pushResult.deltaY },
+    })
+
+    // Update Vue Flow's internal state
+    updateNode(collidingGroup.id, { position: { x: pushResult.x, y: pushResult.y } })
+
+    // Add the pushed group to the queue for further cascade checks
+    pushQueue.push({
+      type: 'group',
+      x: pushResult.x,
+      y: pushResult.y,
+      width: currentSize.width,
+      height: currentSize.height,
+      groupId: collidingGroup.id,
+    })
+  }
+
+  return movedGroups
+}
+
+// Convert block groups to Vue Flow group nodes
+const groupNodes = computed<Node[]>(() => {
+  if (!props.blockGroups) return []
+
+  return props.blockGroups.map(group => ({
+    id: group.id,
+    type: 'group',
+    position: { x: group.position_x, y: group.position_y },
+    style: {
+      width: `${group.width}px`,
+      height: `${group.height}px`,
+      backgroundColor: `${getGroupColor(group.type)}10`,
+      borderColor: getGroupColor(group.type),
+      borderWidth: '2px',
+      borderStyle: 'dashed',
+      borderRadius: '12px',
+    },
+    data: {
+      label: group.name,
+      type: group.type,
+      group,
+      isSelected: group.id === props.selectedGroupId,
+      color: getGroupColor(group.type),
+      icon: getGroupIcon(group.type),
+      typeLabel: getGroupTypeLabel(group.type),
+      outputPorts: getGroupOutputPorts(group.type),
+      height: group.height,
+      width: group.width,
+      zones: getGroupZones(group.type),
+      hasMultipleZones: hasMultipleZones(group.type),
+    },
+    // Group nodes should be rendered behind step nodes
+    zIndex: -1,
+  }))
+})
+
+// Convert steps to Vue Flow nodes
+const stepNodes = computed<Node[]>(() => {
+  return props.steps.map(step => {
+    const stepRun = stepRunMap.value.get(step.id)
+    const inputPorts = getInputPorts(step.type)
+    // Pass step for dynamic port generation (switch, router)
+    const outputPorts = getOutputPorts(step.type, step)
+
+    // Calculate position relative to parent group if step belongs to a group
+    const parentGroupId = step.block_group_id || undefined
+    let position = { x: step.position_x, y: step.position_y }
+
+    // If step has a parent group, position is relative to the group
+    if (parentGroupId && props.blockGroups) {
+      const parentGroup = props.blockGroups.find(g => g.id === parentGroupId)
+      if (parentGroup) {
+        // Position relative to group's top-left corner
+        // Add padding for the group header
+        position = {
+          x: step.position_x - parentGroup.position_x,
+          y: step.position_y - parentGroup.position_y,
+        }
+      }
+    }
+
+    return {
+      id: step.id,
+      type: 'custom',
+      position,
+      parentNode: parentGroupId,
+      // Note: expandParent is intentionally NOT set - group should not auto-expand
+      data: {
+        label: step.name,
+        type: step.type,
+        step,
+        isSelected: step.id === props.selectedStepId,
+        stepRun,  // Include step run data if available
+        inputPorts,   // Include input ports for multiple handles
+        outputPorts,  // Include output ports for multiple handles
+      },
+    }
+  })
+})
+
+// Combine group nodes and step nodes
+const nodes = computed<Node[]>(() => {
+  return [...groupNodes.value, ...stepNodes.value]
+})
+
+// Get edge color based on source port
+function getEdgeColor(sourcePort?: string): string {
+  if (!sourcePort) return '#94a3b8'
+
+  const portColors: Record<string, string> = {
+    // Condition ports
+    'true': '#22c55e',      // green for Yes/True
+    'false': '#ef4444',     // red for No/False
+    // Human in loop
+    'approved': '#22c55e',  // green
+    'rejected': '#ef4444',  // red
+    'timeout': '#f59e0b',   // amber
+    // Filter
+    'matched': '#22c55e',   // green
+    'unmatched': '#94a3b8', // gray
+    // Loop/Map
+    'loop': '#3b82f6',      // blue
+    'complete': '#22c55e',  // green
+    'item': '#3b82f6',      // blue
+    // Default
+    'default': '#94a3b8',   // gray
+    'output': '#94a3b8',    // gray
+  }
+
+  return portColors[sourcePort] || '#6366f1' // indigo for custom cases
+}
+
+// Get edge label text
+function getEdgeLabel(sourcePort?: string, condition?: string): string | undefined {
+  if (condition) return condition
+  if (!sourcePort || sourcePort === 'output') return undefined
+
+  // Pretty labels for known ports
+  const portLabels: Record<string, string> = {
+    'true': 'Yes',
+    'false': 'No',
+    'approved': 'Approved',
+    'rejected': 'Rejected',
+    'timeout': 'Timeout',
+    'matched': 'Matched',
+    'unmatched': 'Unmatched',
+    'loop': 'Loop',
+    'complete': 'Complete',
+    'item': 'Item',
+    'default': 'Default',
+  }
+
+  return portLabels[sourcePort] || sourcePort
+}
+
+// Convert edges to Vue Flow edges
+const flowEdges = computed<FlowEdge[]>(() => {
+  return props.edges.map(edge => {
+    const color = getEdgeColor(edge.source_port)
+    return {
+      id: edge.id,
+      source: edge.source_step_id,
+      target: edge.target_step_id,
+      sourceHandle: edge.source_port || undefined, // Connect from specific output port
+      targetHandle: edge.target_port || undefined, // Connect to specific input port
+      type: 'smoothstep',
+      animated: false,
+      label: getEdgeLabel(edge.source_port, edge.condition),
+      labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
+      labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
+      style: { stroke: color, strokeWidth: 2 },
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+    }
+  })
+})
+
+// Handle new connection
+onConnect((params) => {
+  if (!props.readonly) {
+    // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
+    const sourcePort = params.sourceHandle || undefined
+    const targetPort = params.targetHandle || undefined
+    emit('edge:add', params.source, params.target, sourcePort, targetPort)
+  }
+})
+
+// Handle node drag
+onNodeDragStop((event) => {
+  if (!props.readonly) {
+    const node = event.node
+
+    // Check if this is a group node
+    if (node.type === 'group') {
+      const groupData = node.data.group as BlockGroup
+      let newX = Math.round(node.position.x)
+      let newY = Math.round(node.position.y)
+
+      // Calculate delta from original position
+      const originalX = groupData.position_x
+      const originalY = groupData.position_y
+
+      // Get actual group dimensions (prefer Vue Flow dimensions, fallback to stored data)
+      const groupWidth = node.dimensions?.width || groupData.width || DEFAULT_GROUP_WIDTH
+      const groupHeight = node.dimensions?.height || groupData.height || DEFAULT_GROUP_HEIGHT
+
+      // Save the drop position (before any snapping)
+      const dropX = newX
+      const dropY = newY
+
+      // Result arrays
+      const pushedBlocks: PushedBlock[] = []
+      const addedBlocks: AddedBlock[] = []
+      const movedGroups: MovedGroup[] = []
+
+      // Track cascade direction - all pushes will use the same direction for consistency
+      let cascadeDirection: PushDirection | null = null
+
+      // =================================================================
+      // STEP 1: At the DROP position, find blocks that are FULLY INSIDE
+      //         and add them to the group BEFORE any snapping
+      // =================================================================
+      const dropPositionGroup: BlockGroup = {
+        ...groupData,
+        position_x: dropX,
+        position_y: dropY,
+        width: groupWidth,
+        height: groupHeight,
+      }
+
+      // Valid inside area at drop position
+      const dropInnerLeft = dropX + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+      const dropInnerRight = dropX + groupWidth - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+      const dropInnerTop = dropY + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+      const dropInnerBottom = dropY + groupHeight - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+
+      // Set to track which steps are added to the group (won't be pushed out later)
+      const addedStepIds = new Set<string>()
+
+      for (const step of props.steps) {
+        // Skip steps already in this group
+        if (step.block_group_id === node.id) continue
+        // Skip start steps - they cannot be added to groups
+        if (step.type === 'start') continue
+
+        const stepWidth = DEFAULT_STEP_NODE_WIDTH
+        const stepHeight = DEFAULT_STEP_NODE_HEIGHT
+
+        const stepLeft = step.position_x
+        const stepRight = step.position_x + stepWidth
+        const stepTop = step.position_y
+        const stepBottom = step.position_y + stepHeight
+
+        // Check if step is FULLY inside the valid inner area at drop position
+        const fullyInsideAtDrop =
+          stepLeft >= dropInnerLeft && stepRight <= dropInnerRight &&
+          stepTop >= dropInnerTop && stepBottom <= dropInnerBottom
+
+        if (fullyInsideAtDrop) {
+          // Add this block to the group
+          const role = determineRoleInGroup(
+            step.position_x + stepWidth / 2,
+            step.position_y + stepHeight / 2,
+            dropPositionGroup
+          )
+
+          // Store relative position (relative to drop position)
+          const relativeX = step.position_x - dropX
+          const relativeY = step.position_y - dropY
+
+          addedBlocks.push({
+            stepId: step.id,
+            position: { x: step.position_x, y: step.position_y },  // Will be updated after snapping
+            role,
+          })
+          addedStepIds.add(step.id)
+
+          // Update Vue Flow state with relative position and parent
+          updateNode(step.id, {
+            position: { x: relativeX, y: relativeY },
+            parentNode: node.id,
+          })
+        }
+      }
+
+      // =================================================================
+      // STEP 2: Check for collision with other groups and snap if needed
+      // =================================================================
+      const dropZone = findDropZone(newX, newY, groupWidth, groupHeight, node.id)
+
+      let wasGroupPushed = false
+      let pushedAwayFromGroupId: string | null = null
+
+      if (dropZone.zone === 'boundary' && dropZone.group) {
+        // Snap group to outside the other group (groups can't be nested)
+        const snapped = snapToValidPosition(newX, newY, dropZone.group, groupWidth, groupHeight)
+        newX = snapped.x
+        newY = snapped.y
+        wasGroupPushed = true
+        pushedAwayFromGroupId = dropZone.group.id
+
+        // Set cascade direction based on the direction the group was pushed
+        const pushDeltaX = newX - dropX
+        const pushDeltaY = newY - dropY
+        if (Math.abs(pushDeltaX) > Math.abs(pushDeltaY)) {
+          cascadeDirection = pushDeltaX > 0 ? 'right' : 'left'
+        } else {
+          cascadeDirection = pushDeltaY > 0 ? 'down' : 'up'
+        }
+
+        // Update Vue Flow's internal position
+        updateNode(node.id, { position: { x: newX, y: newY } })
+      } else if (dropZone.zone === 'inside' && dropZone.group) {
+        // Groups can't be nested - snap to outside
+        const outsideGap = 20
+        const edgeDistances = [
+          { outX: dropZone.group.position_x - groupWidth - outsideGap, outY: newY },
+          { outX: dropZone.group.position_x + dropZone.group.width + outsideGap, outY: newY },
+          { outX: newX, outY: dropZone.group.position_y - groupHeight - outsideGap },
+          { outX: newX, outY: dropZone.group.position_y + dropZone.group.height + outsideGap },
+        ]
+        let minDist = Infinity
+        for (const pos of edgeDistances) {
+          const dist = Math.sqrt(Math.pow(newX - pos.outX, 2) + Math.pow(newY - pos.outY, 2))
+          if (dist < minDist) {
+            minDist = dist
+            newX = pos.outX
+            newY = pos.outY
+          }
+        }
+        wasGroupPushed = true
+        pushedAwayFromGroupId = dropZone.group.id
+
+        // Set cascade direction based on the direction the group was pushed
+        const pushDeltaX = newX - dropX
+        const pushDeltaY = newY - dropY
+        if (Math.abs(pushDeltaX) > Math.abs(pushDeltaY)) {
+          cascadeDirection = pushDeltaX > 0 ? 'right' : 'left'
+        } else {
+          cascadeDirection = pushDeltaY > 0 ? 'down' : 'up'
+        }
+
+        // Update Vue Flow's internal position
+        updateNode(node.id, { position: { x: newX, y: newY } })
+      }
+
+      // =================================================================
+      // STEP 3: If group was snapped, update the added blocks' absolute positions
+      //         (they move WITH the group - their relative position stays the same)
+      // =================================================================
+      if (wasGroupPushed && addedBlocks.length > 0) {
+        const snapDeltaX = newX - dropX
+        const snapDeltaY = newY - dropY
+
+        for (const addedBlock of addedBlocks) {
+          // Update the absolute position to reflect the group's new position
+          addedBlock.position.x += snapDeltaX
+          addedBlock.position.y += snapDeltaY
+        }
+        // Note: Vue Flow positions don't need updating because they're relative to the group
+      }
+
+      // Track current group positions AND sizes (updated during cascade)
+      const groupPositions = new Map<string, { x: number; y: number }>()
+      const groupSizes = new Map<string, { width: number; height: number }>()
+      // Initialize with the moving group's new position and size
+      groupPositions.set(node.id, { x: newX, y: newY })
+      groupSizes.set(node.id, { width: groupWidth, height: groupHeight })
+
+      // Create a temporary group object with the new position for boundary checking
+      const movedGroup: BlockGroup = {
+        ...groupData,
+        position_x: newX,
+        position_y: newY,
+        width: groupWidth,
+        height: groupHeight,
+      }
+
+      // Set of groups that have been processed (to avoid infinite loops)
+      const processedGroups = new Set<string>([node.id])
+      // Also exclude the group we were pushed away from (if any)
+      if (pushedAwayFromGroupId) {
+        processedGroups.add(pushedAwayFromGroupId)
+      }
+
+      // Queue of groups that need to be pushed (for cascading)
+      interface GroupToPush {
+        group: BlockGroup
+        pusherX: number
+        pusherY: number
+        pusherWidth: number
+        pusherHeight: number
+      }
+      const groupsToPush: GroupToPush[] = []
+
+      // =================================================================
+      // STEP 4: Check remaining blocks for boundary collision and push them out
+      //         (blocks already added in STEP 1 are skipped)
+      // =================================================================
+      for (const step of props.steps) {
+        // Skip steps that are already inside this group
+        if (step.block_group_id === node.id) continue
+
+        // Skip steps that were added in STEP 1 (at drop position)
+        if (addedStepIds.has(step.id)) continue
+
+        // Skip start steps - they cannot be added to groups
+        if (step.type === 'start') continue
+
+        // Get step dimensions (use defaults)
+        const stepWidth = DEFAULT_STEP_NODE_WIDTH
+        const stepHeight = DEFAULT_STEP_NODE_HEIGHT
+
+        // Check if this step overlaps with the moved group's boundary (at FINAL position)
+        const stepLeft = step.position_x
+        const stepRight = step.position_x + stepWidth
+        const stepTop = step.position_y
+        const stepBottom = step.position_y + stepHeight
+
+        // Group bounds (at final position after snapping)
+        const groupLeft = movedGroup.position_x
+        const groupRight = movedGroup.position_x + movedGroup.width
+        const groupTop = movedGroup.position_y
+        const groupBottom = movedGroup.position_y + movedGroup.height
+
+        // Check if step overlaps with group's outer bounds
+        const overlapsGroup =
+          stepRight > groupLeft && stepLeft < groupRight &&
+          stepBottom > groupTop && stepTop < groupBottom
+
+        if (!overlapsGroup) continue
+
+        // Check if step is fully inside the valid inner area at final position
+        const innerLeft = movedGroup.position_x + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+        const innerRight = movedGroup.position_x + movedGroup.width - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+        const innerTop = movedGroup.position_y + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+        const innerBottom = movedGroup.position_y + movedGroup.height - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+
+        const fullyInsideAtFinal =
+          stepLeft >= innerLeft && stepRight <= innerRight &&
+          stepTop >= innerTop && stepBottom <= innerBottom
+
+        // If block is on the boundary at final position, push it out
+        // If block is fully inside at final position but wasn't at drop position, also push it out
+        if (!fullyInsideAtFinal) {
+          // Push to outside - use cascade direction for consistency
+          const pushResult = calculatePushPosition(
+            step.position_x, step.position_y, stepWidth, stepHeight,
+            movedGroup.position_x, movedGroup.position_y, movedGroup.width, movedGroup.height,
+            cascadeDirection ?? undefined  // Use cascade direction if set, otherwise auto-detect
+          )
+
+          // Set cascade direction if this is the first push
+          if (!cascadeDirection) {
+            cascadeDirection = pushResult.direction
+          }
+
+          pushedBlocks.push({
+            stepId: step.id,
+            position: { x: pushResult.x, y: pushResult.y },
+          })
+
+          // Update Vue Flow's internal state for the pushed block
+          let relativeX = pushResult.x
+          let relativeY = pushResult.y
+          if (step.block_group_id && props.blockGroups) {
+            const stepGroup = props.blockGroups.find(g => g.id === step.block_group_id)
+            if (stepGroup) {
+              const stepGroupPos = groupPositions.get(stepGroup.id) || { x: stepGroup.position_x, y: stepGroup.position_y }
+              relativeX = pushResult.x - stepGroupPos.x
+              relativeY = pushResult.y - stepGroupPos.y
+            }
+          }
+          updateNode(step.id, { position: { x: relativeX, y: relativeY } })
+
+          // Check if pushed block now collides with another group's boundary
+          const collidingGroup = findGroupBoundaryCollision(
+            pushResult.x, pushResult.y, stepWidth, stepHeight,
+            processedGroups, groupPositions
+          )
+          if (collidingGroup) {
+            groupsToPush.push({
+              group: collidingGroup,
+              pusherX: pushResult.x,
+              pusherY: pushResult.y,
+              pusherWidth: stepWidth,
+              pusherHeight: stepHeight,
+            })
+          }
+        }
+      }
+
+      // Check if the moved group collides with any other group (group-to-group collision)
+      const collidingGroupInitial = findGroupCollision(
+        newX, newY, groupWidth, groupHeight,
+        processedGroups, groupPositions, groupSizes
+      )
+      if (collidingGroupInitial) {
+        groupsToPush.push({
+          group: collidingGroupInitial,
+          pusherX: newX,
+          pusherY: newY,
+          pusherWidth: groupWidth,
+          pusherHeight: groupHeight,
+        })
+      }
+
+      // Process cascading group pushes
+      const MAX_CASCADE_DEPTH = 10  // Safety limit
+      let cascadeDepth = 0
+
+      while (groupsToPush.length > 0 && cascadeDepth < MAX_CASCADE_DEPTH) {
+        cascadeDepth++
+        const { group, pusherX, pusherY, pusherWidth, pusherHeight } = groupsToPush.shift()!
+
+        // Skip if already processed
+        if (processedGroups.has(group.id)) continue
+        processedGroups.add(group.id)
+
+        // Get current position and size of the group
+        const currentPos = groupPositions.get(group.id) || { x: group.position_x, y: group.position_y }
+        const currentSize = groupSizes.get(group.id) || { width: group.width, height: group.height }
+
+        // Create temporary group with current position and size
+        const tempGroup: BlockGroup = {
+          ...group,
+          position_x: currentPos.x,
+          position_y: currentPos.y,
+        }
+
+        // Calculate new position for the group to avoid collision
+        // Use cascade direction for consistency (if already set)
+        const pushed = calculatePushPosition(
+          currentPos.x, currentPos.y, currentSize.width, currentSize.height,
+          pusherX, pusherY, pusherWidth, pusherHeight,
+          cascadeDirection ?? undefined
+        )
+
+        // Set cascade direction if this is the first push
+        if (!cascadeDirection) {
+          cascadeDirection = pushed.direction
+        }
+
+        // Update group position and size tracking
+        groupPositions.set(group.id, { x: pushed.x, y: pushed.y })
+        groupSizes.set(group.id, currentSize)  // Keep the same size
+
+        // Add to movedGroups
+        movedGroups.push({
+          groupId: group.id,
+          position: { x: pushed.x, y: pushed.y },
+          delta: { x: pushed.deltaX, y: pushed.deltaY },
+        })
+
+        // Update Vue Flow's internal state
+        updateNode(group.id, { position: { x: pushed.x, y: pushed.y } })
+
+        // Check if the pushed group now causes any block collisions
+        // (blocks inside the pushed group will move with it, but we need to check external blocks)
+        for (const step of props.steps) {
+          // Skip steps inside this group (they move with the group)
+          if (step.block_group_id === group.id) continue
+          // Skip start steps
+          if (step.type === 'start') continue
+
+          const stepWidth = DEFAULT_STEP_NODE_WIDTH
+          const stepHeight = DEFAULT_STEP_NODE_HEIGHT
+
+          // Get step's current position (may have been pushed already)
+          const existingPush = pushedBlocks.find(p => p.stepId === step.id)
+          const stepX = existingPush ? existingPush.position.x : step.position_x
+          const stepY = existingPush ? existingPush.position.y : step.position_y
+
+          // Check if step collides with the pushed group's boundary
+          // Use currentSize for accurate dimensions
+          const pushedGroupTemp: BlockGroup = {
+            ...group,
+            position_x: pushed.x,
+            position_y: pushed.y,
+            width: currentSize.width,
+            height: currentSize.height,
+          }
+
+          // Check overlap with pushed group's outer bounds
+          const outerLeft = pushed.x
+          const outerRight = pushed.x + currentSize.width
+          const outerTop = pushed.y
+          const outerBottom = pushed.y + currentSize.height
+
+          const overlapsGroup =
+            (stepX + stepWidth) > outerLeft && stepX < outerRight &&
+            (stepY + stepHeight) > outerTop && stepY < outerBottom
+
+          if (!overlapsGroup) continue
+
+          // Check if fully inside
+          const innerLeft = pushed.x + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+          const innerRight = pushed.x + currentSize.width - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+          const innerTop = pushed.y + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+          const innerBottom = pushed.y + currentSize.height - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+
+          const fullyInside =
+            stepX >= innerLeft && (stepX + stepWidth) <= innerRight &&
+            stepY >= innerTop && (stepY + stepHeight) <= innerBottom
+
+          if (!fullyInside) {
+            // This step is on the pushed group's boundary - push it using cascade direction
+            const blockPushResult = calculatePushPosition(
+              stepX, stepY, stepWidth, stepHeight,
+              pushed.x, pushed.y, currentSize.width, currentSize.height,
+              cascadeDirection ?? undefined
+            )
+
+            // Set cascade direction if not already set
+            if (!cascadeDirection) {
+              cascadeDirection = blockPushResult.direction
+            }
+
+            // Update or add to pushedBlocks
+            const existingIndex = pushedBlocks.findIndex(p => p.stepId === step.id)
+            if (existingIndex >= 0) {
+              pushedBlocks[existingIndex].position = { x: blockPushResult.x, y: blockPushResult.y }
+            } else {
+              pushedBlocks.push({
+                stepId: step.id,
+                position: { x: blockPushResult.x, y: blockPushResult.y },
+              })
+            }
+
+            // Update Vue Flow
+            let relativeX = blockPushResult.x
+            let relativeY = blockPushResult.y
+            if (step.block_group_id && props.blockGroups) {
+              const stepGroup = props.blockGroups.find(g => g.id === step.block_group_id)
+              if (stepGroup) {
+                const stepGroupPos = groupPositions.get(stepGroup.id) || { x: stepGroup.position_x, y: stepGroup.position_y }
+                relativeX = blockPushResult.x - stepGroupPos.x
+                relativeY = blockPushResult.y - stepGroupPos.y
+              }
+            }
+            updateNode(step.id, { position: { x: relativeX, y: relativeY } })
+
+            // Check for further group collisions
+            const nextCollision = findGroupBoundaryCollision(
+              blockPushResult.x, blockPushResult.y, stepWidth, stepHeight,
+              processedGroups, groupPositions
+            )
+            if (nextCollision) {
+              groupsToPush.push({
+                group: nextCollision,
+                pusherX: blockPushResult.x,
+                pusherY: blockPushResult.y,
+                pusherWidth: stepWidth,
+                pusherHeight: stepHeight,
+              })
+            }
+          }
+        }
+
+        // Check if the pushed group collides with another group (group-to-group cascade)
+        const nextGroupCollision = findGroupCollision(
+          pushed.x, pushed.y, currentSize.width, currentSize.height,
+          processedGroups, groupPositions, groupSizes
+        )
+        if (nextGroupCollision) {
+          groupsToPush.push({
+            group: nextGroupCollision,
+            pusherX: pushed.x,
+            pusherY: pushed.y,
+            pusherWidth: currentSize.width,
+            pusherHeight: currentSize.height,
+          })
+        }
+      }
+
+      // Recalculate delta after any snapping
+      const finalDeltaX = newX - originalX
+      const finalDeltaY = newY - originalY
+
+      // Emit the move complete event with all the data
+      emit('group:move-complete', node.id, {
+        position: { x: newX, y: newY },
+        delta: { x: finalDeltaX, y: finalDeltaY },
+        pushedBlocks,
+        addedBlocks,
+        movedGroups,
+      })
+    } else {
+      // For step nodes, calculate absolute position if they have a parent
+      let absoluteX = Math.round(node.position.x)
+      let absoluteY = Math.round(node.position.y)
+
+      // Get actual node dimensions (use defaults if not available)
+      const nodeWidth = node.dimensions?.width ?? DEFAULT_STEP_NODE_WIDTH
+      const nodeHeight = node.dimensions?.height ?? DEFAULT_STEP_NODE_HEIGHT
+
+      if (node.parentNode && props.blockGroups) {
+        const parentGroup = props.blockGroups.find(g => g.id === node.parentNode)
+        if (parentGroup) {
+          absoluteX += parentGroup.position_x
+          absoluteY += parentGroup.position_y
+        }
+      }
+
+      // Check drop zone (inside, boundary, or outside) using actual node dimensions
+      const dropZone = findDropZone(absoluteX, absoluteY, nodeWidth, nodeHeight)
+      const step = node.data.step as Step
+      const currentGroupId = step.block_group_id || null
+
+      // Handle boundary zone - snap to valid position
+      if (dropZone.zone === 'boundary' && dropZone.group) {
+        const snapped = snapToValidPosition(absoluteX, absoluteY, dropZone.group, nodeWidth, nodeHeight)
+        absoluteX = snapped.x
+        absoluteY = snapped.y
+
+        // Calculate relative position for Vue Flow (relative to parent if inside group)
+        let relativeX = absoluteX
+        let relativeY = absoluteY
+        if (snapped.inside) {
+          relativeX = absoluteX - dropZone.group.position_x
+          relativeY = absoluteY - dropZone.group.position_y
+        }
+
+        // Update Vue Flow's internal node position to the snapped position
+        updateNode(node.id, {
+          position: { x: relativeX, y: relativeY },
+          parentNode: snapped.inside ? dropZone.group.id : undefined,
+        })
+
+        const targetGroupId = snapped.inside ? dropZone.group.id : null
+        const role = snapped.inside ? determineRoleInGroup(absoluteX, absoluteY, dropZone.group) : undefined
+
+        // If block was pushed outside, check for cascade group collisions
+        let movedGroups: MovedGroup[] = []
+        if (!snapped.inside) {
+          movedGroups = processCascadeGroupPush(
+            absoluteX, absoluteY, nodeWidth, nodeHeight,
+            new Set([dropZone.group.id])  // Exclude the group we were pushed from
+          )
+        }
+
+        if (currentGroupId !== targetGroupId) {
+          emit('step:assign-group', node.id, targetGroupId, { x: absoluteX, y: absoluteY }, role, movedGroups.length > 0 ? movedGroups : undefined)
+        } else {
+          emit('step:update', node.id, { x: absoluteX, y: absoluteY }, movedGroups.length > 0 ? movedGroups : undefined)
+        }
+      } else {
+        // Normal handling - inside or outside
+        const targetGroupId = dropZone.zone === 'inside' ? dropZone.group?.id || null : null
+        const role = dropZone.zone === 'inside' ? dropZone.role : undefined
+
+        if (currentGroupId !== targetGroupId) {
+          // Parent is changing - update Vue Flow's internal state
+          let relativeX = absoluteX
+          let relativeY = absoluteY
+          if (targetGroupId && dropZone.group) {
+            relativeX = absoluteX - dropZone.group.position_x
+            relativeY = absoluteY - dropZone.group.position_y
+          }
+          updateNode(node.id, {
+            position: { x: relativeX, y: relativeY },
+            parentNode: targetGroupId || undefined,
+          })
+          emit('step:assign-group', node.id, targetGroupId, { x: absoluteX, y: absoluteY }, role)
+        } else {
+          emit('step:update', node.id, { x: absoluteX, y: absoluteY })
+        }
+      }
+    }
+  }
+})
+
+// Handle click on empty area (deselect current selection)
+onPaneClick(() => {
+  emit('pane:click')
+})
+
+// Handle node click
+function onNodeClick(event: { node: Node }) {
+  // Check if this is a group node
+  if (event.node.type === 'group') {
+    emit('group:select', event.node.data.group)
+  } else {
+    emit('step:select', event.node.data.step)
+    // If step run data exists, also emit step details event
+    if (event.node.data.stepRun) {
+      emit('step:showDetails', event.node.data.stepRun)
+    }
+  }
+}
+
+// Get step run status color
+function getStepRunStatusColor(status?: string): string {
+  if (!status) return ''
+  const colors: Record<string, string> = {
+    pending: '#f59e0b',  // amber
+    running: '#3b82f6',  // blue
+    completed: '#22c55e', // green
+    failed: '#ef4444',   // red
+    skipped: '#94a3b8',  // gray
+  }
+  return colors[status] || '#94a3b8'
+}
+
+// Get step run status icon
+function getStepRunStatusIcon(status?: string): string {
+  if (!status) return ''
+  const icons: Record<string, string> = {
+    pending: '○',
+    running: '●',
+    completed: '✓',
+    failed: '✕',
+    skipped: '−',
+  }
+  return icons[status] || ''
+}
+
+// Drag and drop handlers
+const dragEnterCounter = ref(0)
+
+function handleDragEnter(event: DragEvent) {
+  if (props.readonly) return
+  event.preventDefault()
+  dragEnterCounter.value++
+  isDragOver.value = true
+}
+
+function handleDragOver(event: DragEvent) {
+  if (props.readonly) return
+
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy'
+  }
+}
+
+function handleDragLeave(event: DragEvent) {
+  if (props.readonly) return
+  event.preventDefault()
+  dragEnterCounter.value--
+  // Only set isDragOver to false when we've left the root element
+  if (dragEnterCounter.value <= 0) {
+    dragEnterCounter.value = 0
+    isDragOver.value = false
+  }
+}
+
+function handleDrop(event: DragEvent) {
+  if (props.readonly) return
+
+  event.preventDefault()
+  dragEnterCounter.value = 0
+  isDragOver.value = false
+
+  if (!event.dataTransfer) return
+
+  // Get the drop position relative to the viewport
+  const target = event.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+
+  // Convert screen coordinates to flow coordinates using Vue Flow's project function
+  const flowPosition = project({
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  })
+
+  // Check if this is a block group drop
+  const groupType = event.dataTransfer.getData('group-type') as BlockGroupType
+  const groupName = event.dataTransfer.getData('group-name')
+
+  if (groupType) {
+    // Position for group (larger than step nodes)
+    const position = {
+      x: Math.round(flowPosition.x - 200),
+      y: Math.round(flowPosition.y - 150),
+    }
+    emit('group:drop', { type: groupType, name: groupName || 'New Group', position })
+    return
+  }
+
+  // Handle step drop
+  const stepType = event.dataTransfer.getData('step-type') as StepType
+  const stepName = event.dataTransfer.getData('step-name') || 'New Step'
+
+  if (!stepType) return
+
+  // Center the node at the drop position (node width ~150px, height ~60px)
+  let positionX = Math.round(flowPosition.x - 75)
+  let positionY = Math.round(flowPosition.y - 30)
+
+  // Check drop zone with boundary detection
+  const dropZone = findDropZone(positionX, positionY)
+  let targetGroupId: string | undefined
+  let targetRole: string | undefined
+
+  if (dropZone.zone === 'boundary' && dropZone.group) {
+    // Snap to valid position
+    const snapped = snapToValidPosition(positionX, positionY, dropZone.group)
+    positionX = snapped.x
+    positionY = snapped.y
+    targetGroupId = snapped.inside ? dropZone.group.id : undefined
+    if (snapped.inside) {
+      targetRole = determineRoleInGroup(positionX, positionY, dropZone.group)
+    }
+  } else if (dropZone.zone === 'inside' && dropZone.group) {
+    targetGroupId = dropZone.group.id
+    targetRole = dropZone.role
+  }
+
+  emit('step:drop', {
+    type: stepType,
+    name: stepName,
+    position: { x: positionX, y: positionY },
+    groupId: targetGroupId,
+    groupRole: targetRole,
+  })
+}
+
+// Get port handle color based on port name
+function getPortColor(portName: string): string {
+  const portColors: Record<string, string> = {
+    // Condition ports
+    'true': '#22c55e',      // green for Yes/True
+    'false': '#ef4444',     // red for No/False
+    // Human in loop
+    'approved': '#22c55e',  // green
+    'rejected': '#ef4444',  // red
+    'timeout': '#f59e0b',   // amber
+    // Filter
+    'matched': '#22c55e',   // green
+    'unmatched': '#94a3b8', // gray
+    // Loop/Map
+    'loop': '#3b82f6',      // blue
+    'complete': '#22c55e',  // green
+    'item': '#3b82f6',      // blue
+    // Default
+    'default': '#94a3b8',   // gray
+    'output': '#94a3b8',    // gray
+    'input': '#94a3b8',     // gray
+  }
+
+  return portColors[portName] || '#6366f1' // indigo for custom cases
+}
+
+// Get step type color
+function getStepColor(type: string) {
+  const colors: Record<string, string> = {
+    start: '#10b981', // Emerald - distinct entry point color
+    llm: '#3b82f6',
+    tool: '#22c55e',
+    condition: '#f59e0b',
+    switch: '#eab308',
+    map: '#8b5cf6',
+    join: '#6366f1',
+    subflow: '#ec4899',
+    loop: '#14b8a6',
+    wait: '#64748b',
+    function: '#f97316',
+    router: '#a855f7',
+    human_in_loop: '#ef4444',
+    filter: '#06b6d4',
+    split: '#0ea5e9',
+    aggregate: '#0284c7',
+    error: '#dc2626',
+    note: '#9ca3af',
+  }
+  return colors[type] || '#64748b'
+}
+
+// Check if step type is start
+function isStartNode(type: string): boolean {
+  return type === 'start'
+}
+</script>
+
+<template>
+  <div
+    :class="['dag-editor', { 'drag-over': isDragOver }]"
+    @dragenter="handleDragEnter"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
+    <VueFlow
+      :nodes="nodes"
+      :edges="flowEdges"
+      :default-viewport="{ zoom: 1, x: 50, y: 50 }"
+      :default-edge-options="{
+        type: 'smoothstep',
+        animated: true,
+        style: { strokeWidth: 2, stroke: '#94a3b8' },
+        markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8' }
+      }"
+      :min-zoom="0.25"
+      :max-zoom="2"
+      fit-view-on-init
+      :snap-to-grid="true"
+      :snap-grid="[20, 20]"
+      @node-click="onNodeClick"
+    >
+      <!-- Block Group Node Template -->
+      <template #node-group="{ data }">
+        <div
+          :class="[
+            'dag-group',
+            { 'dag-group-selected': data.isSelected }
+          ]"
+          :style="{
+            borderColor: data.color,
+            '--group-color': data.color,
+            '--group-height': `${data.height}px`,
+          }"
+        >
+          <!-- Group Input Handle (left side) -->
+          <Handle
+            type="target"
+            id="group-input"
+            :position="Position.Left"
+            class="dag-group-handle dag-group-handle-input"
+            :style="{ top: '50%' }"
+          />
+
+          <!-- Group Header -->
+          <div
+            class="dag-group-header"
+            :style="{ backgroundColor: data.color }"
+          >
+            <span class="dag-group-icon">{{ data.icon }}</span>
+            <span class="dag-group-type">{{ data.typeLabel }}</span>
+            <span class="dag-group-name">{{ data.label }}</span>
+          </div>
+
+          <!-- Entry Point Indicator (for single-zone groups) -->
+          <div v-if="!data.hasMultipleZones" class="dag-group-entry" :style="{ color: data.color }">
+            <span class="dag-group-entry-arrow">→</span>
+            <span class="dag-group-entry-label">Start</span>
+          </div>
+
+          <!-- Multi-Section Zone Dividers and Labels -->
+          <template v-if="data.hasMultipleZones && data.zones">
+            <!-- Section Labels and Dividers -->
+            <template v-for="(zone, index) in data.zones" :key="zone.role">
+              <!-- Section Label -->
+              <div
+                class="dag-group-section-label"
+                :style="{
+                  top: `${32 + (data.height - 32) * zone.top + 8}px`,
+                  left: zone.left === 0 ? '12px' : `${data.width * zone.left + 12}px`,
+                  color: data.color,
+                }"
+              >
+                <span class="dag-group-section-arrow">→</span>
+                {{ zone.label }}
+              </div>
+
+              <!-- Horizontal Divider (for try_catch style - vertical stacking) -->
+              <div
+                v-if="index > 0 && zone.left === 0"
+                class="dag-group-divider-h"
+                :style="{
+                  top: `${32 + (data.height - 32) * zone.top}px`,
+                  backgroundColor: data.color,
+                }"
+              />
+
+              <!-- Vertical Divider (for if_else style - horizontal stacking) -->
+              <div
+                v-if="index > 0 && zone.left > 0"
+                class="dag-group-divider-v"
+                :style="{
+                  left: `${data.width * zone.left - 2}px`,
+                  backgroundColor: data.color,
+                }"
+              />
+            </template>
+          </template>
+
+          <!-- Group Output Handles (right side) -->
+          <div class="dag-group-outputs">
+            <Handle
+              v-for="(port, index) in data.outputPorts"
+              :key="port.name"
+              type="source"
+              :id="port.name"
+              :position="Position.Right"
+              class="dag-group-handle dag-group-handle-output"
+              :style="{
+                top: `${50 + (index - (data.outputPorts.length - 1) / 2) * 40}%`,
+                '--handle-color': port.color,
+              }"
+            />
+            <!-- Output Port Labels -->
+            <div
+              v-for="(port, index) in data.outputPorts"
+              :key="`label-${port.name}`"
+              class="dag-group-port-label"
+              :style="{
+                top: `${50 + (index - (data.outputPorts.length - 1) / 2) * 40}%`,
+                color: port.color,
+              }"
+            >
+              {{ port.label }}
+            </div>
+          </div>
+
+          <!-- Group content area is handled by Vue Flow's built-in group functionality -->
+        </div>
+      </template>
+
+      <!-- Custom Node Template with Handles -->
+      <template #node-custom="{ data }">
+        <div
+          :class="[
+            'dag-node',
+            { 'dag-node-selected': data.isSelected },
+            { 'dag-node-start': isStartNode(data.type) },
+            { 'dag-node-has-run': data.stepRun }
+          ]"
+          :style="{
+            borderColor: getStepColor(data.type),
+          }"
+        >
+          <!-- Step Run Status Indicator -->
+          <div
+            v-if="data.stepRun"
+            class="dag-node-status"
+            :style="{ backgroundColor: getStepRunStatusColor(data.stepRun.status) }"
+            :title="`${data.stepRun.status} - Click for details`"
+          >
+            {{ getStepRunStatusIcon(data.stepRun.status) }}
+          </div>
+
+          <!-- Input Handles (left) - Multiple for merging blocks like join/aggregate -->
+          <template v-if="!isStartNode(data.type) && data.inputPorts && data.inputPorts.length > 1">
+            <Handle
+              v-for="(port, index) in data.inputPorts"
+              :key="port.name"
+              type="target"
+              :id="port.name"
+              :position="Position.Left"
+              :class="['dag-handle', 'dag-handle-target', 'dag-handle-multi']"
+              :style="{
+                '--handle-top': `${25 + (index * 50 / (data.inputPorts.length - 1 || 1))}%`,
+              }"
+              :title="port.label"
+            />
+            <!-- Port labels on the left side -->
+            <div class="dag-port-labels dag-port-labels-left">
+              <div
+                v-for="(port, index) in data.inputPorts"
+                :key="`input-label-${port.name}`"
+                class="dag-port-label dag-port-label-left"
+                :style="{
+                  top: `${25 + (index * 50 / (data.inputPorts.length - 1 || 1))}%`,
+                }"
+              >
+                {{ port.label }}
+              </div>
+            </div>
+          </template>
+          <!-- Single input handle for standard blocks (hidden for Start nodes) -->
+          <Handle
+            v-else-if="!isStartNode(data.type)"
+            type="target"
+            :position="Position.Left"
+            class="dag-handle dag-handle-target"
+          />
+
+          <div class="dag-node-type" :style="{ backgroundColor: getStepColor(data.type) }">
+            <!-- Play icon for Start node -->
+            <svg
+              v-if="isStartNode(data.type)"
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="dag-node-icon"
+            >
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            {{ data.type }}
+          </div>
+          <div class="dag-node-label">{{ data.label }}</div>
+
+          <!-- Duration indicator for completed step runs -->
+          <div v-if="data.stepRun?.duration_ms" class="dag-node-duration">
+            {{ data.stepRun.duration_ms < 1000 ? `${data.stepRun.duration_ms}ms` : `${(data.stepRun.duration_ms / 1000).toFixed(1)}s` }}
+          </div>
+
+          <!-- Output Handles (right) - Multiple for branching blocks -->
+          <template v-if="data.outputPorts && data.outputPorts.length > 1">
+            <Handle
+              v-for="(port, index) in data.outputPorts"
+              :key="port.name"
+              type="source"
+              :id="port.name"
+              :position="Position.Right"
+              :class="['dag-handle', 'dag-handle-source', 'dag-handle-multi', 'dag-handle-colored']"
+              :style="{
+                '--handle-top': `${25 + (index * 50 / (data.outputPorts.length - 1 || 1))}%`,
+                '--handle-bg': getPortColor(port.name),
+                '--handle-border': getPortColor(port.name),
+              }"
+              :title="port.label"
+            />
+            <!-- Port labels on the right side -->
+            <div class="dag-port-labels">
+              <div
+                v-for="(port, index) in data.outputPorts"
+                :key="`label-${port.name}`"
+                class="dag-port-label"
+                :style="{
+                  top: `${25 + (index * 50 / (data.outputPorts.length - 1 || 1))}%`,
+                  color: getPortColor(port.name),
+                }"
+              >
+                {{ port.label }}
+              </div>
+            </div>
+          </template>
+          <!-- Single output handle for non-branching blocks -->
+          <Handle
+            v-else
+            type="source"
+            :position="Position.Right"
+            class="dag-handle dag-handle-source"
+          />
+        </div>
+      </template>
+
+      <!-- Controls Panel -->
+      <Controls position="bottom-right" />
+
+      <!-- Mini Map -->
+      <MiniMap
+        :pannable="true"
+        :zoomable="true"
+        :node-color="(node: Node) => node.type === 'group' ? node.data.color : getStepColor(node.data.type)"
+        class="dag-minimap"
+      />
+    </VueFlow>
+
+    <!-- Drop indicator overlay -->
+    <div v-if="isDragOver" class="drop-indicator">
+      <div class="drop-indicator-content">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Drop to add step</span>
+      </div>
+    </div>
+
+    <div v-if="!readonly && !isDragOver" class="dag-editor-hint">
+      Drag blocks here to add steps
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.dag-editor {
+  width: 100%;
+  height: 100%;
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(circle, #e2e8f0 1px, transparent 1px);
+  background-size: 20px 20px;
+  position: relative;
+  transition: background-color 0.2s;
+}
+
+.dag-editor.drag-over {
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+.dag-node {
+  background: white;
+  border: 2px solid;
+  border-radius: 8px;
+  min-width: 150px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.15s, transform 0.15s;
+  position: relative;
+}
+
+.dag-node:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.dag-node-selected {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Start Node Special Styling */
+.dag-node-start {
+  min-width: 160px;
+  border-width: 2.5px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.dag-node-start:hover {
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.dag-node-start .dag-node-type {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+}
+
+.dag-node-icon {
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.dag-node-type {
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: 6px 6px 0 0;
+}
+
+.dag-node-label {
+  padding: 10px 14px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #1e293b;
+}
+
+/* Step Run Status Indicator */
+.dag-node-status {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.dag-node-has-run {
+  cursor: pointer;
+}
+
+.dag-node-has-run:hover .dag-node-status {
+  transform: scale(1.15);
+}
+
+/* Duration indicator */
+.dag-node-duration {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.65rem;
+  color: #64748b;
+  font-family: 'SF Mono', Monaco, monospace;
+  white-space: nowrap;
+}
+
+/* Handle Styles */
+.dag-handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: white !important;
+  border: 2px solid #94a3b8 !important;
+  border-radius: 50% !important;
+  transition: all 0.15s ease;
+}
+
+.dag-handle:hover {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  transform: scale(1.2);
+}
+
+.dag-handle-target {
+  left: -6px !important;
+  top: 50% !important;
+  transform: translateY(-50%);
+}
+
+.dag-handle-source {
+  right: -6px !important;
+  top: 50% !important;
+  transform: translateY(-50%);
+}
+
+/* Multi-handle styling for branching/merging blocks */
+.dag-handle-multi {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.dag-handle-multi.dag-handle-source {
+  right: -5px !important;
+  /* Use CSS custom property for vertical positioning */
+  top: var(--handle-top, 50%) !important;
+  transform: translateY(-50%);
+}
+
+.dag-handle-multi.dag-handle-target {
+  left: -5px !important;
+  /* Use CSS custom property for vertical positioning */
+  top: var(--handle-top, 50%) !important;
+  transform: translateY(-50%);
+}
+
+/* Colored handles for branching blocks - use CSS custom properties */
+.dag-handle-colored {
+  background: var(--handle-bg, white) !important;
+  border-color: var(--handle-border, #94a3b8) !important;
+}
+
+.dag-handle-colored:hover {
+  filter: brightness(1.1);
+  transform: scale(1.3) translateY(-50%);
+}
+
+/* Port labels container - right side (outputs) */
+.dag-port-labels {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Port labels container - left side (inputs) */
+.dag-port-labels-left {
+  right: auto;
+  left: 8px;
+}
+
+.dag-port-label {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 0.6rem;
+  color: #64748b;
+  text-transform: uppercase;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* Left side port labels */
+.dag-port-label-left {
+  right: auto;
+  left: 0;
+}
+
+/* Editor Hint */
+.dag-editor-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  background: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dag-editor-hint::before {
+  content: '💡';
+  font-size: 0.875rem;
+}
+
+/* Drop Indicator */
+.drop-indicator {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.08);
+  border: 2px dashed var(--color-primary);
+  pointer-events: none;
+  z-index: 100;
+}
+
+.drop-indicator-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* Mini Map Customization */
+.dag-minimap {
+  background: white !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Controls Customization */
+:deep(.vue-flow__controls) {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+:deep(.vue-flow__controls-button) {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: white;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+:deep(.vue-flow__controls-button:hover) {
+  background: #f1f5f9;
+  color: #3b82f6;
+}
+
+:deep(.vue-flow__controls-button svg) {
+  width: 16px;
+  height: 16px;
+}
+
+/* Edge Styles */
+:deep(.vue-flow__edge-path) {
+  stroke: #94a3b8;
+  stroke-width: 2;
+}
+
+:deep(.vue-flow__edge.selected .vue-flow__edge-path) {
+  stroke: #3b82f6;
+  stroke-width: 3;
+}
+
+:deep(.vue-flow__edge:hover .vue-flow__edge-path) {
+  stroke: #3b82f6;
+}
+
+/* Connection line when dragging */
+:deep(.vue-flow__connection-line) {
+  stroke: #3b82f6;
+  stroke-width: 2;
+  stroke-dasharray: 5;
+}
+
+/* Block Group Styles */
+.dag-group {
+  width: 100%;
+  height: 100%;
+  border: 2px dashed;
+  border-radius: 12px;
+  background: transparent;
+  position: relative;
+}
+
+.dag-group-selected {
+  box-shadow: 0 0 0 3px rgba(var(--group-color), 0.3);
+}
+
+.dag-group-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 6px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.dag-group-icon {
+  font-size: 0.875rem;
+}
+
+.dag-group-type {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+  opacity: 0.9;
+}
+
+.dag-group-name {
+  margin-left: auto;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150px;
+}
+
+/* Group Input/Output Handles */
+.dag-group-handle {
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 50% !important;
+  border: 2px solid !important;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.dag-group-handle-input {
+  left: -7px !important;
+  background: white !important;
+  border-color: var(--group-color) !important;
+}
+
+.dag-group-handle-input:hover {
+  background: var(--group-color) !important;
+  transform: scale(1.2) translateY(-50%);
+}
+
+.dag-group-handle-output {
+  right: -7px !important;
+  background: var(--handle-color, #22c55e) !important;
+  border-color: var(--handle-color, #22c55e) !important;
+  transform: translateY(-50%);
+}
+
+.dag-group-handle-output:hover {
+  filter: brightness(1.1);
+  transform: scale(1.3) translateY(-50%);
+}
+
+/* Group Entry Point Indicator */
+.dag-group-entry {
+  position: absolute;
+  top: 44px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.dag-group-entry-arrow {
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.dag-group-entry-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Group Output Port Labels */
+.dag-group-outputs {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  height: var(--group-height, 100%);
+  pointer-events: none;
+}
+
+.dag-group-port-label {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  letter-spacing: 0.03em;
+}
+
+/* Multi-Section Zone Styles */
+.dag-group-section-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+  z-index: 5;
+}
+
+.dag-group-section-arrow {
+  font-size: 0.9rem;
+  font-weight: bold;
+}
+
+/* Horizontal Divider (for try_catch) */
+.dag-group-divider-h {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  opacity: 0.4;
+  z-index: 5;
+}
+
+/* Vertical Divider (for if_else) */
+.dag-group-divider-v {
+  position: absolute;
+  top: 42px;
+  bottom: 10px;
+  width: 2px;
+  opacity: 0.4;
+  z-index: 5;
+}
+
+/* Nested group indicator */
+:deep(.vue-flow__node-group) {
+  cursor: grab;
+}
+
+:deep(.vue-flow__node-group:active) {
+  cursor: grabbing;
+}
+
+/* Make group nodes resizable appearance */
+:deep(.vue-flow__node-group .vue-flow__resize-control) {
+  width: 12px;
+  height: 12px;
+  background: white;
+  border: 2px solid #94a3b8;
+  border-radius: 4px;
+}
+
+:deep(.vue-flow__node-group .vue-flow__resize-control:hover) {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+</style>

@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+.output/
+.nuxt/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+*.out
+
+# Temporary files
+tmp/
+temp/
+
+# Docker volumes (local)
+postgres_data/
+redis_data/
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# Go
+*.test
+__debug_bin

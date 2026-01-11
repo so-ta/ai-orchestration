@@ -1,0 +1,498 @@
+# AI Orchestration
+
+Multi-tenant SaaS for designing, executing, and monitoring DAG workflows with LLM and tool integrations.
+
+---
+
+## AI-Driven Development Project
+
+**このプロジェクトは人間によるコーディングを一切行わず、すべてをAIエージェントが実装・保守するプロジェクトです。**
+
+### 基本原則
+
+| 原則 | 説明 |
+|------|------|
+| **完全AI実装** | 設計・実装・テスト・ドキュメント作成すべてをAIが担当 |
+| **人間の役割** | 要件定義、レビュー、承認のみ |
+| **コンテキスト継続** | 後続エージェントがコンテキストを見失わないよう文書化必須 |
+
+### AIフレンドリードキュメント要件
+
+後続のAIエージェントが即座にコンテキストを把握できるよう、以下を遵守：
+
+1. **明示的な記述**
+   - 暗黙知を排除し、すべてを文書化
+   - 「なぜ」その設計・実装にしたかを記録
+   - 制約条件や前提条件を明記
+
+2. **構造化された情報**
+   - テーブル形式での情報整理を優先
+   - コードブロックでの具体例提示
+   - 階層的な見出し構造
+
+3. **参照可能性**
+   - ファイルパスは絶対パスまたはプロジェクトルートからの相対パス
+   - 関連ドキュメントへのリンクを明記
+   - 検索可能なキーワードを含める
+
+4. **最新性の維持**
+   - コード変更時は必ずドキュメント更新
+   - 古い情報は削除または更新日を明記
+   - バージョン管理との整合性を保つ
+
+### コンテキスト引き継ぎチェックリスト
+
+新しいAIエージェントセッション開始時：
+
+```
+1. [ ] CLAUDE.md を読む（このファイル）
+2. [ ] docs/INDEX.md で関連ドキュメントを特定
+3. [ ] 作業対象のドキュメントを読む
+4. [ ] 既存の実装パターンを確認
+5. [ ] テスト・検証手順を確認
+```
+
+### 意思決定の記録
+
+重要な技術的決定は以下の形式で記録：
+
+```markdown
+### Decision: [決定事項]
+- **Date**: YYYY-MM-DD
+- **Context**: 背景・状況
+- **Options**: 検討した選択肢
+- **Decision**: 選択した内容
+- **Rationale**: 理由
+- **Consequences**: 影響・結果
+```
+
+---
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Backend | Go 1.22+ |
+| Frontend | Vue 3 + Nuxt 3 |
+| Database | PostgreSQL 16 |
+| Cache/Queue | Redis 7 |
+| Auth | Keycloak 24 (OIDC) |
+| Tracing | OpenTelemetry + Jaeger |
+
+## Documentation Index
+
+| Document | Purpose | Path |
+|----------|---------|------|
+| INDEX | Document navigation | [docs/INDEX.md](docs/INDEX.md) |
+| BACKEND | Go code structure, interfaces | [docs/BACKEND.md](docs/BACKEND.md) |
+| FRONTEND | Vue/Nuxt structure, composables | [docs/FRONTEND.md](docs/FRONTEND.md) |
+| API | REST endpoints, schemas | [docs/API.md](docs/API.md) |
+| DATABASE | Schema, queries | [docs/DATABASE.md](docs/DATABASE.md) |
+| DEPLOYMENT | Docker, K8s, config | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+| DOCUMENTATION_RULES | Doc format, MECE rules | [docs/DOCUMENTATION_RULES.md](docs/DOCUMENTATION_RULES.md) |
+| TESTING | Frontend testing rules | [frontend/docs/TESTING.md](frontend/docs/TESTING.md) |
+| OpenAPI | Machine-readable spec | [docs/openapi.yaml](docs/openapi.yaml) |
+
+**Read these docs before modifying related code.**
+
+## Directory Structure
+
+```
+ai-orchestration/
+├── CLAUDE.md                 # This file
+├── docker-compose.yml        # Dev environment
+├── backend/
+│   ├── cmd/api/              # API server entry
+│   ├── cmd/worker/           # Worker entry
+│   ├── internal/
+│   │   ├── domain/           # Entities
+│   │   ├── usecase/          # Business logic
+│   │   ├── handler/          # HTTP handlers
+│   │   ├── repository/       # DB operations
+│   │   ├── adapter/          # External integrations
+│   │   ├── engine/           # DAG executor
+│   │   └── middleware/       # Auth
+│   ├── pkg/                  # Shared packages
+│   ├── migrations/           # SQL migrations
+│   └── tests/e2e/            # Integration tests
+├── frontend/
+│   ├── pages/                # Nuxt pages
+│   ├── components/dag-editor/# DAG visual editor
+│   ├── composables/          # Vue composables
+│   └── plugins/              # Keycloak init
+├── deploy/kubernetes/        # K8s manifests
+└── docs/                     # Documentation
+```
+
+## Commands
+
+### Option A: Full Docker (すべてDockerで実行)
+
+```bash
+# Start all services
+docker compose up -d
+
+# Logs
+docker compose logs -f api
+docker compose logs -f worker
+
+# Rebuild
+docker compose up -d --build api worker
+```
+
+### Option B: Local Development with Hot Reload (推奨)
+
+Makefileを使用してホットリロード開発環境を起動：
+
+```bash
+# 1. ミドルウェア起動 (PostgreSQL, Redis, Keycloak, Jaeger)
+make dev-middleware
+
+# 2. API起動 (ホットリロード) - ターミナル1
+make dev-api
+
+# 3. Worker起動 (ホットリロード) - ターミナル2
+make dev-worker
+
+# 4. Frontend起動 (ホットリロード) - ターミナル3
+make dev-frontend
+
+# tmuxがインストールされている場合、すべてを一度に起動
+make dev
+
+# すべて停止
+make stop
+```
+
+**利用可能なMakeターゲット:**
+
+| コマンド | 説明 |
+|---------|------|
+| `make help` | ヘルプ表示 |
+| `make dev` | 全サービス起動（tmux使用） |
+| `make dev-middleware` | ミドルウェアのみ起動 |
+| `make dev-api` | APIをホットリロードで起動 |
+| `make dev-worker` | Workerをホットリロードで起動 |
+| `make dev-frontend` | Frontendをホットリロードで起動 |
+| `make stop` | 全サービス停止 |
+| `make test` | 全テスト実行 |
+
+**手動コマンド（参考）:**
+
+```bash
+# Middleware
+docker compose -f docker-compose.middleware.yml up -d
+
+# Backend API with hot reload (from project root)
+cd backend && air -c .air.toml
+
+# Worker with hot reload (from project root)
+cd backend && air -c .air.worker.toml
+
+# Frontend (from frontend/ directory)
+npm run dev
+```
+
+### Option C: Hybrid Development (フロントエンドローカル + APIはDocker)
+
+ローカルGoのバージョン不一致がある場合、この方法を使用：
+
+```bash
+# 1. ミドルウェアとAPI/Workerを Docker で起動
+docker compose up -d postgres redis keycloak jaeger api worker
+
+# 2. フロントエンドをローカルで起動
+cd frontend && npm run dev
+```
+
+**アクセスURL:**
+- Frontend: http://localhost:3000
+- API: http://localhost:8080
+- Keycloak: http://localhost:8180
+- Jaeger: http://localhost:16686
+
+**注意:** ローカルGoでバージョン不一致エラーが発生する場合（`compile: version "go1.x.x" does not match go tool version "go1.y.y"`）、APIはDockerで実行してください。
+
+### Tests
+
+```bash
+# Backend Test (local)
+cd backend && go test ./...
+cd backend && go test ./tests/e2e/... -v
+
+# Backend Test (Docker)
+docker compose exec api go test ./...
+
+# Frontend Test
+cd frontend && npm run check       # All checks (typecheck + lint + test)
+cd frontend && npm run typecheck   # TypeScript only
+cd frontend && npm run test:run    # Unit tests only
+```
+
+## URLs (Development)
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8080 |
+| Frontend | http://localhost:3000 |
+| Keycloak | http://localhost:8180 |
+| Jaeger | http://localhost:16686 |
+
+## Test Credentials
+
+| User | Password | Role |
+|------|----------|------|
+| admin@example.com | admin123 | tenant_admin |
+| builder@example.com | builder123 | builder |
+
+Default tenant ID: `00000000-0000-0000-0000-000000000001`
+
+## Core Concepts
+
+### Step Types
+
+| Type | Purpose | Config |
+|------|---------|--------|
+| `llm` | LLM call | `provider`, `model`, `prompt` |
+| `tool` | Adapter exec | `adapter_id` |
+| `condition` | Branch | `expression` |
+| `map` | Array parallel | `input_path`, `parallel` |
+| `join` | Merge | - |
+| `subflow` | Nested workflow | `workflow_id` |
+| `loop` | Iteration | `loop_type`, `count`, `condition` |
+| `wait` | Delay/Timer | `duration_ms`, `until` |
+| `function` | Custom code | `code`, `language` |
+| `router` | AI routing | `routes`, `provider`, `model` |
+| `human_in_loop` | Approval gate | `instructions`, `timeout_hours` |
+
+### Adapters
+
+| ID | File | Purpose |
+|----|------|---------|
+| `mock` | adapter/mock.go | Testing |
+| `openai` | adapter/openai.go | GPT API |
+| `anthropic` | adapter/anthropic.go | Claude API |
+| `http` | adapter/http.go | Generic HTTP |
+
+### Run States
+
+```
+pending -> running -> completed | failed | cancelled
+```
+
+### Condition Expression Syntax
+
+```
+$.field == "value"     # equality
+$.field != "value"     # inequality
+$.field > 10           # numeric
+$.nested.field         # nested path
+$.field                # truthy
+```
+
+## Development Rules
+
+### Workflow (REQUIRED)
+
+1. Read relevant docs before code changes
+2. Update docs when changing specs
+3. Use TodoWrite for task tracking
+4. Run tests after changes
+
+### Self-Documentation (REQUIRED)
+
+**AI agents MUST maintain documentation autonomously.**
+
+#### Before Any Code Change
+
+```
+1. Read docs/INDEX.md to find relevant document
+2. Read the relevant document
+3. Verify understanding matches implementation
+```
+
+#### When Documentation Missing
+
+| Situation | Action |
+|-----------|--------|
+| No doc for area being modified | Create new doc following DOCUMENTATION_RULES.md |
+| Existing doc incomplete | Update existing doc |
+| Code contradicts doc | Fix code OR update doc (confirm intent first) |
+
+#### After Code Change
+
+```
+1. Update relevant doc in docs/
+2. If new feature/module: create docs/{FEATURE}.md
+3. If new doc created: update docs/INDEX.md
+4. Follow MECE principle (see docs/DOCUMENTATION_RULES.md)
+```
+
+#### Documentation Priority
+
+1. **MUST document**: Public interfaces, API changes, config changes
+2. **SHOULD document**: Internal architecture decisions, non-obvious patterns
+3. **MAY skip**: Trivial implementation details (use code comments)
+
+### Frontend Testing Workflow (REQUIRED)
+
+**AIエージェントは以下のチェックを必ず実行すること：**
+
+```bash
+# Frontend directory
+cd frontend
+
+# 1. TypeScript check (MUST pass)
+npm run typecheck
+
+# 2. Lint check
+npm run lint
+
+# 3. Run tests
+npm run test:run
+
+# 4. Or run all checks at once
+npm run check
+```
+
+| Check | Command | Required |
+|-------|---------|----------|
+| TypeScript | `npm run typecheck` | **必須** |
+| ESLint | `npm run lint` | 推奨 |
+| Unit Tests | `npm run test:run` | 推奨 |
+| All Checks | `npm run check` | **完了前必須** |
+| Docker Build | `docker compose build frontend` | **package.json変更時必須** |
+
+**禁止事項：**
+- TypeScriptエラーを無視してコードを完了とすること
+- ブラウザ確認なしでUI変更を完了とすること
+- 型エラーをキャストで回避すること（根本原因を修正）
+- プラットフォーム固有パッケージ（`@rollup/rollup-darwin-*`等）をdependenciesに追加
+
+**詳細は [frontend/docs/TESTING.md](frontend/docs/TESTING.md) を参照**
+
+### Bug Fix Flow
+
+1. Write failing test reproducing bug
+2. Verify test fails
+3. Fix code
+4. Verify test passes
+
+### Code Conventions
+
+**Go:**
+- gofmt/goimports
+- Explicit error handling (no `_` ignore)
+- log/slog for logging
+- testify for tests
+
+**Vue/TS:**
+- Composition API
+- `<script setup lang="ts">`
+- PascalCase components
+- `use` prefix for composables
+- **ブラウザのalert/confirm/promptは使用禁止** - AIブラウザ操作をブロックするため、`useToast()`を使用
+
+### Git
+
+- Branches: `feature/`, `fix/`, `docs/`
+- Commits: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`)
+
+### Multi-tenancy
+
+All queries MUST include `tenant_id` filter.
+
+### API Design
+
+- Base: `/api/v1`
+- Auth: Bearer JWT
+- Dev mode: `X-Tenant-ID` header
+- Error: `{"error": {"code": "...", "message": "..."}}`
+
+### Session Management (AI Agent)
+
+**セッション終了時の引き継ぎ：**
+
+```
+1. 未完了タスクをTodoWriteで記録
+2. 実装した内容のドキュメント更新
+3. 既知の問題・課題を明記
+4. 次のアクションを明確に記載
+```
+
+**禁止事項：**
+- ドキュメント更新なしでのセッション終了
+- 暗黙的な前提に依存した実装
+- 口頭説明でしか伝わらない設計決定
+
+## Environment Variables
+
+| Variable | Service | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | api, worker | PostgreSQL |
+| `REDIS_URL` | api, worker | Redis |
+| `AUTH_ENABLED` | api | Enable JWT (default: false) |
+| `TELEMETRY_ENABLED` | api, worker | Enable tracing |
+| `OPENAI_API_KEY` | worker | OpenAI key |
+| `ANTHROPIC_API_KEY` | worker | Anthropic key |
+
+## API Quick Test
+
+```bash
+# Create workflow
+curl -X POST http://localhost:8080/api/v1/workflows \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
+  -d '{"name": "Test"}'
+
+# Add step
+curl -X POST "http://localhost:8080/api/v1/workflows/{id}/steps" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
+  -d '{"name": "Step1", "type": "tool", "config": {"adapter_id": "mock"}}'
+
+# Publish
+curl -X POST "http://localhost:8080/api/v1/workflows/{id}/publish" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001"
+
+# Execute
+curl -X POST "http://localhost:8080/api/v1/workflows/{id}/runs" \
+  -H "Content-Type: application/json" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
+  -d '{"input": {}, "mode": "test"}'
+```
+
+## Common Operations
+
+### Add New Adapter
+
+1. Create `backend/internal/adapter/{name}.go`
+2. Implement `Adapter` interface
+3. Register in registry
+4. Add test `{name}_test.go`
+5. Update docs/BACKEND.md
+
+### Add New API Endpoint
+
+1. Add handler in `backend/internal/handler/`
+2. Add route in `cmd/api/main.go`
+3. Add usecase if needed
+4. Update docs/API.md and docs/openapi.yaml
+
+### Add Database Migration
+
+1. Create SQL in `backend/migrations/`
+2. Run: `docker compose exec api migrate -path /migrations -database "$DB_URL" up`
+3. Update docs/DATABASE.md
+
+## Implementation Status
+
+All phases complete (Phase 1-8):
+- Workflow CRUD, Steps, Edges
+- DAG execution engine (conditions, map, join)
+- Adapters (Mock, OpenAI, Anthropic, HTTP)
+- Schedules, Webhooks
+- Keycloak OIDC auth
+- OpenTelemetry tracing
+- E2E tests
+- K8s deployment manifests
