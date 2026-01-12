@@ -27,6 +27,14 @@
 | [TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules, Vitest | Frontend code changes |
 | [SIM_FEATURES.md](./SIM_FEATURES.md) | Sim.ai互換機能の実装状況 | 新機能追加時 |
 
+## Architecture Designs
+
+アーキテクチャ設計書：
+
+| Design | Description | Status | Document |
+|--------|-------------|--------|----------|
+| Unified Block Model | ブロック実行の統一モデル | 🚧 設計中 | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) |
+
 ## Feature Implementation Plans
 
 未実装機能の詳細設計書：
