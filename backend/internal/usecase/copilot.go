@@ -908,11 +908,18 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 
 	sb.WriteString("## Available Step Types\n")
 	sb.WriteString("- start: Entry point (required, exactly one)\n")
-	sb.WriteString("- end: Exit point (required, at least one)\n")
 	sb.WriteString("- llm: LLM/AI call (config: provider, model, system_prompt, user_prompt)\n")
 	sb.WriteString("- tool: External tool/adapter (config: adapter_id)\n")
-	sb.WriteString("- condition: Branching (config: expression)\n")
+	sb.WriteString("- condition: Binary branching true/false (config: expression)\n")
+	sb.WriteString("- switch: Multi-way branching (config: expression, cases)\n")
+	sb.WriteString("- map: Parallel array processing (config: input_path, parallel)\n")
+	sb.WriteString("- join: Merge parallel branches (config: join_mode)\n")
+	sb.WriteString("- loop: Iteration (config: loop_type, count, condition)\n")
+	sb.WriteString("- wait: Delay/timer (config: duration_ms)\n")
 	sb.WriteString("- function: Custom code execution (config: code, language)\n")
+	sb.WriteString("- router: AI-based dynamic routing (config: routes, provider, model)\n")
+	sb.WriteString("- human_in_loop: Human approval gate (config: instructions, timeout_hours)\n")
+	sb.WriteString("- log: Debug logging (config: message, level)\n")
 	sb.WriteString("\n")
 
 	sb.WriteString("## User Request\n")
@@ -926,7 +933,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
     {
       "temp_id": "step_1",
       "name": "Step Name",
-      "type": "llm|tool|condition|function|start|end",
+      "type": "start|llm|tool|condition|switch|map|join|loop|wait|function|router|human_in_loop|log",
       "description": "What this step does",
       "config": { ... },
       "position_x": 400,
@@ -946,13 +953,14 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 	sb.WriteString("\n\n")
 
 	sb.WriteString("## Instructions\n")
-	sb.WriteString("1. ALWAYS include a 'start' step and at least one 'end' step\n")
-	sb.WriteString("2. Position steps vertically with 150px spacing\n")
-	sb.WriteString("3. Use descriptive step names in the user's language\n")
-	sb.WriteString("4. Provide meaningful config for each step type\n")
-	sb.WriteString("5. Connect all steps with edges\n")
-	sb.WriteString("6. For LLM steps, include system_prompt and user_prompt in config\n")
-	sb.WriteString("7. Respond in the same language as the user\n")
+	sb.WriteString("1. ALWAYS include exactly one 'start' step as the entry point\n")
+	sb.WriteString("2. The workflow ends when the last step(s) complete - no 'end' step needed\n")
+	sb.WriteString("3. Position steps vertically with 150px spacing\n")
+	sb.WriteString("4. Use descriptive step names in the user's language\n")
+	sb.WriteString("5. Provide meaningful config for each step type\n")
+	sb.WriteString("6. Connect all steps with edges from source to target\n")
+	sb.WriteString("7. For LLM steps, include system_prompt and user_prompt in config\n")
+	sb.WriteString("8. Respond in the same language as the user\n")
 
 	return sb.String()
 }

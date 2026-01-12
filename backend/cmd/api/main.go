@@ -90,6 +90,8 @@ func main() {
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 	credentialRepo := postgres.NewCredentialRepository(pool)
 	copilotSessionRepo := postgres.NewCopilotSessionRepository(pool)
+	usageRepo := postgres.NewUsageRepository(pool)
+	budgetRepo := postgres.NewBudgetRepository(pool)
 
 	// Initialize usecases
 	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo)
@@ -102,6 +104,7 @@ func main() {
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
 	copilotUsecase := usecase.NewCopilotUsecase(workflowRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
+	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
 	// Initialize handlers
 	workflowHandler := handler.NewWorkflowHandler(workflowUsecase)
@@ -115,6 +118,7 @@ func main() {
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
 	copilotHandler := handler.NewCopilotHandler(copilotUsecase)
+	usageHandler := handler.NewUsageHandler(usageUsecase)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -315,6 +319,26 @@ func main() {
 			r.Post("/optimize", copilotHandler.Optimize)
 			r.Post("/chat", copilotHandler.Chat)
 		})
+
+		// Usage tracking and cost management
+		r.Route("/usage", func(r chi.Router) {
+			r.Get("/summary", usageHandler.GetSummary)
+			r.Get("/daily", usageHandler.GetDaily)
+			r.Get("/by-workflow", usageHandler.GetByWorkflow)
+			r.Get("/by-model", usageHandler.GetByModel)
+			r.Get("/pricing", usageHandler.GetPricing)
+
+			// Budget management
+			r.Route("/budgets", func(r chi.Router) {
+				r.Get("/", usageHandler.ListBudgets)
+				r.Post("/", usageHandler.CreateBudget)
+				r.Put("/{id}", usageHandler.UpdateBudget)
+				r.Delete("/{id}", usageHandler.DeleteBudget)
+			})
+		})
+
+		// Run usage (nested under runs)
+		r.Get("/runs/{run_id}/usage", usageHandler.GetByRun)
 	})
 
 	// Public webhook trigger endpoint (no auth required)
