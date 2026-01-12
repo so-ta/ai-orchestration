@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Step, StepType, BlockDefinition, InputPort, OutputPort } from '~/types/api'
 import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
+import type { ConfigSchema, UIConfig } from './config/types/config-schema'
+import DynamicConfigForm from './config/DynamicConfigForm.vue'
 
 const { t } = useI18n()
 const blocks = useBlocks()
@@ -182,6 +184,24 @@ watch(() => formType.value, async (newType) => {
     currentBlockDef.value = null
   }
 }, { immediate: true })
+
+// Check if block has config_schema for dynamic form rendering
+const hasConfigSchema = computed(() => {
+  const schema = currentBlockDef.value?.config_schema
+  return schema && typeof schema === 'object' && Object.keys(schema).length > 0
+})
+
+// Get config_schema as ConfigSchema type
+const configSchema = computed<ConfigSchema | null>(() => {
+  if (!hasConfigSchema.value) return null
+  return currentBlockDef.value?.config_schema as ConfigSchema
+})
+
+// Get ui_config for additional UI customization
+const uiConfig = computed<UIConfig | undefined>(() => {
+  if (!currentBlockDef.value?.ui_config) return undefined
+  return currentBlockDef.value.ui_config as UIConfig
+})
 
 // Helper to format schema type for display
 function formatSchemaType(schema: object | undefined): string {
@@ -428,8 +448,19 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- LLM Configuration -->
-        <div v-if="formType === 'llm'" class="form-section">
+        <!-- Dynamic Config Form (when config_schema is defined) -->
+        <div v-if="hasConfigSchema && !['start', 'join', 'note'].includes(formType)" class="form-section">
+          <h4 class="section-title">{{ currentBlockDef?.name || formType }} 設定</h4>
+          <DynamicConfigForm
+            :schema="configSchema"
+            :ui-config="uiConfig"
+            v-model="formConfig"
+            :disabled="readonlyMode"
+          />
+        </div>
+
+        <!-- LLM Configuration (Legacy fallback when no config_schema) -->
+        <div v-else-if="formType === 'llm'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.llm.title') }}</h4>
 
           <div class="form-row">
@@ -511,8 +542,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Tool Configuration -->
-        <div v-if="formType === 'tool'" class="form-section">
+        <!-- Tool Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'tool'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.tool.title') }}</h4>
 
           <div class="form-group">
@@ -563,8 +594,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Condition Configuration -->
-        <div v-if="formType === 'condition'" class="form-section">
+        <!-- Condition Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'condition'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.condition.title') }}</h4>
 
           <div class="form-group">
@@ -625,8 +656,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Switch Configuration -->
-        <div v-if="formType === 'switch'" class="form-section">
+        <!-- Switch Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'switch'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.switch.title') }}</h4>
 
           <div class="form-group">
@@ -727,8 +758,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Loop Configuration -->
-        <div v-if="formType === 'loop'" class="form-section">
+        <!-- Loop Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'loop'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.loop.title') }}</h4>
 
           <div class="form-group">
@@ -794,8 +825,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Wait Configuration -->
-        <div v-if="formType === 'wait'" class="form-section">
+        <!-- Wait Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'wait'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.wait.title') }}</h4>
 
           <div class="form-group">
@@ -823,8 +854,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Function Configuration -->
-        <div v-if="formType === 'function'" class="form-section">
+        <!-- Function Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'function'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.function.title') }}</h4>
 
           <div class="form-group">
@@ -852,8 +883,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Router Configuration -->
-        <div v-if="formType === 'router'" class="form-section">
+        <!-- Router Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'router'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.router.title') }}</h4>
 
           <div class="form-row">
@@ -904,8 +935,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Human in Loop Configuration -->
-        <div v-if="formType === 'human_in_loop'" class="form-section">
+        <!-- Human in Loop Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'human_in_loop'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.humanInLoop.title') }}</h4>
 
           <div class="form-group">
@@ -953,8 +984,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Map Configuration -->
-        <div v-if="formType === 'map'" class="form-section">
+        <!-- Map Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'map'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.map.title') }}</h4>
 
           <div class="form-group">
@@ -982,8 +1013,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Subflow Configuration -->
-        <div v-if="formType === 'subflow'" class="form-section">
+        <!-- Subflow Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'subflow'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.subflow.title') }}</h4>
 
           <div class="form-group">
@@ -998,14 +1029,14 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Join Configuration -->
-        <div v-if="formType === 'join'" class="form-section">
+        <!-- Join Configuration (Always shown - no config needed) -->
+        <div v-if="!hasConfigSchema && formType === 'join'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.join.title') }}</h4>
           <p class="form-hint">{{ t('stepConfig.join.description') }}</p>
         </div>
 
-        <!-- Start Configuration -->
-        <div v-if="formType === 'start'" class="form-section">
+        <!-- Start Configuration (Always shown - no config needed) -->
+        <div v-if="!hasConfigSchema && formType === 'start'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.start.title') }}</h4>
           <div class="start-info-box">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="start-icon">
@@ -1026,8 +1057,8 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- Log Configuration -->
-        <div v-if="formType === 'log'" class="form-section">
+        <!-- Log Configuration (Legacy fallback when no config_schema) -->
+        <div v-if="!hasConfigSchema && formType === 'log'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.log.title') }}</h4>
 
           <div class="form-group">
