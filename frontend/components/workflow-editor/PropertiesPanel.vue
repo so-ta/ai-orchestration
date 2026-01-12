@@ -1,18 +1,30 @@
 <script setup lang="ts">
 import type { Step, StepType, BlockDefinition, InputPort, OutputPort } from '~/types/api'
+import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
 
 const { t } = useI18n()
 const blocks = useBlocks()
+const toast = useToast()
 
 const props = defineProps<{
   step: Step | null
+  workflowId: string
   readonlyMode?: boolean
   saving?: boolean
 }>()
 
+// Active tab state
+const activeTab = ref<'settings' | 'copilot'>('settings')
+
+// Reset to settings tab when step changes
+watch(() => props.step, () => {
+  activeTab.value = 'settings'
+})
+
 const emit = defineEmits<{
   (e: 'save', data: { name: string; type: StepType; config: Record<string, any> }): void
   (e: 'delete'): void
+  (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
 }>()
 
 // Form state
@@ -94,6 +106,22 @@ function handleDelete() {
   if (confirm(t('editor.confirmDeleteStep'))) {
     emit('delete')
   }
+}
+
+// Handle suggestion from Copilot
+function handleApplySuggestion(suggestion: StepSuggestion) {
+  // Apply suggestion to current step
+  formType.value = suggestion.type as StepType
+  formName.value = suggestion.name
+  formConfig.value = { ...(suggestion.config || {}) }
+  activeTab.value = 'settings'
+  toast.success(t('copilot.suggestionApplied'))
+}
+
+// Handle generated workflow from Copilot
+function handleApplyWorkflow(workflow: GenerateWorkflowResponse) {
+  // Pass to parent to apply to canvas
+  emit('apply-workflow', workflow)
 }
 
 // Available adapters for tool step (computed for i18n reactivity)
@@ -229,86 +257,120 @@ const expressionTemplates = {
 
 <template>
   <div class="properties-panel">
-    <!-- Empty State -->
-    <div v-if="!step" class="properties-empty">
-      <div class="empty-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
-          <path d="M12 12l8-4.5"/>
-          <path d="M12 12v9"/>
-          <path d="M12 12L4 7.5"/>
-        </svg>
+    <!-- Header: shows step info if selected, otherwise generic header -->
+    <div v-if="step" class="properties-header">
+      <div class="header-color" :style="{ backgroundColor: stepTypeColors[step.type] }" />
+      <div class="header-info">
+        <h3 class="header-title">{{ readonlyMode ? t('editor.viewStep') : t('editor.editStep') }}</h3>
+        <span class="header-type">{{ step.type }}</span>
       </div>
-      <p class="empty-title">{{ t('editor.noStepSelected') }}</p>
-      <p class="empty-desc">{{ t('editor.selectStepHint') }}</p>
-
-      <!-- Quick Tips -->
-      <div class="empty-tips">
-        <div class="empty-tips-title">{{ t('editor.quickTips') }}</div>
-        <ul class="empty-tips-list">
-          <li>
-            <span class="tip-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M5 12h14"/>
-                <path d="M12 5v14"/>
-              </svg>
-            </span>
-            {{ t('editor.tipDragBlock') }}
-          </li>
-          <li>
-            <span class="tip-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                <polyline points="15 3 21 3 21 9"/>
-                <line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-            </span>
-            {{ t('editor.tipConnectNodes') }}
-          </li>
-          <li>
-            <span class="tip-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              </svg>
-            </span>
-            {{ t('editor.tipClickToSelect') }}
-          </li>
-        </ul>
-      </div>
-
-      <!-- Keyboard Shortcuts -->
-      <div class="empty-shortcuts">
-        <div class="empty-shortcuts-title">{{ t('editor.keyboardShortcuts') }}</div>
-        <div class="shortcut-item">
-          <kbd>Delete</kbd>
-          <span>{{ t('editor.shortcutDelete') }}</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Esc</kbd>
-          <span>{{ t('editor.shortcutDeselect') }}</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Ctrl</kbd> + <kbd>C</kbd>
-          <span>{{ t('editor.shortcutCopy') }}</span>
-        </div>
-        <div class="shortcut-item">
-          <kbd>Ctrl</kbd> + <kbd>V</kbd>
-          <span>{{ t('editor.shortcutPaste') }}</span>
-        </div>
+    </div>
+    <div v-else class="properties-header properties-header-empty">
+      <div class="header-info">
+        <h3 class="header-title">{{ t('editor.propertiesPanel') }}</h3>
       </div>
     </div>
 
-    <!-- Step Properties -->
-    <template v-else>
-      <div class="properties-header">
-        <div class="header-color" :style="{ backgroundColor: stepTypeColors[step.type] }" />
-        <div class="header-info">
-          <h3 class="header-title">{{ readonlyMode ? t('editor.viewStep') : t('editor.editStep') }}</h3>
-          <span class="header-type">{{ step.type }}</span>
+    <!-- Tab Bar (always visible) -->
+    <div class="properties-tabs">
+      <button
+        class="tab-button"
+        :class="{ active: activeTab === 'settings' }"
+        @click="activeTab = 'settings'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        {{ t('editor.tabs.settings') }}
+      </button>
+      <button
+        class="tab-button"
+        :class="{ active: activeTab === 'copilot' }"
+        @click="activeTab = 'copilot'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2z"/>
+          <circle cx="8" cy="14" r="2"/>
+          <circle cx="16" cy="14" r="2"/>
+        </svg>
+        {{ t('editor.tabs.copilot') }}
+      </button>
+    </div>
+
+    <!-- Settings Tab Content -->
+    <div v-if="activeTab === 'settings'" class="properties-body-wrapper">
+      <!-- Empty State (no step selected) -->
+      <div v-if="!step" class="properties-empty">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/>
+            <path d="M12 12l8-4.5"/>
+            <path d="M12 12v9"/>
+            <path d="M12 12L4 7.5"/>
+          </svg>
+        </div>
+        <p class="empty-title">{{ t('editor.noStepSelected') }}</p>
+        <p class="empty-desc">{{ t('editor.selectStepHint') }}</p>
+
+        <!-- Quick Tips -->
+        <div class="empty-tips">
+          <div class="empty-tips-title">{{ t('editor.quickTips') }}</div>
+          <ul class="empty-tips-list">
+            <li>
+              <span class="tip-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14"/>
+                  <path d="M12 5v14"/>
+                </svg>
+              </span>
+              {{ t('editor.tipDragBlock') }}
+            </li>
+            <li>
+              <span class="tip-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </span>
+              {{ t('editor.tipConnectNodes') }}
+            </li>
+            <li>
+              <span class="tip-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                </svg>
+              </span>
+              {{ t('editor.tipClickToSelect') }}
+            </li>
+          </ul>
+        </div>
+
+        <!-- Keyboard Shortcuts -->
+        <div class="empty-shortcuts">
+          <div class="empty-shortcuts-title">{{ t('editor.keyboardShortcuts') }}</div>
+          <div class="shortcut-item">
+            <kbd>Delete</kbd>
+            <span>{{ t('editor.shortcutDelete') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Esc</kbd>
+            <span>{{ t('editor.shortcutDeselect') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl</kbd> + <kbd>C</kbd>
+            <span>{{ t('editor.shortcutCopy') }}</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Ctrl</kbd> + <kbd>V</kbd>
+            <span>{{ t('editor.shortcutPaste') }}</span>
+          </div>
         </div>
       </div>
 
-      <div class="properties-body">
+      <!-- Step Properties (when step is selected) -->
+      <div v-else class="properties-body">
         <!-- Basic Information -->
         <div class="form-section">
           <h4 class="section-title">{{ t('stepConfig.basicInfo') }}</h4>
@@ -1065,28 +1127,38 @@ const expressionTemplates = {
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Footer with actions -->
-      <div class="properties-footer">
-        <button
-          v-if="!readonlyMode && !isStartNode"
-          class="btn btn-danger-outline"
-          :disabled="saving"
-          @click="handleDelete"
-        >
-          {{ t('common.delete') }}
-        </button>
-        <div class="footer-spacer" />
-        <button
-          v-if="!readonlyMode"
-          class="btn btn-primary"
-          :disabled="saving"
-          @click="handleSave"
-        >
-          {{ saving ? t('common.saving') : t('common.save') }}
-        </button>
-      </div>
-    </template>
+    <!-- Copilot Tab Content (always available) -->
+    <div v-if="activeTab === 'copilot'" class="properties-body copilot-container">
+      <CopilotTab
+        :step="step"
+        :workflow-id="workflowId"
+        @apply-suggestion="handleApplySuggestion"
+        @apply-workflow="handleApplyWorkflow"
+      />
+    </div>
+
+    <!-- Footer with actions (only when step selected) -->
+    <div v-if="step" class="properties-footer">
+      <button
+        v-if="!readonlyMode && !isStartNode"
+        class="btn btn-danger-outline"
+        :disabled="saving"
+        @click="handleDelete"
+      >
+        {{ t('common.delete') }}
+      </button>
+      <div class="footer-spacer" />
+      <button
+        v-if="!readonlyMode"
+        class="btn btn-primary"
+        :disabled="saving"
+        @click="handleSave"
+      >
+        {{ saving ? t('common.saving') : t('common.save') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -1096,6 +1168,14 @@ const expressionTemplates = {
   flex-direction: column;
   height: 100%;
   background: var(--color-surface);
+}
+
+/* Body Wrapper for Settings Tab */
+.properties-body-wrapper {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Empty State */
@@ -1258,6 +1338,53 @@ const expressionTemplates = {
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Tab Bar */
+.properties-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+
+.tab-button:hover {
+  color: var(--color-text);
+}
+
+.tab-button.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.tab-button svg {
+  opacity: 0.7;
+}
+
+.tab-button.active svg {
+  opacity: 1;
+}
+
+/* Copilot Container */
+.copilot-container {
+  padding: 0.75rem 1rem;
 }
 
 /* Body */

@@ -64,6 +64,9 @@ var (
 	ErrBlockTemplateIsBuiltin    = errors.New("cannot modify built-in template")
 	ErrBlockTemplateSlugExists   = errors.New("block template slug already exists")
 
+	// Copilot Session errors
+	ErrCopilotSessionNotFound = errors.New("copilot session not found")
+
 	// Block Definition errors (additional)
 	ErrBlockDefinitionNotFound   = errors.New("block definition not found")
 	ErrBlockDefinitionSlugExists = errors.New("block definition slug already exists")

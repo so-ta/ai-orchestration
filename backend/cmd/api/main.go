@@ -89,6 +89,7 @@ func main() {
 	blockRepo := postgres.NewBlockDefinitionRepository(pool)
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 	credentialRepo := postgres.NewCredentialRepository(pool)
+	copilotSessionRepo := postgres.NewCopilotSessionRepository(pool)
 
 	// Initialize usecases
 	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo)
@@ -100,6 +101,7 @@ func main() {
 	auditService := usecase.NewAuditService(auditRepo)
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
+	copilotUsecase := usecase.NewCopilotUsecase(workflowRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
 
 	// Initialize handlers
 	workflowHandler := handler.NewWorkflowHandler(workflowUsecase)
@@ -112,6 +114,7 @@ func main() {
 	blockHandler := handler.NewBlockHandler(blockRepo)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
+	copilotHandler := handler.NewCopilotHandler(copilotUsecase)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -188,6 +191,22 @@ func main() {
 					r.Post("/", stepHandler.Create)
 					r.Put("/{step_id}", stepHandler.Update)
 					r.Delete("/{step_id}", stepHandler.Delete)
+
+					// Step-specific Copilot
+					r.Route("/{step_id}/copilot", func(r chi.Router) {
+						r.Post("/suggest", copilotHandler.SuggestForStep)
+						r.Post("/explain", copilotHandler.ExplainStep)
+					})
+				})
+
+				// Workflow-level Copilot (with session management)
+				r.Route("/copilot", func(r chi.Router) {
+					r.Get("/session", copilotHandler.GetOrCreateSession)
+					r.Get("/sessions", copilotHandler.ListSessions)
+					r.Post("/sessions/new", copilotHandler.StartNewSession)
+					r.Get("/sessions/{session_id}", copilotHandler.GetSessionMessages)
+					r.Post("/chat", copilotHandler.ChatWithSession)
+					r.Post("/generate", copilotHandler.GenerateWorkflow)
 				})
 
 				// Edges
@@ -286,6 +305,15 @@ func main() {
 				r.Post("/revoke", credentialHandler.Revoke)
 				r.Post("/activate", credentialHandler.Activate)
 			})
+		})
+
+		// Copilot (AI-assisted workflow building)
+		r.Route("/copilot", func(r chi.Router) {
+			r.Post("/suggest", copilotHandler.Suggest)
+			r.Post("/diagnose", copilotHandler.Diagnose)
+			r.Post("/explain", copilotHandler.Explain)
+			r.Post("/optimize", copilotHandler.Optimize)
+			r.Post("/chat", copilotHandler.Chat)
 		})
 	})
 

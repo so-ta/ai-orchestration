@@ -139,6 +139,7 @@
     "blocks": "ブロック",
     "dragToCanvas": "キャンバスにドラッグ",
     "dropHint": "ブロックをここにドラッグ、またはクリックで追加",
+    "propertiesPanel": "プロパティ",
     "noStepSelected": "ステップが選択されていません",
     "selectStepHint": "ステップを選択してプロパティを編集、またはパレットからブロックをドラッグしてください",
     "editStep": "ステップを編集",
@@ -205,7 +206,48 @@
     "shortcutDelete": "ステップを削除",
     "shortcutDeselect": "選択解除",
     "shortcutCopy": "ステップをコピー",
-    "shortcutPaste": "ステップを貼り付け"
+    "shortcutPaste": "ステップを貼り付け",
+    "tabs": {
+      "settings": "設定",
+      "copilot": "Copilot"
+    }
+  },
+  "copilot": {
+    "thinking": "考え中...",
+    "chatWelcome": "Copilotにご質問ください",
+    "chatHint": "ステップの設定やワークフローの構築についてサポートします",
+    "chatPlaceholder": "質問を入力...",
+    "noSuggestions": "提案はありません。「提案を取得」をクリックしてください。",
+    "noExplanation": "説明はありません。「説明」をクリックしてください。",
+    "explanationTitle": "ステップの説明",
+    "applySuggestion": "適用",
+    "suggestionApplied": "提案を適用しました",
+    "selectStepFirst": "まずステップを選択してください",
+    "session": "セッション",
+    "newSession": "新規セッション",
+    "newSessionStarted": "新しいセッションを開始しました",
+    "sessionHistory": "セッション履歴",
+    "active": "アクティブ",
+    "noSessions": "セッションがありません",
+    "loading": "読み込み中...",
+    "generateWorkflow": "ワークフローを生成",
+    "generateWorkflowTitle": "AIでワークフローを生成",
+    "generateWorkflowDescription": "作成したいワークフローの内容を自然言語で記述してください。AIが自動的にステップ構造を生成します。",
+    "generatePlaceholder": "例: ユーザーからの問い合わせを分類し、技術的な質問はサポートチームに、営業関連は営業チームに振り分けるワークフローを作成してください。",
+    "generate": "生成",
+    "generating": "生成中...",
+    "workflowGenerated": "ワークフローを生成しました。キャンバスに反映されます。",
+    "actions": {
+      "suggest": "提案",
+      "explain": "説明"
+    },
+    "errors": {
+      "chatFailed": "チャットに失敗しました",
+      "suggestFailed": "提案の取得に失敗しました",
+      "explainFailed": "説明の取得に失敗しました",
+      "sessionFailed": "セッションの読み込みに失敗しました",
+      "generateFailed": "ワークフローの生成に失敗しました"
+    }
   },
   "stepConfig": {
     "basicInfo": "基本情報",

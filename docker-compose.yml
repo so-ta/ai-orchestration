@@ -77,6 +77,9 @@ services:
       TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-false}
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       ENVIRONMENT: development
+      # LLM API Keys
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "8080:8080"
     volumes:

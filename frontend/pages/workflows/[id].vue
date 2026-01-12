@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType } from '~/types/api'
+import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import { calculateLayout } from '~/utils/graph-layout'
 
 const { t } = useI18n()
@@ -806,6 +807,61 @@ async function handleAutoLayout() {
   }
 }
 
+// Apply generated workflow from Copilot
+async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) {
+  if (!workflow.value || isReadonly.value) return
+
+  try {
+    saving.value = true
+
+    // Map temp_id to actual step id
+    const idMapping: Record<string, string> = {}
+
+    // Create all steps first
+    for (const genStep of generatedWorkflow.steps) {
+      // Skip if this is a start step and we already have one
+      if (genStep.type === 'start') {
+        const existingStart = workflow.value.steps?.find(s => s.type === 'start')
+        if (existingStart) {
+          idMapping[genStep.temp_id] = existingStart.id
+          continue
+        }
+      }
+
+      const response = await workflows.createStep(workflowId, {
+        name: genStep.name,
+        type: genStep.type as StepType,
+        config: genStep.config || {},
+        position: { x: genStep.position_x, y: genStep.position_y },
+      })
+      idMapping[genStep.temp_id] = response.data.id
+    }
+
+    // Create edges using the id mapping
+    for (const genEdge of generatedWorkflow.edges) {
+      const sourceId = idMapping[genEdge.source_temp_id]
+      const targetId = idMapping[genEdge.target_temp_id]
+
+      if (sourceId && targetId) {
+        await workflows.createEdge(workflowId, {
+          source_step_id: sourceId,
+          target_step_id: targetId,
+          source_port: genEdge.source_port,
+        })
+      }
+    }
+
+    // Reload workflow to see the new steps
+    await loadWorkflow()
+    toast.success(t('copilot.workflowGenerated'))
+  } catch (e) {
+    toast.error(t('copilot.errors.generateFailed'), e instanceof Error ? e.message : undefined)
+    console.error('Failed to apply generated workflow:', e)
+  } finally {
+    saving.value = false
+  }
+}
+
 // Keyboard shortcuts (Delete, Cmd/Ctrl+C, Cmd/Ctrl+V, Escape)
 useKeyboardShortcuts({
   selectedStep,
@@ -1023,10 +1079,12 @@ onMounted(() => {
         <template #properties>
           <PropertiesPanel
             :step="selectedStep"
+            :workflow-id="workflowId"
             :readonly-mode="isReadonly"
             :saving="saving"
             @save="handleSaveStep"
             @delete="handleDeleteStep"
+            @apply-workflow="handleApplyWorkflow"
           />
         </template>
       </WorkflowEditorLayout>

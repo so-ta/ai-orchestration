@@ -139,6 +139,7 @@
     "blocks": "Blocks",
     "dragToCanvas": "Drag to canvas",
     "dropHint": "Drag blocks here or click to add",
+    "propertiesPanel": "Properties",
     "noStepSelected": "No step selected",
     "selectStepHint": "Select a step to edit its properties, or drag a block from the palette",
     "editStep": "Edit Step",
@@ -205,7 +206,48 @@
     "shortcutDelete": "Delete step",
     "shortcutDeselect": "Deselect",
     "shortcutCopy": "Copy step",
-    "shortcutPaste": "Paste step"
+    "shortcutPaste": "Paste step",
+    "tabs": {
+      "settings": "Settings",
+      "copilot": "Copilot"
+    }
+  },
+  "copilot": {
+    "thinking": "Thinking...",
+    "chatWelcome": "Ask Copilot anything",
+    "chatHint": "Get help with step configuration and workflow building",
+    "chatPlaceholder": "Type your question...",
+    "noSuggestions": "No suggestions yet. Click \"Suggest\" to get recommendations.",
+    "noExplanation": "No explanation yet. Click \"Explain\" to learn about this step.",
+    "explanationTitle": "Step Explanation",
+    "applySuggestion": "Apply",
+    "suggestionApplied": "Suggestion applied",
+    "selectStepFirst": "Please select a step first",
+    "session": "Session",
+    "newSession": "New Session",
+    "newSessionStarted": "Started new session",
+    "sessionHistory": "Session History",
+    "active": "Active",
+    "noSessions": "No sessions",
+    "loading": "Loading...",
+    "generateWorkflow": "Generate Workflow",
+    "generateWorkflowTitle": "Generate Workflow with AI",
+    "generateWorkflowDescription": "Describe the workflow you want to create in natural language. AI will automatically generate the step structure.",
+    "generatePlaceholder": "Example: Create a workflow that classifies user inquiries and routes technical questions to the support team and sales-related ones to the sales team.",
+    "generate": "Generate",
+    "generating": "Generating...",
+    "workflowGenerated": "Workflow generated. It will be applied to the canvas.",
+    "actions": {
+      "suggest": "Suggest",
+      "explain": "Explain"
+    },
+    "errors": {
+      "chatFailed": "Chat failed",
+      "suggestFailed": "Failed to get suggestions",
+      "explainFailed": "Failed to get explanation",
+      "sessionFailed": "Failed to load session",
+      "generateFailed": "Failed to generate workflow"
+    }
   },
   "stepConfig": {
     "basicInfo": "Basic Information",

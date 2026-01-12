@@ -250,3 +250,23 @@ type BlockTemplateRepository interface {
 	// Delete deletes a block template (only non-builtin templates)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
+
+// CopilotSessionRepository defines the interface for copilot session persistence
+type CopilotSessionRepository interface {
+	// Create creates a new copilot session
+	Create(ctx context.Context, session *domain.CopilotSession) error
+	// GetByID retrieves a copilot session by ID
+	GetByID(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.CopilotSession, error)
+	// GetActiveByUserAndWorkflow retrieves the active session for a user and workflow
+	GetActiveByUserAndWorkflow(ctx context.Context, tenantID uuid.UUID, userID string, workflowID uuid.UUID) (*domain.CopilotSession, error)
+	// GetWithMessages retrieves a session with all its messages
+	GetWithMessages(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.CopilotSession, error)
+	// ListByUserAndWorkflow retrieves all sessions for a user and workflow
+	ListByUserAndWorkflow(ctx context.Context, tenantID uuid.UUID, userID string, workflowID uuid.UUID) ([]*domain.CopilotSession, error)
+	// Update updates a copilot session
+	Update(ctx context.Context, session *domain.CopilotSession) error
+	// AddMessage adds a message to a session
+	AddMessage(ctx context.Context, message *domain.CopilotMessage) error
+	// CloseSession marks a session as inactive
+	CloseSession(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) error
+}

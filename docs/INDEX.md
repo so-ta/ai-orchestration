@@ -25,6 +25,21 @@
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, Kubernetes, environment config | DevOps, deployment |
 | [DOCUMENTATION_RULES.md](./DOCUMENTATION_RULES.md) | Doc format, MECE, templates | Creating/updating documentation |
 | [TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules, Vitest | Frontend code changes |
+| [SIM_FEATURES.md](./SIM_FEATURES.md) | Sim.ai互換機能の実装状況 | 新機能追加時 |
+
+## Feature Implementation Plans
+
+未実装機能の詳細設計書：
+
+| Phase | Feature | Status | Plan Document |
+|-------|---------|--------|---------------|
+| 6 | Guardrails | 📋 未実装 | [PHASE6_GUARDRAILS.md](./plans/PHASE6_GUARDRAILS.md) |
+| 7 | Evaluator | 📋 未実装 | [PHASE7_EVALUATOR.md](./plans/PHASE7_EVALUATOR.md) |
+| 8 | Variables System | 📋 未実装 | [PHASE8_VARIABLES.md](./plans/PHASE8_VARIABLES.md) |
+| 9 | Cost Tracking | 📋 未実装 | [PHASE9_COST_TRACKING.md](./plans/PHASE9_COST_TRACKING.md) |
+| 10 | Copilot | 📋 未実装 | [PHASE10_COPILOT.md](./plans/PHASE10_COPILOT.md) |
+
+**推奨実装順序**: Phase 8 → 9 → 6 → 7 → 10
 
 ## System Overview
 
