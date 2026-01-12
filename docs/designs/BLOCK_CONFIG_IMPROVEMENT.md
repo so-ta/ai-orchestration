@@ -1,6 +1,6 @@
 # ブロック設定ブラッシュアップ案
 
-**Status**: 📋 設計中
+**Status**: 🚧 Phase 3まで実装完了
 **Created**: 2026-01-12
 **Related Documents**:
 - [UNIFIED_BLOCK_MODEL.md](./UNIFIED_BLOCK_MODEL.md)
@@ -1075,9 +1075,11 @@ func (u *StepUsecase) ValidateStepConfig(ctx context.Context, blockSlug string, 
 
 ## 8. 次のアクション
 
-1. [ ] Phase 1: DynamicConfigFormコンポーネント骨組み作成
-2. [ ] Phase 2: TextWidget, SelectWidget, NumberWidget実装
-3. [ ] Phase 3: PropertiesPanel統合（LLMブロックで試験導入）
+1. [x] Phase 1: DynamicConfigFormコンポーネント骨組み作成
+2. [x] Phase 2: TextWidget, SelectWidget, NumberWidget実装（+ Checkbox, Textarea, Array, KeyValue）
+3. [x] Phase 3: PropertiesPanel統合（LLMブロックで試験導入）
+   - [x] DynamicConfigFormをPropertiesPanelに統合
+   - [x] LLMブロックのconfig_schemaをDB migrationで追加
 4. [ ] Phase 4: UIビルダー実装
    - [ ] FieldListEditor（ドラッグ&ドロップ）
    - [ ] FieldEditDialog（タイプ別オプション）
