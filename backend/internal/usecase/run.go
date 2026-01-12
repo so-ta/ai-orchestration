@@ -18,6 +18,7 @@ type RunUsecase struct {
 	versionRepo  repository.WorkflowVersionRepository
 	stepRepo     repository.StepRepository
 	edgeRepo     repository.EdgeRepository
+	stepRunRepo  repository.StepRunRepository
 	queue        *engine.Queue
 }
 
@@ -28,6 +29,7 @@ func NewRunUsecase(
 	versionRepo repository.WorkflowVersionRepository,
 	stepRepo repository.StepRepository,
 	edgeRepo repository.EdgeRepository,
+	stepRunRepo repository.StepRunRepository,
 	redisClient *redis.Client,
 ) *RunUsecase {
 	return &RunUsecase{
@@ -36,6 +38,7 @@ func NewRunUsecase(
 		versionRepo:  versionRepo,
 		stepRepo:     stepRepo,
 		edgeRepo:     edgeRepo,
+		stepRunRepo:  stepRunRepo,
 		queue:        engine.NewQueue(redisClient),
 	}
 }
@@ -236,4 +239,236 @@ func (u *RunUsecase) Cancel(ctx context.Context, tenantID, id uuid.UUID) (*domai
 	}
 
 	return run, nil
+}
+
+// ExecuteSingleStepInput represents input for executing a single step
+type ExecuteSingleStepInput struct {
+	TenantID uuid.UUID
+	RunID    uuid.UUID
+	StepID   uuid.UUID
+	Input    json.RawMessage // Optional: custom input (nil means use previous input)
+}
+
+// ExecuteSingleStep executes only one step from an existing run
+func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleStepInput) (*domain.StepRun, error) {
+	// 1. Get run and validate status (only completed/failed runs can be re-executed)
+	run, err := u.runRepo.GetByID(ctx, input.TenantID, input.RunID)
+	if err != nil {
+		return nil, err
+	}
+	if run.Status != domain.RunStatusCompleted && run.Status != domain.RunStatusFailed {
+		return nil, domain.ErrRunNotResumable
+	}
+
+	// 2. Get workflow definition from version snapshot
+	version, err := u.versionRepo.GetByWorkflowAndVersion(ctx, run.WorkflowID, run.WorkflowVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	var definition domain.WorkflowDefinition
+	if err := json.Unmarshal(version.Definition, &definition); err != nil {
+		return nil, err
+	}
+
+	// 3. Find the step in the definition
+	var targetStep *domain.Step
+	for i := range definition.Steps {
+		if definition.Steps[i].ID == input.StepID {
+			targetStep = &definition.Steps[i]
+			break
+		}
+	}
+	if targetStep == nil {
+		return nil, domain.ErrStepNotFound
+	}
+
+	// 4. Determine input (custom or from previous StepRun)
+	stepInput := input.Input
+	if stepInput == nil {
+		lastRun, err := u.stepRunRepo.GetLatestByStep(ctx, input.RunID, input.StepID)
+		if err != nil {
+			return nil, err
+		}
+		stepInput = lastRun.Input
+	}
+
+	// 5. Get max attempt number for the entire run and increment
+	maxAttempt, err := u.stepRunRepo.GetMaxAttemptForRun(ctx, input.RunID)
+	if err != nil {
+		return nil, err
+	}
+	newAttempt := maxAttempt + 1
+
+	// 6. Collect previous step outputs for injection
+	completedRuns, err := u.stepRunRepo.ListCompletedByRun(ctx, input.RunID)
+	if err != nil {
+		return nil, err
+	}
+	injectedOutputs := make(map[string]json.RawMessage)
+	for _, sr := range completedRuns {
+		injectedOutputs[sr.StepID.String()] = sr.Output
+	}
+
+	// 7. Enqueue job
+	job := &engine.Job{
+		TenantID:        input.TenantID,
+		WorkflowID:      run.WorkflowID,
+		WorkflowVersion: run.WorkflowVersion,
+		RunID:           input.RunID,
+		ExecutionMode:   engine.ExecutionModeSingleStep,
+		TargetStepID:    &input.StepID,
+		StepInput:       stepInput,
+		InjectedOutputs: injectedOutputs,
+	}
+	if err := u.queue.Enqueue(ctx, job); err != nil {
+		return nil, err
+	}
+
+	// 8. Return new StepRun (note: actual execution happens async in worker)
+	return domain.NewStepRunWithAttempt(input.RunID, input.StepID, targetStep.Name, newAttempt), nil
+}
+
+// ResumeFromStepInput represents input for resuming execution from a step
+type ResumeFromStepInput struct {
+	TenantID      uuid.UUID
+	RunID         uuid.UUID
+	FromStepID    uuid.UUID
+	InputOverride json.RawMessage // Optional: override input for the starting step
+}
+
+// ResumeFromStepOutput represents output for resuming execution
+type ResumeFromStepOutput struct {
+	RunID          uuid.UUID   `json:"run_id"`
+	FromStepID     uuid.UUID   `json:"from_step_id"`
+	StepsToExecute []uuid.UUID `json:"steps_to_execute"`
+}
+
+// ResumeFromStep resumes execution from a specific step through all downstream steps
+func (u *RunUsecase) ResumeFromStep(ctx context.Context, input ResumeFromStepInput) (*ResumeFromStepOutput, error) {
+	// 1. Get run and validate status
+	run, err := u.runRepo.GetByID(ctx, input.TenantID, input.RunID)
+	if err != nil {
+		return nil, err
+	}
+	if run.Status != domain.RunStatusCompleted && run.Status != domain.RunStatusFailed {
+		return nil, domain.ErrRunNotResumable
+	}
+
+	// 2. Get workflow definition from version snapshot
+	version, err := u.versionRepo.GetByWorkflowAndVersion(ctx, run.WorkflowID, run.WorkflowVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	var definition domain.WorkflowDefinition
+	if err := json.Unmarshal(version.Definition, &definition); err != nil {
+		return nil, err
+	}
+
+	// 3. Find the starting step in the definition
+	var found bool
+	for i := range definition.Steps {
+		if definition.Steps[i].ID == input.FromStepID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, domain.ErrStepNotFound
+	}
+
+	// 4. Collect downstream steps (steps reachable from FromStepID)
+	stepsToExecute := collectDownstreamSteps(&definition, input.FromStepID)
+
+	// 5. Collect previous step outputs for injection (steps NOT in stepsToExecute)
+	completedRuns, err := u.stepRunRepo.ListCompletedByRun(ctx, input.RunID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a set of steps to execute for quick lookup
+	executeSet := make(map[uuid.UUID]bool)
+	for _, stepID := range stepsToExecute {
+		executeSet[stepID] = true
+	}
+
+	injectedOutputs := make(map[string]json.RawMessage)
+	for _, sr := range completedRuns {
+		// Only inject outputs from steps that won't be re-executed
+		if !executeSet[sr.StepID] {
+			injectedOutputs[sr.StepID.String()] = sr.Output
+		}
+	}
+
+	// 6. Determine input for the starting step
+	stepInput := input.InputOverride
+	if stepInput == nil {
+		lastRun, err := u.stepRunRepo.GetLatestByStep(ctx, input.RunID, input.FromStepID)
+		if err == nil && lastRun != nil {
+			stepInput = lastRun.Input
+		}
+	}
+
+	// 7. Enqueue job
+	job := &engine.Job{
+		TenantID:        input.TenantID,
+		WorkflowID:      run.WorkflowID,
+		WorkflowVersion: run.WorkflowVersion,
+		RunID:           input.RunID,
+		ExecutionMode:   engine.ExecutionModeResume,
+		TargetStepID:    &input.FromStepID,
+		StepInput:       stepInput,
+		InjectedOutputs: injectedOutputs,
+	}
+	if err := u.queue.Enqueue(ctx, job); err != nil {
+		return nil, err
+	}
+
+	return &ResumeFromStepOutput{
+		RunID:          input.RunID,
+		FromStepID:     input.FromStepID,
+		StepsToExecute: stepsToExecute,
+	}, nil
+}
+
+// GetStepHistory returns all StepRuns for a specific step in a run
+func (u *RunUsecase) GetStepHistory(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.StepRun, error) {
+	// Validate run exists and belongs to tenant
+	_, err := u.runRepo.GetByID(ctx, tenantID, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	return u.stepRunRepo.ListByStep(ctx, runID, stepID)
+}
+
+// collectDownstreamSteps collects all steps reachable from the starting step (BFS)
+func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUID) []uuid.UUID {
+	// Build adjacency list
+	outEdges := make(map[uuid.UUID][]uuid.UUID)
+	for _, edge := range def.Edges {
+		outEdges[edge.SourceStepID] = append(outEdges[edge.SourceStepID], edge.TargetStepID)
+	}
+
+	// BFS to collect all downstream steps
+	result := []uuid.UUID{startStepID}
+	visited := make(map[uuid.UUID]bool)
+	visited[startStepID] = true
+
+	queue := []uuid.UUID{startStepID}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		for _, next := range outEdges[current] {
+			if !visited[next] {
+				visited[next] = true
+				result = append(result, next)
+				queue = append(queue, next)
+			}
+		}
+	}
+
+	return result
 }

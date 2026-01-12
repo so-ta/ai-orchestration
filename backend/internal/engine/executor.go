@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/adapter"
+	"github.com/souta/ai-orchestration/internal/block/sandbox"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,36 +23,258 @@ var tracer = otel.Tracer("ai-orchestration/engine")
 
 // Executor executes a workflow DAG
 type Executor struct {
-	registry  *adapter.Registry
-	logger    *slog.Logger
-	evaluator *ConditionEvaluator
+	registry      *adapter.Registry
+	logger        *slog.Logger
+	evaluator     *ConditionEvaluator
+	sandbox       *sandbox.Sandbox
+	usageRecorder *UsageRecorder
+}
+
+// ExecutorOption is a functional option for Executor
+type ExecutorOption func(*Executor)
+
+// WithUsageRecorder sets the usage recorder for the executor
+func WithUsageRecorder(recorder *UsageRecorder) ExecutorOption {
+	return func(e *Executor) {
+		e.usageRecorder = recorder
+	}
 }
 
 // NewExecutor creates a new executor
-func NewExecutor(registry *adapter.Registry, logger *slog.Logger) *Executor {
-	return &Executor{
+func NewExecutor(registry *adapter.Registry, logger *slog.Logger, opts ...ExecutorOption) *Executor {
+	e := &Executor{
 		registry:  registry,
 		logger:    logger,
 		evaluator: NewConditionEvaluator(),
+		sandbox:   sandbox.New(sandbox.DefaultConfig()),
 	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // ExecutionContext holds the context for a workflow execution
 type ExecutionContext struct {
-	Run        *domain.Run
-	Definition *domain.WorkflowDefinition
-	StepRuns   map[uuid.UUID]*domain.StepRun
-	StepData   map[uuid.UUID]json.RawMessage // step outputs
-	mu         sync.RWMutex
+	Run             *domain.Run
+	Definition      *domain.WorkflowDefinition
+	StepRuns        map[uuid.UUID]*domain.StepRun
+	StepData        map[uuid.UUID]json.RawMessage // step outputs
+	InjectedOutputs map[string]json.RawMessage    // pre-injected outputs for partial execution
+	mu              sync.RWMutex
 }
 
 // NewExecutionContext creates a new execution context
 func NewExecutionContext(run *domain.Run, def *domain.WorkflowDefinition) *ExecutionContext {
 	return &ExecutionContext{
-		Run:        run,
-		Definition: def,
-		StepRuns:   make(map[uuid.UUID]*domain.StepRun),
-		StepData:   make(map[uuid.UUID]json.RawMessage),
+		Run:             run,
+		Definition:      def,
+		StepRuns:        make(map[uuid.UUID]*domain.StepRun),
+		StepData:        make(map[uuid.UUID]json.RawMessage),
+		InjectedOutputs: make(map[string]json.RawMessage),
+	}
+}
+
+// InjectPreviousOutputs injects outputs from a previous run for partial execution
+func (ec *ExecutionContext) InjectPreviousOutputs(outputs map[string]json.RawMessage) {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+
+	ec.InjectedOutputs = outputs
+	// Also add to StepData so they're available during execution
+	for stepIDStr, output := range outputs {
+		if stepID, err := uuid.Parse(stepIDStr); err == nil {
+			ec.StepData[stepID] = output
+		}
+	}
+}
+
+// ExecuteSingleStep executes only one step with the given input
+func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionContext, stepID uuid.UUID, input json.RawMessage) (*domain.StepRun, error) {
+	ctx, span := tracer.Start(ctx, "workflow.execute_single_step",
+		trace.WithAttributes(
+			attribute.String("run_id", execCtx.Run.ID.String()),
+			attribute.String("step_id", stepID.String()),
+		),
+	)
+	defer span.End()
+
+	// Find the step in the definition
+	var targetStep *domain.Step
+	for i := range execCtx.Definition.Steps {
+		if execCtx.Definition.Steps[i].ID == stepID {
+			targetStep = &execCtx.Definition.Steps[i]
+			break
+		}
+	}
+	if targetStep == nil {
+		err := fmt.Errorf("step not found: %s", stepID)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	e.logger.Info("Executing single step",
+		"run_id", execCtx.Run.ID,
+		"step_id", stepID,
+		"step_name", targetStep.Name,
+	)
+
+	// Create step run
+	stepRun := domain.NewStepRun(execCtx.Run.ID, targetStep.ID, targetStep.Name)
+
+	execCtx.mu.Lock()
+	execCtx.StepRuns[targetStep.ID] = stepRun
+	execCtx.mu.Unlock()
+
+	// Use provided input or prepare from context
+	var stepInput json.RawMessage
+	if input != nil && len(input) > 0 {
+		stepInput = input
+	} else {
+		stepInput = e.prepareStepInput(execCtx, *targetStep)
+	}
+	stepRun.Start(stepInput)
+
+	// Execute based on step type
+	var output json.RawMessage
+	var err error
+
+	// Build a mini graph for the single step execution
+	graph := &Graph{
+		Steps:    map[uuid.UUID]domain.Step{targetStep.ID: *targetStep},
+		InEdges:  make(map[uuid.UUID][]domain.Edge),
+		OutEdges: make(map[uuid.UUID][]domain.Edge),
+	}
+
+	// Call executeNodeWithInput instead of executeNode to use custom input
+	output, err = e.executeStepWithInput(ctx, execCtx, *targetStep, stepRun, stepInput)
+
+	if err != nil {
+		stepRun.Fail(err.Error())
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		e.logger.Error("Single step execution failed",
+			"run_id", execCtx.Run.ID,
+			"step_id", stepID,
+			"error", err,
+		)
+		return stepRun, err
+	}
+
+	stepRun.Complete(output)
+
+	execCtx.mu.Lock()
+	execCtx.StepData[targetStep.ID] = output
+	execCtx.mu.Unlock()
+
+	span.SetStatus(codes.Ok, "single step completed")
+	e.logger.Info("Single step completed",
+		"run_id", execCtx.Run.ID,
+		"step_id", stepID,
+	)
+
+	// Suppress unused variable warning
+	_ = graph
+
+	return stepRun, nil
+}
+
+// ExecuteFromStep executes from a specific step through all downstream steps
+func (e *Executor) ExecuteFromStep(ctx context.Context, execCtx *ExecutionContext, startStepID uuid.UUID, startInput json.RawMessage) error {
+	ctx, span := tracer.Start(ctx, "workflow.execute_from_step",
+		trace.WithAttributes(
+			attribute.String("run_id", execCtx.Run.ID.String()),
+			attribute.String("start_step_id", startStepID.String()),
+		),
+	)
+	defer span.End()
+
+	// Verify the starting step exists
+	var found bool
+	for i := range execCtx.Definition.Steps {
+		if execCtx.Definition.Steps[i].ID == startStepID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		err := fmt.Errorf("start step not found: %s", startStepID)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	e.logger.Info("Executing from step",
+		"run_id", execCtx.Run.ID,
+		"start_step_id", startStepID,
+	)
+
+	// Build execution graph
+	graph := e.buildGraph(execCtx.Definition)
+
+	// If custom input provided for start step, store it
+	if startInput != nil && len(startInput) > 0 {
+		execCtx.mu.Lock()
+		// Store the custom input to be used when the start step runs
+		execCtx.StepData[startStepID] = startInput
+		execCtx.mu.Unlock()
+	}
+
+	// Execute from start step
+	if err := e.executeNodes(ctx, execCtx, graph, []uuid.UUID{startStepID}); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	span.SetStatus(codes.Ok, "execution from step completed")
+	return nil
+}
+
+// executeStepWithInput executes a step with explicit input (for single step execution)
+func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
+	switch step.Type {
+	case domain.StepTypeStart:
+		return e.executeStartStep(ctx, step, input)
+	case domain.StepTypeTool:
+		return e.executeToolStep(ctx, execCtx, step, stepRun, input)
+	case domain.StepTypeLLM:
+		return e.executeLLMStep(ctx, execCtx, step, stepRun, input)
+	case domain.StepTypeCondition:
+		return e.executeConditionStep(ctx, execCtx, step, input)
+	case domain.StepTypeMap:
+		return e.executeMapStep(ctx, step, input)
+	case domain.StepTypeJoin:
+		return e.executeJoinStep(ctx, execCtx, step)
+	case domain.StepTypeLoop:
+		return e.executeLoopStep(ctx, step, input)
+	case domain.StepTypeWait:
+		return e.executeWaitStep(ctx, step, input)
+	case domain.StepTypeFunction:
+		return e.executeFunctionStep(ctx, step, input)
+	case domain.StepTypeRouter:
+		return e.executeRouterStep(ctx, step, input)
+	case domain.StepTypeHumanInLoop:
+		return e.executeHumanInLoopStep(ctx, execCtx, step, input)
+	case domain.StepTypeSwitch:
+		return e.executeSwitchStep(ctx, execCtx, step, input)
+	case domain.StepTypeFilter:
+		return e.executeFilterStep(ctx, step, input)
+	case domain.StepTypeSplit:
+		return e.executeSplitStep(ctx, step, input)
+	case domain.StepTypeAggregate:
+		return e.executeAggregateStep(ctx, step, input)
+	case domain.StepTypeError:
+		return e.executeErrorStep(ctx, step, input)
+	case domain.StepTypeNote:
+		return e.executeNoteStep(ctx, step, input)
+	case domain.StepTypeLog:
+		return e.executeLogStep(ctx, step, input)
+	case domain.StepTypeSubflow:
+		return input, nil
+	default:
+		return input, nil
 	}
 }
 
@@ -271,9 +495,9 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	case domain.StepTypeStart:
 		output, err = e.executeStartStep(ctx, step, input)
 	case domain.StepTypeTool:
-		output, err = e.executeToolStep(ctx, step, input)
+		output, err = e.executeToolStep(ctx, execCtx, step, stepRun, input)
 	case domain.StepTypeLLM:
-		output, err = e.executeLLMStep(ctx, step, input)
+		output, err = e.executeLLMStep(ctx, execCtx, step, stepRun, input)
 	case domain.StepTypeCondition:
 		output, err = e.executeConditionStep(ctx, execCtx, step, input)
 	case domain.StepTypeMap:
@@ -302,6 +526,8 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		output, err = e.executeErrorStep(ctx, step, input)
 	case domain.StepTypeNote:
 		output, err = e.executeNoteStep(ctx, step, input)
+	case domain.StepTypeLog:
+		output, err = e.executeLogStep(ctx, step, input)
 	case domain.StepTypeSubflow:
 		// Subflow not yet implemented
 		output = input
@@ -373,7 +599,7 @@ func (e *Executor) executeStartStep(ctx context.Context, step domain.Step, input
 	return input, nil
 }
 
-func (e *Executor) executeToolStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	// Parse step config to get adapter ID
 	var config struct {
 		AdapterID string `json:"adapter_id"`
@@ -397,6 +623,32 @@ func (e *Executor) executeToolStep(ctx context.Context, step domain.Step, input 
 		Input:  input,
 		Config: step.Config,
 	})
+
+	// Record usage if this is an LLM adapter (has token metadata)
+	if e.usageRecorder != nil && resp != nil && resp.Metadata != nil {
+		// Only record if we have token information (indicates LLM call)
+		if _, hasTokens := resp.Metadata["prompt_tokens"]; hasTokens {
+			workflowID := execCtx.Run.WorkflowID
+			runID := execCtx.Run.ID
+			stepRunID := stepRun.ID
+			errorMsg := ""
+			if err != nil {
+				errorMsg = err.Error()
+			}
+			e.usageRecorder.RecordFromMetadata(
+				ctx,
+				execCtx.Run.TenantID,
+				&workflowID,
+				&runID,
+				&stepRunID,
+				resp.Metadata,
+				resp.DurationMs,
+				err == nil,
+				errorMsg,
+			)
+		}
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +656,7 @@ func (e *Executor) executeToolStep(ctx context.Context, step domain.Step, input 
 	return resp.Output, nil
 }
 
-func (e *Executor) executeLLMStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	// Parse step config to determine which LLM provider to use
 	var config struct {
 		Provider  string `json:"provider"`   // openai, anthropic, or adapter_id
@@ -442,6 +694,29 @@ func (e *Executor) executeLLMStep(ctx context.Context, step domain.Step, input j
 		Input:  input,
 		Config: step.Config,
 	})
+
+	// Record usage regardless of success/failure
+	if e.usageRecorder != nil && resp != nil {
+		workflowID := execCtx.Run.WorkflowID
+		runID := execCtx.Run.ID
+		stepRunID := stepRun.ID
+		errorMsg := ""
+		if err != nil {
+			errorMsg = err.Error()
+		}
+		e.usageRecorder.RecordFromMetadata(
+			ctx,
+			execCtx.Run.TenantID,
+			&workflowID,
+			&runID,
+			&stepRunID,
+			resp.Metadata,
+			resp.DurationMs,
+			err == nil,
+			errorMsg,
+		)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -901,25 +1176,52 @@ func (e *Executor) executeFunctionStep(ctx context.Context, step domain.Step, in
 		return nil, fmt.Errorf("invalid function config: %w", err)
 	}
 
-	e.logger.Info("Executing function step",
-		"step_id", step.ID,
-		"language", config.Language,
-	)
-
-	// For now, function execution is not implemented
-	// In production, this would use a sandboxed JS runtime like goja
-	e.logger.Warn("Function step execution not fully implemented, passing through input",
-		"step_id", step.ID,
-	)
-
-	// Return input as-is with a note
-	output := map[string]interface{}{
-		"input":   json.RawMessage(input),
-		"warning": "Function execution not implemented in this version",
-		"code":    config.Code,
+	// Validate language (only JavaScript supported for now)
+	language := config.Language
+	if language == "" {
+		language = "javascript"
+	}
+	if language != "javascript" && language != "js" {
+		return nil, fmt.Errorf("unsupported language: %s (only javascript is supported)", language)
 	}
 
-	return json.Marshal(output)
+	e.logger.Info("Executing function step",
+		"step_id", step.ID,
+		"language", language,
+	)
+
+	// Parse input to map
+	var inputMap map[string]interface{}
+	if err := json.Unmarshal(input, &inputMap); err != nil {
+		// If input is not a valid JSON object, wrap it
+		inputMap = map[string]interface{}{
+			"raw": string(input),
+		}
+	}
+
+	// Create execution context with HTTP client and logger
+	execCtx := &sandbox.ExecutionContext{
+		HTTP: sandbox.NewHTTPClient(30 * time.Second),
+		Logger: func(args ...interface{}) {
+			e.logger.Info("Script log", "step_id", step.ID, "message", fmt.Sprint(args...))
+		},
+	}
+
+	// Execute the code in sandbox
+	result, err := e.sandbox.Execute(ctx, config.Code, inputMap, execCtx)
+	if err != nil {
+		e.logger.Error("Function execution failed",
+			"step_id", step.ID,
+			"error", err,
+		)
+		return nil, fmt.Errorf("function execution failed: %w", err)
+	}
+
+	e.logger.Info("Function execution completed",
+		"step_id", step.ID,
+	)
+
+	return json.Marshal(result)
 }
 
 func (e *Executor) executeRouterStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
@@ -1474,6 +1776,147 @@ func (e *Executor) executeNoteStep(ctx context.Context, step domain.Step, input 
 	)
 
 	return input, nil
+}
+
+// executeLogStep outputs a log message for debugging purposes
+func (e *Executor) executeLogStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+	var config domain.LogStepConfig
+	if err := json.Unmarshal(step.Config, &config); err != nil {
+		return nil, err
+	}
+
+	// Default log level
+	level := config.Level
+	if level == "" {
+		level = "info"
+	}
+
+	// Process message template (replace {{$.field}} with actual values)
+	message := config.Message
+	if input != nil {
+		message = substituteLogTemplateVariables(message, input)
+	}
+
+	// Build log output
+	logOutput := map[string]interface{}{
+		"message":   message,
+		"level":     level,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	// If data path is specified, extract and include that data
+	if config.Data != "" && input != nil {
+		var inputData interface{}
+		if err := json.Unmarshal(input, &inputData); err == nil {
+			if extracted := extractLogJSONPath(inputData, config.Data); extracted != nil {
+				logOutput["data"] = extracted
+			}
+		}
+	}
+
+	// Log to executor logger
+	switch level {
+	case "debug":
+		e.logger.Debug("Log step output",
+			"step_id", step.ID,
+			"message", message,
+		)
+	case "warn":
+		e.logger.Warn("Log step output",
+			"step_id", step.ID,
+			"message", message,
+		)
+	case "error":
+		e.logger.Error("Log step output",
+			"step_id", step.ID,
+			"message", message,
+		)
+	default:
+		e.logger.Info("Log step output",
+			"step_id", step.ID,
+			"message", message,
+		)
+	}
+
+	// Return log output so it's visible in StepRun
+	output, err := json.Marshal(logOutput)
+	if err != nil {
+		return nil, err
+	}
+
+	return output, nil
+}
+
+// substituteLogTemplateVariables replaces {{$.path}} patterns in the message with values from input
+func substituteLogTemplateVariables(template string, input json.RawMessage) string {
+	var inputData interface{}
+	if err := json.Unmarshal(input, &inputData); err != nil {
+		return template
+	}
+
+	// Find and replace all {{$.path}} patterns
+	result := template
+	for {
+		start := strings.Index(result, "{{")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(result[start:], "}}")
+		if end == -1 {
+			break
+		}
+		end += start + 2
+
+		path := strings.TrimSpace(result[start+2 : end-2])
+		value := extractLogJSONPath(inputData, path)
+		var replacement string
+		if value != nil {
+			switch v := value.(type) {
+			case string:
+				replacement = v
+			default:
+				if jsonBytes, err := json.Marshal(v); err == nil {
+					replacement = string(jsonBytes)
+				}
+			}
+		}
+		result = result[:start] + replacement + result[end:]
+	}
+
+	return result
+}
+
+// extractLogJSONPath extracts a value from data using a JSON path like $.field or $.nested.field
+func extractLogJSONPath(data interface{}, path string) interface{} {
+	// Remove leading $. if present
+	path = strings.TrimPrefix(path, "$.")
+	path = strings.TrimPrefix(path, "$")
+
+	if path == "" {
+		return data
+	}
+
+	parts := strings.Split(path, ".")
+	current := data
+
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+
+		switch v := current.(type) {
+		case map[string]interface{}:
+			var ok bool
+			current, ok = v[part]
+			if !ok {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+
+	return current
 }
 
 // WorkflowError represents a custom workflow error from error step

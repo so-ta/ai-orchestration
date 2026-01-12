@@ -24,13 +24,16 @@ func NewStepRepository(pool *pgxpool.Pool) *StepRepository {
 // Create creates a new step
 func (r *StepRepository) Create(ctx context.Context, s *domain.Step) error {
 	query := `
-		INSERT INTO steps (id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO steps (id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 	_, err := r.pool.Exec(ctx, query,
 		s.ID, s.WorkflowID, s.Name, s.Type, s.Config,
 		s.BlockGroupID, s.GroupRole,
-		s.PositionX, s.PositionY, s.CreatedAt, s.UpdatedAt,
+		s.PositionX, s.PositionY,
+		s.BlockDefinitionID, s.CredentialBindings,
+		s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -38,7 +41,8 @@ func (r *StepRepository) Create(ctx context.Context, s *domain.Step) error {
 // GetByID retrieves a step by ID
 func (r *StepRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) (*domain.Step, error) {
 	query := `
-		SELECT id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y, created_at, updated_at
+		SELECT id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, created_at, updated_at
 		FROM steps
 		WHERE id = $1 AND workflow_id = $2
 	`
@@ -46,7 +50,9 @@ func (r *StepRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) 
 	err := r.pool.QueryRow(ctx, query, id, workflowID).Scan(
 		&s.ID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
 		&s.BlockGroupID, &s.GroupRole,
-		&s.PositionX, &s.PositionY, &s.CreatedAt, &s.UpdatedAt,
+		&s.PositionX, &s.PositionY,
+		&s.BlockDefinitionID, &s.CredentialBindings,
+		&s.CreatedAt, &s.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrStepNotFound
@@ -60,7 +66,8 @@ func (r *StepRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) 
 // ListByWorkflow retrieves all steps for a workflow
 func (r *StepRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.Step, error) {
 	query := `
-		SELECT id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y, created_at, updated_at
+		SELECT id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, created_at, updated_at
 		FROM steps
 		WHERE workflow_id = $1
 		ORDER BY created_at
@@ -77,7 +84,9 @@ func (r *StepRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUI
 		if err := rows.Scan(
 			&s.ID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
 			&s.BlockGroupID, &s.GroupRole,
-			&s.PositionX, &s.PositionY, &s.CreatedAt, &s.UpdatedAt,
+			&s.PositionX, &s.PositionY,
+			&s.BlockDefinitionID, &s.CredentialBindings,
+			&s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -90,7 +99,8 @@ func (r *StepRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUI
 // ListByBlockGroup retrieves all steps in a block group
 func (r *StepRepository) ListByBlockGroup(ctx context.Context, blockGroupID uuid.UUID) ([]*domain.Step, error) {
 	query := `
-		SELECT id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y, created_at, updated_at
+		SELECT id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, created_at, updated_at
 		FROM steps
 		WHERE block_group_id = $1
 		ORDER BY created_at
@@ -107,7 +117,9 @@ func (r *StepRepository) ListByBlockGroup(ctx context.Context, blockGroupID uuid
 		if err := rows.Scan(
 			&s.ID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
 			&s.BlockGroupID, &s.GroupRole,
-			&s.PositionX, &s.PositionY, &s.CreatedAt, &s.UpdatedAt,
+			&s.PositionX, &s.PositionY,
+			&s.BlockDefinitionID, &s.CredentialBindings,
+			&s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -122,11 +134,13 @@ func (r *StepRepository) Update(ctx context.Context, s *domain.Step) error {
 	s.UpdatedAt = time.Now().UTC()
 	query := `
 		UPDATE steps
-		SET name = $1, type = $2, config = $3, block_group_id = $4, group_role = $5, position_x = $6, position_y = $7, updated_at = $8
-		WHERE id = $9 AND workflow_id = $10
+		SET name = $1, type = $2, config = $3, block_group_id = $4, group_role = $5, position_x = $6, position_y = $7,
+			block_definition_id = $8, credential_bindings = $9, updated_at = $10
+		WHERE id = $11 AND workflow_id = $12
 	`
 	result, err := r.pool.Exec(ctx, query,
-		s.Name, s.Type, s.Config, s.BlockGroupID, s.GroupRole, s.PositionX, s.PositionY, s.UpdatedAt,
+		s.Name, s.Type, s.Config, s.BlockGroupID, s.GroupRole, s.PositionX, s.PositionY,
+		s.BlockDefinitionID, s.CredentialBindings, s.UpdatedAt,
 		s.ID, s.WorkflowID,
 	)
 	if err != nil {

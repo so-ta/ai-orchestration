@@ -48,6 +48,19 @@ func NewStepRun(runID, stepID uuid.UUID, stepName string) *StepRun {
 	}
 }
 
+// NewStepRunWithAttempt creates a new step run with a specific attempt number (for re-execution)
+func NewStepRunWithAttempt(runID, stepID uuid.UUID, stepName string, attempt int) *StepRun {
+	return &StepRun{
+		ID:        uuid.New(),
+		RunID:     runID,
+		StepID:    stepID,
+		StepName:  stepName,
+		Status:    StepRunStatusPending,
+		Attempt:   attempt,
+		CreatedAt: time.Now().UTC(),
+	}
+}
+
 // Start marks the step run as started
 func (sr *StepRun) Start(input json.RawMessage) {
 	now := time.Now().UTC()

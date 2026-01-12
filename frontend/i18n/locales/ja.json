@@ -193,7 +193,9 @@
       "error": "エラー",
       "errorDesc": "エラーでワークフローを停止",
       "note": "ノート",
-      "noteDesc": "ドキュメント/コメント"
+      "noteDesc": "ドキュメント/コメント",
+      "log": "ログ",
+      "logDesc": "デバッグ用のログを出力"
     },
     "quickTips": "クイックヒント",
     "tipDragBlock": "パレットからブロックをドラッグしてステップを追加",
@@ -390,6 +392,23 @@
       "contentPlaceholder": "ワークフローのこの部分についてのドキュメントやコメントを追加...",
       "color": "ノートの色",
       "description": "ノートはドキュメント用であり、ワークフローの実行には影響しません。"
+    },
+    "log": {
+      "title": "ログ設定",
+      "message": "ログメッセージ",
+      "messagePlaceholder": "処理中: {'{{'}$.name{'}}'}",
+      "messageHint": "{'{{'}$.field{'}}'}形式でテンプレート変数を使用できます",
+      "level": "ログレベル",
+      "levels": {
+        "debug": "デバッグ",
+        "info": "情報",
+        "warn": "警告",
+        "error": "エラー"
+      },
+      "data": "追加データ",
+      "dataPlaceholder": "$.input",
+      "dataHint": "ログに含める追加データのJSONパス（例: $.input, $.steps.step1.output）",
+      "viewNote": "ログ出力はRun詳細画面のステップ出力で確認できます"
     }
   },
   "runs": {
@@ -445,7 +464,23 @@
     "loading": "実行履歴を読み込み中...",
     "loadFailed": "実行履歴の読み込みに失敗しました",
     "viewWorkflows": "ワークフローを表示",
-    "view": "詳細"
+    "view": "詳細",
+    "stepDetails": "ステップ詳細",
+    "executionHistory": "実行履歴",
+    "attemptN": "{n}回目の実行",
+    "executeThisStepOnly": "このステップのみ実行",
+    "resumeFromHere": "ここから再実行",
+    "executeStep": "ステップを実行",
+    "resumeExecution": "再実行",
+    "inputData": "入力データ",
+    "editInput": "入力を編集",
+    "execute": "実行",
+    "noHistory": "実行履歴がありません",
+    "reExecuteSuccess": "再実行をキューに追加しました",
+    "reExecuteFailed": "再実行の開始に失敗しました",
+    "stepNotResumable": "このRunは再実行できません（完了または失敗したRunのみ再実行可能）",
+    "loadingHistory": "実行履歴を読み込み中...",
+    "invalidJson": "無効なJSON形式です"
   },
   "schedules": {
     "title": "スケジュール",
@@ -497,5 +532,158 @@
     "loadFailed": "読み込みに失敗しました",
     "saveFailed": "保存に失敗しました",
     "deleteFailed": "削除に失敗しました"
+  },
+  "admin": {
+    "title": "管理者設定",
+    "subtitle": "運営者専用の管理機能",
+    "operatorNote": "このセクションは運営者（Operator）専用です。ブロックテンプレートとシステムブロックを管理します。",
+    "templates": {
+      "title": "ブロックテンプレート",
+      "subtitle": "カスタムブロックの実行ロジックテンプレートを管理",
+      "newTemplate": "新規テンプレート",
+      "editTemplate": "テンプレートを編集",
+      "deleteTemplate": "テンプレートを削除",
+      "noTemplates": "テンプレートがありません",
+      "noTemplatesDesc": "カスタムブロックのテンプレートを作成してください",
+      "createFirst": "最初のテンプレートを作成",
+      "builtinSection": "ビルトインテンプレート",
+      "builtinDesc": "システムに組み込まれたテンプレート（編集不可）",
+      "customSection": "カスタムテンプレート",
+      "customDesc": "運営者が作成したカスタムテンプレート",
+      "noCustomTemplates": "カスタムテンプレートがありません",
+      "builtin": "ビルトイン",
+      "viewCode": "コードを表示",
+      "cannotEditBuiltin": "ビルトインテンプレートは編集できません",
+      "cannotDeleteBuiltin": "ビルトインテンプレートは削除できません",
+      "invalidJson": "無効なJSONフォーマットです",
+      "confirmDelete": "このテンプレートを削除しますか？この操作は取り消せません。",
+      "table": {
+        "name": "名前",
+        "slug": "スラッグ",
+        "executorType": "実行タイプ",
+        "updatedAt": "更新日時",
+        "actions": "アクション"
+      },
+      "form": {
+        "name": "テンプレート名",
+        "namePlaceholder": "例: HTTP API Call",
+        "slug": "スラッグ",
+        "slugPlaceholder": "例: http_api",
+        "slugHint": "小文字英数字とアンダースコアのみ使用可能",
+        "description": "説明",
+        "descriptionPlaceholder": "テンプレートの説明を入力（任意）",
+        "executorType": "実行タイプ",
+        "executorCode": "実行コード",
+        "executorCodePlaceholder": "JavaScriptの実行コードを入力",
+        "configSchema": "設定スキーマ（JSON Schema）",
+        "configSchemaPlaceholder": "空のオブジェクト",
+        "configSchemaHint": "ブロック設定のバリデーション用JSONスキーマ"
+      },
+      "executorTypes": {
+        "javascriptDesc": "JavaScript（Sandbox）で実行",
+        "builtinDesc": "Go言語で実装されたビルトイン実行"
+      },
+      "messages": {
+        "created": "テンプレートを作成しました",
+        "updated": "テンプレートを更新しました",
+        "deleted": "テンプレートを削除しました",
+        "createFailed": "テンプレートの作成に失敗しました",
+        "updateFailed": "テンプレートの更新に失敗しました",
+        "deleteFailed": "テンプレートの削除に失敗しました"
+      }
+    },
+    "blocks": {
+      "title": "システムブロック",
+      "subtitle": "全テナントに提供するブロック定義を管理",
+      "newBlock": "新規ブロック",
+      "editBlock": "ブロックを編集",
+      "deleteBlock": "ブロックを削除",
+      "noBlocks": "システムブロックがありません",
+      "noBlocksDesc": "SaaS利用者に提供するブロックを作成してください",
+      "createFirst": "最初のシステムブロックを作成",
+      "confirmDelete": "このブロックを削除しますか？この操作は取り消せません。",
+      "table": {
+        "name": "名前",
+        "category": "カテゴリ",
+        "template": "テンプレート",
+        "version": "バージョン",
+        "enabled": "有効",
+        "updatedAt": "更新日時",
+        "actions": "アクション"
+      },
+      "form": {
+        "name": "ブロック名",
+        "namePlaceholder": "例: Slack メッセージ送信",
+        "displayName": "表示名",
+        "displayNamePlaceholder": "例: Slack通知",
+        "description": "説明",
+        "descriptionPlaceholder": "ブロックの説明を入力（任意）",
+        "category": "カテゴリ",
+        "categories": {
+          "api": "API",
+          "transform": "データ変換",
+          "control": "制御フロー",
+          "custom": "カスタム"
+        },
+        "template": "テンプレート",
+        "templateHint": "使用するテンプレートを選択（カスタムコードの場合は「なし」）",
+        "noTemplate": "なし（カスタムコード）",
+        "templateConfig": "テンプレート設定",
+        "customCode": "カスタムコード",
+        "customCodePlaceholder": "JavaScriptの実行コードを入力",
+        "inputSchema": "入力スキーマ（JSON Schema）",
+        "outputSchema": "出力スキーマ（JSON Schema）",
+        "credentialType": "必要な認証タイプ",
+        "credentialTypeHint": "このブロックで使用する認証情報のタイプ",
+        "enabled": "有効"
+      },
+      "messages": {
+        "created": "ブロックを作成しました",
+        "updated": "ブロックを更新しました",
+        "deleted": "ブロックを削除しました",
+        "createFailed": "ブロックの作成に失敗しました",
+        "updateFailed": "ブロックの更新に失敗しました",
+        "deleteFailed": "ブロックの削除に失敗しました"
+      }
+    }
+  },
+  "credentials": {
+    "title": "環境変数",
+    "subtitle": "ブロックで使用する環境変数（APIキー等）を管理",
+    "systemBlockSection": "システムブロック用",
+    "systemBlockDesc": "運営者が提供するシステムブロックで使用する環境変数",
+    "tenantBlockSection": "テナントブロック用",
+    "tenantBlockDesc": "自分で作成したカスタムブロックで使用する環境変数",
+    "noCredentials": "環境変数がありません",
+    "noCredentialsDesc": "ブロックで使用する環境変数を追加してください",
+    "addVariable": "環境変数を追加",
+    "editVariable": "環境変数を編集",
+    "deleteVariable": "環境変数を削除",
+    "form": {
+      "key": "キー",
+      "keyPlaceholder": "例: OPENAI_API_KEY",
+      "keyHint": "大文字英数字とアンダースコアのみ使用可能",
+      "value": "値",
+      "valuePlaceholder": "値を入力",
+      "valueHidden": "（保存済み - 編集時は新しい値を入力）"
+    },
+    "table": {
+      "key": "キー",
+      "createdAt": "作成日時",
+      "updatedAt": "更新日時",
+      "actions": "アクション"
+    },
+    "actions": {
+      "confirmDelete": "この環境変数を削除しますか？この操作は取り消せません。"
+    },
+    "messages": {
+      "created": "環境変数を追加しました",
+      "updated": "環境変数を更新しました",
+      "deleted": "環境変数を削除しました",
+      "createFailed": "環境変数の追加に失敗しました",
+      "updateFailed": "環境変数の更新に失敗しました",
+      "deleteFailed": "環境変数の削除に失敗しました"
+    },
+    "securityNote": "環境変数は暗号化されて安全に保存されます。システムブロック用とテナントブロック用は独立しており、相互に参照することはできません。"
   }
 }

@@ -15,15 +15,33 @@ const (
 	jobDataKeyPrefix = "aio:jobs:data:"
 )
 
+// ExecutionMode represents the type of execution
+type ExecutionMode string
+
+const (
+	// ExecutionModeFull is the default full workflow execution
+	ExecutionModeFull ExecutionMode = "full"
+	// ExecutionModeSingleStep executes only a single step
+	ExecutionModeSingleStep ExecutionMode = "single_step"
+	// ExecutionModeResume resumes execution from a specific step
+	ExecutionModeResume ExecutionMode = "resume"
+)
+
 // Job represents a workflow execution job
 type Job struct {
-	ID              string    `json:"id"`
-	TenantID        uuid.UUID `json:"tenant_id"`
-	WorkflowID      uuid.UUID `json:"workflow_id"`
-	WorkflowVersion int       `json:"workflow_version"`
-	RunID           uuid.UUID `json:"run_id"`
+	ID              string          `json:"id"`
+	TenantID        uuid.UUID       `json:"tenant_id"`
+	WorkflowID      uuid.UUID       `json:"workflow_id"`
+	WorkflowVersion int             `json:"workflow_version"`
+	RunID           uuid.UUID       `json:"run_id"`
 	Input           json.RawMessage `json:"input"`
-	CreatedAt       time.Time `json:"created_at"`
+	CreatedAt       time.Time       `json:"created_at"`
+
+	// Partial execution fields
+	ExecutionMode   ExecutionMode              `json:"execution_mode,omitempty"`   // "full", "single_step", "resume"
+	TargetStepID    *uuid.UUID                 `json:"target_step_id,omitempty"`   // Target step for single_step/resume
+	StepInput       json.RawMessage            `json:"step_input,omitempty"`       // Custom input for the target step
+	InjectedOutputs map[string]json.RawMessage `json:"injected_outputs,omitempty"` // Previous step outputs to inject
 }
 
 // Queue manages the job queue

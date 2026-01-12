@@ -511,13 +511,106 @@ POST /runs/{run_id}/cancel
 
 Response `200`: Updated run with `status: cancelled`
 
-### Resume
+### Resume From Step
 ```
 POST /runs/{run_id}/resume
 ```
 
-Constraint: Must be `failed` status
-Response `200`: New run from failed step
+Resume execution from a specific step through all downstream steps.
+
+Request:
+```json
+{
+  "from_step_id": "uuid (required)",
+  "input_override": {}
+}
+```
+
+Constraint: Run must be `completed` or `failed` status
+
+Response `202`:
+```json
+{
+  "data": {
+    "run_id": "uuid",
+    "from_step_id": "uuid",
+    "steps_to_execute": ["uuid", "uuid", "uuid"]
+  }
+}
+```
+
+### Execute Single Step
+```
+POST /runs/{run_id}/steps/{step_id}/execute
+```
+
+Re-execute only a single step from an existing run.
+
+Request:
+```json
+{
+  "input": {}
+}
+```
+
+Constraint: Run must be `completed` or `failed` status
+
+Response `202`:
+```json
+{
+  "data": {
+    "id": "uuid",
+    "run_id": "uuid",
+    "step_id": "uuid",
+    "step_name": "string",
+    "status": "pending",
+    "attempt": 2
+  }
+}
+```
+
+### Get Step History
+```
+GET /runs/{run_id}/steps/{step_id}/history
+```
+
+Get all execution history for a specific step in a run.
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "run_id": "uuid",
+      "step_id": "uuid",
+      "step_name": "string",
+      "status": "completed",
+      "attempt": 2,
+      "input": {},
+      "output": {},
+      "error": "",
+      "started_at": "ISO8601",
+      "completed_at": "ISO8601",
+      "duration_ms": 500
+    },
+    {
+      "id": "uuid",
+      "run_id": "uuid",
+      "step_id": "uuid",
+      "step_name": "string",
+      "status": "failed",
+      "attempt": 1,
+      "input": {},
+      "output": {},
+      "error": "Error message",
+      "started_at": "ISO8601",
+      "completed_at": "ISO8601",
+      "duration_ms": 200
+    }
+  ]
+}
+```
 
 ---
 
@@ -698,6 +791,234 @@ Response `200`:
     }
   ],
   "pagination": {}
+}
+```
+
+---
+
+## Usage & Cost Tracking
+
+### Get Usage Summary
+```
+GET /usage/summary
+```
+
+Query:
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `period` | string | `month` | `day`, `week`, `month` |
+
+Response `200`:
+```json
+{
+  "data": {
+    "period": "month",
+    "start_date": "2025-01-01T00:00:00Z",
+    "end_date": "2025-01-31T23:59:59Z",
+    "total_requests": 1500,
+    "total_input_tokens": 500000,
+    "total_output_tokens": 200000,
+    "total_cost_usd": 15.50,
+    "success_rate": 0.98,
+    "avg_latency_ms": 850
+  }
+}
+```
+
+### Get Daily Usage
+```
+GET /usage/daily
+```
+
+Query:
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `start` | ISO8601 | Yes | Start date |
+| `end` | ISO8601 | Yes | End date |
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "date": "2025-01-15",
+      "total_requests": 150,
+      "total_input_tokens": 50000,
+      "total_output_tokens": 20000,
+      "total_cost_usd": 1.55,
+      "provider": "openai",
+      "model": "gpt-4o"
+    }
+  ]
+}
+```
+
+### Get Usage by Workflow
+```
+GET /usage/by-workflow
+```
+
+Query:
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `period` | string | `month` | `day`, `week`, `month` |
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "workflow_id": "uuid",
+      "workflow_name": "My Workflow",
+      "total_requests": 500,
+      "total_tokens": 150000,
+      "total_cost_usd": 5.25
+    }
+  ]
+}
+```
+
+### Get Usage by Model
+```
+GET /usage/by-model
+```
+
+Query:
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `period` | string | `month` | `day`, `week`, `month` |
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "total_requests": 800,
+      "total_input_tokens": 300000,
+      "total_output_tokens": 100000,
+      "total_cost_usd": 10.00,
+      "avg_latency_ms": 750
+    }
+  ]
+}
+```
+
+### Get Run Usage
+```
+GET /runs/{run_id}/usage
+```
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "step_run_id": "uuid",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "operation": "chat",
+      "input_tokens": 1000,
+      "output_tokens": 500,
+      "total_tokens": 1500,
+      "input_cost_usd": 0.0025,
+      "output_cost_usd": 0.005,
+      "total_cost_usd": 0.0075,
+      "latency_ms": 850,
+      "success": true,
+      "created_at": "ISO8601"
+    }
+  ]
+}
+```
+
+### List Budgets
+```
+GET /usage/budgets
+```
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "workflow_id": null,
+      "budget_type": "monthly",
+      "budget_amount_usd": 100.00,
+      "alert_threshold": 0.80,
+      "enabled": true,
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601"
+    }
+  ]
+}
+```
+
+### Create Budget
+```
+POST /usage/budgets
+```
+
+Request:
+```json
+{
+  "workflow_id": "uuid (optional)",
+  "budget_type": "monthly|daily",
+  "budget_amount_usd": 100.00,
+  "alert_threshold": 0.80
+}
+```
+
+Response `201`: Created budget
+
+### Update Budget
+```
+PUT /usage/budgets/{id}
+```
+
+Request:
+```json
+{
+  "budget_amount_usd": 150.00,
+  "alert_threshold": 0.90,
+  "enabled": true
+}
+```
+
+Response `200`: Updated budget
+
+### Delete Budget
+```
+DELETE /usage/budgets/{id}
+```
+
+Response `204`: No content
+
+### Get Model Pricing
+```
+GET /usage/pricing
+```
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "input_cost_per_1k": 0.0025,
+      "output_cost_per_1k": 0.01
+    },
+    {
+      "provider": "anthropic",
+      "model": "claude-3-opus",
+      "input_cost_per_1k": 0.015,
+      "output_cost_per_1k": 0.075
+    }
+  ]
 }
 ```
 

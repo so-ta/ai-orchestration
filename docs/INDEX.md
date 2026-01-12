@@ -19,6 +19,7 @@
 |----------|---------|--------------|
 | [BACKEND.md](./BACKEND.md) | Go backend structure, interfaces, patterns | Modifying backend code |
 | [FRONTEND.md](./FRONTEND.md) | Nuxt/Vue structure, composables, components | Modifying frontend code |
+| [FRONTEND.md#dag-editor](./FRONTEND.md#dag-editor-componentdag-editor) | DAG editor collision detection, resize logic | **Modifying DAG editor** |
 | [API.md](./API.md) | REST endpoints, request/response schemas | API integration, adding endpoints |
 | [DATABASE.md](./DATABASE.md) | Schema, migrations, query patterns | Database operations |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, Kubernetes, environment config | DevOps, deployment |
@@ -45,12 +46,17 @@ Tracing: OpenTelemetry -> Jaeger
 ### Step Types
 | Type | Description | Config Key Fields |
 |------|-------------|-------------------|
+| `start` | Entry point | - |
 | `llm` | LLM API call | `provider`, `model`, `prompt` |
 | `tool` | Adapter execution | `adapter_id`, adapter-specific |
-| `condition` | Branch routing | `expression` |
+| `condition` | Branch routing (2-way) | `expression` |
+| `switch` | Multi-branch routing | `cases`, `default` |
 | `map` | Array parallel/sequential | `input_path`, `parallel` |
 | `join` | Merge branches | - |
 | `subflow` | Nested workflow | `workflow_id` |
+| `loop` | Iteration | `loop_type`, `count`, `condition` |
+| `filter` | Filter items | `expression` |
+| `log` | Debug logging | `message`, `level` |
 
 ### Run States
 ```

@@ -126,9 +126,24 @@ type BlockDefinition struct {
 	// Output ports (for blocks with multiple outputs like condition, switch)
 	OutputPorts []OutputPort `json:"output_ports"`
 
-	// Executor
+	// Executor (legacy fields, for backward compatibility)
 	ExecutorType   ExecutorType    `json:"executor_type"`
 	ExecutorConfig json.RawMessage `json:"executor_config,omitempty"`
+
+	// Template-based execution (new)
+	TemplateID     *uuid.UUID      `json:"template_id,omitempty"`     // Reference to block_templates
+	TemplateConfig json.RawMessage `json:"template_config,omitempty"` // Template configuration
+
+	// Custom code execution (for code-based blocks)
+	// Hidden for system blocks when accessed by tenant users
+	CustomCode string `json:"custom_code,omitempty"`
+
+	// Required credentials declaration
+	// Format: [{"name": "api_key", "type": "api_key", "scope": "system|tenant", "description": "...", "required": true}]
+	RequiredCredentials json.RawMessage `json:"required_credentials,omitempty"`
+
+	// Visibility (only applies to tenant blocks; system blocks are always visible)
+	IsPublic bool `json:"is_public"`
 
 	// Error handling
 	ErrorCodes []ErrorCodeDef `json:"error_codes"`
@@ -137,6 +152,11 @@ type BlockDefinition struct {
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GetRequiredCredentials returns parsed required credentials
+func (b *BlockDefinition) GetRequiredCredentials() ([]RequiredCredential, error) {
+	return ParseRequiredCredentials(b.RequiredCredentials)
 }
 
 // NewBlockDefinition creates a new block definition
@@ -257,4 +277,65 @@ type BlockExecutionResponse struct {
 	Output     json.RawMessage   `json:"output"`
 	DurationMs int               `json:"duration_ms"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
+}
+
+// ============================================================================
+// BlockTemplate - Reusable patterns for block definitions
+// ============================================================================
+
+// TemplateExecutorType represents how a template is executed
+type TemplateExecutorType string
+
+const (
+	TemplateExecutorBuiltin    TemplateExecutorType = "builtin"    // Go code implementation
+	TemplateExecutorJavaScript TemplateExecutorType = "javascript" // JavaScript code
+)
+
+// BlockTemplate represents a reusable block pattern
+type BlockTemplate struct {
+	ID           uuid.UUID            `json:"id"`
+	Slug         string               `json:"slug"` // Unique identifier (e.g., "http_api", "graphql")
+	Name         string               `json:"name"`
+	Description  string               `json:"description,omitempty"`
+	ConfigSchema json.RawMessage      `json:"config_schema"`     // What users configure when using this template
+	ExecutorType TemplateExecutorType `json:"executor_type"`     // "builtin" or "javascript"
+	ExecutorCode string               `json:"executor_code,omitempty"` // For javascript templates
+	IsBuiltin    bool                 `json:"is_builtin"`        // Cannot be deleted if true
+	CreatedAt    time.Time            `json:"created_at"`
+	UpdatedAt    time.Time            `json:"updated_at"`
+}
+
+// NewBlockTemplate creates a new block template
+func NewBlockTemplate(slug, name string) *BlockTemplate {
+	now := time.Now().UTC()
+	return &BlockTemplate{
+		ID:           uuid.New(),
+		Slug:         slug,
+		Name:         name,
+		ConfigSchema: json.RawMessage("{}"),
+		ExecutorType: TemplateExecutorBuiltin,
+		IsBuiltin:    false,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+}
+
+// BuiltinTemplates returns the slugs of all built-in templates
+func BuiltinTemplates() []string {
+	return []string{
+		"http_api",
+		"graphql",
+		"transform",
+		"llm_call",
+	}
+}
+
+// IsBuiltinTemplate checks if a slug is a built-in template
+func IsBuiltinTemplate(slug string) bool {
+	for _, builtin := range BuiltinTemplates() {
+		if slug == builtin {
+			return true
+		}
+	}
+	return false
 }

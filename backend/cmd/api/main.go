@@ -19,6 +19,7 @@ import (
 	authmw "github.com/souta/ai-orchestration/internal/middleware"
 	"github.com/souta/ai-orchestration/internal/repository/postgres"
 	"github.com/souta/ai-orchestration/internal/usecase"
+	"github.com/souta/ai-orchestration/pkg/crypto"
 	"github.com/souta/ai-orchestration/pkg/database"
 	redispkg "github.com/souta/ai-orchestration/pkg/redis"
 	"github.com/souta/ai-orchestration/pkg/telemetry"
@@ -68,27 +69,40 @@ func main() {
 	defer redisClient.Close()
 	log.Println("Connected to Redis")
 
+	// Initialize encryptor for credentials
+	encryptor, err := crypto.NewEncryptor()
+	if err != nil {
+		log.Fatalf("Failed to initialize encryptor: %v", err)
+	}
+	log.Println("Encryptor initialized")
+
 	// Initialize repositories
 	workflowRepo := postgres.NewWorkflowRepository(pool)
 	stepRepo := postgres.NewStepRepository(pool)
 	edgeRepo := postgres.NewEdgeRepository(pool)
 	runRepo := postgres.NewRunRepository(pool)
+	stepRunRepo := postgres.NewStepRunRepository(pool)
 	versionRepo := postgres.NewWorkflowVersionRepository(pool)
 	scheduleRepo := postgres.NewScheduleRepository(pool)
 	webhookRepo := postgres.NewWebhookRepository(pool)
 	auditRepo := postgres.NewAuditLogRepository(pool)
 	blockRepo := postgres.NewBlockDefinitionRepository(pool)
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
+	credentialRepo := postgres.NewCredentialRepository(pool)
+	usageRepo := postgres.NewUsageRepository(pool)
+	budgetRepo := postgres.NewBudgetRepository(pool)
 
 	// Initialize usecases
 	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo)
 	stepUsecase := usecase.NewStepUsecase(workflowRepo, stepRepo)
 	edgeUsecase := usecase.NewEdgeUsecase(workflowRepo, stepRepo, edgeRepo)
-	runUsecase := usecase.NewRunUsecase(workflowRepo, runRepo, versionRepo, stepRepo, edgeRepo, redisClient)
+	runUsecase := usecase.NewRunUsecase(workflowRepo, runRepo, versionRepo, stepRepo, edgeRepo, stepRunRepo, redisClient)
 	scheduleUsecase := usecase.NewScheduleUsecase(scheduleRepo, workflowRepo, runRepo)
 	webhookUsecase := usecase.NewWebhookUsecase(webhookRepo, workflowRepo, runRepo)
 	auditService := usecase.NewAuditService(auditRepo)
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
+	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
+	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
 	// Initialize handlers
 	workflowHandler := handler.NewWorkflowHandler(workflowUsecase)
@@ -100,6 +114,8 @@ func main() {
 	auditHandler := handler.NewAuditHandler(auditService)
 	blockHandler := handler.NewBlockHandler(blockRepo)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
+	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
+	usageHandler := handler.NewUsageHandler(usageUsecase)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -211,6 +227,13 @@ func main() {
 		r.Route("/runs", func(r chi.Router) {
 			r.Get("/{run_id}", runHandler.Get)
 			r.Post("/{run_id}/cancel", runHandler.Cancel)
+			r.Post("/{run_id}/resume", runHandler.ResumeFromStep)
+
+			// Step execution and history
+			r.Route("/{run_id}/steps/{step_id}", func(r chi.Router) {
+				r.Post("/execute", runHandler.ExecuteSingleStep)
+				r.Get("/history", runHandler.GetStepHistory)
+			})
 		})
 
 		// Schedules
@@ -255,6 +278,39 @@ func main() {
 			r.Put("/{slug}", blockHandler.Update)
 			r.Delete("/{slug}", blockHandler.Delete)
 		})
+
+		// Credentials (API keys, tokens, etc.)
+		r.Route("/credentials", func(r chi.Router) {
+			r.Get("/", credentialHandler.List)
+			r.Post("/", credentialHandler.Create)
+			r.Route("/{credential_id}", func(r chi.Router) {
+				r.Get("/", credentialHandler.Get)
+				r.Put("/", credentialHandler.Update)
+				r.Delete("/", credentialHandler.Delete)
+				r.Post("/revoke", credentialHandler.Revoke)
+				r.Post("/activate", credentialHandler.Activate)
+			})
+		})
+
+		// Usage tracking and cost management
+		r.Route("/usage", func(r chi.Router) {
+			r.Get("/summary", usageHandler.GetSummary)
+			r.Get("/daily", usageHandler.GetDaily)
+			r.Get("/by-workflow", usageHandler.GetByWorkflow)
+			r.Get("/by-model", usageHandler.GetByModel)
+			r.Get("/pricing", usageHandler.GetPricing)
+
+			// Budget management
+			r.Route("/budgets", func(r chi.Router) {
+				r.Get("/", usageHandler.ListBudgets)
+				r.Post("/", usageHandler.CreateBudget)
+				r.Put("/{id}", usageHandler.UpdateBudget)
+				r.Delete("/{id}", usageHandler.DeleteBudget)
+			})
+		})
+
+		// Run usage (nested under runs)
+		r.Get("/runs/{run_id}/usage", usageHandler.GetByRun)
 	})
 
 	// Public webhook trigger endpoint (no auth required)

@@ -116,6 +116,7 @@ export const blockColors: Record<string, string> = {
   error: '#dc2626',
   // Utility blocks
   note: '#9ca3af',
+  log: '#10b981',
 }
 
 // Default color for unknown blocks

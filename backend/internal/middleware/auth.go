@@ -156,8 +156,11 @@ func (m *AuthMiddleware) setAuthContext(ctx context.Context, claims *Claims) con
 		tenantID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	}
 
-	// Parse user ID
-	userID, _ := uuid.Parse(claims.Sub)
+	// Parse user ID (if invalid, userID will be uuid.Nil)
+	userID, err := uuid.Parse(claims.Sub)
+	if err != nil {
+		userID = uuid.Nil
+	}
 
 	ctx = context.WithValue(ctx, TenantIDKey, tenantID)
 	ctx = context.WithValue(ctx, UserIDKey, userID)

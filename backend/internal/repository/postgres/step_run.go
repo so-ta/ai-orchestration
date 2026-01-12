@@ -96,3 +96,107 @@ func (r *StepRunRepository) Update(ctx context.Context, sr *domain.StepRun) erro
 	)
 	return err
 }
+
+// GetMaxAttempt returns the highest attempt number for a step in a run
+func (r *StepRunRepository) GetMaxAttempt(ctx context.Context, runID, stepID uuid.UUID) (int, error) {
+	query := `SELECT COALESCE(MAX(attempt), 0) FROM step_runs WHERE run_id = $1 AND step_id = $2`
+	var maxAttempt int
+	err := r.pool.QueryRow(ctx, query, runID, stepID).Scan(&maxAttempt)
+	if err != nil {
+		return 0, err
+	}
+	return maxAttempt, nil
+}
+
+// GetMaxAttemptForRun returns the highest attempt number across all steps in a run
+func (r *StepRunRepository) GetMaxAttemptForRun(ctx context.Context, runID uuid.UUID) (int, error) {
+	query := `SELECT COALESCE(MAX(attempt), 0) FROM step_runs WHERE run_id = $1`
+	var maxAttempt int
+	err := r.pool.QueryRow(ctx, query, runID).Scan(&maxAttempt)
+	if err != nil {
+		return 0, err
+	}
+	return maxAttempt, nil
+}
+
+// GetLatestByStep returns the most recent StepRun for a step in a run
+func (r *StepRunRepository) GetLatestByStep(ctx context.Context, runID, stepID uuid.UUID) (*domain.StepRun, error) {
+	query := `
+		SELECT id, run_id, step_id, step_name, status, attempt, input, output, error, started_at, completed_at, duration_ms, created_at
+		FROM step_runs
+		WHERE run_id = $1 AND step_id = $2
+		ORDER BY attempt DESC
+		LIMIT 1
+	`
+	var sr domain.StepRun
+	err := r.pool.QueryRow(ctx, query, runID, stepID).Scan(
+		&sr.ID, &sr.RunID, &sr.StepID, &sr.StepName, &sr.Status, &sr.Attempt,
+		&sr.Input, &sr.Output, &sr.Error, &sr.StartedAt, &sr.CompletedAt, &sr.DurationMs, &sr.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrStepRunNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sr, nil
+}
+
+// ListCompletedByRun returns the latest completed StepRun for each step in a run
+func (r *StepRunRepository) ListCompletedByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error) {
+	query := `
+		SELECT DISTINCT ON (step_id)
+			id, run_id, step_id, step_name, status, attempt, input, output, error, started_at, completed_at, duration_ms, created_at
+		FROM step_runs
+		WHERE run_id = $1 AND status = 'completed'
+		ORDER BY step_id, attempt DESC
+	`
+	rows, err := r.pool.Query(ctx, query, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stepRuns []*domain.StepRun
+	for rows.Next() {
+		var sr domain.StepRun
+		if err := rows.Scan(
+			&sr.ID, &sr.RunID, &sr.StepID, &sr.StepName, &sr.Status, &sr.Attempt,
+			&sr.Input, &sr.Output, &sr.Error, &sr.StartedAt, &sr.CompletedAt, &sr.DurationMs, &sr.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		stepRuns = append(stepRuns, &sr)
+	}
+
+	return stepRuns, nil
+}
+
+// ListByStep returns all StepRuns for a specific step in a run (for history)
+func (r *StepRunRepository) ListByStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.StepRun, error) {
+	query := `
+		SELECT id, run_id, step_id, step_name, status, attempt, input, output, error, started_at, completed_at, duration_ms, created_at
+		FROM step_runs
+		WHERE run_id = $1 AND step_id = $2
+		ORDER BY attempt ASC
+	`
+	rows, err := r.pool.Query(ctx, query, runID, stepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stepRuns []*domain.StepRun
+	for rows.Next() {
+		var sr domain.StepRun
+		if err := rows.Scan(
+			&sr.ID, &sr.RunID, &sr.StepID, &sr.StepName, &sr.Status, &sr.Attempt,
+			&sr.Input, &sr.Output, &sr.Error, &sr.StartedAt, &sr.CompletedAt, &sr.DurationMs, &sr.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		stepRuns = append(stepRuns, &sr)
+	}
+
+	return stepRuns, nil
+}
