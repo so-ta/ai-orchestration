@@ -764,14 +764,28 @@ async function handleRun(mode: 'test' | 'production') {
 
 // Save step from properties panel
 async function handleSaveStep(formData: { name: string; type: string; config: Record<string, any> }) {
-  if (!selectedStep.value) return
+  if (!selectedStep.value || !workflow.value) return
 
   try {
     saving.value = true
-    await workflows.updateStep(workflowId, selectedStep.value.id, formData)
-    await loadWorkflow()
+    const stepId = selectedStep.value.id
+
+    // Optimistic update - update local state immediately
+    const stepIndex = workflow.value.steps?.findIndex(s => s.id === stepId)
+    if (stepIndex !== undefined && stepIndex >= 0 && workflow.value.steps) {
+      workflow.value.steps[stepIndex] = {
+        ...workflow.value.steps[stepIndex],
+        name: formData.name,
+        config: formData.config as object,
+      }
+    }
+
+    // Save to API (no reload needed)
+    await workflows.updateStep(workflowId, stepId, formData)
   } catch (e) {
     toast.error('Failed to save step', e instanceof Error ? e.message : undefined)
+    // On error, reload to get correct state
+    await loadWorkflow()
   } finally {
     saving.value = false
   }
