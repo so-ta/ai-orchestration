@@ -46,12 +46,17 @@ Tracing: OpenTelemetry -> Jaeger
 ### Step Types
 | Type | Description | Config Key Fields |
 |------|-------------|-------------------|
+| `start` | Entry point | - |
 | `llm` | LLM API call | `provider`, `model`, `prompt` |
 | `tool` | Adapter execution | `adapter_id`, adapter-specific |
-| `condition` | Branch routing | `expression` |
+| `condition` | Branch routing (2-way) | `expression` |
+| `switch` | Multi-branch routing | `cases`, `default` |
 | `map` | Array parallel/sequential | `input_path`, `parallel` |
 | `join` | Merge branches | - |
 | `subflow` | Nested workflow | `workflow_id` |
+| `loop` | Iteration | `loop_type`, `count`, `condition` |
+| `filter` | Filter items | `expression` |
+| `log` | Debug logging | `message`, `level` |
 
 ### Run States
 ```

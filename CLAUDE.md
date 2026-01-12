@@ -253,9 +253,11 @@ Default tenant ID: `00000000-0000-0000-0000-000000000001`
 
 | Type | Purpose | Config |
 |------|---------|--------|
+| `start` | Entry point | - |
 | `llm` | LLM call | `provider`, `model`, `prompt` |
 | `tool` | Adapter exec | `adapter_id` |
-| `condition` | Branch | `expression` |
+| `condition` | Branch (2-way) | `expression` |
+| `switch` | Multi-branch routing | `cases`, `default` |
 | `map` | Array parallel | `input_path`, `parallel` |
 | `join` | Merge | - |
 | `subflow` | Nested workflow | `workflow_id` |
@@ -264,6 +266,12 @@ Default tenant ID: `00000000-0000-0000-0000-000000000001`
 | `function` | Custom code | `code`, `language` |
 | `router` | AI routing | `routes`, `provider`, `model` |
 | `human_in_loop` | Approval gate | `instructions`, `timeout_hours` |
+| `filter` | Filter items | `expression` |
+| `split` | Split into batches | `batch_size` |
+| `aggregate` | Aggregate data | `mode` |
+| `error` | Stop with error | `message` |
+| `note` | Documentation | `content` |
+| `log` | Debug logging | `message`, `level` |
 
 ### Adapters
 
@@ -427,6 +435,132 @@ npm run check
 3. Fix code
 4. Verify test passes
 
+### Task Type Decision (判断フローガイド)
+
+作業開始前にタスクの種類と影響範囲を判別する。
+
+**タスク種類の判別:**
+
+| リクエスト内容 | 対応方針 |
+|--------------|---------|
+| バグ修正 | 再現テスト作成 → 修正 → テスト確認 |
+| 新機能追加 | 既存パターン確認 → 実装 → テスト → ドキュメント |
+| リファクタリング | 既存テスト確認 → リファクタ → 振る舞い不変を確認 |
+| ドキュメント更新 | 関連コードを確認 → 更新 |
+| 調査・質問 | コードを読んで回答（変更不要） |
+
+**影響範囲の判別:**
+
+| 変更対象 | 対応方針 |
+|---------|---------|
+| 単一ファイルのみ | 直接修正 |
+| 複数ファイル（同一パッケージ） | パッケージ内で完結させる |
+| 複数パッケージ | 影響範囲を全て確認してから着手 |
+| 不明 | 影響範囲を調査してから着手 |
+
+### Commit Message Convention (詳細)
+
+**形式:**
+```
+<type>: <summary>
+
+<body（任意）>
+```
+
+**typeの種類:**
+
+| type | 用途 |
+|------|------|
+| `feat` | 新機能 |
+| `fix` | バグ修正 |
+| `refactor` | リファクタリング（機能変更なし） |
+| `docs` | ドキュメントのみの変更 |
+| `test` | テストの追加・修正 |
+| `chore` | ビルドプロセス、補助ツールの変更 |
+
+**summaryの書き方:**
+- 日本語で記述
+- 50文字以内を目安
+- 動詞で始める（「追加」「修正」「変更」など）
+- 句点（。）は付けない
+
+**コミットのタイミング:**
+
+| 作業状態 | 判断 |
+|---------|------|
+| 機能が完成した | コミット |
+| テストがパスした | コミット |
+| 作業途中だが区切りがよい | コミット |
+| ビルドが通らない | **コミットしない** |
+| テストが失敗している | **コミットしない** |
+
+**コミット粒度:**
+
+| 変更内容 | 粒度 |
+|---------|------|
+| 単一の目的（バグ修正、機能追加など） | 1コミット |
+| 複数の独立した変更 | 変更ごとに分割 |
+| リファクタリング + 機能追加 | 別コミットに分割 |
+
+### Error Handling Decision (エラー対処フロー)
+
+**ビルドエラー:**
+
+| エラー種類 | 対処法 |
+|-----------|--------|
+| importエラー | `go mod tidy` を実行 |
+| 型エラー | 型定義を確認、必要に応じて修正 |
+| undefinedエラー | 関数・変数の定義漏れを確認 |
+| 循環参照エラー | パッケージ構成を見直し |
+
+**テストエラー:**
+
+| エラー種類 | 対処法 |
+|-----------|--------|
+| アサーション失敗（期待値が間違い） | テストを修正 |
+| アサーション失敗（実装が間違い） | 実装を修正 |
+| パニック発生 | nil チェック、境界値を確認 |
+| タイムアウト | 無限ループ、デッドロックを確認 |
+
+**解決できない場合:**
+1. エラーメッセージを正確に記録
+2. 再現手順を整理
+3. 関連するコードを特定
+4. ユーザーに報告し、追加情報を求める
+
+### User Confirmation Required (確認が必要なケース)
+
+以下のケースでは、ユーザーに確認してから進める:
+
+| ケース | 確認内容 |
+|--------|---------|
+| 破壊的変更 | 既存の振る舞いを変更してよいか |
+| 大規模リファクタリング | 方針を確認 |
+| 外部API仕様の不明点 | 仕様の詳細 |
+| セキュリティに関わる変更 | 認証・認可の要件 |
+| 複数の実装方法がある | どのアプローチを取るか |
+
+### Self-Verification Checklist (自己検証)
+
+作業完了時に確認:
+
+**Backend:**
+- [ ] `go build ./...` がパス
+- [ ] `go test ./...` がパス
+- [ ] 不要なデバッグコードを削除
+- [ ] サービスを再起動して動作確認
+
+**Frontend:**
+- [ ] `npm run typecheck` がパス
+- [ ] `npm run lint` がパス
+- [ ] ブラウザで動作確認
+
+**共通:**
+- [ ] コーディング規約に違反していないか
+- [ ] テストを追加・更新したか
+- [ ] ドキュメントを更新したか（必要な場合）
+- [ ] コミットメッセージが規約に従っている
+
 ### Code Conventions
 
 **Go:**
@@ -446,6 +580,23 @@ npm run check
 
 - Branches: `feature/`, `fix/`, `docs/`
 - Commits: Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`)
+
+**禁止事項:**
+
+| 操作 | 理由 |
+|------|------|
+| `git push --force` to main/master | 履歴破壊 |
+| `git reset --hard` on shared branch | 他者の作業を消す |
+| シークレットのコミット | セキュリティリスク |
+| 巨大なバイナリのコミット | リポジトリ肥大化 |
+
+**注意が必要な操作:**
+
+| 操作 | 注意点 |
+|------|--------|
+| `git commit --amend` | push済みの場合は禁止 |
+| `git rebase` | 共有ブランチでは禁止 |
+| `.gitignore` の変更 | 影響範囲を確認 |
 
 ### Multi-tenancy
 
