@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { Step, StepType, BlockDefinition, InputPort, OutputPort } from '~/types/api'
 import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
+import type { ConfigSchema, UIConfig } from './config/types/config-schema'
+import DynamicConfigForm from './config/DynamicConfigForm.vue'
 
 const { t } = useI18n()
 const blocks = useBlocks()
@@ -182,6 +184,24 @@ watch(() => formType.value, async (newType) => {
     currentBlockDef.value = null
   }
 }, { immediate: true })
+
+// Check if block has config_schema for dynamic form rendering
+const hasConfigSchema = computed(() => {
+  const schema = currentBlockDef.value?.config_schema
+  return schema && typeof schema === 'object' && Object.keys(schema).length > 0
+})
+
+// Get config_schema as ConfigSchema type
+const configSchema = computed<ConfigSchema | null>(() => {
+  if (!hasConfigSchema.value) return null
+  return currentBlockDef.value?.config_schema as ConfigSchema
+})
+
+// Get ui_config for additional UI customization
+const uiConfig = computed<UIConfig | undefined>(() => {
+  if (!currentBlockDef.value?.ui_config) return undefined
+  return currentBlockDef.value.ui_config as UIConfig
+})
 
 // Helper to format schema type for display
 function formatSchemaType(schema: object | undefined): string {
@@ -428,8 +448,19 @@ const expressionTemplates = {
           </div>
         </div>
 
-        <!-- LLM Configuration -->
-        <div v-if="formType === 'llm'" class="form-section">
+        <!-- Dynamic Config Form (when config_schema is defined) -->
+        <div v-if="hasConfigSchema && !['start', 'join', 'note'].includes(formType)" class="form-section">
+          <h4 class="section-title">{{ currentBlockDef?.name || formType }} 設定</h4>
+          <DynamicConfigForm
+            :schema="configSchema"
+            :ui-config="uiConfig"
+            v-model="formConfig"
+            :disabled="readonlyMode"
+          />
+        </div>
+
+        <!-- LLM Configuration (Legacy fallback when no config_schema) -->
+        <div v-else-if="formType === 'llm'" class="form-section">
           <h4 class="section-title">{{ t('stepConfig.llm.title') }}</h4>
 
           <div class="form-row">
