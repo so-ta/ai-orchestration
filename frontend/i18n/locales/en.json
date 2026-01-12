@@ -35,9 +35,13 @@
     "runs": "Runs",
     "schedules": "Schedules",
     "settings": "Settings",
+    "admin": "Admin",
     "login": "Login",
     "logout": "Logout",
-    "developmentMode": "Development mode"
+    "developmentMode": "Development mode",
+    "testRole": "Test Role",
+    "roleAdmin": "Admin",
+    "roleUser": "SaaS User"
   },
   "dashboard": {
     "title": "Dashboard",

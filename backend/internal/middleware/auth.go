@@ -65,7 +65,7 @@ func (m *AuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Skip auth if disabled (development mode)
 		if !m.config.Enabled {
-			ctx := m.setDevContext(r.Context())
+			ctx := m.setDevContext(r.Context(), r)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
@@ -127,7 +127,8 @@ func (m *AuthMiddleware) validateToken(token string) (*Claims, error) {
 }
 
 // setDevContext sets default context for development
-func (m *AuthMiddleware) setDevContext(ctx context.Context) context.Context {
+// Supports X-Dev-Role header for testing different roles: "admin" or "user"
+func (m *AuthMiddleware) setDevContext(ctx context.Context, r *http.Request) context.Context {
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	if m.config.DevTenantID != "" {
 		if id, err := uuid.Parse(m.config.DevTenantID); err == nil {
@@ -135,11 +136,29 @@ func (m *AuthMiddleware) setDevContext(ctx context.Context) context.Context {
 		}
 	}
 
+	// Check X-Dev-Role header for role switching in development
+	devRole := r.Header.Get("X-Dev-Role")
+	var roles []string
+	var email string
+
+	switch devRole {
+	case "user":
+		roles = []string{"user"}
+		email = "user@example.com"
+	case "admin":
+		roles = []string{"admin", "user"}
+		email = "admin@example.com"
+	default:
+		// Default to admin for backwards compatibility
+		roles = []string{"admin", "user"}
+		email = "admin@example.com"
+	}
+
 	ctx = context.WithValue(ctx, TenantIDKey, tenantID)
 	// Don't set UserID in dev mode - runs will be created without a user reference
 	ctx = context.WithValue(ctx, UserIDKey, uuid.Nil)
-	ctx = context.WithValue(ctx, UserEmailKey, "dev@example.com")
-	ctx = context.WithValue(ctx, UserRolesKey, []string{"tenant_admin"})
+	ctx = context.WithValue(ctx, UserEmailKey, email)
+	ctx = context.WithValue(ctx, UserRolesKey, roles)
 	return ctx
 }
 
@@ -210,6 +229,29 @@ func HasRole(ctx context.Context, role string) bool {
 		}
 	}
 	return false
+}
+
+// IsAdmin checks if user has admin role
+func IsAdmin(ctx context.Context) bool {
+	return HasRole(ctx, "admin")
+}
+
+// RequireRole middleware checks if user has the required role
+func RequireRole(role string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !HasRole(r.Context(), role) {
+				http.Error(w, `{"error":{"code":"FORBIDDEN","message":"insufficient permissions"}}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireAdmin middleware checks if user has admin role
+func RequireAdmin(next http.Handler) http.Handler {
+	return RequireRole("admin")(next)
 }
 
 // base64URLDecode decodes base64url encoded string

@@ -1,5 +1,8 @@
 import Keycloak from 'keycloak-js'
 
+// Role types
+export type DevRole = 'admin' | 'user'
+
 // Auth state
 const keycloak = ref<Keycloak | null>(null)
 const isAuthenticated = ref(false)
@@ -12,8 +15,20 @@ const user = ref<{
   tenantId: string
 } | null>(null)
 
+// Dev mode role state (persisted in localStorage)
+const devRole = ref<DevRole>('admin')
+const isDevMode = ref(false)
+
 // Initialize flag to prevent multiple initializations
 let initPromise: Promise<boolean> | null = null
+
+// Load dev role from localStorage
+if (import.meta.client) {
+  const savedRole = localStorage.getItem('devRole') as DevRole
+  if (savedRole === 'admin' || savedRole === 'user') {
+    devRole.value = savedRole
+  }
+}
 
 export function useAuth() {
   const config = useRuntimeConfig()
@@ -54,15 +69,45 @@ export function useAuth() {
         }
 
         isLoading.value = false
+        isDevMode.value = false
         return authenticated
       } catch (error) {
         console.error('Keycloak init error:', error)
+        // If Keycloak fails, fall back to dev mode
+        isDevMode.value = true
+        setDevModeUser()
         isLoading.value = false
         return false
       }
     })()
 
     return initPromise
+  }
+
+  // Set user info for dev mode
+  function setDevModeUser(): void {
+    const roles = devRole.value === 'admin' ? ['admin', 'user'] : ['user']
+    const email = devRole.value === 'admin' ? 'admin@example.com' : 'user@example.com'
+    const name = devRole.value === 'admin' ? 'Admin User' : 'SaaS User'
+
+    user.value = {
+      id: 'dev-user',
+      email,
+      name,
+      roles,
+      tenantId: '00000000-0000-0000-0000-000000000001'
+    }
+  }
+
+  // Switch dev mode role
+  function setDevRole(role: DevRole): void {
+    devRole.value = role
+    if (import.meta.client) {
+      localStorage.setItem('devRole', role)
+    }
+    if (isDevMode.value) {
+      setDevModeUser()
+    }
   }
 
   async function login(redirectUri?: string): Promise<void> {
@@ -155,6 +200,8 @@ export function useAuth() {
     isLoading: readonly(isLoading),
     user: readonly(user),
     keycloak: readonly(keycloak),
+    isDevMode: readonly(isDevMode),
+    devRole: readonly(devRole),
 
     // Methods
     init,
@@ -162,6 +209,8 @@ export function useAuth() {
     logout,
     getToken,
     hasRole,
-    hasAnyRole
+    hasAnyRole,
+    setDevRole,
+    isAdmin: () => hasRole('admin')
   }
 }

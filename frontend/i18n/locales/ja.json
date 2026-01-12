@@ -35,9 +35,13 @@
     "runs": "実行履歴",
     "schedules": "スケジュール",
     "settings": "設定",
+    "admin": "管理者",
     "login": "ログイン",
     "logout": "ログアウト",
-    "developmentMode": "開発モード"
+    "developmentMode": "開発モード",
+    "testRole": "テスト用ロール",
+    "roleAdmin": "管理者",
+    "roleUser": "SaaS利用者"
   },
   "dashboard": {
     "title": "ダッシュボード",

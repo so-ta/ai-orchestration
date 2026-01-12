@@ -2,7 +2,7 @@
 export function useApi() {
   const config = useRuntimeConfig()
   const baseURL = config.public.apiBase
-  const { getToken, isAuthenticated } = useAuth()
+  const { getToken, isAuthenticated, isDevMode, devRole } = useAuth()
 
   async function request<T>(
     endpoint: string,
@@ -24,6 +24,11 @@ export function useApi() {
     } else {
       // Development fallback: use default tenant ID
       ;(headers as Record<string, string>)['X-Tenant-ID'] = '00000000-0000-0000-0000-000000000001'
+    }
+
+    // In dev mode, send the dev role header
+    if (isDevMode.value) {
+      ;(headers as Record<string, string>)['X-Dev-Role'] = devRole.value
     }
 
     const response = await fetch(url, {

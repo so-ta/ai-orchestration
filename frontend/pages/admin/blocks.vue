@@ -6,6 +6,7 @@ const { t } = useI18n()
 
 definePageMeta({
   layout: 'default',
+  middleware: ['admin'],
 })
 
 const blocksApi = useBlocks()

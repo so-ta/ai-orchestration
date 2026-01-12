@@ -1,16 +1,38 @@
 <script setup lang="ts">
+import type { DevRole } from '~/composables/useAuth'
+
 const { t } = useI18n()
-const { isAuthenticated, isLoading, user, login, logout } = useAuth()
+const { isAuthenticated, isLoading, user, login, logout, isDevMode, devRole, setDevRole, isAdmin } = useAuth()
 
 const route = useRoute()
 
-const menuItems = computed(() => [
+// Base menu items for all users
+const baseMenuItems = computed(() => [
   { name: t('nav.dashboard'), path: '/', icon: 'home' },
   { name: t('nav.workflows'), path: '/workflows', icon: 'workflow' },
   { name: t('nav.runs'), path: '/runs', icon: 'play' },
   { name: t('nav.schedules'), path: '/schedules', icon: 'clock' },
   { name: t('nav.settings'), path: '/settings', icon: 'settings' }
 ])
+
+// Admin-only menu items
+const adminMenuItems = computed(() => [
+  { name: t('nav.admin'), path: '/admin', icon: 'admin' }
+])
+
+// Combined menu items based on role
+const menuItems = computed(() => {
+  if (isAdmin()) {
+    return [...baseMenuItems.value, ...adminMenuItems.value]
+  }
+  return baseMenuItems.value
+})
+
+// Handle dev role change
+function handleDevRoleChange(event: Event) {
+  const target = event.target as HTMLSelectElement
+  setDevRole(target.value as DevRole)
+}
 
 // Check if the current route matches the menu item (including child routes)
 function isActiveRoute(itemPath: string): boolean {
@@ -72,6 +94,10 @@ async function handleLogout() {
                   <circle cx="12" cy="12" r="3"></circle>
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
+                <!-- Admin icon (shield) -->
+                <svg v-else-if="item.icon === 'admin'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
               </span>
               {{ item.name }}
             </NuxtLink>
@@ -101,6 +127,27 @@ async function handleLogout() {
             </svg>
           </button>
         </div>
+        <!-- Dev mode with role switcher -->
+        <div v-else-if="isDevMode" class="dev-mode-section">
+          <div class="dev-user-info">
+            <div class="user-avatar dev-avatar">
+              {{ devRole === 'admin' ? 'A' : 'U' }}
+            </div>
+            <div class="user-details">
+              <span class="user-name">{{ devRole === 'admin' ? 'Admin User' : 'SaaS User' }}</span>
+              <span class="user-role">{{ devRole }}</span>
+            </div>
+          </div>
+          <div class="role-switcher">
+            <label class="role-label">{{ $t('nav.testRole') }}</label>
+            <select class="role-select" :value="devRole" @change="handleDevRoleChange">
+              <option value="admin">{{ $t('nav.roleAdmin') }}</option>
+              <option value="user">{{ $t('nav.roleUser') }}</option>
+            </select>
+          </div>
+          <span class="dev-mode-badge">{{ $t('nav.developmentMode') }}</span>
+        </div>
+        <!-- Login button when not in dev mode and not authenticated -->
         <div v-else class="login-section">
           <button class="btn-login" @click="handleLogin">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -110,7 +157,6 @@ async function handleLogout() {
             </svg>
             {{ $t('nav.login') }}
           </button>
-          <span class="dev-mode">{{ $t('nav.developmentMode') }}</span>
         </div>
       </div>
     </aside>
@@ -310,6 +356,60 @@ async function handleLogout() {
 .dev-mode {
   color: var(--color-text-secondary);
   font-size: 0.75rem;
+  text-align: center;
+}
+
+/* Dev mode section with role switcher */
+.dev-mode-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.dev-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dev-avatar {
+  background: var(--color-warning, #f59e0b);
+}
+
+.role-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.role-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.role-select {
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: white;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.dev-mode-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-radius: var(--radius);
   text-align: center;
 }
 
