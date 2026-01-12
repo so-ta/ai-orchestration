@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType } from '~/types/api'
+import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
+import type { ExecutionLog } from '~/types/execution'
 import { calculateLayout } from '~/utils/graph-layout'
 
 const { t } = useI18n()
@@ -19,6 +20,12 @@ const blockGroups = ref<BlockGroup[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
+
+// Execution state
+const latestRun = ref<Run | null>(null)
+const executionLogs = ref<ExecutionLog[]>([])
+const logPanelOpen = ref(false)
+const logPanelHeight = ref(200)
 
 // Tab state
 const activeTab = ref<'editor' | 'history'>('editor')
@@ -961,9 +968,49 @@ async function loadBlockDefinitions() {
   }
 }
 
+// Load latest run for step re-execution
+async function loadLatestRun() {
+  try {
+    const response = await runs.list(workflowId, { limit: 1 })
+    if (response.data && response.data.length > 0) {
+      latestRun.value = response.data[0]
+    }
+  } catch (e) {
+    console.error('Failed to load latest run:', e)
+  }
+}
+
+// Execution log handlers
+function handleExecutionLog(log: ExecutionLog) {
+  executionLogs.value.push(log)
+  // Auto-open log panel when first log arrives
+  if (executionLogs.value.length === 1) {
+    logPanelOpen.value = true
+  }
+}
+
+function clearExecutionLogs() {
+  executionLogs.value = []
+}
+
+// Handle execute workflow from execution tab
+async function handleExecuteWorkflowFromTab(mode: 'test' | 'production', input: object) {
+  if (!workflow.value) return
+
+  try {
+    const response = await runs.create(workflowId, { mode, input })
+    latestRun.value = response.data
+    // Don't open in new tab, just update latest run reference
+    toast.success(t('workflows.runStarted'))
+  } catch (e) {
+    toast.error(t('workflows.runFailed'), e instanceof Error ? e.message : undefined)
+  }
+}
+
 onMounted(() => {
   loadWorkflow()
   loadBlockDefinitions()
+  loadLatestRun()
 })
 </script>
 
@@ -1038,7 +1085,7 @@ onMounted(() => {
       </div>
 
       <!-- Editor Tab Content -->
-      <div v-show="activeTab === 'editor'">
+      <div v-show="activeTab === 'editor'" class="editor-tab-content" :class="{ 'log-panel-open': logPanelOpen }" :style="logPanelOpen ? { paddingBottom: logPanelHeight + 'px' } : {}">
         <!-- Actions Bar -->
         <div class="actions-bar">
           <div class="actions-left">
@@ -1161,12 +1208,25 @@ onMounted(() => {
             :workflow-id="workflowId"
             :readonly-mode="isReadonly"
             :saving="saving"
+            :latest-run="latestRun"
             @save="handleSaveStep"
             @delete="handleDeleteStep"
             @apply-workflow="handleApplyWorkflow"
+            @execute-workflow="handleExecuteWorkflowFromTab"
+            @log="handleExecutionLog"
           />
         </template>
       </WorkflowEditorLayout>
+
+      <!-- Execution Log Panel -->
+      <ExecutionLogPanel
+        :logs="executionLogs"
+        :is-open="logPanelOpen"
+        :panel-height="logPanelHeight"
+        @update:is-open="logPanelOpen = $event"
+        @update:panel-height="logPanelHeight = $event"
+        @clear="clearExecutionLogs"
+      />
       </div>
 
       <!-- History Tab Content -->
@@ -1394,5 +1454,15 @@ onMounted(() => {
 
 .tab svg {
   flex-shrink: 0;
+}
+
+/* Editor Tab Content */
+.editor-tab-content {
+  position: relative;
+  transition: padding-bottom 0.2s ease;
+}
+
+.editor-tab-content.log-panel-open {
+  /* padding-bottom is set inline based on logPanelHeight */
 }
 </style>

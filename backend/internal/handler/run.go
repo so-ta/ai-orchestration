@@ -255,3 +255,55 @@ func (h *RunHandler) GetStepHistory(w http.ResponseWriter, r *http.Request) {
 
 	JSONData(w, http.StatusOK, stepRuns)
 }
+
+// TestStepInlineRequest represents a request to test a step inline
+type TestStepInlineRequest struct {
+	Input json.RawMessage `json:"input"` // Custom input for testing
+}
+
+// TestStepInline handles POST /api/v1/workflows/{id}/steps/{step_id}/test
+// This allows testing a single step without requiring an existing run
+func (h *RunHandler) TestStepInline(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+		return
+	}
+	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+		return
+	}
+
+	var req TestStepInlineRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+		return
+	}
+
+	// Set default empty input if not provided
+	input := req.Input
+	if input == nil {
+		input = json.RawMessage(`{}`)
+	}
+
+	var userIDPtr *uuid.UUID
+	if userID := getUserID(r); userID != uuid.Nil {
+		userIDPtr = &userID
+	}
+
+	output, err := h.runUsecase.TestStepInline(r.Context(), usecase.TestStepInlineInput{
+		TenantID:   tenantID,
+		WorkflowID: workflowID,
+		StepID:     stepID,
+		Input:      input,
+		UserID:     userIDPtr,
+	})
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	JSONData(w, http.StatusAccepted, output)
+}

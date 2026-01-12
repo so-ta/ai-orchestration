@@ -142,7 +142,9 @@
       "version": "バージョン",
       "noRuns": "実行履歴がありません",
       "noRunsDesc": "このワークフローを実行すると履歴が表示されます"
-    }
+    },
+    "runStarted": "ワークフローを開始しました",
+    "runFailed": "ワークフローの実行に失敗しました"
   },
   "editor": {
     "blocks": "ブロック",
@@ -220,7 +222,88 @@
     "shortcutPaste": "ステップを貼り付け",
     "tabs": {
       "settings": "設定",
-      "copilot": "Copilot"
+      "copilot": "Copilot",
+      "execution": "実行"
+    }
+  },
+  "execution": {
+    "modes": {
+      "single": "ブロック実行",
+      "workflow": "ワークフロー",
+      "abTest": "A/Bテスト",
+      "promptTest": "プロンプトテスト"
+    },
+    "selectStepToExecute": "実行するステップを選択してください",
+    "selectLLMStep": "A/Bテストまたはプロンプトテストを行うにはLLMステップを選択してください",
+    "useCustomInput": "カスタム入力を使用",
+    "inputPlaceholder": "{\"key\": \"value\"}",
+    "executeTest": "テスト実行",
+    "executing": "実行中...",
+    "waitingForResult": "結果を待機中...",
+    "stepExecuted": "ステップを実行しました",
+    "stepQueued": "ステップをキューに追加しました",
+    "stepTestCompleted": "テストが完了しました",
+    "stepTestFailed": "テストが失敗しました",
+    "noRunWarning": "このワークフローにはまだ実行履歴がありません。先にワークフロー全体を実行してください。",
+    "inlineTestInfo": "既存の実行がないため、新しいテスト実行が作成されます。",
+    "history": "実行履歴",
+    "attempt": "実行 #{n}",
+    "workflowDesc": "ワークフロー全体を実行します。結果はログパネルに表示されます。",
+    "testRun": "テスト実行",
+    "productionRun": "本番実行",
+    "workflowStarted": "ワークフローを開始しました",
+    "abTestDesc": "同じ入力で異なるモデル設定を比較します。",
+    "promptTestDesc": "同じモデルで異なるプロンプトを比較します。",
+    "variantName": "バリアント名",
+    "modelName": "モデル名",
+    "addVariant": "バリアントを追加",
+    "runABTest": "A/Bテストを実行",
+    "copyCurrentPrompt": "現在のプロンプトをコピー",
+    "promptPlaceholder": "プロンプトを入力...",
+    "addPromptVariant": "プロンプトバリアントを追加",
+    "runPromptTest": "プロンプトテストを実行",
+    "abTestPlaceholder": "A/Bテスト機能は近日実装予定です",
+    "promptTestPlaceholder": "プロンプトテスト機能は近日実装予定です",
+    "status": {
+      "pending": "待機中",
+      "running": "実行中",
+      "completed": "完了",
+      "failed": "失敗"
+    },
+    "errors": {
+      "noRunAvailable": "実行可能なRunがありません。先にワークフローを実行してください。",
+      "noStepSelected": "ステップが選択されていません",
+      "executionFailed": "実行に失敗しました",
+      "invalidJson": "無効なJSON形式です",
+      "invalidJsonObject": "JSONオブジェクトを入力してください",
+      "needTwoVariants": "A/Bテストには2つ以上の有効なバリアントが必要です",
+      "needPromptVariant": "少なくとも1つのプロンプトバリアントが必要です"
+    },
+    "logs": {
+      "startingStep": "ステップ「{name}」を実行中...",
+      "stepCompleted": "ステップ「{name}」が完了しました",
+      "stepFailed": "ステップ「{name}」が失敗しました: {error}",
+      "stepQueued": "ステップ「{name}」をキューに追加しました（Run ID: {runId}）",
+      "stepTestCompleted": "ステップ「{name}」のテストが完了しました",
+      "stepTestFailed": "ステップ「{name}」のテストが失敗しました: {error}",
+      "pollingTimeout": "テスト結果の取得がタイムアウトしました",
+      "startingWorkflow": "ワークフローを{mode}モードで開始...",
+      "workflowStarted": "ワークフロー実行を開始しました（ID: {id}）",
+      "workflowFailed": "ワークフローの開始に失敗しました: {error}",
+      "startingABTest": "{count}個のバリアントでA/Bテストを開始...",
+      "runningVariant": "バリアント「{name}」を実行中（{provider}/{model}）",
+      "startingPromptTest": "{count}個のプロンプトでテストを開始...",
+      "testingPrompt": "プロンプト「{name}」をテスト中..."
+    },
+    "logPanel": {
+      "title": "実行ログ",
+      "copy": "ログをコピー",
+      "clear": "クリア",
+      "open": "開く",
+      "close": "閉じる",
+      "empty": "実行ログはまだありません",
+      "showData": "データを表示",
+      "scrollToBottom": "最新へスクロール"
     }
   },
   "copilot": {

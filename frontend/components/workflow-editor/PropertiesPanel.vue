@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { Step, StepType, BlockDefinition, InputPort, OutputPort } from '~/types/api'
+import type { Step, StepType, BlockDefinition, InputPort, OutputPort, Run } from '~/types/api'
 import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
+import type { ExecutionLog } from '~/types/execution'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 
 const { t } = useI18n()
@@ -13,10 +14,11 @@ const props = defineProps<{
   workflowId: string
   readonlyMode?: boolean
   saving?: boolean
+  latestRun?: Run | null
 }>()
 
 // Active tab state
-const activeTab = ref<'settings' | 'copilot'>('settings')
+const activeTab = ref<'settings' | 'copilot' | 'execution'>('settings')
 
 // Reset to settings tab when step changes
 watch(() => props.step, () => {
@@ -27,6 +29,9 @@ const emit = defineEmits<{
   (e: 'save', data: { name: string; type: StepType; config: Record<string, any> }): void
   (e: 'delete'): void
   (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
+  (e: 'execute', data: { stepId: string; input: object; mode: 'test' | 'production' }): void
+  (e: 'execute-workflow', mode: 'test' | 'production', input: object): void
+  (e: 'log', log: ExecutionLog): void
 }>()
 
 // Form state
@@ -315,6 +320,16 @@ const expressionTemplates = {
           <circle cx="16" cy="14" r="2"/>
         </svg>
         {{ t('editor.tabs.copilot') }}
+      </button>
+      <button
+        class="tab-button"
+        :class="{ active: activeTab === 'execution' }"
+        @click="activeTab = 'execution'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        {{ t('editor.tabs.execution') }}
       </button>
     </div>
 
@@ -1170,6 +1185,18 @@ const expressionTemplates = {
       />
     </div>
 
+    <!-- Execution Tab Content -->
+    <div v-if="activeTab === 'execution'" class="properties-body execution-container">
+      <ExecutionTab
+        :step="step"
+        :workflow-id="workflowId"
+        :latest-run="latestRun || null"
+        @execute="(data) => emit('execute', data)"
+        @execute-workflow="(mode, input) => emit('execute-workflow', mode, input)"
+        @log="(log) => emit('log', log)"
+      />
+    </div>
+
     <!-- Footer with actions (only when step selected) -->
     <div v-if="step" class="properties-footer">
       <button
@@ -1415,6 +1442,11 @@ const expressionTemplates = {
 
 /* Copilot Container */
 .copilot-container {
+  padding: 0.75rem 1rem;
+}
+
+/* Execution Container */
+.execution-container {
   padding: 0.75rem 1rem;
 }
 

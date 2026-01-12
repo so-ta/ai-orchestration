@@ -18,6 +18,16 @@ interface StepHistoryResponse {
   data: StepRun[]
 }
 
+// Response type for inline step testing
+interface TestStepInlineResponse {
+  data: {
+    run_id: string
+    step_id: string
+    step_name: string
+    is_queued: boolean
+  }
+}
+
 export function useRuns() {
   const api = useApi()
 
@@ -67,6 +77,12 @@ export function useRuns() {
     return api.get<StepHistoryResponse>(`/runs/${runId}/steps/${stepId}/history`)
   }
 
+  // Test a single step inline (without requiring an existing run)
+  // Creates a new test run and executes only the specified step
+  async function testStepInline(workflowId: string, stepId: string, input?: object) {
+    return api.post<TestStepInlineResponse>(`/workflows/${workflowId}/steps/${stepId}/test`, { input })
+  }
+
   return {
     list,
     get,
@@ -75,5 +91,6 @@ export function useRuns() {
     executeSingleStep,
     resumeFromStep,
     getStepHistory,
+    testStepInline,
   }
 }
