@@ -180,6 +180,11 @@ export interface BlockDefinition {
   executor_type: ExecutorType
   executor_config?: object
   error_codes: ErrorCodeDef[]
+  // Unified Block Model fields
+  code?: string              // JavaScript code executed in sandbox
+  ui_config?: object         // UI metadata (icon, color, configSchema)
+  is_system?: boolean        // System blocks can only be edited by admins
+  version?: number           // Version number, incremented on each update
   enabled: boolean
   created_at: string
   updated_at: string

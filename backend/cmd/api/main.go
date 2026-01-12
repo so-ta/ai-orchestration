@@ -87,6 +87,7 @@ func main() {
 	webhookRepo := postgres.NewWebhookRepository(pool)
 	auditRepo := postgres.NewAuditLogRepository(pool)
 	blockRepo := postgres.NewBlockDefinitionRepository(pool)
+	blockVersionRepo := postgres.NewBlockVersionRepository(pool)
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 	credentialRepo := postgres.NewCredentialRepository(pool)
 	copilotSessionRepo := postgres.NewCopilotSessionRepository(pool)
@@ -102,6 +103,7 @@ func main() {
 	webhookUsecase := usecase.NewWebhookUsecase(webhookRepo, workflowRepo, runRepo)
 	auditService := usecase.NewAuditService(auditRepo)
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
+	blockUsecase := usecase.NewBlockUsecase(blockRepo, blockVersionRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
 	copilotUsecase := usecase.NewCopilotUsecase(workflowRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
@@ -114,7 +116,7 @@ func main() {
 	scheduleHandler := handler.NewScheduleHandler(scheduleUsecase)
 	webhookHandler := handler.NewWebhookHandler(webhookUsecase)
 	auditHandler := handler.NewAuditHandler(auditService)
-	blockHandler := handler.NewBlockHandler(blockRepo)
+	blockHandler := handler.NewBlockHandler(blockRepo, blockUsecase)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
 	copilotHandler := handler.NewCopilotHandler(copilotUsecase)
@@ -339,6 +341,19 @@ func main() {
 
 		// Run usage (nested under runs)
 		r.Get("/runs/{run_id}/usage", usageHandler.GetByRun)
+
+		// Admin routes for system block management
+		r.Route("/admin/blocks", func(r chi.Router) {
+			// TODO: Add admin role check middleware
+			r.Get("/", blockHandler.ListSystemBlocks)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", blockHandler.GetSystemBlock)
+				r.Put("/", blockHandler.UpdateSystemBlock)
+				r.Get("/versions", blockHandler.ListBlockVersions)
+				r.Get("/versions/{version}", blockHandler.GetBlockVersion)
+				r.Post("/rollback", blockHandler.RollbackBlock)
+			})
+		})
 	})
 
 	// Public webhook trigger endpoint (no auth required)

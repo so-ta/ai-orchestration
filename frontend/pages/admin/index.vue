@@ -19,6 +19,12 @@ const adminLinks = [
     href: '/admin/blocks',
     icon: 'block',
   },
+  {
+    title: 'System Blocks',
+    description: 'Edit system block code and configuration',
+    href: '/admin/system-blocks',
+    icon: 'system',
+  },
 ]
 </script>
 
@@ -49,6 +55,7 @@ const adminLinks = [
         <div class="admin-card-icon">
           <span v-if="link.icon === 'template'" class="icon-template">📦</span>
           <span v-if="link.icon === 'block'" class="icon-block">🧩</span>
+          <span v-if="link.icon === 'system'" class="icon-system">⚙️</span>
         </div>
         <div class="admin-card-content">
           <h3>{{ $t(link.title) }}</h3>

@@ -164,10 +164,25 @@ type BlockDefinitionRepository interface {
 
 // BlockDefinitionFilter defines filtering options for block definition list
 type BlockDefinitionFilter struct {
-	Category    *domain.BlockCategory
+	Category     *domain.BlockCategory
 	ExecutorType *domain.ExecutorType
-	EnabledOnly bool
-	SystemOnly  bool // If true, only return system blocks (tenant_id IS NULL)
+	EnabledOnly  bool
+	SystemOnly   bool // If true, only return system blocks (tenant_id IS NULL)
+	IsSystem     *bool // Filter by is_system flag
+}
+
+// BlockVersionRepository defines the interface for block version persistence
+type BlockVersionRepository interface {
+	// Create creates a new block version
+	Create(ctx context.Context, version *domain.BlockVersion) error
+	// GetByID retrieves a block version by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockVersion, error)
+	// GetByBlockAndVersion retrieves a specific version of a block
+	GetByBlockAndVersion(ctx context.Context, blockID uuid.UUID, version int) (*domain.BlockVersion, error)
+	// ListByBlock retrieves all versions of a block
+	ListByBlock(ctx context.Context, blockID uuid.UUID) ([]*domain.BlockVersion, error)
+	// GetLatestByBlock retrieves the latest version of a block
+	GetLatestByBlock(ctx context.Context, blockID uuid.UUID) (*domain.BlockVersion, error)
 }
 
 // BlockGroupRepository defines the interface for block group persistence

@@ -3,20 +3,27 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/repository"
+	"github.com/souta/ai-orchestration/internal/usecase"
 )
 
 // BlockHandler handles block definition HTTP requests
 type BlockHandler struct {
-	blockRepo repository.BlockDefinitionRepository
+	blockRepo    repository.BlockDefinitionRepository
+	blockUsecase *usecase.BlockUsecase
 }
 
 // NewBlockHandler creates a new BlockHandler
-func NewBlockHandler(blockRepo repository.BlockDefinitionRepository) *BlockHandler {
-	return &BlockHandler{blockRepo: blockRepo}
+func NewBlockHandler(blockRepo repository.BlockDefinitionRepository, blockUsecase *usecase.BlockUsecase) *BlockHandler {
+	return &BlockHandler{
+		blockRepo:    blockRepo,
+		blockUsecase: blockUsecase,
+	}
 }
 
 // CreateBlockRequest represents a create block definition request
@@ -260,4 +267,197 @@ func (h *BlockHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ============================================================================
+// Admin endpoints for system block management
+// ============================================================================
+
+// ListSystemBlocks handles GET /api/v1/admin/blocks
+func (h *BlockHandler) ListSystemBlocks(w http.ResponseWriter, r *http.Request) {
+	blocks, err := h.blockUsecase.ListSystemBlocks(r.Context())
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	type SystemBlockListResponse struct {
+		Blocks []*domain.BlockDefinition `json:"blocks"`
+	}
+
+	JSONData(w, http.StatusOK, SystemBlockListResponse{Blocks: blocks})
+}
+
+// UpdateSystemBlockRequest represents a request to update a system block
+type UpdateSystemBlockRequest struct {
+	Name          *string         `json:"name"`
+	Description   *string         `json:"description"`
+	Code          *string         `json:"code"`
+	ConfigSchema  json.RawMessage `json:"config_schema"`
+	InputSchema   json.RawMessage `json:"input_schema"`
+	OutputSchema  json.RawMessage `json:"output_schema"`
+	UIConfig      json.RawMessage `json:"ui_config"`
+	ChangeSummary string          `json:"change_summary"`
+}
+
+// UpdateSystemBlock handles PUT /api/v1/admin/blocks/{id}
+func (h *BlockHandler) UpdateSystemBlock(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid block id", nil)
+		return
+	}
+
+	var req UpdateSystemBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+		return
+	}
+
+	// Get user ID from context (if available)
+	var changedBy *uuid.UUID
+	if userID := getUserID(r); userID != uuid.Nil {
+		changedBy = &userID
+	}
+
+	input := usecase.UpdateSystemBlockInput{
+		BlockID:       id,
+		Name:          req.Name,
+		Description:   req.Description,
+		Code:          req.Code,
+		ConfigSchema:  req.ConfigSchema,
+		InputSchema:   req.InputSchema,
+		OutputSchema:  req.OutputSchema,
+		UIConfig:      req.UIConfig,
+		ChangeSummary: req.ChangeSummary,
+		ChangedBy:     changedBy,
+	}
+
+	block, err := h.blockUsecase.UpdateSystemBlock(r.Context(), input)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, block)
+}
+
+// GetSystemBlock handles GET /api/v1/admin/blocks/{id}
+func (h *BlockHandler) GetSystemBlock(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid block id", nil)
+		return
+	}
+
+	block, err := h.blockRepo.GetByID(r.Context(), id)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	if block == nil {
+		Error(w, http.StatusNotFound, "NOT_FOUND", "block not found", nil)
+		return
+	}
+
+	JSONData(w, http.StatusOK, block)
+}
+
+// ListBlockVersions handles GET /api/v1/admin/blocks/{id}/versions
+func (h *BlockHandler) ListBlockVersions(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid block id", nil)
+		return
+	}
+
+	versions, err := h.blockUsecase.GetBlockVersions(r.Context(), id)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	type VersionListResponse struct {
+		Versions []*domain.BlockVersion `json:"versions"`
+	}
+
+	JSONData(w, http.StatusOK, VersionListResponse{Versions: versions})
+}
+
+// GetBlockVersion handles GET /api/v1/admin/blocks/{id}/versions/{version}
+func (h *BlockHandler) GetBlockVersion(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid block id", nil)
+		return
+	}
+
+	versionStr := chi.URLParam(r, "version")
+	version, err := strconv.Atoi(versionStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid version number", nil)
+		return
+	}
+
+	blockVersion, err := h.blockUsecase.GetBlockVersion(r.Context(), id, version)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+	if blockVersion == nil {
+		Error(w, http.StatusNotFound, "NOT_FOUND", "version not found", nil)
+		return
+	}
+
+	JSONData(w, http.StatusOK, blockVersion)
+}
+
+// RollbackBlockRequest represents a request to rollback a block
+type RollbackBlockRequest struct {
+	Version int `json:"version"`
+}
+
+// RollbackBlock handles POST /api/v1/admin/blocks/{id}/rollback
+func (h *BlockHandler) RollbackBlock(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid block id", nil)
+		return
+	}
+
+	var req RollbackBlockRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+		return
+	}
+
+	if req.Version <= 0 {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "version must be positive", nil)
+		return
+	}
+
+	// Get user ID from context (if available)
+	var changedBy *uuid.UUID
+	if userID := getUserID(r); userID != uuid.Nil {
+		changedBy = &userID
+	}
+
+	input := usecase.RollbackSystemBlockInput{
+		BlockID:   id,
+		Version:   req.Version,
+		ChangedBy: changedBy,
+	}
+
+	block, err := h.blockUsecase.RollbackSystemBlock(r.Context(), input)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, block)
 }
