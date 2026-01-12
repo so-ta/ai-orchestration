@@ -193,7 +193,9 @@
       "error": "Error",
       "errorDesc": "Stop workflow with error",
       "note": "Note",
-      "noteDesc": "Documentation/comment"
+      "noteDesc": "Documentation/comment",
+      "log": "Log",
+      "logDesc": "Output log messages for debugging"
     },
     "quickTips": "Quick Tips",
     "tipDragBlock": "Drag a block from the palette to add a step",
@@ -390,6 +392,23 @@
       "contentPlaceholder": "Add documentation or comments about this part of the workflow...",
       "color": "Note Color",
       "description": "Notes are for documentation only and do not affect workflow execution."
+    },
+    "log": {
+      "title": "Log Configuration",
+      "message": "Log Message",
+      "messagePlaceholder": "Processing: {'{{'}$.name{'}}'}",
+      "messageHint": "Use {'{{'}$.field{'}}'} template variables in your message",
+      "level": "Log Level",
+      "levels": {
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Warning",
+        "error": "Error"
+      },
+      "data": "Additional Data",
+      "dataPlaceholder": "$.input",
+      "dataHint": "JSON path to additional data (e.g., $.input, $.steps.step1.output)",
+      "viewNote": "Log output can be viewed in the step output on the Run details page"
     }
   },
   "runs": {
@@ -445,7 +464,23 @@
     "loading": "Loading runs...",
     "loadFailed": "Failed to load runs",
     "viewWorkflows": "View Workflows",
-    "view": "View"
+    "view": "View",
+    "stepDetails": "Step Details",
+    "executionHistory": "Execution History",
+    "attemptN": "Attempt {n}",
+    "executeThisStepOnly": "Execute This Step Only",
+    "resumeFromHere": "Resume From Here",
+    "executeStep": "Execute Step",
+    "resumeExecution": "Resume Execution",
+    "inputData": "Input Data",
+    "editInput": "Edit Input",
+    "execute": "Execute",
+    "noHistory": "No execution history",
+    "reExecuteSuccess": "Re-execution queued successfully",
+    "reExecuteFailed": "Failed to start re-execution",
+    "stepNotResumable": "This run cannot be re-executed (only completed or failed runs can be re-executed)",
+    "loadingHistory": "Loading execution history...",
+    "invalidJson": "Invalid JSON format"
   },
   "schedules": {
     "title": "Schedules",
@@ -497,5 +532,158 @@
     "loadFailed": "Failed to load",
     "saveFailed": "Failed to save",
     "deleteFailed": "Failed to delete"
+  },
+  "admin": {
+    "title": "Admin Settings",
+    "subtitle": "Operator-only management features",
+    "operatorNote": "This section is for operators only. Manage block templates and system blocks.",
+    "templates": {
+      "title": "Block Templates",
+      "subtitle": "Manage execution logic templates for custom blocks",
+      "newTemplate": "New Template",
+      "editTemplate": "Edit Template",
+      "deleteTemplate": "Delete Template",
+      "noTemplates": "No templates",
+      "noTemplatesDesc": "Create templates for custom block execution logic",
+      "createFirst": "Create your first template",
+      "builtinSection": "Builtin Templates",
+      "builtinDesc": "System builtin templates (read-only)",
+      "customSection": "Custom Templates",
+      "customDesc": "Custom templates created by operators",
+      "noCustomTemplates": "No custom templates",
+      "builtin": "Builtin",
+      "viewCode": "View Code",
+      "cannotEditBuiltin": "Cannot edit builtin templates",
+      "cannotDeleteBuiltin": "Cannot delete builtin templates",
+      "invalidJson": "Invalid JSON format",
+      "confirmDelete": "Are you sure you want to delete this template? This action cannot be undone.",
+      "table": {
+        "name": "Name",
+        "slug": "Slug",
+        "executorType": "Executor Type",
+        "updatedAt": "Updated At",
+        "actions": "Actions"
+      },
+      "form": {
+        "name": "Template Name",
+        "namePlaceholder": "e.g., HTTP API Call",
+        "slug": "Slug",
+        "slugPlaceholder": "e.g., http_api",
+        "slugHint": "Only lowercase letters, numbers, and underscores",
+        "description": "Description",
+        "descriptionPlaceholder": "Enter template description (optional)",
+        "executorType": "Executor Type",
+        "executorCode": "Executor Code",
+        "executorCodePlaceholder": "Enter JavaScript execution code",
+        "configSchema": "Config Schema (JSON Schema)",
+        "configSchemaPlaceholder": "Empty object",
+        "configSchemaHint": "JSON Schema for block configuration validation"
+      },
+      "executorTypes": {
+        "javascriptDesc": "Execute in JavaScript sandbox",
+        "builtinDesc": "Builtin Go implementation"
+      },
+      "messages": {
+        "created": "Template created successfully",
+        "updated": "Template updated successfully",
+        "deleted": "Template deleted successfully",
+        "createFailed": "Failed to create template",
+        "updateFailed": "Failed to update template",
+        "deleteFailed": "Failed to delete template"
+      }
+    },
+    "blocks": {
+      "title": "System Blocks",
+      "subtitle": "Manage block definitions provided to all tenants",
+      "newBlock": "New Block",
+      "editBlock": "Edit Block",
+      "deleteBlock": "Delete Block",
+      "noBlocks": "No system blocks",
+      "noBlocksDesc": "Create blocks to provide to SaaS users",
+      "createFirst": "Create your first system block",
+      "confirmDelete": "Are you sure you want to delete this block? This action cannot be undone.",
+      "table": {
+        "name": "Name",
+        "category": "Category",
+        "template": "Template",
+        "version": "Version",
+        "enabled": "Enabled",
+        "updatedAt": "Updated At",
+        "actions": "Actions"
+      },
+      "form": {
+        "name": "Block Name",
+        "namePlaceholder": "e.g., Send Slack Message",
+        "displayName": "Display Name",
+        "displayNamePlaceholder": "e.g., Slack Notification",
+        "description": "Description",
+        "descriptionPlaceholder": "Enter block description (optional)",
+        "category": "Category",
+        "categories": {
+          "api": "API",
+          "transform": "Data Transform",
+          "control": "Control Flow",
+          "custom": "Custom"
+        },
+        "template": "Template",
+        "templateHint": "Select a template (or 'None' for custom code)",
+        "noTemplate": "None (Custom Code)",
+        "templateConfig": "Template Configuration",
+        "customCode": "Custom Code",
+        "customCodePlaceholder": "Enter JavaScript execution code",
+        "inputSchema": "Input Schema (JSON Schema)",
+        "outputSchema": "Output Schema (JSON Schema)",
+        "credentialType": "Required Credential Type",
+        "credentialTypeHint": "The type of credential this block requires",
+        "enabled": "Enabled"
+      },
+      "messages": {
+        "created": "Block created successfully",
+        "updated": "Block updated successfully",
+        "deleted": "Block deleted successfully",
+        "createFailed": "Failed to create block",
+        "updateFailed": "Failed to update block",
+        "deleteFailed": "Failed to delete block"
+      }
+    }
+  },
+  "credentials": {
+    "title": "Environment Variables",
+    "subtitle": "Manage environment variables (API keys, etc.) for blocks",
+    "systemBlockSection": "For System Blocks",
+    "systemBlockDesc": "Environment variables for system blocks provided by operators",
+    "tenantBlockSection": "For Tenant Blocks",
+    "tenantBlockDesc": "Environment variables for custom blocks you created",
+    "noCredentials": "No environment variables",
+    "noCredentialsDesc": "Add environment variables to use in blocks",
+    "addVariable": "Add Variable",
+    "editVariable": "Edit Variable",
+    "deleteVariable": "Delete Variable",
+    "form": {
+      "key": "Key",
+      "keyPlaceholder": "e.g., OPENAI_API_KEY",
+      "keyHint": "Only uppercase letters, numbers, and underscores",
+      "value": "Value",
+      "valuePlaceholder": "Enter value",
+      "valueHidden": "(Saved - enter new value to update)"
+    },
+    "table": {
+      "key": "Key",
+      "createdAt": "Created At",
+      "updatedAt": "Updated At",
+      "actions": "Actions"
+    },
+    "actions": {
+      "confirmDelete": "Are you sure you want to delete this environment variable? This action cannot be undone."
+    },
+    "messages": {
+      "created": "Environment variable added successfully",
+      "updated": "Environment variable updated successfully",
+      "deleted": "Environment variable deleted successfully",
+      "createFailed": "Failed to add environment variable",
+      "updateFailed": "Failed to update environment variable",
+      "deleteFailed": "Failed to delete environment variable"
+    },
+    "securityNote": "Environment variables are encrypted and stored securely. System block variables and tenant block variables are separate and cannot access each other."
   }
 }

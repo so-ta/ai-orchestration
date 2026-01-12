@@ -2,10 +2,12 @@
 import { VueFlow, useVueFlow, Handle, Position, MarkerType, type Node, type Edge as FlowEdge } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
 import { Controls } from '@vue-flow/controls'
+import { NodeResizer, type OnResizeStart, type OnResize, type OnResizeEnd } from '@vue-flow/node-resizer'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/controls/dist/style.css'
+import '@vue-flow/node-resizer/dist/style.css'
 import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType } from '~/types/api'
 
 const props = defineProps<{
@@ -56,6 +58,14 @@ const emit = defineEmits<{
   (e: 'group:move-complete', groupId: string, data: {
     position: { x: number; y: number }
     delta: { x: number; y: number }
+    pushedBlocks: PushedBlock[]
+    addedBlocks: AddedBlock[]
+    movedGroups: MovedGroup[]
+  }): void
+  // Group resize complete - includes size change, pushed/added blocks, and cascaded group movements
+  (e: 'group:resize-complete', groupId: string, data: {
+    position: { x: number; y: number }
+    size: { width: number; height: number }
     pushedBlocks: PushedBlock[]
     addedBlocks: AddedBlock[]
     movedGroups: MovedGroup[]
@@ -1753,6 +1763,356 @@ function getStepColor(type: string) {
 function isStartNode(type: string): boolean {
   return type === 'start'
 }
+
+// Minimum size for group nodes
+const MIN_GROUP_WIDTH = 200
+const MIN_GROUP_HEIGHT = 150
+
+// Track resize state for position compensation
+interface ResizeState {
+  groupId: string
+  initialGroupX: number
+  initialGroupY: number
+  // Map of stepId -> initial relative position
+  initialChildPositions: Map<string, { relX: number; relY: number }>
+}
+const resizeState = ref<ResizeState | null>(null)
+
+// Handle group resize start - record initial positions
+function onGroupResizeStart(nodeId: string, _event: OnResizeStart) {
+  if (props.readonly) return
+
+  const group = props.blockGroups?.find(g => g.id === nodeId)
+  if (!group) return
+
+  // Record initial child positions (relative to group)
+  const childPositions = new Map<string, { relX: number; relY: number }>()
+  for (const step of props.steps) {
+    if (step.block_group_id !== nodeId) continue
+    // Calculate relative position from absolute position
+    const relX = step.position_x - group.position_x
+    const relY = step.position_y - group.position_y
+    childPositions.set(step.id, { relX, relY })
+  }
+
+  resizeState.value = {
+    groupId: nodeId,
+    initialGroupX: group.position_x,
+    initialGroupY: group.position_y,
+    initialChildPositions: childPositions,
+  }
+}
+
+// Handle group resize (during drag) - compensate child positions in real-time
+function onGroupResize(nodeId: string, event: OnResize) {
+  if (props.readonly) return
+  if (!resizeState.value || resizeState.value.groupId !== nodeId) return
+
+  const currentX = event.params.x
+  const currentY = event.params.y
+
+  // Calculate delta from initial position
+  const deltaX = currentX - resizeState.value.initialGroupX
+  const deltaY = currentY - resizeState.value.initialGroupY
+
+  // If no position change, no need to compensate
+  if (deltaX === 0 && deltaY === 0) return
+
+  // Compensate each child's position to maintain absolute position
+  for (const [stepId, initialPos] of resizeState.value.initialChildPositions) {
+    // New relative position = initial relative - delta
+    const newRelX = initialPos.relX - deltaX
+    const newRelY = initialPos.relY - deltaY
+
+    updateNode(stepId, {
+      position: { x: newRelX, y: newRelY },
+    })
+  }
+}
+
+// Handle group resize end with node context
+function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
+  // Clear resize state
+  resizeState.value = null
+  if (props.readonly) return
+
+  const newX = Math.round(event.params.x)
+  const newY = Math.round(event.params.y)
+  const newWidth = Math.round(event.params.width)
+  const newHeight = Math.round(event.params.height)
+
+  // Find the original group data
+  const group = props.blockGroups?.find(g => g.id === nodeId)
+  if (!group) {
+    // Fallback: just emit size update
+    emit('group:update', nodeId, {
+      size: { width: newWidth, height: newHeight }
+    })
+    return
+  }
+
+  // Result arrays
+  const pushedBlocks: PushedBlock[] = []
+  const addedBlocks: AddedBlock[] = []
+  const movedGroups: MovedGroup[] = []
+
+  // Create a virtual group with new dimensions for calculations
+  const resizedGroup: BlockGroup = {
+    ...group,
+    position_x: newX,
+    position_y: newY,
+    width: newWidth,
+    height: newHeight,
+  }
+
+  // Valid inside area bounds for the resized group
+  const innerLeft = newX + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+  const innerRight = newX + newWidth - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+  const innerTop = newY + GROUP_HEADER_HEIGHT + GROUP_PADDING + GROUP_BOUNDARY_WIDTH
+  const innerBottom = newY + newHeight - GROUP_PADDING - GROUP_BOUNDARY_WIDTH
+
+  // Set to track which steps are processed
+  const processedStepIds = new Set<string>()
+
+  // =================================================================
+  // STEP 1: Compensate internal blocks for group position change
+  //         and check if they need to be pushed out
+  // =================================================================
+  for (const step of props.steps) {
+    if (step.block_group_id !== nodeId) continue
+    if (step.type === 'start') continue
+
+    const stepWidth = DEFAULT_STEP_NODE_WIDTH
+    const stepHeight = DEFAULT_STEP_NODE_HEIGHT
+
+    // Step's absolute position (stored in props)
+    const stepAbsX = step.position_x
+    const stepAbsY = step.position_y
+
+    const stepLeft = stepAbsX
+    const stepRight = stepAbsX + stepWidth
+    const stepTop = stepAbsY
+    const stepBottom = stepAbsY + stepHeight
+
+    // Check if block is fully inside the valid inner area
+    const fullyInside =
+      stepLeft >= innerLeft && stepRight <= innerRight &&
+      stepTop >= innerTop && stepBottom <= innerBottom
+
+    // Check if block is fully outside the group (no overlap at all)
+    const fullyOutside =
+      stepRight <= newX || stepLeft >= newX + newWidth ||
+      stepBottom <= newY || stepTop >= newY + newHeight
+
+    // Check if block overlaps with group boundary (partially inside/outside)
+    const onBoundary = !fullyInside && !fullyOutside
+
+    if (onBoundary) {
+      // Block overlaps with boundary - push out to nearest outside position
+      const outsideGap = 20
+      const edgeDistances = [
+        { outX: newX - stepWidth - outsideGap, outY: stepAbsY },
+        { outX: newX + newWidth + outsideGap, outY: stepAbsY },
+        { outX: stepAbsX, outY: newY - stepHeight - outsideGap },
+        { outX: stepAbsX, outY: newY + newHeight + outsideGap },
+      ]
+
+      // Find closest outside position based on current position
+      let bestPos = edgeDistances[0]
+      let bestDist = Infinity
+      for (const pos of edgeDistances) {
+        const dist = Math.sqrt(Math.pow(stepAbsX - pos.outX, 2) + Math.pow(stepAbsY - pos.outY, 2))
+        if (dist < bestDist) {
+          bestDist = dist
+          bestPos = pos
+        }
+      }
+
+      pushedBlocks.push({
+        stepId: step.id,
+        position: { x: bestPos.outX, y: bestPos.outY },
+      })
+
+      // Update Vue Flow state - remove from parent (use absolute position)
+      updateNode(step.id, {
+        position: { x: bestPos.outX, y: bestPos.outY },
+        parentNode: undefined,
+      })
+
+      processedStepIds.add(step.id)
+    } else if (fullyOutside) {
+      // Block is fully outside - just remove from group, keep its absolute position
+      pushedBlocks.push({
+        stepId: step.id,
+        position: { x: stepAbsX, y: stepAbsY },
+      })
+
+      // Update Vue Flow state - remove from parent, keep absolute position
+      updateNode(step.id, {
+        position: { x: stepAbsX, y: stepAbsY },
+        parentNode: undefined,
+      })
+
+      processedStepIds.add(step.id)
+    } else {
+      // Block is fully inside - position already compensated by onGroupResize
+      // No need to update position again
+      processedStepIds.add(step.id)
+    }
+  }
+
+  // =================================================================
+  // STEP 2: Check blocks NOT in this group - add if now fully inside
+  // =================================================================
+  for (const step of props.steps) {
+    // Skip if already in this group or already processed
+    if (step.block_group_id === nodeId) continue
+    if (processedStepIds.has(step.id)) continue
+    if (step.type === 'start') continue
+
+    const stepWidth = DEFAULT_STEP_NODE_WIDTH
+    const stepHeight = DEFAULT_STEP_NODE_HEIGHT
+
+    const stepLeft = step.position_x
+    const stepRight = step.position_x + stepWidth
+    const stepTop = step.position_y
+    const stepBottom = step.position_y + stepHeight
+
+    // Check if block is now fully inside the valid inner area
+    const fullyInside =
+      stepLeft >= innerLeft && stepRight <= innerRight &&
+      stepTop >= innerTop && stepBottom <= innerBottom
+
+    if (fullyInside) {
+      // Determine role based on position
+      const role = determineRoleInGroup(
+        step.position_x + stepWidth / 2,
+        step.position_y + stepHeight / 2,
+        resizedGroup
+      )
+
+      addedBlocks.push({
+        stepId: step.id,
+        position: { x: step.position_x, y: step.position_y },
+        role,
+      })
+
+      // Update Vue Flow state - set parent
+      const relativeX = step.position_x - newX
+      const relativeY = step.position_y - newY
+      updateNode(step.id, {
+        position: { x: relativeX, y: relativeY },
+        parentNode: nodeId,
+      })
+
+      processedStepIds.add(step.id)
+    }
+  }
+
+  // =================================================================
+  // STEP 3: Check for collision with other groups and push them away
+  // =================================================================
+  const processedGroups = new Set<string>([nodeId])
+  const groupPositions = new Map<string, { x: number; y: number }>()
+  const groupSizes = new Map<string, { width: number; height: number }>()
+
+  // Initialize group positions and sizes
+  if (props.blockGroups) {
+    for (const g of props.blockGroups) {
+      if (g.id === nodeId) {
+        groupPositions.set(g.id, { x: newX, y: newY })
+        groupSizes.set(g.id, { width: newWidth, height: newHeight })
+      } else {
+        groupPositions.set(g.id, { x: g.position_x, y: g.position_y })
+        groupSizes.set(g.id, { width: g.width, height: g.height })
+      }
+    }
+  }
+
+  // Check for collisions with the resized group
+  const collidingGroup = findGroupCollision(
+    newX, newY, newWidth, newHeight,
+    processedGroups, groupPositions, groupSizes
+  )
+
+  if (collidingGroup) {
+    // Push the colliding group away
+    const collidingPos = groupPositions.get(collidingGroup.id) || { x: collidingGroup.position_x, y: collidingGroup.position_y }
+    const collidingSize = groupSizes.get(collidingGroup.id) || { width: collidingGroup.width, height: collidingGroup.height }
+
+    const pushResult = calculatePushPosition(
+      collidingPos.x, collidingPos.y, collidingSize.width, collidingSize.height,
+      newX, newY, newWidth, newHeight
+    )
+
+    movedGroups.push({
+      groupId: collidingGroup.id,
+      position: { x: pushResult.x, y: pushResult.y },
+      delta: { x: pushResult.deltaX, y: pushResult.deltaY },
+    })
+
+    // Update Vue Flow state
+    updateNode(collidingGroup.id, { position: { x: pushResult.x, y: pushResult.y } })
+
+    // Continue cascade check
+    processedGroups.add(collidingGroup.id)
+    groupPositions.set(collidingGroup.id, { x: pushResult.x, y: pushResult.y })
+
+    // Process cascade (similar to processCascadeGroupPush but simplified)
+    const cascadeDirection = pushResult.direction
+    let currentPos = { x: pushResult.x, y: pushResult.y }
+    let currentSize = collidingSize
+    let cascadeDepth = 0
+    const MAX_CASCADE = 10
+
+    while (cascadeDepth < MAX_CASCADE) {
+      cascadeDepth++
+      const nextCollision = findGroupCollision(
+        currentPos.x, currentPos.y, currentSize.width, currentSize.height,
+        processedGroups, groupPositions, groupSizes
+      )
+
+      if (!nextCollision) break
+
+      const nextPos = groupPositions.get(nextCollision.id) || { x: nextCollision.position_x, y: nextCollision.position_y }
+      const nextSize = groupSizes.get(nextCollision.id) || { width: nextCollision.width, height: nextCollision.height }
+
+      const nextPush = calculatePushPosition(
+        nextPos.x, nextPos.y, nextSize.width, nextSize.height,
+        currentPos.x, currentPos.y, currentSize.width, currentSize.height,
+        cascadeDirection
+      )
+
+      movedGroups.push({
+        groupId: nextCollision.id,
+        position: { x: nextPush.x, y: nextPush.y },
+        delta: { x: nextPush.deltaX, y: nextPush.deltaY },
+      })
+
+      updateNode(nextCollision.id, { position: { x: nextPush.x, y: nextPush.y } })
+      processedGroups.add(nextCollision.id)
+      groupPositions.set(nextCollision.id, { x: nextPush.x, y: nextPush.y })
+
+      currentPos = { x: nextPush.x, y: nextPush.y }
+      currentSize = nextSize
+    }
+  }
+
+  // First, emit group:update to persist the new size and position
+  emit('group:update', nodeId, {
+    position: { x: newX, y: newY },
+    size: { width: newWidth, height: newHeight },
+  })
+
+  // Then emit the resize complete event with all the collision/push changes
+  emit('group:resize-complete', nodeId, {
+    position: { x: newX, y: newY },
+    size: { width: newWidth, height: newHeight },
+    pushedBlocks,
+    addedBlocks,
+    movedGroups,
+  })
+}
 </script>
 
 <template>
@@ -1781,7 +2141,19 @@ function isStartNode(type: string): boolean {
       @node-click="onNodeClick"
     >
       <!-- Block Group Node Template -->
-      <template #node-group="{ data }">
+      <template #node-group="{ data, id }">
+        <!-- Resizer for group nodes (only in edit mode) -->
+        <NodeResizer
+          v-if="!readonly"
+          :min-width="MIN_GROUP_WIDTH"
+          :min-height="MIN_GROUP_HEIGHT"
+          :color="data.color"
+          :handle-class-name="'dag-group-resize-handle'"
+          :line-class-name="'dag-group-resize-line'"
+          @resize-start="(event: OnResizeStart) => onGroupResizeStart(id, event)"
+          @resize="(event: OnResize) => onGroupResize(id, event)"
+          @resize-end="(event: OnResizeEnd) => onGroupResizeEnd(id, event)"
+        />
         <div
           :class="[
             'dag-group',
@@ -1802,12 +2174,9 @@ function isStartNode(type: string): boolean {
             :style="{ top: '50%' }"
           />
 
-          <!-- Group Header -->
-          <div
-            class="dag-group-header"
-            :style="{ backgroundColor: data.color }"
-          >
-            <span class="dag-group-icon">{{ data.icon }}</span>
+          <!-- Group Header - Minimal Linear -->
+          <div class="dag-group-header">
+            <span class="dag-group-indicator" :style="{ backgroundColor: data.color }" />
             <span class="dag-group-type">{{ data.typeLabel }}</span>
             <span class="dag-group-name">{{ data.label }}</span>
           </div>
@@ -1948,20 +2317,10 @@ function isStartNode(type: string): boolean {
             class="dag-handle dag-handle-target"
           />
 
-          <div class="dag-node-type" :style="{ backgroundColor: getStepColor(data.type) }">
-            <!-- Play icon for Start node -->
-            <svg
-              v-if="isStartNode(data.type)"
-              xmlns="http://www.w3.org/2000/svg"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              class="dag-node-icon"
-            >
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-            {{ data.type }}
+          <!-- Minimal Linear: Header with dot indicator -->
+          <div class="dag-node-header">
+            <span class="dag-node-indicator" :style="{ backgroundColor: getStepColor(data.type) }" />
+            <span class="dag-node-type">{{ data.type }}</span>
           </div>
           <div class="dag-node-label">{{ data.label }}</div>
 
@@ -2044,10 +2403,10 @@ function isStartNode(type: string): boolean {
 .dag-editor {
   width: 100%;
   height: 100%;
-  background-color: #f8fafc;
+  background-color: #fafafa;
   background-image:
-    radial-gradient(circle, #e2e8f0 1px, transparent 1px);
-  background-size: 20px 20px;
+    radial-gradient(circle, #e5e5e5 1px, transparent 1px);
+  background-size: 24px 24px;
   position: relative;
   transition: background-color 0.2s;
 }
@@ -2056,78 +2415,82 @@ function isStartNode(type: string): boolean {
   background-color: rgba(59, 130, 246, 0.05);
 }
 
+/* ========================================
+   Minimal Linear Design System
+   ======================================== */
+
 .dag-node {
-  background: white;
-  border: 2px solid;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
-  min-width: 150px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.15s, transform 0.15s;
+  min-width: 160px;
+  box-shadow: none;
+  transition: border-color 0.15s, background-color 0.15s;
   position: relative;
 }
 
 .dag-node:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transform: translateY(-1px);
+  border-color: #d4d4d4;
+  background-color: #fafafa;
 }
 
 .dag-node-selected {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
 }
 
-/* Start Node Special Styling */
+/* Start Node - subtle enhancement */
 .dag-node-start {
   min-width: 160px;
-  border-width: 2.5px;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
 
-.dag-node-start:hover {
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+.dag-node-start .dag-node-indicator {
+  width: 10px;
+  height: 10px;
 }
 
-.dag-node-start .dag-node-type {
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-}
-
-.dag-node-icon {
-  margin-right: 4px;
-  vertical-align: middle;
-}
-
-.dag-node-type {
-  color: white;
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 3px 10px;
-  border-radius: 6px 6px 0 0;
-}
-
-.dag-node-label {
-  padding: 10px 14px;
-  font-weight: 500;
-  font-size: 0.875rem;
-  color: #1e293b;
-}
-
-/* Step Run Status Indicator */
-.dag-node-status {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+/* Node Header - Minimal Linear style */
+.dag-node-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: white;
+  gap: 8px;
+  padding: 10px 12px 4px;
+}
+
+/* Type Indicator (small dot) */
+.dag-node-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Type Label - Subtle gray text */
+.dag-node-type {
   font-size: 11px;
-  font-weight: 700;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-weight: 500;
+  color: #737373;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Node Label */
+.dag-node-label {
+  padding: 4px 12px 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #171717;
+  line-height: 1.4;
+}
+
+/* Step Run Status Indicator - Minimal Linear (left border accent) */
+.dag-node-status {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
   z-index: 10;
 }
 
@@ -2135,8 +2498,25 @@ function isStartNode(type: string): boolean {
   cursor: pointer;
 }
 
-.dag-node-has-run:hover .dag-node-status {
-  transform: scale(1.15);
+/* Running state - animated border */
+.dag-node-running {
+  border-color: #3b82f6;
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+/* Completed state - green left border */
+.dag-node-completed {
+  border-left: 3px solid #22c55e;
+}
+
+/* Failed state - red left border */
+.dag-node-failed {
+  border-left: 3px solid #ef4444;
+}
+
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3); }
+  50% { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0); }
 }
 
 /* Duration indicator */
@@ -2155,50 +2535,54 @@ function isStartNode(type: string): boolean {
   white-space: nowrap;
 }
 
-/* Handle Styles */
+/* Handle Styles - Minimal Linear (subtle, visible on hover) */
 .dag-handle {
-  width: 12px !important;
-  height: 12px !important;
-  background: white !important;
-  border: 2px solid #94a3b8 !important;
+  width: 8px !important;
+  height: 8px !important;
+  background: #ffffff !important;
+  border: 1.5px solid #d4d4d4 !important;
   border-radius: 50% !important;
-  transition: all 0.15s ease;
+  opacity: 0;
+  transition: opacity 0.15s, border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+
+.dag-node:hover .dag-handle,
+.vue-flow__node:hover .dag-handle {
+  opacity: 1;
 }
 
 .dag-handle:hover {
   background: #3b82f6 !important;
   border-color: #3b82f6 !important;
-  transform: scale(1.2);
+  transform: scale(1.25) translateY(-50%);
 }
 
 .dag-handle-target {
-  left: -6px !important;
+  left: -4px !important;
   top: 50% !important;
   transform: translateY(-50%);
 }
 
 .dag-handle-source {
-  right: -6px !important;
+  right: -4px !important;
   top: 50% !important;
   transform: translateY(-50%);
 }
 
 /* Multi-handle styling for branching/merging blocks */
 .dag-handle-multi {
-  width: 10px !important;
-  height: 10px !important;
+  width: 8px !important;
+  height: 8px !important;
 }
 
 .dag-handle-multi.dag-handle-source {
-  right: -5px !important;
-  /* Use CSS custom property for vertical positioning */
+  right: -4px !important;
   top: var(--handle-top, 50%) !important;
   transform: translateY(-50%);
 }
 
 .dag-handle-multi.dag-handle-target {
-  left: -5px !important;
-  /* Use CSS custom property for vertical positioning */
+  left: -4px !important;
   top: var(--handle-top, 50%) !important;
   transform: translateY(-50%);
 }
@@ -2326,19 +2710,19 @@ function isStartNode(type: string): boolean {
   height: 16px;
 }
 
-/* Edge Styles */
+/* Edge Styles - Minimal Linear */
 :deep(.vue-flow__edge-path) {
-  stroke: #94a3b8;
-  stroke-width: 2;
+  stroke: #d4d4d4;
+  stroke-width: 1.5;
 }
 
 :deep(.vue-flow__edge.selected .vue-flow__edge-path) {
   stroke: #3b82f6;
-  stroke-width: 3;
+  stroke-width: 2;
 }
 
 :deep(.vue-flow__edge:hover .vue-flow__edge-path) {
-  stroke: #3b82f6;
+  stroke: #a3a3a3;
 }
 
 /* Connection line when dragging */
@@ -2348,18 +2732,24 @@ function isStartNode(type: string): boolean {
   stroke-dasharray: 5;
 }
 
-/* Block Group Styles */
+/* Block Group Styles - Minimal Linear */
 .dag-group {
   width: 100%;
   height: 100%;
-  border: 2px dashed;
+  border: 1px solid #e5e5e5;
   border-radius: 12px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.01);
   position: relative;
+  transition: border-color 0.15s;
+}
+
+.dag-group:hover {
+  border-color: #d4d4d4;
 }
 
 .dag-group-selected {
-  box-shadow: 0 0 0 3px rgba(var(--group-color), 0.3);
+  border-color: var(--group-color);
+  box-shadow: 0 0 0 1px var(--group-color);
 }
 
 .dag-group-header {
@@ -2367,60 +2757,74 @@ function isStartNode(type: string): boolean {
   top: 0;
   left: 0;
   right: 0;
-  height: 28px;
-  border-radius: 10px 10px 0 0;
+  height: 32px;
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid #e5e5e5;
+  background: rgba(0, 0, 0, 0.02);
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  gap: 6px;
-  color: white;
+  padding: 0 14px;
+  gap: 8px;
   font-size: 0.75rem;
   font-weight: 500;
 }
 
-.dag-group-icon {
-  font-size: 0.875rem;
+/* Group Type Indicator (small dot) */
+.dag-group-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .dag-group-type {
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: 0.65rem;
-  opacity: 0.9;
+  font-size: 11px;
+  font-weight: 600;
+  color: #737373;
 }
 
 .dag-group-name {
   margin-left: auto;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
+  color: #171717;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 150px;
 }
 
-/* Group Input/Output Handles */
+/* Group Input/Output Handles - Minimal Linear */
 .dag-group-handle {
-  width: 14px !important;
-  height: 14px !important;
+  width: 8px !important;
+  height: 8px !important;
   border-radius: 50% !important;
-  border: 2px solid !important;
+  border: 1.5px solid !important;
   transition: all 0.15s ease;
   z-index: 10;
+  opacity: 0;
+}
+
+.dag-group:hover .dag-group-handle {
+  opacity: 1;
 }
 
 .dag-group-handle-input {
-  left: -7px !important;
+  left: -4px !important;
   background: white !important;
-  border-color: var(--group-color) !important;
+  border-color: #d4d4d4 !important;
 }
 
 .dag-group-handle-input:hover {
-  background: var(--group-color) !important;
-  transform: scale(1.2) translateY(-50%);
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  transform: scale(1.25) translateY(-50%);
 }
 
 .dag-group-handle-output {
-  right: -7px !important;
+  right: -4px !important;
   background: var(--handle-color, #22c55e) !important;
   border-color: var(--handle-color, #22c55e) !important;
   transform: translateY(-50%);
@@ -2428,30 +2832,30 @@ function isStartNode(type: string): boolean {
 
 .dag-group-handle-output:hover {
   filter: brightness(1.1);
-  transform: scale(1.3) translateY(-50%);
+  transform: scale(1.25) translateY(-50%);
 }
 
-/* Group Entry Point Indicator */
+/* Group Entry Point Indicator - Minimal Linear */
 .dag-group-entry {
   position: absolute;
   top: 44px;
-  left: 16px;
+  left: 14px;
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.7rem;
+  font-size: 10px;
   font-weight: 600;
-  opacity: 0.7;
+  opacity: 0.5;
 }
 
 .dag-group-entry-arrow {
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: bold;
 }
 
 .dag-group-entry-label {
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 /* Group Output Port Labels */
@@ -2474,42 +2878,44 @@ function isStartNode(type: string): boolean {
   letter-spacing: 0.03em;
 }
 
-/* Multi-Section Zone Styles */
+/* Multi-Section Zone Styles - Minimal Linear */
 .dag-group-section-label {
   position: absolute;
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  opacity: 0.8;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
   z-index: 5;
 }
 
 .dag-group-section-arrow {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: bold;
 }
 
-/* Horizontal Divider (for try_catch) */
+/* Horizontal Divider (for try_catch) - Minimal */
 .dag-group-divider-h {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  height: 2px;
-  opacity: 0.4;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: #e5e5e5 !important;
+  opacity: 1;
   z-index: 5;
 }
 
-/* Vertical Divider (for if_else) */
+/* Vertical Divider (for if_else) - Minimal */
 .dag-group-divider-v {
   position: absolute;
   top: 42px;
-  bottom: 10px;
-  width: 2px;
-  opacity: 0.4;
+  bottom: 12px;
+  width: 1px;
+  background: #e5e5e5 !important;
+  opacity: 1;
   z-index: 5;
 }
 
@@ -2534,5 +2940,48 @@ function isStartNode(type: string): boolean {
 :deep(.vue-flow__node-group .vue-flow__resize-control:hover) {
   background: #3b82f6;
   border-color: #3b82f6;
+}
+
+/* Custom resize handle styles for node-resizer - Minimal Linear */
+:deep(.dag-group-resize-handle) {
+  width: 8px !important;
+  height: 8px !important;
+  background: white !important;
+  border: 1.5px solid #d4d4d4 !important;
+  border-radius: 2px !important;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+:deep(.vue-flow__node-group:hover .dag-group-resize-handle) {
+  opacity: 1;
+}
+
+:deep(.dag-group-resize-handle:hover) {
+  background: var(--group-color, #3b82f6) !important;
+  transform: scale(1.2);
+}
+
+/* Resize line styles */
+:deep(.dag-group-resize-line) {
+  border-color: var(--group-color, #94a3b8) !important;
+  border-width: 1px !important;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+:deep(.vue-flow__node-group:hover .dag-group-resize-line) {
+  opacity: 0.5;
+}
+
+/* Show resize handles on hover */
+:deep(.vue-flow__node-group .vue-flow__resize-control) {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+:deep(.vue-flow__node-group:hover .vue-flow__resize-control),
+:deep(.vue-flow__node-group.selected .vue-flow__resize-control) {
+  opacity: 1;
 }
 </style>

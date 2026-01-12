@@ -320,6 +320,135 @@ async function handleGroupMoveComplete(
   }
 }
 
+// Handle group resize complete - update blocks that were pushed out or added, and groups that were moved
+async function handleGroupResizeComplete(
+  groupId: string,
+  data: {
+    position: { x: number; y: number }
+    size: { width: number; height: number }
+    pushedBlocks: Array<{ stepId: string; position: { x: number; y: number } }>
+    addedBlocks: Array<{ stepId: string; position: { x: number; y: number }; role: string }>
+    movedGroups: Array<{ groupId: string; position: { x: number; y: number }; delta: { x: number; y: number } }>
+  }
+) {
+  if (!workflow.value || isReadonly.value) return
+
+  try {
+    // 1. Update pushed blocks (removed from group)
+    for (const pushed of data.pushedBlocks) {
+      const step = workflow.value.steps?.find(s => s.id === pushed.stepId)
+      if (step) {
+        step.block_group_id = undefined
+        step.group_role = undefined
+        step.position_x = pushed.position.x
+        step.position_y = pushed.position.y
+      }
+    }
+
+    // 2. Handle blocks being added to the group
+    const edgesToDelete: string[] = []
+    for (const added of data.addedBlocks) {
+      const step = workflow.value.steps?.find(s => s.id === added.stepId)
+      if (step) {
+        // Collect edges to delete (crossing boundary)
+        const connectedEdges = workflow.value.edges?.filter(e =>
+          e.source_step_id === added.stepId || e.target_step_id === added.stepId
+        ) || []
+        for (const edge of connectedEdges) {
+          edgesToDelete.push(edge.id)
+        }
+
+        // Update local state
+        step.block_group_id = groupId
+        step.group_role = added.role
+        step.position_x = added.position.x
+        step.position_y = added.position.y
+      }
+    }
+
+    // Remove edges from local state
+    if (edgesToDelete.length > 0 && workflow.value.edges) {
+      workflow.value.edges = workflow.value.edges.filter(e => !edgesToDelete.includes(e.id))
+    }
+
+    // 3. Handle cascading group movements
+    const stepsInMovedGroups: Array<{ step: Step; delta: { x: number; y: number } }> = []
+    for (const movedGroup of data.movedGroups) {
+      // Update moved group position in local state
+      const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
+      if (targetGroup) {
+        targetGroup.position_x = movedGroup.position.x
+        targetGroup.position_y = movedGroup.position.y
+      }
+
+      // Find and track all steps inside the moved group
+      const stepsInThisGroup = workflow.value.steps?.filter(s => s.block_group_id === movedGroup.groupId) || []
+      for (const step of stepsInThisGroup) {
+        step.position_x += movedGroup.delta.x
+        step.position_y += movedGroup.delta.y
+        stepsInMovedGroups.push({ step, delta: movedGroup.delta })
+      }
+    }
+
+    // 4. Save to API (parallel updates for performance)
+    const updatePromises: Promise<unknown>[] = []
+
+    // Update pushed blocks (remove from group and update position)
+    for (const pushed of data.pushedBlocks) {
+      updatePromises.push(
+        blockGroupsApi.removeStep(workflowId, groupId, pushed.stepId).catch(() => {
+          // May fail if already removed
+        }).then(() => {
+          return workflows.updateStep(workflowId, pushed.stepId, {
+            position: pushed.position,
+          })
+        })
+      )
+    }
+
+    // Delete edges for added blocks
+    for (const edgeId of edgesToDelete) {
+      updatePromises.push(workflows.deleteEdge(workflowId, edgeId).catch(() => {
+        // Ignore edge deletion errors
+      }))
+    }
+
+    // Add blocks to group
+    for (const added of data.addedBlocks) {
+      updatePromises.push(
+        blockGroupsApi.addStep(workflowId, groupId, {
+          step_id: added.stepId,
+          group_role: added.role,
+        }).then(() => {
+          return workflows.updateStep(workflowId, added.stepId, {
+            position: added.position,
+          })
+        })
+      )
+    }
+
+    // Update cascading moved groups
+    for (const movedGroup of data.movedGroups) {
+      updatePromises.push(blockGroupsApi.update(workflowId, movedGroup.groupId, {
+        position: movedGroup.position,
+      }))
+    }
+
+    // Update steps inside moved groups
+    for (const { step } of stepsInMovedGroups) {
+      updatePromises.push(workflows.updateStep(workflowId, step.id, {
+        position: { x: step.position_x, y: step.position_y },
+      }))
+    }
+
+    await Promise.all(updatePromises)
+  } catch (e) {
+    toast.error('Failed to update after resize', e instanceof Error ? e.message : undefined)
+    // On error, reload to get correct state
+    await loadWorkflow()
+  }
+}
+
 // Assign step to a group (or remove from group)
 async function handleStepAssignGroup(
   stepId: string,
@@ -886,6 +1015,7 @@ onMounted(() => {
             @group:update="handleUpdateGroupPosition"
             @group:drop="handleGroupDrop"
             @group:move-complete="handleGroupMoveComplete"
+            @group:resize-complete="handleGroupResizeComplete"
           />
         </template>
 

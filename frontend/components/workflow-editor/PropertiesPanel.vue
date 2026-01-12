@@ -52,7 +52,8 @@ const stepTypeDescriptions = computed(() => ({
   split: t('editor.stepTypes.splitDesc'),
   aggregate: t('editor.stepTypes.aggregateDesc'),
   error: t('editor.stepTypes.errorDesc'),
-  note: t('editor.stepTypes.noteDesc')
+  note: t('editor.stepTypes.noteDesc'),
+  log: t('editor.stepTypes.logDesc')
 } as Record<StepType, string>))
 
 // Step type colors (matching DagEditor)
@@ -74,7 +75,8 @@ const stepTypeColors: Record<StepType, string> = {
   split: '#0ea5e9',
   aggregate: '#0284c7',
   error: '#dc2626',
-  note: '#9ca3af'
+  note: '#9ca3af',
+  log: '#10b981'
 }
 
 // Check if step is a start node (cannot be deleted)
@@ -357,6 +359,7 @@ const expressionTemplates = {
               </optgroup>
               <optgroup :label="t('editor.categories.utility')">
                 <option value="note">{{ t('editor.stepTypes.note') }}</option>
+                <option value="log">{{ t('editor.stepTypes.log') }}</option>
               </optgroup>
             </select>
             <p class="form-hint">{{ stepTypeDescriptions[formType] }}</p>
@@ -958,6 +961,57 @@ const expressionTemplates = {
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
             <span>{{ t('stepConfig.start.cannotDelete') }}</span>
+          </div>
+        </div>
+
+        <!-- Log Configuration -->
+        <div v-if="formType === 'log'" class="form-section">
+          <h4 class="section-title">{{ t('stepConfig.log.title') }}</h4>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.log.message') }}</label>
+            <textarea
+              v-model="formConfig.message"
+              class="form-input form-textarea"
+              rows="3"
+              :placeholder="t('stepConfig.log.messagePlaceholder')"
+              :disabled="readonlyMode"
+            ></textarea>
+            <p class="form-hint">{{ t('stepConfig.log.messageHint') }}</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.log.level') }}</label>
+            <select
+              v-model="formConfig.level"
+              class="form-input"
+              :disabled="readonlyMode"
+            >
+              <option value="debug">{{ t('stepConfig.log.levels.debug') }}</option>
+              <option value="info">{{ t('stepConfig.log.levels.info') }}</option>
+              <option value="warn">{{ t('stepConfig.log.levels.warn') }}</option>
+              <option value="error">{{ t('stepConfig.log.levels.error') }}</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">{{ t('stepConfig.log.data') }}</label>
+            <input
+              v-model="formConfig.data"
+              type="text"
+              class="form-input code-input"
+              :placeholder="t('stepConfig.log.dataPlaceholder')"
+              :disabled="readonlyMode"
+            >
+            <p class="form-hint">{{ t('stepConfig.log.dataHint') }}</p>
+          </div>
+
+          <div class="info-box log-info-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <span>{{ t('stepConfig.log.viewNote') }}</span>
           </div>
         </div>
 

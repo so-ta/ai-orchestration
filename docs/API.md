@@ -511,13 +511,106 @@ POST /runs/{run_id}/cancel
 
 Response `200`: Updated run with `status: cancelled`
 
-### Resume
+### Resume From Step
 ```
 POST /runs/{run_id}/resume
 ```
 
-Constraint: Must be `failed` status
-Response `200`: New run from failed step
+Resume execution from a specific step through all downstream steps.
+
+Request:
+```json
+{
+  "from_step_id": "uuid (required)",
+  "input_override": {}
+}
+```
+
+Constraint: Run must be `completed` or `failed` status
+
+Response `202`:
+```json
+{
+  "data": {
+    "run_id": "uuid",
+    "from_step_id": "uuid",
+    "steps_to_execute": ["uuid", "uuid", "uuid"]
+  }
+}
+```
+
+### Execute Single Step
+```
+POST /runs/{run_id}/steps/{step_id}/execute
+```
+
+Re-execute only a single step from an existing run.
+
+Request:
+```json
+{
+  "input": {}
+}
+```
+
+Constraint: Run must be `completed` or `failed` status
+
+Response `202`:
+```json
+{
+  "data": {
+    "id": "uuid",
+    "run_id": "uuid",
+    "step_id": "uuid",
+    "step_name": "string",
+    "status": "pending",
+    "attempt": 2
+  }
+}
+```
+
+### Get Step History
+```
+GET /runs/{run_id}/steps/{step_id}/history
+```
+
+Get all execution history for a specific step in a run.
+
+Response `200`:
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "run_id": "uuid",
+      "step_id": "uuid",
+      "step_name": "string",
+      "status": "completed",
+      "attempt": 2,
+      "input": {},
+      "output": {},
+      "error": "",
+      "started_at": "ISO8601",
+      "completed_at": "ISO8601",
+      "duration_ms": 500
+    },
+    {
+      "id": "uuid",
+      "run_id": "uuid",
+      "step_id": "uuid",
+      "step_name": "string",
+      "status": "failed",
+      "attempt": 1,
+      "input": {},
+      "output": {},
+      "error": "Error message",
+      "started_at": "ISO8601",
+      "completed_at": "ISO8601",
+      "duration_ms": 200
+    }
+  ]
+}
+```
 
 ---
 

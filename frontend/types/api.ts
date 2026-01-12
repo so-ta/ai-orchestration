@@ -65,6 +65,7 @@ export type StepType =
   | 'aggregate'
   | 'error'
   | 'note'
+  | 'log'
 
 export interface Edge {
   id: string
@@ -300,4 +301,130 @@ export interface UpdateBlockGroupRequest {
 export interface AddStepToGroupRequest {
   step_id: string
   group_role: GroupRole
+}
+
+// Credential Types
+export type CredentialType = 'api_key' | 'oauth2' | 'basic_auth' | 'custom'
+export type CredentialStatus = 'active' | 'expired' | 'revoked'
+
+export interface CredentialMetadata {
+  provider?: string      // e.g., "openai", "anthropic", "github"
+  scopes?: string[]      // OAuth2 scopes
+  environment?: string   // e.g., "production", "staging"
+  tags?: string[]        // Custom tags for filtering
+}
+
+export interface Credential {
+  id: string
+  tenant_id: string
+  name: string
+  description?: string
+  credential_type: CredentialType
+  metadata: CredentialMetadata
+  expires_at?: string
+  status: CredentialStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateCredentialRequest {
+  name: string
+  description?: string
+  credential_type: CredentialType
+  data: CredentialData
+  metadata?: CredentialMetadata
+  expires_at?: string
+}
+
+export interface UpdateCredentialRequest {
+  name?: string
+  description?: string
+  data?: CredentialData
+  metadata?: CredentialMetadata
+  expires_at?: string
+}
+
+export interface CredentialData {
+  // API Key
+  api_key?: string
+  header_name?: string    // e.g., "Authorization", "X-API-Key"
+  header_prefix?: string  // e.g., "Bearer ", "Token "
+
+  // Basic Auth
+  username?: string
+  password?: string
+
+  // OAuth2
+  access_token?: string
+  refresh_token?: string
+  token_type?: string
+  expires_at?: string
+  scopes?: string[]
+
+  // Custom fields
+  custom?: Record<string, unknown>
+}
+
+// System Credential Types (Operator-managed)
+export interface SystemCredential {
+  id: string
+  name: string
+  description?: string
+  credential_type: CredentialType
+  metadata: CredentialMetadata
+  expires_at?: string
+  status: CredentialStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateSystemCredentialRequest {
+  name: string
+  description?: string
+  credential_type: CredentialType
+  data: CredentialData
+  metadata?: CredentialMetadata
+  expires_at?: string
+}
+
+export interface UpdateSystemCredentialRequest {
+  name?: string
+  description?: string
+  data?: CredentialData
+  metadata?: CredentialMetadata
+  expires_at?: string
+}
+
+// Block Template Types
+export type TemplateExecutorType = 'builtin' | 'javascript'
+
+export interface BlockTemplate {
+  id: string
+  slug: string
+  name: string
+  description?: string
+  config_schema: object
+  executor_type: TemplateExecutorType
+  executor_code?: string
+  is_builtin: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateBlockTemplateRequest {
+  slug: string
+  name: string
+  description?: string
+  config_schema?: object
+  executor_type: TemplateExecutorType
+  executor_code?: string
+}
+
+export interface UpdateBlockTemplateRequest {
+  slug?: string
+  name?: string
+  description?: string
+  config_schema?: object
+  executor_type?: TemplateExecutorType
+  executor_code?: string
 }

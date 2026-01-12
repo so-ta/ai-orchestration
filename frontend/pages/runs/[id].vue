@@ -3,6 +3,7 @@ import type { Run, WorkflowDefinition, StepRun } from '~/types/api'
 
 const route = useRoute()
 const runId = route.params.id as string
+const { t } = useI18n()
 
 const runsApi = useRuns()
 const toast = useToast()
@@ -12,11 +13,19 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 
 // UI state
-const activeTab = ref<'overview' | 'workflow' | 'steps' | 'input' | 'output'>('overview')
+const activeTab = ref<'execution' | 'input' | 'output'>('execution')
 
 // Step details modal state
 const selectedStepRun = ref<StepRun | null>(null)
 const showStepDetails = ref(false)
+
+// Re-execution state
+const stepHistory = ref<StepRun[]>([])
+const loadingHistory = ref(false)
+const showReExecuteForm = ref(false)
+const reExecuteMode = ref<'single' | 'resume'>('single')
+const reExecuteInput = ref<string>('')
+const reExecuting = ref(false)
 
 // Computed workflow definition from API response
 const workflowDefinition = computed<WorkflowDefinition | null>(() => {
@@ -120,7 +129,7 @@ function getStatusIcon(status: string) {
 }
 
 function formatDuration(ms?: number) {
-  if (!ms) return '-'
+  if (ms === undefined || ms === null) return '-'
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(2)}s`
   return `${Math.floor(ms / 60000)}m ${((ms % 60000) / 1000).toFixed(0)}s`
@@ -162,6 +171,16 @@ const totalSteps = computed(() => {
   return run.value?.step_runs?.length || 0
 })
 
+// Step runs sorted by timestamp descending (newest first)
+const sortedStepRuns = computed(() => {
+  if (!run.value?.step_runs) return []
+  return [...run.value.step_runs].sort((a, b) => {
+    const timeA = new Date(a.completed_at || a.started_at || a.created_at).getTime()
+    const timeB = new Date(b.completed_at || b.started_at || b.created_at).getTime()
+    return timeB - timeA // Descending order
+  })
+})
+
 // Copy to clipboard
 function copyToClipboard(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -169,16 +188,118 @@ function copyToClipboard(text: string) {
   }
 }
 
+// Check if run is resizable (completed or failed)
+const canReExecute = computed(() => {
+  return run.value && ['completed', 'failed'].includes(run.value.status)
+})
+
+// Load step execution history
+async function loadStepHistory(stepId: string) {
+  loadingHistory.value = true
+  try {
+    const response = await runsApi.getStepHistory(runId, stepId)
+    stepHistory.value = response.data || []
+  } catch (e) {
+    toast.error(t('runs.loadingHistory'), e instanceof Error ? e.message : undefined)
+    stepHistory.value = []
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
 // Handle step details from DAG click
-function handleStepShowDetails(stepRun: StepRun) {
+async function handleStepShowDetails(stepRun: StepRun) {
   selectedStepRun.value = stepRun
   showStepDetails.value = true
+  showReExecuteForm.value = false
+
+  // Load step history if run is completed/failed
+  if (canReExecute.value) {
+    await loadStepHistory(stepRun.step_id)
+  }
 }
 
 // Close step details modal
 function closeStepDetails() {
   showStepDetails.value = false
   selectedStepRun.value = null
+  stepHistory.value = []
+  showReExecuteForm.value = false
+  reExecuteInput.value = ''
+}
+
+// Open re-execute form
+function openReExecuteForm(mode: 'single' | 'resume') {
+  reExecuteMode.value = mode
+  // Initialize input with current step input
+  if (selectedStepRun.value?.input) {
+    reExecuteInput.value = JSON.stringify(selectedStepRun.value.input, null, 2)
+  } else {
+    reExecuteInput.value = '{}'
+  }
+  showReExecuteForm.value = true
+}
+
+// Execute single step
+async function handleExecuteSingleStep() {
+  if (!selectedStepRun.value) return
+
+  reExecuting.value = true
+  try {
+    let inputData: object | undefined
+    if (reExecuteInput.value.trim()) {
+      try {
+        inputData = JSON.parse(reExecuteInput.value)
+      } catch {
+        toast.error(t('runs.invalidJson'))
+        return
+      }
+    }
+
+    await runsApi.executeSingleStep(runId, selectedStepRun.value.step_id, inputData)
+    toast.success(t('runs.reExecuteSuccess'))
+    showReExecuteForm.value = false
+
+    // Reload run data
+    await loadRun()
+
+    // Reload step history
+    await loadStepHistory(selectedStepRun.value.step_id)
+  } catch (e) {
+    toast.error(t('runs.reExecuteFailed'), e instanceof Error ? e.message : undefined)
+  } finally {
+    reExecuting.value = false
+  }
+}
+
+// Resume from step
+async function handleResumeFromStep() {
+  if (!selectedStepRun.value) return
+
+  reExecuting.value = true
+  try {
+    let inputOverride: object | undefined
+    if (reExecuteInput.value.trim()) {
+      try {
+        inputOverride = JSON.parse(reExecuteInput.value)
+      } catch {
+        toast.error(t('runs.invalidJson'))
+        return
+      }
+    }
+
+    await runsApi.resumeFromStep(runId, selectedStepRun.value.step_id, inputOverride)
+    toast.success(t('runs.reExecuteSuccess'))
+    showReExecuteForm.value = false
+
+    // Close modal and reload run data
+    closeStepDetails()
+    await loadRun()
+  } catch (e) {
+    toast.error(t('runs.reExecuteFailed'), e instanceof Error ? e.message : undefined)
+  } finally {
+    reExecuting.value = false
+  }
 }
 
 onMounted(() => {
@@ -340,27 +461,13 @@ onUnmounted(() => {
       <div class="tabs-container">
         <div class="tabs">
           <button
-            :class="['tab', { active: activeTab === 'overview' }]"
-            @click="activeTab = 'overview'"
-          >
-            Overview
-          </button>
-          <button
-            :class="['tab', { active: activeTab === 'workflow' }]"
-            @click="activeTab = 'workflow'"
+            :class="['tab', { active: activeTab === 'execution' }]"
+            @click="activeTab = 'execution'"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="9" y1="3" x2="9" y2="21"></line>
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
             </svg>
-            Workflow
-          </button>
-          <button
-            :class="['tab', { active: activeTab === 'steps' }]"
-            @click="activeTab = 'steps'"
-          >
-            Step Executions
-            <span v-if="run.step_runs?.length" class="tab-badge">{{ run.step_runs.length }}</span>
+            Execution
           </button>
           <button
             :class="['tab', { active: activeTab === 'input' }]"
@@ -378,189 +485,121 @@ onUnmounted(() => {
 
         <!-- Tab Content -->
         <div class="tab-content">
-          <!-- Overview Tab -->
-          <div v-if="activeTab === 'overview'" class="overview-grid">
-            <div class="info-card">
-              <h3 class="info-card-title">Execution Timeline</h3>
-              <div class="timeline">
-                <div class="timeline-item">
-                  <div class="timeline-marker completed"></div>
-                  <div class="timeline-content">
-                    <div class="timeline-label">Created</div>
-                    <div class="timeline-value">{{ formatDateTime(run.created_at) }}</div>
-                  </div>
-                </div>
-                <div class="timeline-item" :class="{ pending: !run.started_at }">
-                  <div :class="['timeline-marker', run.started_at ? 'completed' : 'pending']"></div>
-                  <div class="timeline-content">
-                    <div class="timeline-label">Started</div>
-                    <div class="timeline-value">{{ formatDateTime(run.started_at) }}</div>
-                  </div>
-                </div>
-                <div class="timeline-item" :class="{ pending: !run.completed_at }">
-                  <div :class="['timeline-marker', run.completed_at ? (run.status === 'failed' ? 'failed' : 'completed') : 'pending']"></div>
-                  <div class="timeline-content">
-                    <div class="timeline-label">{{ run.status === 'failed' ? 'Failed' : 'Completed' }}</div>
-                    <div class="timeline-value">{{ formatDateTime(run.completed_at) }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="info-card">
-              <h3 class="info-card-title">Run Details</h3>
-              <div class="details-list">
-                <div class="detail-item">
-                  <span class="detail-label">Workflow ID</span>
-                  <code class="detail-value">{{ run.workflow_id }}</code>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">Tenant ID</span>
-                  <code class="detail-value">{{ run.tenant_id }}</code>
-                </div>
-                <div class="detail-item">
-                  <span class="detail-label">Mode</span>
-                  <span :class="['mode-tag', `mode-${run.mode}`]">{{ run.mode }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="run.error" class="info-card error-card">
-              <h3 class="info-card-title">
+          <!-- Execution Tab (Unified: Overview + Workflow + Steps) -->
+          <div v-if="activeTab === 'execution'" class="execution-view">
+            <!-- Error Banner (if any) -->
+            <div v-if="run.error" class="execution-error-banner">
+              <div class="error-icon-wrapper">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="12" y1="8" x2="12" y2="12"></line>
                   <line x1="12" y1="16" x2="12.01" y2="16"></line>
                 </svg>
-                Error
-              </h3>
-              <pre class="error-message">{{ run.error }}</pre>
-            </div>
-          </div>
-
-          <!-- Workflow Tab -->
-          <div v-if="activeTab === 'workflow'" class="workflow-preview">
-            <div v-if="workflowDefinition" class="workflow-preview-container">
-              <div class="workflow-preview-header">
-                <h3 class="workflow-preview-title">
-                  {{ workflowDefinition.name }}
-                  <span class="version-badge">v{{ run.workflow_version }}</span>
-                </h3>
-                <p v-if="workflowDefinition.description" class="workflow-preview-description">
-                  {{ workflowDefinition.description }}
-                </p>
               </div>
-              <div class="workflow-dag-container">
-                <DagEditor
-                  :steps="workflowDefinition.steps || []"
-                  :edges="workflowDefinition.edges || []"
-                  :readonly="true"
-                  :selected-step-id="selectedStepRun?.step_id || null"
-                  :step-runs="run?.step_runs || []"
-                  @step:showDetails="handleStepShowDetails"
-                />
+              <div class="error-details">
+                <div class="error-label">Error</div>
+                <pre class="error-text">{{ run.error }}</pre>
               </div>
-              <p class="workflow-hint">Click on a step to view its input/output details</p>
-            </div>
-            <div v-else class="workflow-preview-fallback">
-              <div class="empty-state">
-                <div class="empty-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                  </svg>
-                </div>
-                <p class="empty-title">Workflow definition not available</p>
-                <p class="empty-subtitle">This run was created before workflow versioning was enabled</p>
-                <NuxtLink :to="`/workflows/${run.workflow_id}`" class="btn btn-outline">
-                  View Current Workflow
-                </NuxtLink>
-              </div>
-            </div>
-          </div>
-
-          <!-- Steps Tab -->
-          <div v-if="activeTab === 'steps'">
-            <div v-if="!run.step_runs?.length" class="empty-state">
-              <div class="empty-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                  <polyline points="9 11 12 14 22 4"></polyline>
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-                </svg>
-              </div>
-              <p class="empty-title">No step executions yet</p>
-              <p class="empty-subtitle">Step executions will appear here once the run starts</p>
             </div>
 
-            <div v-else class="steps-list">
-              <div
-                v-for="(stepRun, index) in run.step_runs"
-                :key="stepRun.id"
-                class="step-card"
-              >
-                <div class="step-header" @click="toggleStepExpanded(stepRun.id)">
-                  <div class="step-info">
-                    <span class="step-number">{{ index + 1 }}</span>
-                    <span :class="['step-status-icon', `status-${stepRun.status}`]">
-                      {{ getStatusIcon(stepRun.status) }}
-                    </span>
-                    <span class="step-name">{{ stepRun.step_name }}</span>
-                    <span :class="['badge badge-sm', getStatusBadge(stepRun.status)]">
-                      {{ stepRun.status }}
-                    </span>
+            <!-- Workflow DAG Visualization -->
+            <div class="execution-workflow">
+              <div v-if="workflowDefinition" class="workflow-dag-wrapper">
+                <div class="workflow-dag-header">
+                  <div class="workflow-title-area">
+                    <h3 class="workflow-name">{{ workflowDefinition.name }}</h3>
+                    <span class="version-badge">v{{ run.workflow_version }}</span>
                   </div>
-                  <div class="step-meta">
-                    <span v-if="stepRun.attempt > 1" class="attempt-badge">
-                      Attempt {{ stepRun.attempt }}
-                    </span>
-                    <span class="step-duration">{{ formatDuration(stepRun.duration_ms) }}</span>
-                    <svg
-                      :class="['expand-icon', { expanded: expandedSteps.has(stepRun.id) }]"
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                    >
-                      <polyline points="6 9 12 15 18 9"></polyline>
+                  <p v-if="workflowDefinition.description" class="workflow-description">
+                    {{ workflowDefinition.description }}
+                  </p>
+                </div>
+                <div class="workflow-dag-container">
+                  <DagEditor
+                    :steps="workflowDefinition.steps || []"
+                    :edges="workflowDefinition.edges || []"
+                    :readonly="true"
+                    :selected-step-id="selectedStepRun?.step_id || null"
+                    :step-runs="run?.step_runs || []"
+                    @step:showDetails="handleStepShowDetails"
+                  />
+                </div>
+                <p class="workflow-hint">Click on a step to view its input/output details</p>
+              </div>
+              <div v-else class="workflow-preview-fallback">
+                <div class="empty-state compact">
+                  <div class="empty-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
                     </svg>
                   </div>
-                </div>
-
-                <div v-if="expandedSteps.has(stepRun.id)" class="step-details">
-                  <div class="step-detail-grid">
-                    <div class="step-detail-item">
-                      <span class="detail-label">Step ID</span>
-                      <code class="detail-value">{{ stepRun.step_id }}</code>
-                    </div>
-                    <div class="step-detail-item">
-                      <span class="detail-label">Started</span>
-                      <span class="detail-value">{{ formatTimestamp(stepRun.started_at) }}</span>
-                    </div>
-                    <div class="step-detail-item">
-                      <span class="detail-label">Completed</span>
-                      <span class="detail-value">{{ formatTimestamp(stepRun.completed_at) }}</span>
-                    </div>
-                  </div>
-
-                  <div v-if="stepRun.error" class="step-error">
-                    <div class="step-error-title">Error</div>
-                    <pre class="step-error-message">{{ stepRun.error }}</pre>
-                  </div>
-
-                  <div v-if="stepRun.input" class="step-data">
-                    <div class="step-data-title">Input</div>
-                    <pre class="step-data-content">{{ formatJson(stepRun.input) }}</pre>
-                  </div>
-
-                  <div v-if="stepRun.output" class="step-data">
-                    <div class="step-data-title">Output</div>
-                    <pre class="step-data-content">{{ formatJson(stepRun.output) }}</pre>
-                  </div>
+                  <p class="empty-title">Workflow definition not available</p>
+                  <NuxtLink :to="`/workflows/${run.workflow_id}`" class="btn btn-outline btn-sm">
+                    View Current Workflow
+                  </NuxtLink>
                 </div>
               </div>
+            </div>
+
+            <!-- Step Executions Table -->
+            <div class="execution-steps-table-container">
+              <div v-if="!run.step_runs?.length" class="empty-state compact">
+                <div class="empty-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                    <polyline points="9 11 12 14 22 4"></polyline>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                  </svg>
+                </div>
+                <p class="empty-title">No step executions yet</p>
+                <p class="empty-subtitle">Step executions will appear here once the run starts</p>
+              </div>
+
+              <table v-else class="steps-table">
+                <thead>
+                  <tr>
+                    <th class="col-block">Block</th>
+                    <th class="col-status">Status</th>
+                    <th class="col-step-id">Step ID</th>
+                    <th class="col-duration">Duration</th>
+                    <th class="col-timestamp">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="stepRun in sortedStepRuns"
+                    :key="stepRun.id"
+                    class="step-row"
+                    @click="handleStepShowDetails(stepRun)"
+                  >
+                    <td class="col-block">
+                      <div class="block-cell">
+                        <span :class="['block-icon', `status-${stepRun.status}`]">
+                          {{ getStatusIcon(stepRun.status) }}
+                        </span>
+                        <span class="block-name">{{ stepRun.step_name }}</span>
+                        <span v-if="stepRun.attempt > 1" class="attempt-badge-sm">
+                          #{{ stepRun.attempt }}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="col-status">
+                      <span :class="['status-tag', `status-tag-${stepRun.status}`]">
+                        {{ stepRun.status }}
+                      </span>
+                    </td>
+                    <td class="col-step-id">
+                      <code class="step-id-text">{{ stepRun.step_id.substring(0, 8) }}</code>
+                    </td>
+                    <td class="col-duration">
+                      <span class="duration-text">{{ formatDuration(stepRun.duration_ms) }}</span>
+                    </td>
+                    <td class="col-timestamp">
+                      <span class="timestamp-text">{{ formatDateTime(stepRun.completed_at || stepRun.started_at) }}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -642,6 +681,77 @@ onUnmounted(() => {
               <div class="step-meta-item">
                 <span class="meta-label">Completed</span>
                 <span class="meta-value">{{ formatTimestamp(selectedStepRun.completed_at) }}</span>
+              </div>
+            </div>
+
+            <!-- Re-execution Actions -->
+            <div v-if="canReExecute && !showReExecuteForm" class="reexecute-actions">
+              <button class="btn btn-outline" @click="openReExecuteForm('single')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+                {{ t('runs.executeThisStepOnly') }}
+              </button>
+              <button class="btn btn-outline" @click="openReExecuteForm('resume')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                {{ t('runs.resumeFromHere') }}
+              </button>
+            </div>
+
+            <!-- Re-execution Form -->
+            <div v-if="showReExecuteForm" class="reexecute-form">
+              <div class="reexecute-form-header">
+                <h4 class="reexecute-form-title">
+                  {{ reExecuteMode === 'single' ? t('runs.executeStep') : t('runs.resumeExecution') }}
+                </h4>
+                <button class="btn btn-outline btn-xs" @click="showReExecuteForm = false">
+                  {{ t('common.cancel') }}
+                </button>
+              </div>
+              <div class="reexecute-form-body">
+                <label class="reexecute-form-label">{{ t('runs.inputData') }}</label>
+                <textarea
+                  v-model="reExecuteInput"
+                  class="reexecute-input"
+                  rows="8"
+                  :placeholder="t('runs.editInput')"
+                ></textarea>
+              </div>
+              <div class="reexecute-form-footer">
+                <button
+                  class="btn btn-primary"
+                  :disabled="reExecuting"
+                  @click="reExecuteMode === 'single' ? handleExecuteSingleStep() : handleResumeFromStep()"
+                >
+                  <span v-if="reExecuting" class="loading-spinner-sm"></span>
+                  {{ t('runs.execute') }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Execution History -->
+            <div v-if="canReExecute && stepHistory.length > 1" class="step-history">
+              <h4 class="step-history-title">{{ t('runs.executionHistory') }}</h4>
+              <div v-if="loadingHistory" class="step-history-loading">
+                <span class="loading-spinner-sm"></span>
+              </div>
+              <div v-else class="step-history-list">
+                <div
+                  v-for="historyItem in stepHistory"
+                  :key="historyItem.id"
+                  :class="['step-history-item', { active: historyItem.id === selectedStepRun.id }]"
+                  @click="selectedStepRun = historyItem"
+                >
+                  <span class="history-attempt">{{ t('runs.attemptN', { n: historyItem.attempt }) }}</span>
+                  <span :class="['history-status', `status-${historyItem.status}`]">
+                    {{ getStatusIcon(historyItem.status) }}
+                  </span>
+                  <span class="history-duration">{{ formatDuration(historyItem.duration_ms) }}</span>
+                  <span class="history-time">{{ formatTimestamp(historyItem.completed_at) }}</span>
+                </div>
               </div>
             </div>
 
@@ -1014,7 +1124,335 @@ onUnmounted(() => {
   padding: 1.5rem;
 }
 
-/* Overview Grid */
+/* Execution View (Unified) */
+.execution-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.execution-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+}
+
+.error-icon-wrapper {
+  flex-shrink: 0;
+  color: var(--color-error);
+  margin-top: 2px;
+}
+
+.error-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.error-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-error);
+  margin-bottom: 0.5rem;
+}
+
+.error-text {
+  font-size: 0.75rem;
+  color: #b91c1c;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.execution-workflow {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.workflow-dag-wrapper {
+  padding: 1rem;
+}
+
+.workflow-dag-header {
+  margin-bottom: 1rem;
+}
+
+.workflow-title-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.workflow-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.workflow-description {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.execution-steps {
+  background: white;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.execution-steps-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.execution-steps-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.step-count-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  background: var(--color-primary);
+  color: white;
+  border-radius: 10px;
+}
+
+.execution-steps-summary {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+}
+
+.summary-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.summary-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.summary-item.completed .summary-dot {
+  background: #10b981;
+}
+
+.summary-item.completed {
+  color: #16a34a;
+}
+
+.summary-item.failed .summary-dot {
+  background: var(--color-error);
+}
+
+.summary-item.failed {
+  color: var(--color-error);
+}
+
+.summary-item.running .summary-dot {
+  background: var(--color-primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.summary-item.running {
+  color: var(--color-primary);
+}
+
+.empty-state.compact {
+  padding: 2rem 1rem;
+}
+
+.empty-state.compact .empty-icon {
+  margin-bottom: 0.5rem;
+}
+
+.empty-state.compact .empty-title {
+  font-size: 0.875rem;
+}
+
+.empty-state.compact .empty-subtitle {
+  font-size: 0.75rem;
+  margin-top: 0.125rem;
+}
+
+/* Steps Table (sim.ai style) */
+.execution-steps-table-container {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.steps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.steps-table thead {
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.steps-table th {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.steps-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.steps-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.steps-table tbody tr:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.steps-table td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+}
+
+.col-block {
+  min-width: 180px;
+}
+
+.col-status {
+  width: 100px;
+}
+
+.col-step-id {
+  width: 100px;
+}
+
+.col-duration {
+  width: 90px;
+}
+
+.col-timestamp {
+  width: 180px;
+}
+
+.block-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.block-icon {
+  font-size: 0.875rem;
+  width: 20px;
+  text-align: center;
+}
+
+.block-icon.status-completed {
+  color: #10b981;
+}
+
+.block-icon.status-failed {
+  color: var(--color-error);
+}
+
+.block-icon.status-running {
+  color: var(--color-primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.block-icon.status-pending {
+  color: var(--color-text-secondary);
+}
+
+.block-name {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.attempt-badge-sm {
+  font-size: 0.625rem;
+  padding: 0.125rem 0.375rem;
+  background: #fef3c7;
+  color: #d97706;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.status-tag {
+  display: inline-block;
+  padding: 0.25rem 0.625rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-tag-completed {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.status-tag-failed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.status-tag-running {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.status-tag-pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.step-id-text {
+  font-size: 0.75rem;
+  color: var(--color-primary);
+  background: transparent;
+  padding: 0;
+}
+
+.duration-text {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.timestamp-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+/* Legacy Overview Grid (kept for compatibility) */
 .overview-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1667,6 +2105,189 @@ onUnmounted(() => {
 .btn-xs {
   padding: 0.25rem 0.5rem;
   font-size: 0.625rem;
+}
+
+/* Re-execution Actions */
+.reexecute-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: var(--radius);
+}
+
+.reexecute-actions .btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Re-execution Form */
+.reexecute-form {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.reexecute-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.reexecute-form-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.reexecute-form-body {
+  padding: 1rem;
+}
+
+.reexecute-form-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.reexecute-input {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  font-family: 'SF Mono', Monaco, monospace;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  resize: vertical;
+  background: white;
+}
+
+.reexecute-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.reexecute-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.reexecute-form-footer .btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Step History */
+.step-history {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.step-history-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.step-history-loading {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.step-history-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.step-history-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.step-history-item:last-child {
+  border-bottom: none;
+}
+
+.step-history-item:hover {
+  background: var(--color-surface);
+}
+
+.step-history-item.active {
+  background: #eff6ff;
+  border-left: 3px solid var(--color-primary);
+}
+
+.history-attempt {
+  font-size: 0.75rem;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.history-status {
+  font-size: 0.875rem;
+}
+
+.history-status.status-completed {
+  color: #10b981;
+}
+
+.history-status.status-failed {
+  color: var(--color-error);
+}
+
+.history-status.status-running {
+  color: var(--color-primary);
+}
+
+.history-status.status-pending {
+  color: var(--color-text-secondary);
+}
+
+.history-duration {
+  font-size: 0.75rem;
+  font-family: monospace;
+  color: var(--color-text-secondary);
+}
+
+.history-time {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-left: auto;
+}
+
+/* Loading spinner small */
+.loading-spinner-sm {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* Responsive */

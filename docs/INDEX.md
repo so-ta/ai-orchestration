@@ -19,6 +19,7 @@
 |----------|---------|--------------|
 | [BACKEND.md](./BACKEND.md) | Go backend structure, interfaces, patterns | Modifying backend code |
 | [FRONTEND.md](./FRONTEND.md) | Nuxt/Vue structure, composables, components | Modifying frontend code |
+| [FRONTEND.md#dag-editor](./FRONTEND.md#dag-editor-componentdag-editor) | DAG editor collision detection, resize logic | **Modifying DAG editor** |
 | [API.md](./API.md) | REST endpoints, request/response schemas | API integration, adding endpoints |
 | [DATABASE.md](./DATABASE.md) | Schema, migrations, query patterns | Database operations |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, Kubernetes, environment config | DevOps, deployment |

@@ -49,6 +49,26 @@ var (
 	ErrWebhookDisabled       = errors.New("webhook is disabled")
 	ErrWebhookInvalidSecret  = errors.New("invalid webhook secret")
 
+	// Credential errors
+	ErrCredentialNotFound = errors.New("credential not found")
+	ErrCredentialExpired  = errors.New("credential has expired")
+	ErrCredentialRevoked  = errors.New("credential has been revoked")
+
+	// System Credential errors
+	ErrSystemCredentialNotFound = errors.New("system credential not found")
+	ErrSystemCredentialExpired  = errors.New("system credential has expired")
+	ErrSystemCredentialRevoked  = errors.New("system credential has been revoked")
+
+	// Block Template errors
+	ErrBlockTemplateNotFound     = errors.New("block template not found")
+	ErrBlockTemplateIsBuiltin    = errors.New("cannot modify built-in template")
+	ErrBlockTemplateSlugExists   = errors.New("block template slug already exists")
+
+	// Block Definition errors (additional)
+	ErrBlockDefinitionNotFound   = errors.New("block definition not found")
+	ErrBlockDefinitionSlugExists = errors.New("block definition slug already exists")
+	ErrBlockCodeHidden           = errors.New("block code is hidden for system blocks")
+
 	// Tenant errors
 	ErrTenantNotFound = errors.New("tenant not found")
 	ErrUnauthorized   = errors.New("unauthorized")

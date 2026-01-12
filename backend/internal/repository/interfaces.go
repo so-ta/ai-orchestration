@@ -66,6 +66,17 @@ type StepRunRepository interface {
 	GetByID(ctx context.Context, runID, id uuid.UUID) (*domain.StepRun, error)
 	ListByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error)
 	Update(ctx context.Context, stepRun *domain.StepRun) error
+
+	// GetMaxAttempt returns the highest attempt number for a step in a run
+	GetMaxAttempt(ctx context.Context, runID, stepID uuid.UUID) (int, error)
+	// GetMaxAttemptForRun returns the highest attempt number across all steps in a run
+	GetMaxAttemptForRun(ctx context.Context, runID uuid.UUID) (int, error)
+	// GetLatestByStep returns the most recent StepRun for a step in a run
+	GetLatestByStep(ctx context.Context, runID, stepID uuid.UUID) (*domain.StepRun, error)
+	// ListCompletedByRun returns the latest completed StepRun for each step in a run
+	ListCompletedByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error)
+	// ListByStep returns all StepRuns for a specific step in a run (for history)
+	ListByStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.StepRun, error)
 }
 
 // WorkflowVersionRepository defines the interface for workflow version persistence
@@ -175,4 +186,67 @@ type BlockGroupRunRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockGroupRun, error)
 	ListByRun(ctx context.Context, runID uuid.UUID) ([]*domain.BlockGroupRun, error)
 	Update(ctx context.Context, run *domain.BlockGroupRun) error
+}
+
+// CredentialRepository defines the interface for credential persistence
+type CredentialRepository interface {
+	// Create creates a new credential
+	Create(ctx context.Context, credential *domain.Credential) error
+	// GetByID retrieves a credential by ID
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Credential, error)
+	// GetByName retrieves a credential by name within a tenant
+	GetByName(ctx context.Context, tenantID uuid.UUID, name string) (*domain.Credential, error)
+	// List retrieves credentials with optional filtering
+	List(ctx context.Context, tenantID uuid.UUID, filter CredentialFilter) ([]*domain.Credential, int, error)
+	// Update updates a credential
+	Update(ctx context.Context, credential *domain.Credential) error
+	// Delete deletes a credential
+	Delete(ctx context.Context, tenantID, id uuid.UUID) error
+	// UpdateStatus updates the status of a credential
+	UpdateStatus(ctx context.Context, tenantID, id uuid.UUID, status domain.CredentialStatus) error
+}
+
+// CredentialFilter defines filtering options for credential list
+type CredentialFilter struct {
+	CredentialType *domain.CredentialType
+	Status         *domain.CredentialStatus
+	Page           int
+	Limit          int
+}
+
+// SystemCredentialRepository defines the interface for system credential persistence
+// System credentials are operator-managed and used by system blocks (not accessible by tenants)
+type SystemCredentialRepository interface {
+	// Create creates a new system credential
+	Create(ctx context.Context, credential *domain.SystemCredential) error
+	// GetByID retrieves a system credential by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.SystemCredential, error)
+	// GetByName retrieves a system credential by name
+	GetByName(ctx context.Context, name string) (*domain.SystemCredential, error)
+	// List retrieves all system credentials
+	List(ctx context.Context) ([]*domain.SystemCredential, error)
+	// ListByType retrieves system credentials by type
+	ListByType(ctx context.Context, credType domain.CredentialType) ([]*domain.SystemCredential, error)
+	// Update updates a system credential
+	Update(ctx context.Context, credential *domain.SystemCredential) error
+	// Delete deletes a system credential
+	Delete(ctx context.Context, id uuid.UUID) error
+	// UpdateStatus updates the status of a system credential
+	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.CredentialStatus) error
+}
+
+// BlockTemplateRepository defines the interface for block template persistence
+type BlockTemplateRepository interface {
+	// Create creates a new block template
+	Create(ctx context.Context, template *domain.BlockTemplate) error
+	// GetByID retrieves a block template by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockTemplate, error)
+	// GetBySlug retrieves a block template by slug
+	GetBySlug(ctx context.Context, slug string) (*domain.BlockTemplate, error)
+	// List retrieves all block templates
+	List(ctx context.Context) ([]*domain.BlockTemplate, error)
+	// Update updates a block template (only non-builtin templates)
+	Update(ctx context.Context, template *domain.BlockTemplate) error
+	// Delete deletes a block template (only non-builtin templates)
+	Delete(ctx context.Context, id uuid.UUID) error
 }

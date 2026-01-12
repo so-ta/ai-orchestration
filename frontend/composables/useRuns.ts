@@ -1,5 +1,22 @@
 // Run API composable
-import type { Run, ApiResponse, PaginatedResponse } from '~/types/api'
+import type { Run, StepRun, ApiResponse, PaginatedResponse } from '~/types/api'
+
+// Response types for step re-execution
+interface ExecuteSingleStepResponse {
+  data: StepRun
+}
+
+interface ResumeFromStepResponse {
+  data: {
+    run_id: string
+    from_step_id: string
+    steps_to_execute: string[]
+  }
+}
+
+interface StepHistoryResponse {
+  data: StepRun[]
+}
 
 export function useRuns() {
   const api = useApi()
@@ -32,10 +49,31 @@ export function useRuns() {
     return api.post<ApiResponse<Run>>(`/runs/${runId}/cancel`)
   }
 
+  // Execute a single step (re-execute)
+  async function executeSingleStep(runId: string, stepId: string, input?: object) {
+    return api.post<ExecuteSingleStepResponse>(`/runs/${runId}/steps/${stepId}/execute`, { input })
+  }
+
+  // Resume execution from a step (re-execute from here)
+  async function resumeFromStep(runId: string, fromStepId: string, inputOverride?: object) {
+    return api.post<ResumeFromStepResponse>(`/runs/${runId}/resume`, {
+      from_step_id: fromStepId,
+      input_override: inputOverride
+    })
+  }
+
+  // Get execution history for a step
+  async function getStepHistory(runId: string, stepId: string) {
+    return api.get<StepHistoryResponse>(`/runs/${runId}/steps/${stepId}/history`)
+  }
+
   return {
     list,
     get,
     create,
     cancel,
+    executeSingleStep,
+    resumeFromStep,
+    getStepHistory,
   }
 }

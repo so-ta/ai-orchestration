@@ -587,7 +587,7 @@ func TestExecutor_ExecuteFunctionStep(t *testing.T) {
 		Name: "test-function",
 		Type: domain.StepTypeFunction,
 		Config: json.RawMessage(`{
-			"code": "return input.value * 2",
+			"code": "return { result: input.value * 2 }",
 			"language": "javascript"
 		}`),
 	}
@@ -601,9 +601,52 @@ func TestExecutor_ExecuteFunctionStep(t *testing.T) {
 	err = json.Unmarshal(output, &result)
 	require.NoError(t, err)
 
-	// Function execution is not implemented, so it should pass through with warning
-	assert.Contains(t, result["warning"].(string), "not implemented")
-	assert.Equal(t, "return input.value * 2", result["code"])
+	// Function should execute and return calculated result
+	assert.EqualValues(t, 10, result["result"])
+}
+
+func TestExecutor_ExecuteFunctionStep_WithExecuteFunction(t *testing.T) {
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-function-with-execute",
+		Type: domain.StepTypeFunction,
+		Config: json.RawMessage(`{
+			"code": "function execute(input, context) { return { greeting: 'Hello, ' + input.name + '!' }; }"
+		}`),
+	}
+
+	input := json.RawMessage(`{"name": "World"}`)
+	output, err := executor.executeFunctionStep(context.Background(), step, input)
+
+	require.NoError(t, err)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Hello, World!", result["greeting"])
+}
+
+func TestExecutor_ExecuteFunctionStep_UnsupportedLanguage(t *testing.T) {
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-function-python",
+		Type: domain.StepTypeFunction,
+		Config: json.RawMessage(`{
+			"code": "print('hello')",
+			"language": "python"
+		}`),
+	}
+
+	input := json.RawMessage(`{}`)
+	_, err := executor.executeFunctionStep(context.Background(), step, input)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported language")
 }
 
 func TestExecutor_ExecuteRouterStep_NoAdapter(t *testing.T) {

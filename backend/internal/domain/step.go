@@ -29,6 +29,7 @@ const (
 	StepTypeAggregate   StepType = "aggregate"   // Aggregate data (n8n: Aggregate)
 	StepTypeError       StepType = "error"       // Stop and error (n8n: Stop And Error)
 	StepTypeNote        StepType = "note"        // Documentation/comment node (n8n: NOOP)
+	StepTypeLog         StepType = "log"         // Log output for debugging
 )
 
 // ValidStepTypes returns all valid step types
@@ -52,6 +53,7 @@ func ValidStepTypes() []StepType {
 		StepTypeAggregate,
 		StepTypeError,
 		StepTypeNote,
+		StepTypeLog,
 	}
 }
 
@@ -72,25 +74,39 @@ type Step struct {
 	Name         string          `json:"name"`
 	Type         StepType        `json:"type"`
 	Config       json.RawMessage `json:"config"`
-	BlockGroupID *uuid.UUID `json:"block_group_id,omitempty"` // Reference to containing block group
-	GroupRole    string    `json:"group_role,omitempty"`     // Role within block group (body, catch, then, else, etc.)
+	BlockGroupID *uuid.UUID      `json:"block_group_id,omitempty"` // Reference to containing block group
+	GroupRole    string          `json:"group_role,omitempty"`     // Role within block group (body, catch, then, else, etc.)
 	PositionX    int             `json:"position_x"`
 	PositionY    int             `json:"position_y"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+
+	// Block definition reference (for registry-based blocks)
+	BlockDefinitionID *uuid.UUID `json:"block_definition_id,omitempty"`
+
+	// Credential bindings: maps required credential names to actual credential IDs
+	// Format: {"credential_name": "uuid-of-tenant-credential", ...}
+	CredentialBindings json.RawMessage `json:"credential_bindings,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// GetCredentialBindings parses and returns the credential bindings map
+func (s *Step) GetCredentialBindings() (map[string]uuid.UUID, error) {
+	return ParseCredentialBindings(s.CredentialBindings)
 }
 
 // NewStep creates a new step
 func NewStep(workflowID uuid.UUID, name string, stepType StepType, config json.RawMessage) *Step {
 	now := time.Now().UTC()
 	return &Step{
-		ID:         uuid.New(),
-		WorkflowID: workflowID,
-		Name:       name,
-		Type:       stepType,
-		Config:     config,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:                 uuid.New(),
+		WorkflowID:         workflowID,
+		Name:               name,
+		Type:               stepType,
+		Config:             config,
+		CredentialBindings: json.RawMessage(`{}`),
+		CreatedAt:          now,
+		UpdatedAt:          now,
 	}
 }
 
@@ -261,4 +277,11 @@ type ErrorStepConfig struct {
 type NoteStepConfig struct {
 	Content string `json:"content"` // Note/documentation content (markdown supported)
 	Color   string `json:"color"`   // Optional color for the note (hex color)
+}
+
+// LogStepConfig represents configuration for a log step
+type LogStepConfig struct {
+	Message string `json:"message"`          // Log message (supports template variables like {{$.input.field}})
+	Level   string `json:"level,omitempty"`  // Log level: debug, info, warn, error (default: info)
+	Data    string `json:"data,omitempty"`   // JSON path to data to include in log (e.g., "$.input" or "$.steps.step1.output")
 }

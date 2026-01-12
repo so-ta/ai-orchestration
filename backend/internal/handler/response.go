@@ -89,8 +89,28 @@ func HandleError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrWebhookNotFound),
 		errors.Is(err, domain.ErrTenantNotFound),
 		errors.Is(err, domain.ErrBlockGroupNotFound),
-		errors.Is(err, domain.ErrBlockGroupRunNotFound):
+		errors.Is(err, domain.ErrBlockGroupRunNotFound),
+		errors.Is(err, domain.ErrCredentialNotFound),
+		errors.Is(err, domain.ErrSystemCredentialNotFound),
+		errors.Is(err, domain.ErrBlockTemplateNotFound),
+		errors.Is(err, domain.ErrBlockDefinitionNotFound):
 		Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrCredentialExpired),
+		errors.Is(err, domain.ErrCredentialRevoked),
+		errors.Is(err, domain.ErrSystemCredentialExpired),
+		errors.Is(err, domain.ErrSystemCredentialRevoked):
+		Error(w, http.StatusForbidden, "CREDENTIAL_UNAVAILABLE", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrBlockTemplateIsBuiltin):
+		Error(w, http.StatusForbidden, "BUILTIN_PROTECTED", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrBlockTemplateSlugExists),
+		errors.Is(err, domain.ErrBlockDefinitionSlugExists):
+		Error(w, http.StatusConflict, "SLUG_EXISTS", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrBlockCodeHidden):
+		Error(w, http.StatusForbidden, "CODE_HIDDEN", err.Error(), nil)
 
 	case errors.Is(err, domain.ErrWorkflowAlreadyPublished),
 		errors.Is(err, domain.ErrWorkflowNotEditable),

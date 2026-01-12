@@ -298,6 +298,30 @@ $.field                # truthy
 2. Update docs when changing specs
 3. Use TodoWrite for task tracking
 4. Run tests after changes
+5. **Restart services after code changes** (see below)
+
+### Service Restart After Code Changes (REQUIRED)
+
+**バックエンドコード変更後は、必ず関連サービスを再起動すること。**
+
+| 変更対象 | 再起動コマンド |
+|----------|---------------|
+| `backend/cmd/api/` | `docker compose restart api` |
+| `backend/cmd/worker/` | `docker compose restart worker` |
+| `backend/internal/` | `docker compose restart api worker` |
+| 両方 | `docker compose restart api worker` |
+
+```bash
+# Docker環境の場合
+docker compose restart api worker
+
+# ローカル開発（air使用）の場合は自動リロードされる
+```
+
+**重要:**
+- コード変更だけでは反映されない（特にDocker環境）
+- 変更を検証する前に必ず再起動を実行
+- フロントエンドはホットリロードで自動反映されるため再起動不要
 
 ### Self-Documentation (REQUIRED)
 
@@ -370,6 +394,31 @@ npm run check
 - プラットフォーム固有パッケージ（`@rollup/rollup-darwin-*`等）をdependenciesに追加
 
 **詳細は [frontend/docs/TESTING.md](frontend/docs/TESTING.md) を参照**
+
+### DAG Editor Modification (REQUIRED)
+
+**ワークフローエディタ（DAGエディタ）を修正する場合、必ず以下を確認すること：**
+
+```
+1. [ ] docs/FRONTEND.md の「Block Group Push Logic」セクションを読む
+2. [ ] docs/FRONTEND.md の「Group Resize Logic」セクションを読む
+3. [ ] Vue Flowの親子ノード関係（相対座標 vs 絶対座標）を理解する
+4. [ ] 衝突判定ロジックの3ケース分類を理解する
+```
+
+**重要な注意点：**
+
+| 領域 | 注意点 |
+|------|--------|
+| 座標系 | 子ノードは親からの相対座標。押出後は絶対座標に変換必須 |
+| リサイズ | `onGroupResize`でリアルタイム位置補正必須（視覚的ジャンプ防止） |
+| 衝突判定 | `fullyInside`, `fullyOutside`, `onBoundary`の3ケースで処理 |
+| イベント順序 | `group:update` → `group:resize-complete`の順で発火必須 |
+| ネスト | グループのネストは非対応（外側にスナップ） |
+
+**関連ファイル：**
+- `components/dag-editor/DagEditor.vue` - 衝突判定、リサイズハンドラ
+- `pages/workflows/[id].vue` - イベントハンドラ、API永続化
 
 ### Bug Fix Flow
 
