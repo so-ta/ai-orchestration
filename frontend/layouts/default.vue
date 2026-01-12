@@ -2,6 +2,8 @@
 const { t } = useI18n()
 const { isAuthenticated, isLoading, user, login, logout } = useAuth()
 
+const route = useRoute()
+
 const menuItems = computed(() => [
   { name: t('nav.dashboard'), path: '/', icon: 'home' },
   { name: t('nav.workflows'), path: '/workflows', icon: 'workflow' },
@@ -9,6 +11,16 @@ const menuItems = computed(() => [
   { name: t('nav.schedules'), path: '/schedules', icon: 'clock' },
   { name: t('nav.settings'), path: '/settings', icon: 'settings' }
 ])
+
+// Check if the current route matches the menu item (including child routes)
+function isActiveRoute(itemPath: string): boolean {
+  // Dashboard (/) should only match exact path
+  if (itemPath === '/') {
+    return route.path === '/'
+  }
+  // Other routes match if current path starts with the menu item path
+  return route.path.startsWith(itemPath)
+}
 
 async function handleLogin() {
   await login()
@@ -36,7 +48,7 @@ async function handleLogout() {
           <li v-for="item in menuItems" :key="item.path">
             <NuxtLink
               :to="item.path"
-              :class="['nav-link', { active: $route.path === item.path }]"
+              :class="['nav-link', { active: isActiveRoute(item.path) }]"
             >
               <span class="nav-icon">
                 <svg v-if="item.icon === 'home'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
