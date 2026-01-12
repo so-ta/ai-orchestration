@@ -92,6 +92,8 @@ Multi-tenant SaaS for designing, executing, and monitoring DAG workflows with LL
 | DOCUMENTATION_RULES | Doc format, MECE rules | [docs/DOCUMENTATION_RULES.md](docs/DOCUMENTATION_RULES.md) |
 | TESTING | Frontend testing rules | [frontend/docs/TESTING.md](frontend/docs/TESTING.md) |
 | OpenAPI | Machine-readable spec | [docs/openapi.yaml](docs/openapi.yaml) |
+| **UNIFIED_BLOCK_MODEL** | **Block architecture (MUST READ for integrations)** | [docs/designs/UNIFIED_BLOCK_MODEL.md](docs/designs/UNIFIED_BLOCK_MODEL.md) |
+| BLOCK_REGISTRY | Block definitions, error codes | [docs/BLOCK_REGISTRY.md](docs/BLOCK_REGISTRY.md) |
 
 **Read these docs before modifying related code.**
 
@@ -365,6 +367,74 @@ docker compose restart api worker
 1. **MUST document**: Public interfaces, API changes, config changes
 2. **SHOULD document**: Internal architecture decisions, non-obvious patterns
 3. **MAY skip**: Trivial implementation details (use code comments)
+
+### Documentation Sync Flow (REQUIRED)
+
+**コードとドキュメントの齟齬を防ぐための必須フロー**
+
+#### アーキテクチャ変更時の更新対象マッピング
+
+| 変更内容 | 更新必須ドキュメント |
+|---------|-------------------|
+| 新規ブロック/外部連携追加 | `BLOCK_REGISTRY.md`, `UNIFIED_BLOCK_MODEL.md`（参照のみ） |
+| DBスキーマ変更 | `DATABASE.md` |
+| API追加/変更 | `API.md`, `openapi.yaml` |
+| バックエンド構造変更 | `BACKEND.md` |
+| フロントエンド構造変更 | `FRONTEND.md` |
+| 認証/認可変更 | `DEPLOYMENT.md` |
+
+#### ドキュメント更新チェックリスト
+
+コード変更完了後、以下を確認：
+
+```
+1. [ ] 変更した機能に関連するドキュメントを特定
+2. [ ] 該当ドキュメントの記載が実装と一致しているか確認
+3. [ ] 古い情報があれば更新（「実装済み」等のステータス更新含む）
+4. [ ] 相互参照リンクが正しいか確認
+5. [ ] docs/INDEX.md に新ドキュメントの参照があるか確認
+```
+
+#### 齟齬防止のための設計原則
+
+| 原則 | 説明 |
+|------|------|
+| **Single Source of Truth** | 同じ情報を複数箇所に書かない。参照リンクを使う |
+| **Status明記** | 設計書には `Status: ✅ 実装済み / 📋 未実装` を明記 |
+| **Updated日付** | 重要なドキュメントには更新日を記載 |
+| **関連ドキュメントリンク** | Related Documents セクションで相互リンク |
+
+#### 齟齬発見時の対応フロー
+
+```
+1. 齟齬を発見
+   ↓
+2. どちらが正しいか確認（実装 vs ドキュメント）
+   ↓
+3. 実装が正しい場合 → ドキュメントを更新
+   ドキュメントが正しい場合 → 実装を修正（またはユーザーに確認）
+   ↓
+4. 関連ドキュメントも同時に確認・更新
+   ↓
+5. 齟齬の原因を分析し、再発防止策をCLAUDE.mdに追記
+```
+
+#### ドキュメント間の依存関係
+
+```
+CLAUDE.md (エントリーポイント)
+  ├── docs/INDEX.md (ナビゲーション)
+  │     ├── BACKEND.md
+  │     ├── FRONTEND.md
+  │     ├── API.md
+  │     ├── DATABASE.md
+  │     └── designs/UNIFIED_BLOCK_MODEL.md ← BLOCK_REGISTRY.md
+  │
+  └── 変更時は上記の依存関係を考慮して更新
+```
+
+**重要**: アーキテクチャに関わる変更（Unified Block Model等）は、複数ドキュメントに影響する。
+変更前に影響範囲を確認し、すべての関連ドキュメントを更新すること。
 
 ### Frontend Testing Workflow (REQUIRED)
 
@@ -664,8 +734,61 @@ curl -X POST "http://localhost:8080/api/v1/workflows/{id}/runs" \
 
 ## Common Operations
 
-### Add New Adapter
+### Add New Block / Integration (REQUIRED READING)
 
+**⚠️ 外部連携（Discord, Slack, Notion等）を追加する場合、必ず以下を先に読むこと：**
+
+```
+1. [ ] docs/designs/UNIFIED_BLOCK_MODEL.md を読む
+2. [ ] 既存ブロックの実装パターンを確認（migrations/011_unified_block_model.sql）
+3. [ ] ctx インターフェース（http, llm, workflow, human, adapter）を理解する
+```
+
+**現在のアーキテクチャ（Unified Block Model）:**
+
+| 方式 | 説明 | 用途 |
+|------|------|------|
+| **Migration追加** | JavaScriptコードをDBに登録 | **新規ブロック追加の標準方式** |
+| Go Adapter追加 | Goでアダプター実装 | LLMプロバイダー等の特殊ケースのみ |
+
+**新規ブロック追加手順（標準）:**
+
+1. Migrationファイル作成: `backend/migrations/XXX_{name}_block.sql`
+2. `block_definitions`テーブルにINSERT
+   - `tenant_id = NULL` でシステムブロック（全ユーザー提供）
+   - `code`にJavaScriptコード（`ctx.http`等を使用）
+   - `ui_config`にアイコン・カラー・設定スキーマ
+3. Migration実行
+4. docs/BLOCK_REGISTRY.md を更新
+
+**コード例（Discord通知ブロック）:**
+
+```sql
+INSERT INTO block_definitions (tenant_id, slug, name, category, code, ui_config, is_system)
+VALUES (
+  NULL,  -- システムブロック
+  'discord',
+  'Discord通知',
+  'integration',
+  $code$
+    const webhookUrl = config.webhook_url || ctx.secrets.DISCORD_WEBHOOK_URL;
+    const payload = { content: renderTemplate(config.message, input) };
+    return await ctx.http.post(webhookUrl, payload);
+  $code$,
+  '{"icon": "message-circle", "color": "#5865F2", "configSchema": {...}}',
+  TRUE
+);
+```
+
+**Go Adapterが必要なケース（例外）:**
+
+| ケース | 理由 |
+|--------|------|
+| LLMプロバイダー追加 | `ctx.llm`経由で呼び出すため |
+| 複雑な認証フロー | OAuth2等、JSでは困難な場合 |
+| バイナリ処理 | 画像・ファイル処理等 |
+
+Go Adapter追加が必要な場合のみ:
 1. Create `backend/internal/adapter/{name}.go`
 2. Implement `Adapter` interface
 3. Register in registry

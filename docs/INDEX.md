@@ -26,6 +26,7 @@
 | [DOCUMENTATION_RULES.md](./DOCUMENTATION_RULES.md) | Doc format, MECE, templates | Creating/updating documentation |
 | [TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules, Vitest | Frontend code changes |
 | [SIM_FEATURES.md](./SIM_FEATURES.md) | Sim.ai互換機能の実装状況 | 新機能追加時 |
+| **[BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md)** | **Block definitions, error codes** | **新規ブロック追加時（必読）** |
 
 ## Architecture Designs
 
@@ -124,7 +125,23 @@ frontend/
 
 ## Common Operations
 
-### Add New Adapter
+### Add New Block / Integration (⚠️ REQUIRED READING)
+
+**新規ブロック（Discord, Slack等）を追加する場合、必ず以下を読むこと：**
+
+```
+1. [ ] docs/designs/UNIFIED_BLOCK_MODEL.md を読む
+2. [ ] docs/BLOCK_REGISTRY.md を読む
+3. [ ] migrations/011_unified_block_model.sql で既存パターンを確認
+```
+
+**標準手順（Migration追加）：**
+1. Create `backend/migrations/XXX_{name}_block.sql`
+2. INSERT into `block_definitions` with `tenant_id = NULL` for system blocks
+3. Run migration
+4. Update `docs/BLOCK_REGISTRY.md`
+
+**Go Adapterが必要なケース（例外）のみ：**
 1. Create `backend/internal/adapter/{name}.go`
 2. Implement `Adapter` interface
 3. Register in `adapter/registry.go`
@@ -134,16 +151,18 @@ frontend/
 1. Add handler in `backend/internal/handler/`
 2. Add route in `cmd/api/main.go`
 3. Add usecase if new business logic needed
-4. Update `docs/openapi.yaml`
+4. Update `docs/API.md` and `docs/openapi.yaml`
 
 ### Add New Step Type
 1. Define in `backend/internal/domain/step.go`
 2. Add execution logic in `backend/internal/engine/executor.go`
 3. Update frontend step config UI
+4. **Update `docs/BACKEND.md` Step Types section**
 
 ### Add Database Migration
 1. Create SQL in `backend/migrations/`
 2. Run: `docker compose exec api migrate -path /migrations -database "$DB_URL" up`
+3. **Update `docs/DATABASE.md`**
 
 ## Test Commands
 
