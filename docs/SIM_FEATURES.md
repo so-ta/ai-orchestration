@@ -47,165 +47,23 @@ Phase 6-10 の詳細設計は以下のドキュメントを参照：
 
 ---
 
-## 実装完了ノート
+## 実装済み機能の参照
 
-### 2024-01: Phase 1-5 実装完了
+Phase 1-5 の詳細仕様は正式ドキュメントに統合済み：
 
-以下が実装済み：
+| Phase | Step Type | 正式ドキュメント |
+|-------|-----------|-----------------|
+| 1 | `loop` | [BACKEND.md - Loop Step](./BACKEND.md#step-config-schemas) |
+| 2 | `human_in_loop` | [BACKEND.md - Human-in-Loop Step](./BACKEND.md#step-config-schemas) |
+| 3 | `wait` | [BACKEND.md - Wait Step](./BACKEND.md#step-config-schemas) |
+| 4 | `function` | [BACKEND.md - Function Step](./BACKEND.md#step-config-schemas) |
+| 5 | `router` | [BACKEND.md - Router Step](./BACKEND.md#step-config-schemas) |
 
-**バックエンド**
-- `backend/internal/domain/step.go` - 新規ステップタイプとConfig構造体
-- `backend/internal/engine/executor.go` - 実行ロジック（executeLoopStep, executeWaitStep等）
-- `backend/internal/engine/executor_test.go` - ユニットテスト
-
-**フロントエンド**
-- `frontend/types/api.ts` - StepType定義
-- `frontend/components/dag-editor/DagEditor.vue` - ノードカラー
-- `frontend/pages/workflows/[id].vue` - Step設定フォーム
-
-**ドキュメント**
-- `docs/BACKEND.md` - Step Config Schemas
-- `CLAUDE.md` - Step Types テーブル
-
-**注意点**
-- `function` ステップ: JavaScript実行は未実装（入力パススルー）
+**実装上の注意点**
+- `function` ステップ: JavaScript実行はパススルー実装（入力をそのまま返す）
 - `human_in_loop` ステップ: テストモードでは自動承認、本番モードではpending状態
 
----
-
-## Phase 1: Loop Block
-
-### 仕様
-
-4つのループタイプをサポート：
-
-1. **for** - 固定回数の繰り返し
-2. **forEach** - 配列の各要素を処理
-3. **while** - 条件が真の間繰り返し
-4. **do-while** - 最低1回実行し、条件が真の間繰り返し
-
-### Config Schema
-
-```json
-{
-  "loop_type": "for|forEach|while|doWhile",
-  "count": 10,                    // for: 繰り返し回数
-  "input_path": "$.items",        // forEach: 配列パス
-  "condition": "$.index < 10",    // while/doWhile: 継続条件
-  "max_iterations": 100,          // 無限ループ防止
-  "inner_steps": ["step_id_1"]    // ループ内で実行するステップ
-}
-```
-
-### 出力
-
-```json
-{
-  "results": [...],           // 各イテレーションの結果
-  "iterations": 10,           // 実行回数
-  "completed": true           // 正常完了したか
-}
-```
-
-### 実装ファイル
-
-1. `backend/internal/domain/step.go` - StepTypeLoop追加
-2. `backend/internal/engine/executor.go` - executeLoopStep追加
-3. `frontend/components/dag-editor/` - LoopノードUI
-4. `docs/BACKEND.md` - ドキュメント更新
-
----
-
-## Phase 2: Human in the Loop
-
-### 仕様
-
-ワークフロー実行を一時停止し、人間の介入を待つ。
-
-### Config Schema
-
-```json
-{
-  "timeout_hours": 24,           // タイムアウト時間
-  "notification": {
-    "type": "email|slack|webhook",
-    "target": "..."
-  },
-  "approval_url": true,          // 承認URLを生成
-  "required_fields": [           // 承認時に必要な入力
-    {"name": "approved", "type": "boolean"},
-    {"name": "comment", "type": "string"}
-  ]
-}
-```
-
-### フロー
-
-1. ステップ到達時にRun状態を `waiting_approval` に変更
-2. 通知を送信（設定されている場合）
-3. 承認URLまたはAPIエンドポイントで待機
-4. 承認/却下後に実行を再開
-
----
-
-## Phase 3: Wait Block
-
-### 仕様
-
-指定時間だけ実行を遅延させる。
-
-### Config Schema
-
-```json
-{
-  "duration_ms": 5000,           // 遅延時間（ミリ秒）
-  "until": "2024-01-01T00:00:00Z" // 特定時刻まで待機
-}
-```
-
----
-
-## Phase 4: Function Block
-
-### 仕様
-
-カスタムJavaScript/TypeScriptコードを実行。
-
-### Config Schema
-
-```json
-{
-  "code": "return input.value * 2;",
-  "language": "javascript",
-  "timeout_ms": 5000
-}
-```
-
-### セキュリティ考慮
-
-- サンドボックス実行（goja等のJSランタイム）
-- リソース制限（CPU、メモリ、実行時間）
-- ネットワークアクセス制限
-
----
-
-## Phase 5: Router Block
-
-### 仕様
-
-LLMを使用して動的にルーティング先を決定。
-
-### Config Schema
-
-```json
-{
-  "routes": [
-    {"name": "support", "description": "Customer support questions"},
-    {"name": "sales", "description": "Sales inquiries"},
-    {"name": "technical", "description": "Technical issues"}
-  ],
-  "model": "gpt-4o-mini",
-  "prompt": "Classify the following request..."
-}
-```
+**関連コード**
+- Backend: `backend/internal/domain/step.go`, `backend/internal/engine/executor.go`
+- Frontend: `frontend/types/api.ts`, `frontend/pages/workflows/[id].vue`
 
