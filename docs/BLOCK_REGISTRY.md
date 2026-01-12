@@ -1,8 +1,21 @@
 # Block Registry Design
 
+Block definitions, error codes, and system block management.
+
 > **Status**: ✅ Implemented (Unified Block Model)
 > **Updated**: 2025-01-12
 > **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Table | `block_definitions` |
+| System Blocks | `tenant_id = NULL` (18 blocks) |
+| Tenant Blocks | `tenant_id = UUID` |
+| Executor | Goja JavaScript VM |
+| Version History | `block_versions` table |
+| Categories | ai, logic, integration, data, control, utility |
 
 ## Overview
 

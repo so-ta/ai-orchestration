@@ -1,5 +1,21 @@
 # Frontend Technical Reference
 
+Vue 3 / Nuxt 3 frontend structure, composables, and components.
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Framework | Nuxt 3 + Vue 3 |
+| Language | TypeScript |
+| State Management | Composables (Vue 3 Composition API) |
+| DAG Editor | @vue-flow/core |
+| Auth | Keycloak OIDC |
+| Pages | `pages/` (file-based routing) |
+| Components | `components/` |
+| Composables | `composables/` |
+| Types | `types/api.ts` |
+
 ## Directory Structure
 
 ```
@@ -414,24 +430,18 @@ const onBoundary = !fullyInside && !fullyOutside
 
 ## Pages
 
-### Dashboard (pages/index.vue)
+| Page | Path | Features |
+|------|------|----------|
+| Dashboard | `pages/index.vue` | Recent workflows, Recent runs (status badges), Quick actions |
+| Workflow List | `pages/workflows/index.vue` | Filter by status, Search by name, Create/Edit/Delete/Publish |
+| Workflow Detail | `pages/workflows/[id].vue` | DAG Editor + Config Panel + Run button |
+| Run List | `pages/runs/index.vue` | Workflow name, Status badge, Trigger type, Duration |
+| Run Detail | `pages/runs/[id].vue` | Run metadata, Step timeline, Step I/O, Error details |
+| Schedules | `pages/schedules/index.vue` | CRUD for scheduled executions |
+| Settings | `pages/settings/index.vue` | Tenant configuration |
 
-Displays:
-- Recent workflows
-- Recent runs (status badges)
-- Quick actions
+### Workflow Detail Layout
 
-### Workflow List (pages/workflows/index.vue)
-
-Features:
-- Filter by status (draft/published)
-- Search by name
-- Create new button
-- Actions: edit, delete, publish
-
-### Workflow Detail (pages/workflows/[id].vue)
-
-Layout:
 ```
 +------------------+------------------+
 |  DAG Editor      |  Config Panel    |
@@ -439,31 +449,6 @@ Layout:
 |                  |  - Run button    |
 +------------------+------------------+
 ```
-
-### Run List (pages/runs/index.vue)
-
-Columns:
-- Workflow name
-- Status (badge)
-- Trigger type
-- Started at
-- Duration
-
-### Run Detail (pages/runs/[id].vue)
-
-Displays:
-- Run metadata
-- Step timeline (visual)
-- Step input/output (collapsible)
-- Error details (if failed)
-
-### Schedules (pages/schedules/index.vue)
-
-CRUD for scheduled executions.
-
-### Settings (pages/settings/index.vue)
-
-Tenant configuration.
 
 ## Auth Plugin (plugins/auth.client.ts)
 
@@ -534,3 +519,10 @@ npm run typecheck
 | `NUXT_PUBLIC_KEYCLOAK_URL` | Keycloak URL |
 | `NUXT_PUBLIC_KEYCLOAK_REALM` | Keycloak realm |
 | `NUXT_PUBLIC_KEYCLOAK_CLIENT_ID` | Keycloak client ID |
+
+## Related Documents
+
+- [API.md](./API.md) - REST API endpoints and schemas
+- [TESTING.md](../frontend/docs/TESTING.md) - Frontend testing rules
+- [BACKEND.md](./BACKEND.md) - Backend architecture
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Docker and Kubernetes deployment

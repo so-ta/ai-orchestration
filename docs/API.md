@@ -1,13 +1,17 @@
 # API Reference
 
-## Base
+REST API endpoints, request/response schemas, and authentication.
 
-```
-URL: /api/v1
-Auth: Bearer <JWT>
-Content-Type: application/json
-Tenant: X-Tenant-ID header (dev mode) or JWT claim (prod)
-```
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Base URL | `/api/v1` |
+| Auth | Bearer JWT |
+| Content-Type | `application/json` |
+| Tenant (Dev) | `X-Tenant-ID` header |
+| Tenant (Prod) | JWT claim |
+| Health Check | `GET /health`, `GET /ready` |
 
 ## Headers
 
@@ -1219,3 +1223,10 @@ TOKEN=$(curl -s -X POST http://localhost:8180/realms/ai-orchestration/protocol/o
 # Use token
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/workflows
 ```
+
+## Related Documents
+
+- [BACKEND.md](./BACKEND.md) - Backend code structure and handlers
+- [DATABASE.md](./DATABASE.md) - Database schema
+- [openapi.yaml](./openapi.yaml) - Machine-readable OpenAPI spec
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Environment and authentication setup
