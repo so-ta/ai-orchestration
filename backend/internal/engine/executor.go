@@ -699,20 +699,16 @@ func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContex
 func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	// Parse step config to determine which LLM provider to use
 	var config struct {
-		Provider  string `json:"provider"`   // openai, anthropic, or adapter_id
-		AdapterID string `json:"adapter_id"` // fallback for backward compatibility
+		Provider string `json:"provider"` // openai, anthropic, etc.
 	}
 	if err := json.Unmarshal(step.Config, &config); err != nil {
 		return nil, fmt.Errorf("invalid LLM step config: %w", err)
 	}
 
-	// Determine adapter ID
+	// Determine adapter ID (default to OpenAI)
 	adapterID := config.Provider
 	if adapterID == "" {
-		adapterID = config.AdapterID
-	}
-	if adapterID == "" {
-		adapterID = "openai" // default to OpenAI
+		adapterID = "openai"
 	}
 
 	// Get adapter
