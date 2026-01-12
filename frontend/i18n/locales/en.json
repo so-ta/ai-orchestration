@@ -236,7 +236,7 @@
     "selectStepToExecute": "Select a step to execute",
     "selectLLMStep": "Select an LLM step to run A/B or prompt tests",
     "useCustomInput": "Use custom input",
-    "inputPlaceholder": "{\"key\": \"value\"}",
+    "inputPlaceholder": "{'{'}\"key\": \"value\"{'}'}",
     "executeTest": "Test Run",
     "executing": "Executing...",
     "waitingForResult": "Waiting for result...",

@@ -236,7 +236,7 @@
     "selectStepToExecute": "実行するステップを選択してください",
     "selectLLMStep": "A/Bテストまたはプロンプトテストを行うにはLLMステップを選択してください",
     "useCustomInput": "カスタム入力を使用",
-    "inputPlaceholder": "{\"key\": \"value\"}",
+    "inputPlaceholder": "{'{'}\"key\": \"value\"{'}'}",
     "executeTest": "テスト実行",
     "executing": "実行中...",
     "waitingForResult": "結果を待機中...",
