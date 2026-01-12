@@ -22,16 +22,26 @@
 
 | Area | Test Files | Coverage | Status |
 |------|-----------|----------|--------|
-| **Backend** | 17 files | ~20% | Partial |
-| **Frontend** | 1 file | <1% | Critical |
+| **Backend** | 20 files | ~30% | Improving |
+| **Frontend** | 3 files | ~10% | Improving |
 | **E2E** | 1 file | ~25% | Critical |
+
+### Phase 1 完了項目 (2026-01-12)
+
+| 追加したテスト | テスト数 | ファイル |
+|--------------|---------|---------|
+| Backend Handler (workflow) | 47 | `handler/workflow_test.go` |
+| Backend Repository (workflow) | 20 | `repository/postgres/workflow_test.go` |
+| Frontend useApi | 14 | `composables/__tests__/useApi.spec.ts` |
+| Frontend useAuth | 9 | `composables/__tests__/useAuth.spec.ts` |
+| **合計** | **90** | |
 
 ### Backend Coverage by Package
 
 | Package | Source Files | Test Files | Coverage | Priority |
 |---------|:------------:|:----------:|:--------:|:--------:|
-| handler | 17 | 0 | 0% | **CRITICAL** |
-| repository/postgres | 18 | 0 | 0% | **CRITICAL** |
+| handler | 17 | 1 | 6% | **CRITICAL** |
+| repository/postgres | 18 | 1 | 6% | **CRITICAL** |
 | usecase | 14 | 1 | 7% | HIGH |
 | domain | 22 | 6 | 27% | OK |
 | adapter | 9 | 4 | 44% | OK |
@@ -44,7 +54,7 @@
 
 | Area | Files | Test Files | Coverage | Priority |
 |------|:-----:|:----------:|:--------:|:--------:|
-| composables | 16 | 1 | 6% | **CRITICAL** |
+| composables | 16 | 3 | 19% | HIGH |
 | components | 50+ | 0 | 0% | HIGH |
 | pages | 15 | 0 | 0% | HIGH |
 
@@ -112,98 +122,209 @@
 
 ## Implementation Phases
 
-### Phase 1: Critical Foundation (Week 1-2)
+### Phase 1: Critical Foundation ✅ COMPLETED (2026-01-12)
 
 **Goal**: 最も影響の大きい領域のテストを追加
 
-#### Backend Handler Tests
+#### 完了項目
 
-| File | Tests to Add | Priority |
-|------|--------------|----------|
-| `handler/workflow.go` | CRUD validation, auth, errors | P0 |
-| `handler/admin_tenant.go` | Tenant operations, isolation | P0 |
-| `handler/run.go` | Run lifecycle, state transitions | P0 |
-| `handler/step.go` | Step CRUD, type validation | P1 |
-| `handler/edge.go` | Edge creation, DAG validation | P1 |
+| File | 追加したテスト | Status |
+|------|--------------|--------|
+| `handler/workflow_test.go` | 47 tests (CRUD validation, auth, errors) | ✅ Done |
+| `repository/postgres/workflow_test.go` | 20 tests (CRUD, tenant isolation) | ✅ Done |
+| `composables/__tests__/useApi.spec.ts` | 14 tests (HTTP methods, headers) | ✅ Done |
+| `composables/__tests__/useAuth.spec.ts` | 9 tests (roles, dev mode) | ✅ Done |
 
-**Test Cases for workflow_handler_test.go:**
-```
-- TestCreateWorkflow_Success
-- TestCreateWorkflow_InvalidJSON
-- TestCreateWorkflow_MissingTenantID
-- TestCreateWorkflow_EmptyName
-- TestGetWorkflow_Success
-- TestGetWorkflow_NotFound
-- TestGetWorkflow_WrongTenant (isolation)
-- TestUpdateWorkflow_Success
-- TestUpdateWorkflow_AlreadyPublished
-- TestDeleteWorkflow_Success
-- TestDeleteWorkflow_HasRuns
-- TestPublishWorkflow_Success
-- TestPublishWorkflow_InvalidDAG
-```
+#### 追加した設計改善
 
-#### Frontend Core Composables
+- `backend/internal/repository/postgres/db.go` - DB interface for testability
+- pgxmock dependency for mock database testing
 
-| File | Tests to Add | Priority |
-|------|--------------|----------|
-| `useAuth.ts` | Auth flow, token refresh, dev mode | P0 |
-| `useApi.ts` | HTTP methods, error handling, retry | P0 |
-| `useWorkflows.ts` | CRUD operations, state management | P1 |
-| `useRuns.ts` | Run polling, state updates | P1 |
+---
 
-### Phase 2: Business Logic (Week 3-4)
+### Phase 2: Business Logic (次フェーズ)
 
 **Goal**: ビジネスロジック層のテストカバレッジ向上
 
-#### Backend Usecase Tests
+#### 2.1 Backend Handler Tests (残り)
 
-| File | Tests to Add | Priority |
-|------|--------------|----------|
-| `usecase/run.go` | Execution orchestration, state machine | P0 |
-| `usecase/copilot.go` | AI suggestions, error handling | P0 |
-| `usecase/credential_resolver.go` | Credential resolution, secrets | P1 |
-| `usecase/schedule.go` | Schedule management, triggers | P1 |
-| `usecase/webhook.go` | Webhook handling, validation | P1 |
+| File | LOC | 追加テスト | 見積テスト数 | Priority |
+|------|-----|-----------|-------------|----------|
+| `handler/run.go` | 462 | Run lifecycle, state transitions | 30-40 | P0 |
+| `handler/admin_tenant.go` | 489 | Tenant operations, isolation | 25-35 | P0 |
+| `handler/step.go` | 334 | Step CRUD, type validation | 20-30 | P1 |
+| `handler/edge.go` | 205 | Edge creation, validation | 15-20 | P1 |
+| `handler/copilot.go` | 778 | AI endpoints, streaming | 30-40 | P1 |
 
-#### Backend Repository Tests
+**Test Cases for run_handler_test.go:**
+```
+- TestCreateRun_Success
+- TestCreateRun_WorkflowNotPublished
+- TestCreateRun_InvalidInput
+- TestGetRun_Success
+- TestGetRun_NotFound
+- TestGetRun_WrongTenant
+- TestListRuns_Pagination
+- TestListRuns_FilterByStatus
+- TestCancelRun_Success
+- TestCancelRun_AlreadyCompleted
+- TestRetryRun_Success
+- TestRetryRun_NotFailed
+```
 
-| File | Tests to Add | Priority |
-|------|--------------|----------|
-| `repository/postgres/tenant.go` | Tenant isolation, CRUD | P0 |
-| `repository/postgres/workflow.go` | Workflow persistence, versioning | P0 |
-| `repository/postgres/run.go` | Run state management | P0 |
-| `repository/postgres/usage.go` | Usage tracking, aggregation | P1 |
+#### 2.2 Backend Repository Tests (残り)
 
-### Phase 3: UI Components (Week 5-6)
+| File | LOC | 追加テスト | 見積テスト数 | Priority |
+|------|-----|-----------|-------------|----------|
+| `repository/postgres/run.go` | 624 | Run state management | 25-35 | P0 |
+| `repository/postgres/tenant.go` | 517 | Tenant isolation, CRUD | 20-30 | P0 |
+| `repository/postgres/step.go` | 358 | Step persistence | 15-20 | P1 |
+| `repository/postgres/edge.go` | 187 | Edge persistence | 10-15 | P1 |
+| `repository/postgres/usage.go` | 576 | Usage tracking | 20-25 | P2 |
 
-**Goal**: フロントエンドコンポーネントのテスト追加
+**Implementation Note:**
+- 既存の `db.go` DB interface を他の repository にも適用
+- `NewXxxRepositoryWithDB()` constructor を追加してテスト可能に
 
-#### Critical Components
+#### 2.3 Backend Usecase Tests
 
-| Component | Tests to Add | Priority |
-|-----------|--------------|----------|
-| `DagEditor.vue` | Node operations, edge connections | P0 |
-| `PropertiesPanel.vue` | Form validation, config updates | P1 |
-| `DynamicConfigForm.vue` | Schema rendering, validation | P1 |
-| `RunViewer.vue` | State display, log rendering | P2 |
+| File | LOC | 追加テスト | 見積テスト数 | Priority |
+|------|-----|-----------|-------------|----------|
+| `usecase/run.go` | 15.9KB | Execution orchestration | 40-50 | P0 |
+| `usecase/workflow.go` | 582 | Workflow business logic | 20-25 | P1 |
+| `usecase/credential_resolver.go` | 286 | Secret resolution | 15-20 | P1 |
+| `usecase/schedule.go` | 201 | Schedule management | 10-15 | P2 |
+| `usecase/webhook.go` | 246 | Webhook handling | 10-15 | P2 |
 
-### Phase 4: E2E Coverage (Week 7-8)
+**Test Approach:**
+- Repository を interface 化してモック注入
+- domain error mapping のテスト
+- エッジケース（同時実行、タイムアウト等）
+
+---
+
+### Phase 3: Frontend Components
+
+**Goal**: フロントエンドのテストカバレッジ向上
+
+#### 3.1 Composable Tests (残り)
+
+| File | LOC | 追加テスト | 見積テスト数 | Priority |
+|------|-----|-----------|-------------|----------|
+| `useWorkflows.ts` | 181 | CRUD operations, state | 15-20 | P0 |
+| `useRuns.ts` | 270 | Polling, state updates | 20-25 | P0 |
+| `useDagEditor.ts` | 356 | Node/edge operations | 25-30 | P1 |
+| `useSteps.ts` | 125 | Step CRUD | 10-15 | P1 |
+| `useBlocks.ts` | 82 | Block definitions | 8-12 | P2 |
+
+**Test Cases for useWorkflows.spec.ts:**
+```typescript
+describe('useWorkflows', () => {
+  describe('fetchWorkflows', () => {
+    it('should fetch and cache workflows')
+    it('should handle pagination')
+    it('should handle network errors')
+  })
+  describe('createWorkflow', () => {
+    it('should create and add to list')
+    it('should validate input')
+  })
+  describe('updateWorkflow', () => {
+    it('should update and refresh')
+    it('should handle optimistic update')
+  })
+  describe('deleteWorkflow', () => {
+    it('should remove from list')
+    it('should handle deletion errors')
+  })
+})
+```
+
+#### 3.2 Component Tests
+
+| Component | LOC | 追加テスト | 見積テスト数 | Priority |
+|-----------|-----|-----------|-------------|----------|
+| `DagEditor.vue` | 2,987 | Node/edge operations | 40-50 | P0 |
+| `PropertiesPanel.vue` | 486 | Form validation | 15-20 | P1 |
+| `DynamicConfigForm.vue` | 389 | Schema rendering | 15-20 | P1 |
+| `BlockPalette.vue` | 298 | Block drag/drop | 10-15 | P2 |
+| `RunViewer.vue` | 521 | State display, logs | 15-20 | P2 |
+
+**Test Approach (DagEditor.vue):**
+```typescript
+describe('DagEditor', () => {
+  describe('node operations', () => {
+    it('should add node on drop')
+    it('should remove node on delete key')
+    it('should update node position on drag')
+    it('should select node on click')
+  })
+  describe('edge operations', () => {
+    it('should create edge between valid ports')
+    it('should prevent invalid connections')
+    it('should remove edge on delete')
+  })
+  describe('group operations', () => {
+    it('should create group from selection')
+    it('should resize group with contents')
+    it('should push blocks on boundary collision')
+  })
+})
+```
+
+---
+
+### Phase 4: E2E & Integration Tests
 
 **Goal**: E2Eテストでクリティカルフローを網羅
 
-#### E2E Test Scenarios
+#### 4.1 E2E Test Scenarios
 
-| Scenario | Description | Priority |
-|----------|-------------|----------|
-| Workflow CRUD | Create, update, publish, delete | P0 |
-| Run Lifecycle | Execute, monitor, cancel, retry | P0 |
-| LLM Step Execution | OpenAI/Anthropic integration | P0 |
-| Map/Join Patterns | Parallel execution, merge | P1 |
-| Block Groups | Group creation, nesting | P1 |
-| Multi-tenant Isolation | Cross-tenant access prevention | P0 |
-| Error Recovery | Failed step handling, retry | P1 |
-| Credentials | Secret resolution, masking | P1 |
+| Scenario | Description | 見積テスト数 | Priority |
+|----------|-------------|-------------|----------|
+| Workflow CRUD | Create → Edit → Publish → Delete | 5-8 | P0 |
+| Run Lifecycle | Execute → Monitor → Complete/Cancel | 8-12 | P0 |
+| LLM Integration | OpenAI/Anthropic step execution | 5-8 | P0 |
+| Multi-tenant Isolation | Cross-tenant access prevention | 5-8 | P0 |
+| Map/Join Patterns | Parallel execution, merge | 5-8 | P1 |
+| Block Groups | Group creation, nesting | 5-8 | P1 |
+| Error Recovery | Failed step → Retry → Success | 5-8 | P1 |
+| Credentials | Secret resolution, masking | 5-8 | P2 |
+
+#### 4.2 Integration Tests
+
+| Area | 追加テスト | 見積テスト数 | Priority |
+|------|-----------|-------------|----------|
+| Handler + Usecase + Repository | Full request/response flow | 30-40 | P0 |
+| Engine + Adapter | Step execution with mock LLM | 20-30 | P1 |
+| Webhook + Scheduler | Trigger mechanisms | 15-20 | P2 |
+
+---
+
+## Phase 実行サマリー
+
+| Phase | 主要タスク | 見積テスト数 | 所要時間目安 |
+|-------|-----------|-------------|-------------|
+| Phase 1 | ✅ Handler, Repository, Composable 基盤 | 90 | 完了 |
+| Phase 2 | Handler残り, Repository残り, Usecase | 200-250 | 2-3日 |
+| Phase 3 | Composable残り, Component | 150-200 | 2-3日 |
+| Phase 4 | E2E, Integration | 100-150 | 2-3日 |
+| **合計** | | **540-690** | **6-9日** |
+
+### 推奨実行順序
+
+```
+Phase 2.1 → Phase 2.2 → Phase 2.3 → Phase 3.1 → Phase 3.2 → Phase 4.1 → Phase 4.2
+ (Handler)   (Repo)      (Usecase)   (Composable) (Component)  (E2E)     (Integration)
+```
+
+### 各Phaseの開始条件
+
+| Phase | 開始条件 |
+|-------|---------|
+| Phase 2 | 即時開始可能 |
+| Phase 3 | Phase 2.1完了後（並行可） |
+| Phase 4 | Phase 2, 3 の主要部分完了後 |
 
 ---
 
