@@ -60,193 +60,172 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  DynamicConfigForm.vue (新規)                               │
 │  ├── JSON Schema解析                                        │
-│  ├── フィールドタイプ別レンダリング                          │
+│  ├── **型推論によるウィジェット自動選択**                     │
 │  ├── ajvによるバリデーション                                │
 │  └── 条件付きフィールド表示                                  │
 └─────────────────────────────────────────────────────────────┘
                            ↑
-                    スキーマ駆動
+              標準JSON Schemaのみで動作
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │  block_definitions テーブル                                 │
-│  └── ui_config.configSchema (拡張JSON Schema)              │
-│      ├── 標準JSON Schema (type, enum, minimum等)           │
-│      └── UI拡張 (x-ui-*)                                   │
+│  └── config_schema (標準JSON Schema)                        │
+│      ├── type, enum, minimum, maximum 等                   │
+│      ├── title, description (ラベル・説明に自動利用)         │
+│      └── format (uri, email等の標準フォーマット)             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 拡張configSchemaフォーマット
+### 2.2 設計方針: 標準JSON Schema優先
 
-標準JSON Schemaに`x-ui-*`プレフィックスでUI制御を追加：
+**カスタムブロック作成のユーザビリティを考慮し、標準JSON Schemaだけで基本的なフォームが生成される設計とする。**
+
+#### 基本原則
+
+| 優先度 | 方針 |
+|--------|------|
+| 1 | 標準JSON Schemaのみで基本フォームが動作 |
+| 2 | 型から適切なウィジェットを自動推論 |
+| 3 | `title`/`description`をラベル・説明に自動利用 |
+| 4 | 拡張プロパティは使わなくても問題なし |
+
+#### カスタムブロック作成例（最小構成）
+
+ユーザーがカスタムブロックを作成する際は、標準JSON Schemaだけで十分：
 
 ```json
 {
   "type": "object",
   "properties": {
-    "provider": {
+    "webhook_url": {
       "type": "string",
-      "enum": ["openai", "anthropic", "mock"],
-      "default": "openai",
-      "x-ui-widget": "select",
-      "x-ui-label": "プロバイダー",
-      "x-ui-description": "使用するLLMプロバイダーを選択",
-      "x-ui-order": 1
+      "format": "uri",
+      "title": "Webhook URL",
+      "description": "通知先のWebhook URL"
     },
-    "model": {
+    "message": {
       "type": "string",
-      "x-ui-widget": "select",
-      "x-ui-label": "モデル",
-      "x-ui-order": 2,
-      "x-ui-depends-on": {
-        "field": "provider",
-        "options": {
-          "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-          "anthropic": ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"],
-          "mock": ["mock-model"]
-        }
-      }
+      "title": "メッセージ",
+      "maxLength": 2000
     },
-    "system_prompt": {
-      "type": "string",
-      "x-ui-widget": "textarea",
-      "x-ui-label": "システムプロンプト",
-      "x-ui-rows": 4,
-      "x-ui-placeholder": "AIの役割を定義...",
-      "x-ui-order": 3
-    },
-    "user_prompt": {
-      "type": "string",
-      "x-ui-widget": "template-editor",
-      "x-ui-label": "ユーザープロンプト",
-      "x-ui-description": "{{変数名}}で入力データを参照可能",
-      "x-ui-rows": 6,
-      "x-ui-order": 4
-    },
-    "temperature": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 2,
-      "default": 0.7,
-      "x-ui-widget": "slider",
-      "x-ui-label": "Temperature",
-      "x-ui-step": 0.1,
-      "x-ui-order": 5
-    },
-    "max_tokens": {
+    "retry_count": {
       "type": "integer",
-      "minimum": 1,
-      "maximum": 128000,
-      "default": 4096,
-      "x-ui-widget": "number",
-      "x-ui-label": "最大トークン数",
-      "x-ui-order": 6,
-      "x-ui-collapsed": true
+      "title": "リトライ回数",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 3
+    },
+    "enabled": {
+      "type": "boolean",
+      "title": "有効化",
+      "default": true
     }
   },
-  "required": ["provider", "model", "user_prompt"]
+  "required": ["webhook_url", "message"]
 }
 ```
 
-### 2.3 サポートするUIウィジェット
+上記スキーマから自動生成されるUI：
+- `webhook_url` → URL入力フィールド（`format: uri`から推論）
+- `message` → テキストエリア（`maxLength`が長いstringから推論）
+- `retry_count` → 数値入力（`type: integer`から推論）
+- `enabled` → チェックボックス（`type: boolean`から推論）
 
-| ウィジェット | 用途 | オプション |
-|-------------|------|-----------|
-| `text` | 単一行テキスト | `placeholder`, `maxLength` |
-| `textarea` | 複数行テキスト | `rows`, `placeholder` |
-| `number` | 数値入力 | `step`, `min`, `max` |
-| `slider` | スライダー | `step`, `min`, `max`, `showValue` |
-| `select` | ドロップダウン | `options`, `allowCustom` |
-| `radio` | ラジオボタン | `options`, `inline` |
-| `checkbox` | チェックボックス | - |
-| `switch` | トグルスイッチ | - |
-| `color` | カラーピッカー | `presets` |
-| `datetime` | 日時選択 | `type` (date/time/datetime) |
-| `code` | コードエディタ | `language`, `height` |
-| `template-editor` | テンプレートエディタ | `variables`, `rows` |
-| `json` | JSONエディタ | `schema` |
-| `key-value` | キー・バリューペア | `keyLabel`, `valueLabel` |
-| `array` | 配列エディタ | `itemSchema`, `addLabel` |
-| `object` | ネストオブジェクト | `properties` |
-| `secret` | シークレット入力 | `envKey` |
+### 2.3 型推論ルール
 
-### 2.4 条件付きフィールド表示
+標準JSON Schemaの属性からウィジェットを自動決定：
+
+| JSON Schema | 推論されるウィジェット |
+|-------------|----------------------|
+| `type: "string"` | テキスト入力 |
+| `type: "string"` + `enum` | セレクトボックス |
+| `type: "string"` + `maxLength > 100` | テキストエリア |
+| `type: "string"` + `format: "uri"` | URL入力 |
+| `type: "string"` + `format: "date-time"` | 日時ピッカー |
+| `type: "number"` / `type: "integer"` | 数値入力 |
+| `type: "boolean"` | チェックボックス |
+| `type: "array"` | 配列エディタ |
+| `type: "object"` | ネストフォーム |
+
+### 2.4 標準属性の活用
+
+| JSON Schema属性 | UI上の用途 |
+|----------------|-----------|
+| `title` | フィールドラベル（なければプロパティ名を表示） |
+| `description` | ヘルプテキスト |
+| `default` | 初期値 |
+| `enum` | 選択肢 |
+| `minimum` / `maximum` | 入力制限 |
+| `minLength` / `maxLength` | 文字数制限 |
+| `pattern` | 正規表現バリデーション |
+| `format` | 入力タイプのヒント（uri, email, date-time等） |
+
+### 2.5 オプション: UI拡張（上級者向け）
+
+システムブロックや高度なカスタマイズが必要な場合のみ、`ui_config`で追加設定可能：
 
 ```json
 {
+  "ui_config": {
+    "icon": "send",
+    "color": "#5865F2",
+    "fieldOverrides": {
+      "message": {
+        "widget": "template-editor",
+        "rows": 6
+      }
+    },
+    "groups": [
+      { "id": "basic", "title": "基本設定" },
+      { "id": "advanced", "title": "詳細設定", "collapsed": true }
+    ],
+    "fieldGroups": {
+      "webhook_url": "basic",
+      "message": "basic",
+      "retry_count": "advanced"
+    }
+  }
+}
+```
+
+**重要**: `ui_config`は完全にオプショナル。指定しなくても標準JSON Schemaから適切なUIが生成される。
+
+### 2.6 条件付きフィールド表示
+
+JSON Schemaの`if`/`then`/`else`または`allOf`+`if`で実現可能（標準仕様）：
+
+```json
+{
+  "type": "object",
   "properties": {
     "loop_type": {
       "type": "string",
-      "enum": ["for", "forEach", "while", "doWhile"],
-      "x-ui-widget": "select",
-      "x-ui-label": "ループタイプ"
+      "title": "ループタイプ",
+      "enum": ["for", "forEach", "while"]
     },
     "count": {
       "type": "integer",
-      "x-ui-widget": "number",
-      "x-ui-label": "繰り返し回数",
-      "x-ui-visible-if": {
-        "field": "loop_type",
-        "value": "for"
-      }
+      "title": "繰り返し回数"
     },
     "input_path": {
       "type": "string",
-      "x-ui-widget": "text",
-      "x-ui-label": "入力パス",
-      "x-ui-visible-if": {
-        "field": "loop_type",
-        "value": "forEach"
-      }
-    },
-    "condition": {
-      "type": "string",
-      "x-ui-widget": "text",
-      "x-ui-label": "継続条件",
-      "x-ui-visible-if": {
-        "field": "loop_type",
-        "values": ["while", "doWhile"]
-      }
+      "title": "入力パス"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "loop_type": { "const": "for" } } },
+      "then": { "required": ["count"] }
+    },
+    {
+      "if": { "properties": { "loop_type": { "const": "forEach" } } },
+      "then": { "required": ["input_path"] }
+    }
+  ]
 }
 ```
 
-### 2.5 グループ化とセクション
-
-```json
-{
-  "x-ui-groups": [
-    {
-      "id": "basic",
-      "label": "基本設定",
-      "collapsed": false
-    },
-    {
-      "id": "advanced",
-      "label": "詳細設定",
-      "collapsed": true
-    }
-  ],
-  "properties": {
-    "provider": {
-      "x-ui-group": "basic",
-      "x-ui-order": 1
-    },
-    "model": {
-      "x-ui-group": "basic",
-      "x-ui-order": 2
-    },
-    "temperature": {
-      "x-ui-group": "advanced",
-      "x-ui-order": 1
-    },
-    "max_tokens": {
-      "x-ui-group": "advanced",
-      "x-ui-order": 2
-    }
-  }
-}
-```
+フロントエンドは`required`になっていないフィールドを折りたたみ表示または非表示にすることで、条件付き表示を実現。
 
 ---
 
@@ -284,77 +263,69 @@ frontend/components/workflow-editor/config/
 ```typescript
 // frontend/components/workflow-editor/config/types/config-schema.ts
 
-export type UIWidget =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'slider'
-  | 'select'
-  | 'radio'
-  | 'checkbox'
-  | 'switch'
-  | 'color'
-  | 'datetime'
-  | 'code'
-  | 'template-editor'
-  | 'json'
-  | 'key-value'
-  | 'array'
-  | 'object'
-  | 'secret';
-
-export interface UIExtensions {
-  'x-ui-widget'?: UIWidget;
-  'x-ui-label'?: string;
-  'x-ui-description'?: string;
-  'x-ui-placeholder'?: string;
-  'x-ui-order'?: number;
-  'x-ui-group'?: string;
-  'x-ui-collapsed'?: boolean;
-  'x-ui-rows'?: number;
-  'x-ui-step'?: number;
-  'x-ui-visible-if'?: VisibilityCondition;
-  'x-ui-depends-on'?: DependsOnConfig;
-}
-
-export interface VisibilityCondition {
-  field: string;
-  value?: string | number | boolean;
-  values?: (string | number | boolean)[];
-  operator?: 'eq' | 'ne' | 'in' | 'notIn' | 'gt' | 'lt';
-}
-
-export interface DependsOnConfig {
-  field: string;
-  options: Record<string, string[]>;
-}
-
-export interface ConfigSchemaProperty extends UIExtensions {
+// 標準JSON Schema型定義（シンプルに保つ）
+export interface JSONSchemaProperty {
   type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
-  enum?: (string | number)[];
+  title?: string;           // フィールドラベル
+  description?: string;     // ヘルプテキスト
   default?: unknown;
+  enum?: (string | number)[];
+  const?: string | number | boolean;
+
+  // 数値制約
   minimum?: number;
   maximum?: number;
+
+  // 文字列制約
   minLength?: number;
   maxLength?: number;
   pattern?: string;
-  items?: ConfigSchemaProperty;
-  properties?: Record<string, ConfigSchemaProperty>;
+  format?: 'uri' | 'email' | 'date-time' | 'date' | 'time' | 'uuid';
+
+  // 配列
+  items?: JSONSchemaProperty;
+  minItems?: number;
+  maxItems?: number;
+
+  // オブジェクト
+  properties?: Record<string, JSONSchemaProperty>;
   required?: string[];
+  additionalProperties?: boolean | JSONSchemaProperty;
 }
 
 export interface ConfigSchema {
   type: 'object';
-  properties: Record<string, ConfigSchemaProperty>;
+  properties: Record<string, JSONSchemaProperty>;
   required?: string[];
-  'x-ui-groups'?: UIGroup[];
+  allOf?: ConditionalSchema[];
+}
+
+// 条件付きスキーマ（標準JSON Schema）
+export interface ConditionalSchema {
+  if?: { properties: Record<string, { const: unknown }> };
+  then?: { required?: string[] };
+  else?: { required?: string[] };
+}
+
+// UI設定（オプショナル、ui_configに格納）
+export interface UIConfig {
+  icon?: string;
+  color?: string;
+  fieldOverrides?: Record<string, FieldOverride>;
+  groups?: UIGroup[];
+  fieldGroups?: Record<string, string>;
+}
+
+export interface FieldOverride {
+  widget?: 'textarea' | 'code' | 'template-editor' | 'slider' | 'secret' | 'key-value';
+  rows?: number;
+  language?: string;
 }
 
 export interface UIGroup {
   id: string;
-  label: string;
+  title: string;
   collapsed?: boolean;
-  icon?: string;
 }
 ```
 
@@ -459,80 +430,50 @@ WHERE slug = 'llm';
 
 ---
 
-## 4. 各ブロックのconfigSchema定義
+## 4. 各ブロックのconfigSchema定義（標準JSON Schemaのみ）
+
+カスタムブロック作成の参考として、システムブロックも標準JSON Schemaのみで定義。
 
 ### 4.1 LLMブロック
 
 ```json
 {
   "type": "object",
-  "x-ui-groups": [
-    { "id": "model", "label": "モデル設定" },
-    { "id": "prompt", "label": "プロンプト" },
-    { "id": "params", "label": "パラメータ", "collapsed": true }
-  ],
   "properties": {
     "provider": {
       "type": "string",
+      "title": "プロバイダー",
       "enum": ["openai", "anthropic", "mock"],
-      "default": "openai",
-      "x-ui-widget": "select",
-      "x-ui-label": "プロバイダー",
-      "x-ui-group": "model",
-      "x-ui-order": 1
+      "default": "openai"
     },
     "model": {
       "type": "string",
-      "x-ui-widget": "select",
-      "x-ui-label": "モデル",
-      "x-ui-group": "model",
-      "x-ui-order": 2,
-      "x-ui-depends-on": {
-        "field": "provider",
-        "options": {
-          "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-          "anthropic": ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
-          "mock": ["mock-model"]
-        }
-      }
+      "title": "モデル"
     },
     "system_prompt": {
       "type": "string",
-      "x-ui-widget": "textarea",
-      "x-ui-label": "システムプロンプト",
-      "x-ui-group": "prompt",
-      "x-ui-rows": 4,
-      "x-ui-order": 1
+      "title": "システムプロンプト",
+      "maxLength": 10000
     },
     "user_prompt": {
       "type": "string",
-      "x-ui-widget": "template-editor",
-      "x-ui-label": "ユーザープロンプト",
-      "x-ui-description": "{{変数名}}で入力データを参照可能",
-      "x-ui-group": "prompt",
-      "x-ui-rows": 6,
-      "x-ui-order": 2
+      "title": "ユーザープロンプト",
+      "description": "{{変数名}}で入力データを参照可能",
+      "maxLength": 50000
     },
     "temperature": {
       "type": "number",
+      "title": "Temperature",
       "minimum": 0,
       "maximum": 2,
-      "default": 0.7,
-      "x-ui-widget": "slider",
-      "x-ui-label": "Temperature",
-      "x-ui-step": 0.1,
-      "x-ui-group": "params",
-      "x-ui-order": 1
+      "default": 0.7
     },
     "max_tokens": {
       "type": "integer",
+      "title": "最大トークン数",
       "minimum": 1,
       "maximum": 128000,
-      "default": 4096,
-      "x-ui-widget": "number",
-      "x-ui-label": "最大トークン数",
-      "x-ui-group": "params",
-      "x-ui-order": 2
+      "default": 4096
     }
   },
   "required": ["provider", "model", "user_prompt"]
@@ -544,88 +485,41 @@ WHERE slug = 'llm';
 ```json
 {
   "type": "object",
-  "x-ui-groups": [
-    { "id": "request", "label": "リクエスト設定" },
-    { "id": "auth", "label": "認証", "collapsed": true },
-    { "id": "advanced", "label": "詳細設定", "collapsed": true }
-  ],
   "properties": {
     "url": {
       "type": "string",
-      "format": "uri",
-      "x-ui-widget": "text",
-      "x-ui-label": "URL",
-      "x-ui-placeholder": "https://api.example.com/endpoint",
-      "x-ui-group": "request",
-      "x-ui-order": 1
+      "title": "URL",
+      "format": "uri"
     },
     "method": {
       "type": "string",
+      "title": "メソッド",
       "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
-      "default": "GET",
-      "x-ui-widget": "select",
-      "x-ui-label": "メソッド",
-      "x-ui-group": "request",
-      "x-ui-order": 2
+      "default": "GET"
     },
     "headers": {
       "type": "object",
-      "additionalProperties": { "type": "string" },
-      "x-ui-widget": "key-value",
-      "x-ui-label": "ヘッダー",
-      "x-ui-group": "request",
-      "x-ui-order": 3
+      "title": "ヘッダー",
+      "additionalProperties": { "type": "string" }
     },
     "body": {
       "type": "string",
-      "x-ui-widget": "json",
-      "x-ui-label": "リクエストボディ",
-      "x-ui-group": "request",
-      "x-ui-order": 4,
-      "x-ui-visible-if": {
-        "field": "method",
-        "values": ["POST", "PUT", "PATCH"]
-      }
-    },
-    "auth_type": {
-      "type": "string",
-      "enum": ["none", "bearer", "basic", "api_key"],
-      "default": "none",
-      "x-ui-widget": "select",
-      "x-ui-label": "認証タイプ",
-      "x-ui-group": "auth",
-      "x-ui-order": 1
-    },
-    "auth_token": {
-      "type": "string",
-      "x-ui-widget": "secret",
-      "x-ui-label": "トークン",
-      "x-ui-group": "auth",
-      "x-ui-order": 2,
-      "x-ui-visible-if": {
-        "field": "auth_type",
-        "values": ["bearer", "api_key"]
-      }
+      "title": "リクエストボディ",
+      "maxLength": 100000
     },
     "timeout_ms": {
       "type": "integer",
+      "title": "タイムアウト (ms)",
       "minimum": 1000,
       "maximum": 300000,
-      "default": 30000,
-      "x-ui-widget": "number",
-      "x-ui-label": "タイムアウト (ms)",
-      "x-ui-group": "advanced",
-      "x-ui-order": 1
+      "default": 30000
     },
     "retry_count": {
       "type": "integer",
+      "title": "リトライ回数",
       "minimum": 0,
       "maximum": 5,
-      "default": 0,
-      "x-ui-widget": "number",
-      "x-ui-label": "リトライ回数",
-      "x-ui-group": "advanced",
-      "x-ui-order": 2
+      "default": 0
     }
   },
   "required": ["url", "method"]
@@ -640,11 +534,8 @@ WHERE slug = 'llm';
   "properties": {
     "expression": {
       "type": "string",
-      "x-ui-widget": "code",
-      "x-ui-label": "条件式",
-      "x-ui-description": "JSONPath式で条件を記述 (例: $.status == \"success\")",
-      "x-ui-language": "jsonpath",
-      "x-ui-order": 1
+      "title": "条件式",
+      "description": "JSONPath式で条件を記述 (例: $.status == \"success\")"
     }
   },
   "required": ["expression"]
@@ -659,36 +550,18 @@ WHERE slug = 'llm';
   "properties": {
     "expression": {
       "type": "string",
-      "x-ui-widget": "text",
-      "x-ui-label": "評価式",
-      "x-ui-description": "分岐の基準となる値 (例: $.category)",
-      "x-ui-order": 1
+      "title": "評価式",
+      "description": "分岐の基準となる値 (例: $.category)"
     },
     "cases": {
       "type": "array",
-      "x-ui-widget": "array",
-      "x-ui-label": "分岐条件",
-      "x-ui-add-label": "条件を追加",
-      "x-ui-order": 2,
+      "title": "分岐条件",
       "items": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "x-ui-widget": "text",
-            "x-ui-label": "ラベル"
-          },
-          "expression": {
-            "type": "string",
-            "x-ui-widget": "text",
-            "x-ui-label": "条件式"
-          },
-          "is_default": {
-            "type": "boolean",
-            "default": false,
-            "x-ui-widget": "checkbox",
-            "x-ui-label": "デフォルト"
-          }
+          "name": { "type": "string", "title": "ラベル" },
+          "expression": { "type": "string", "title": "条件式" },
+          "is_default": { "type": "boolean", "title": "デフォルト", "default": false }
         },
         "required": ["name"]
       }
@@ -703,70 +576,48 @@ WHERE slug = 'llm';
 ```json
 {
   "type": "object",
-  "x-ui-groups": [
-    { "id": "type", "label": "ループタイプ" },
-    { "id": "settings", "label": "設定" }
-  ],
   "properties": {
     "loop_type": {
       "type": "string",
+      "title": "ループタイプ",
       "enum": ["for", "forEach", "while", "doWhile"],
-      "default": "for",
-      "x-ui-widget": "radio",
-      "x-ui-label": "ループタイプ",
-      "x-ui-group": "type",
-      "x-ui-inline": true,
-      "x-ui-order": 1
+      "default": "for"
     },
     "count": {
       "type": "integer",
+      "title": "繰り返し回数",
       "minimum": 1,
-      "default": 10,
-      "x-ui-widget": "number",
-      "x-ui-label": "繰り返し回数",
-      "x-ui-group": "settings",
-      "x-ui-order": 1,
-      "x-ui-visible-if": {
-        "field": "loop_type",
-        "value": "for"
-      }
+      "default": 10
     },
     "input_path": {
       "type": "string",
-      "x-ui-widget": "text",
-      "x-ui-label": "入力パス",
-      "x-ui-placeholder": "$.items",
-      "x-ui-group": "settings",
-      "x-ui-order": 2,
-      "x-ui-visible-if": {
-        "field": "loop_type",
-        "value": "forEach"
-      }
+      "title": "入力パス",
+      "description": "forEachで使用 (例: $.items)"
     },
     "condition": {
       "type": "string",
-      "x-ui-widget": "text",
-      "x-ui-label": "継続条件",
-      "x-ui-placeholder": "$.hasMore == true",
-      "x-ui-group": "settings",
-      "x-ui-order": 3,
-      "x-ui-visible-if": {
-        "field": "loop_type",
-        "values": ["while", "doWhile"]
-      }
+      "title": "継続条件",
+      "description": "while/doWhileで使用 (例: $.hasMore == true)"
     },
     "max_iterations": {
       "type": "integer",
+      "title": "最大繰り返し回数",
       "minimum": 1,
       "maximum": 10000,
-      "default": 100,
-      "x-ui-widget": "number",
-      "x-ui-label": "最大繰り返し回数",
-      "x-ui-group": "settings",
-      "x-ui-order": 4
+      "default": 100
     }
   },
-  "required": ["loop_type"]
+  "required": ["loop_type"],
+  "allOf": [
+    {
+      "if": { "properties": { "loop_type": { "const": "for" } } },
+      "then": { "required": ["count"] }
+    },
+    {
+      "if": { "properties": { "loop_type": { "const": "forEach" } } },
+      "then": { "required": ["input_path"] }
+    }
+  ]
 }
 ```
 
@@ -778,20 +629,16 @@ WHERE slug = 'llm';
   "properties": {
     "code": {
       "type": "string",
-      "x-ui-widget": "code",
-      "x-ui-label": "コード",
-      "x-ui-language": "javascript",
-      "x-ui-height": "300px",
-      "x-ui-order": 1
+      "title": "コード",
+      "description": "JavaScriptコードを記述",
+      "maxLength": 100000
     },
     "timeout_ms": {
       "type": "integer",
+      "title": "タイムアウト (ms)",
       "minimum": 100,
       "maximum": 60000,
-      "default": 5000,
-      "x-ui-widget": "number",
-      "x-ui-label": "タイムアウト (ms)",
-      "x-ui-order": 2
+      "default": 5000
     }
   },
   "required": ["code"]
@@ -806,52 +653,29 @@ WHERE slug = 'llm';
   "properties": {
     "instructions": {
       "type": "string",
-      "x-ui-widget": "textarea",
-      "x-ui-label": "承認者への指示",
-      "x-ui-rows": 4,
-      "x-ui-order": 1
+      "title": "承認者への指示",
+      "maxLength": 5000
     },
     "timeout_hours": {
       "type": "number",
+      "title": "タイムアウト (時間)",
       "minimum": 0.1,
       "maximum": 168,
-      "default": 24,
-      "x-ui-widget": "number",
-      "x-ui-label": "タイムアウト (時間)",
-      "x-ui-step": 0.5,
-      "x-ui-order": 2
+      "default": 24
     },
     "require_comment": {
       "type": "boolean",
-      "default": false,
-      "x-ui-widget": "checkbox",
-      "x-ui-label": "コメント必須",
-      "x-ui-order": 3
+      "title": "コメント必須",
+      "default": false
     },
     "approval_options": {
       "type": "array",
-      "x-ui-widget": "array",
-      "x-ui-label": "承認オプション",
-      "x-ui-add-label": "オプションを追加",
-      "x-ui-order": 4,
+      "title": "承認オプション",
       "items": {
         "type": "object",
         "properties": {
-          "label": {
-            "type": "string",
-            "x-ui-widget": "text",
-            "x-ui-label": "ラベル"
-          },
-          "value": {
-            "type": "string",
-            "x-ui-widget": "text",
-            "x-ui-label": "値"
-          },
-          "color": {
-            "type": "string",
-            "x-ui-widget": "color",
-            "x-ui-label": "色"
-          }
+          "label": { "type": "string", "title": "ラベル" },
+          "value": { "type": "string", "title": "値" }
         }
       }
     }
