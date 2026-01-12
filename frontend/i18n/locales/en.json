@@ -24,7 +24,10 @@
     "updatedAt": "Updated At",
     "noData": "No data",
     "error": "Error",
-    "success": "Success"
+    "success": "Success",
+    "all": "All",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -677,7 +680,8 @@
         "outputSchema": "Output Schema (JSON Schema)",
         "credentialType": "Required Credential Type",
         "credentialTypeHint": "The type of credential this block requires",
-        "enabled": "Enabled"
+        "enabled": "Enabled",
+        "icon": "Icon"
       },
       "messages": {
         "created": "Block created successfully",
