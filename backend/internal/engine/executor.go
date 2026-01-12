@@ -23,20 +23,35 @@ var tracer = otel.Tracer("ai-orchestration/engine")
 
 // Executor executes a workflow DAG
 type Executor struct {
-	registry  *adapter.Registry
-	logger    *slog.Logger
-	evaluator *ConditionEvaluator
-	sandbox   *sandbox.Sandbox
+	registry      *adapter.Registry
+	logger        *slog.Logger
+	evaluator     *ConditionEvaluator
+	sandbox       *sandbox.Sandbox
+	usageRecorder *UsageRecorder
+}
+
+// ExecutorOption is a functional option for Executor
+type ExecutorOption func(*Executor)
+
+// WithUsageRecorder sets the usage recorder for the executor
+func WithUsageRecorder(recorder *UsageRecorder) ExecutorOption {
+	return func(e *Executor) {
+		e.usageRecorder = recorder
+	}
 }
 
 // NewExecutor creates a new executor
-func NewExecutor(registry *adapter.Registry, logger *slog.Logger) *Executor {
-	return &Executor{
+func NewExecutor(registry *adapter.Registry, logger *slog.Logger, opts ...ExecutorOption) *Executor {
+	e := &Executor{
 		registry:  registry,
 		logger:    logger,
 		evaluator: NewConditionEvaluator(),
 		sandbox:   sandbox.New(sandbox.DefaultConfig()),
 	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // ExecutionContext holds the context for a workflow execution
@@ -133,7 +148,7 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 	}
 
 	// Call executeNodeWithInput instead of executeNode to use custom input
-	output, err = e.executeStepWithInput(ctx, execCtx, *targetStep, stepInput)
+	output, err = e.executeStepWithInput(ctx, execCtx, *targetStep, stepRun, stepInput)
 
 	if err != nil {
 		stepRun.Fail(err.Error())
@@ -218,14 +233,14 @@ func (e *Executor) ExecuteFromStep(ctx context.Context, execCtx *ExecutionContex
 }
 
 // executeStepWithInput executes a step with explicit input (for single step execution)
-func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	switch step.Type {
 	case domain.StepTypeStart:
 		return e.executeStartStep(ctx, step, input)
 	case domain.StepTypeTool:
-		return e.executeToolStep(ctx, step, input)
+		return e.executeToolStep(ctx, execCtx, step, stepRun, input)
 	case domain.StepTypeLLM:
-		return e.executeLLMStep(ctx, step, input)
+		return e.executeLLMStep(ctx, execCtx, step, stepRun, input)
 	case domain.StepTypeCondition:
 		return e.executeConditionStep(ctx, execCtx, step, input)
 	case domain.StepTypeMap:
@@ -480,9 +495,9 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	case domain.StepTypeStart:
 		output, err = e.executeStartStep(ctx, step, input)
 	case domain.StepTypeTool:
-		output, err = e.executeToolStep(ctx, step, input)
+		output, err = e.executeToolStep(ctx, execCtx, step, stepRun, input)
 	case domain.StepTypeLLM:
-		output, err = e.executeLLMStep(ctx, step, input)
+		output, err = e.executeLLMStep(ctx, execCtx, step, stepRun, input)
 	case domain.StepTypeCondition:
 		output, err = e.executeConditionStep(ctx, execCtx, step, input)
 	case domain.StepTypeMap:
@@ -584,7 +599,7 @@ func (e *Executor) executeStartStep(ctx context.Context, step domain.Step, input
 	return input, nil
 }
 
-func (e *Executor) executeToolStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	// Parse step config to get adapter ID
 	var config struct {
 		AdapterID string `json:"adapter_id"`
@@ -608,6 +623,32 @@ func (e *Executor) executeToolStep(ctx context.Context, step domain.Step, input 
 		Input:  input,
 		Config: step.Config,
 	})
+
+	// Record usage if this is an LLM adapter (has token metadata)
+	if e.usageRecorder != nil && resp != nil && resp.Metadata != nil {
+		// Only record if we have token information (indicates LLM call)
+		if _, hasTokens := resp.Metadata["prompt_tokens"]; hasTokens {
+			workflowID := execCtx.Run.WorkflowID
+			runID := execCtx.Run.ID
+			stepRunID := stepRun.ID
+			errorMsg := ""
+			if err != nil {
+				errorMsg = err.Error()
+			}
+			e.usageRecorder.RecordFromMetadata(
+				ctx,
+				execCtx.Run.TenantID,
+				&workflowID,
+				&runID,
+				&stepRunID,
+				resp.Metadata,
+				resp.DurationMs,
+				err == nil,
+				errorMsg,
+			)
+		}
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -615,7 +656,7 @@ func (e *Executor) executeToolStep(ctx context.Context, step domain.Step, input 
 	return resp.Output, nil
 }
 
-func (e *Executor) executeLLMStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	// Parse step config to determine which LLM provider to use
 	var config struct {
 		Provider  string `json:"provider"`   // openai, anthropic, or adapter_id
@@ -653,6 +694,29 @@ func (e *Executor) executeLLMStep(ctx context.Context, step domain.Step, input j
 		Input:  input,
 		Config: step.Config,
 	})
+
+	// Record usage regardless of success/failure
+	if e.usageRecorder != nil && resp != nil {
+		workflowID := execCtx.Run.WorkflowID
+		runID := execCtx.Run.ID
+		stepRunID := stepRun.ID
+		errorMsg := ""
+		if err != nil {
+			errorMsg = err.Error()
+		}
+		e.usageRecorder.RecordFromMetadata(
+			ctx,
+			execCtx.Run.TenantID,
+			&workflowID,
+			&runID,
+			&stepRunID,
+			resp.Metadata,
+			resp.DurationMs,
+			err == nil,
+			errorMsg,
+		)
+	}
+
 	if err != nil {
 		return nil, err
 	}

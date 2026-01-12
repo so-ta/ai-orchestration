@@ -250,3 +250,41 @@ type BlockTemplateRepository interface {
 	// Delete deletes a block template (only non-builtin templates)
 	Delete(ctx context.Context, id uuid.UUID) error
 }
+
+// UsageRepository defines the interface for usage record persistence
+type UsageRepository interface {
+	// Create creates a new usage record
+	Create(ctx context.Context, record *domain.UsageRecord) error
+	// GetByID retrieves a usage record by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.UsageRecord, error)
+	// GetSummary retrieves aggregated usage summary for a tenant
+	GetSummary(ctx context.Context, tenantID uuid.UUID, period string) (*domain.UsageSummary, error)
+	// GetDaily retrieves daily usage data for a date range
+	GetDaily(ctx context.Context, tenantID uuid.UUID, start, end time.Time) ([]domain.DailyUsage, error)
+	// GetByWorkflow retrieves usage data grouped by workflow
+	GetByWorkflow(ctx context.Context, tenantID uuid.UUID, period string) ([]domain.WorkflowUsage, error)
+	// GetByModel retrieves usage data grouped by model
+	GetByModel(ctx context.Context, tenantID uuid.UUID, period string) (map[string]domain.ModelUsage, error)
+	// GetByRun retrieves all usage records for a specific run
+	GetByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]domain.UsageRecord, error)
+	// AggregateDailyData aggregates raw usage data into daily aggregates
+	AggregateDailyData(ctx context.Context, date time.Time) error
+	// GetCurrentSpend retrieves current spend for budget checking
+	GetCurrentSpend(ctx context.Context, tenantID uuid.UUID, workflowID *uuid.UUID, budgetType domain.BudgetType) (float64, error)
+}
+
+// BudgetRepository defines the interface for budget persistence
+type BudgetRepository interface {
+	// Create creates a new budget
+	Create(ctx context.Context, budget *domain.UsageBudget) error
+	// GetByID retrieves a budget by ID
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.UsageBudget, error)
+	// List retrieves all budgets for a tenant
+	List(ctx context.Context, tenantID uuid.UUID) ([]*domain.UsageBudget, error)
+	// GetByWorkflow retrieves budget for a specific workflow
+	GetByWorkflow(ctx context.Context, tenantID uuid.UUID, workflowID *uuid.UUID, budgetType domain.BudgetType) (*domain.UsageBudget, error)
+	// Update updates a budget
+	Update(ctx context.Context, budget *domain.UsageBudget) error
+	// Delete deletes a budget
+	Delete(ctx context.Context, tenantID, id uuid.UUID) error
+}

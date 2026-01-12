@@ -89,6 +89,8 @@ func main() {
 	blockRepo := postgres.NewBlockDefinitionRepository(pool)
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 	credentialRepo := postgres.NewCredentialRepository(pool)
+	usageRepo := postgres.NewUsageRepository(pool)
+	budgetRepo := postgres.NewBudgetRepository(pool)
 
 	// Initialize usecases
 	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo)
@@ -100,6 +102,7 @@ func main() {
 	auditService := usecase.NewAuditService(auditRepo)
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
+	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
 	// Initialize handlers
 	workflowHandler := handler.NewWorkflowHandler(workflowUsecase)
@@ -112,6 +115,7 @@ func main() {
 	blockHandler := handler.NewBlockHandler(blockRepo)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
+	usageHandler := handler.NewUsageHandler(usageUsecase)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -287,6 +291,26 @@ func main() {
 				r.Post("/activate", credentialHandler.Activate)
 			})
 		})
+
+		// Usage tracking and cost management
+		r.Route("/usage", func(r chi.Router) {
+			r.Get("/summary", usageHandler.GetSummary)
+			r.Get("/daily", usageHandler.GetDaily)
+			r.Get("/by-workflow", usageHandler.GetByWorkflow)
+			r.Get("/by-model", usageHandler.GetByModel)
+			r.Get("/pricing", usageHandler.GetPricing)
+
+			// Budget management
+			r.Route("/budgets", func(r chi.Router) {
+				r.Get("/", usageHandler.ListBudgets)
+				r.Post("/", usageHandler.CreateBudget)
+				r.Put("/{id}", usageHandler.UpdateBudget)
+				r.Delete("/{id}", usageHandler.DeleteBudget)
+			})
+		})
+
+		// Run usage (nested under runs)
+		r.Get("/runs/{run_id}/usage", usageHandler.GetByRun)
 	})
 
 	// Public webhook trigger endpoint (no auth required)

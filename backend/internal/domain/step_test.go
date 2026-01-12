@@ -32,7 +32,7 @@ func TestStepType_IsValid(t *testing.T) {
 
 func TestValidStepTypes(t *testing.T) {
 	types := ValidStepTypes()
-	assert.Len(t, types, 18)
+	assert.Len(t, types, 19)
 	assert.Contains(t, types, StepTypeStart)
 	assert.Contains(t, types, StepTypeLLM)
 	assert.Contains(t, types, StepTypeTool)
@@ -51,6 +51,7 @@ func TestValidStepTypes(t *testing.T) {
 	assert.Contains(t, types, StepTypeAggregate)
 	assert.Contains(t, types, StepTypeError)
 	assert.Contains(t, types, StepTypeNote)
+	assert.Contains(t, types, StepTypeLog)
 }
 
 func TestNewStep(t *testing.T) {
