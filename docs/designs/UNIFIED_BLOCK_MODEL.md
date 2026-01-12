@@ -15,13 +15,14 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                                                             │
-│   実行エンジン = コード実行のみ                               │
+│   実行エンジン = 任意のJavaScriptコード実行                    │
 │                                                             │
 │   ブロック = コード + UIメタデータ                            │
 │                                                             │
 │   ブロックタイプの違い = コードテンプレート + 設定UIの違い      │
 │                                                             │
-│   Sandbox = call() + secrets + env + log()                  │
+│   ctx = http / llm / workflow / human / adapter / ...       │
+│       + secrets + env + log()                               │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -44,43 +45,85 @@ Input (JSON)
 Output (JSON)
 ```
 
-### Sandbox インターフェース
+### ctx インターフェース（コード内で利用可能なAPI）
+
+ブロック内のコードから利用できるAPIは以下の通り：
 
 ```typescript
-interface Sandbox {
-  /**
-   * 統一された外部呼び出し
-   * すべての外部リソースへのアクセスはこれを通す
-   */
-  call(target: string, input: any): Promise<any>;
+interface Context {
+  // === HTTP ===
+  http: {
+    get(url: string, options?: RequestOptions): Promise<Response>;
+    post(url: string, body: any, options?: RequestOptions): Promise<Response>;
+    put(url: string, body: any, options?: RequestOptions): Promise<Response>;
+    delete(url: string, options?: RequestOptions): Promise<Response>;
+    request(url: string, options: RequestOptions): Promise<Response>;
+  };
 
-  /**
-   * シークレット参照
-   */
+  // === LLM ===
+  llm: {
+    chat(provider: string, model: string, request: LLMRequest): Promise<LLMResponse>;
+    complete(provider: string, model: string, prompt: string): Promise<string>;
+  };
+
+  // === Workflow（サブワークフロー呼び出し） ===
+  workflow: {
+    run(workflowId: string, input: any): Promise<any>;
+  };
+
+  // === Human（人間介入） ===
+  human: {
+    requestApproval(request: ApprovalRequest): Promise<ApprovalResult>;
+    requestInput(request: InputRequest): Promise<InputResult>;
+  };
+
+  // === Adapter（登録済み外部連携） ===
+  adapter: {
+    call(adapterId: string, input: any): Promise<any>;
+    list(): AdapterInfo[];
+  };
+
+  // === ユーティリティ ===
   secrets: Record<string, string>;
-
-  /**
-   * 環境変数参照
-   */
   env: Record<string, string>;
-
-  /**
-   * ログ出力
-   */
   log(level: 'debug' | 'info' | 'warn' | 'error', message: string, data?: any): void;
 }
 ```
 
-### call() プロトコル
+### コード例
 
-| プロトコル | 形式 | 用途 | 例 |
-|-----------|-----|------|-----|
-| `https://` | URL | HTTPS呼び出し | `call('https://api.example.com/v1/users', {...})` |
-| `http://` | URL | HTTP呼び出し | `call('http://internal-api/health', {})` |
-| `llm://` | `llm://{provider}/{model}` | LLM API | `call('llm://openai/gpt-4', {messages: [...]})` |
-| `adapter://` | `adapter://{id}` | 登録済みアダプタ | `call('adapter://slack', {channel: '...'})` |
-| `workflow://` | `workflow://{id}` | サブワークフロー | `call('workflow://abc-123', {...})` |
-| `human://` | `human://{type}` | 人間介入 | `call('human://approval', {instructions: '...'})` |
+```javascript
+// HTTP呼び出し
+const response = await ctx.http.post('https://api.example.com/users', {
+  name: input.name
+});
+
+// LLM呼び出し
+const answer = await ctx.llm.chat('openai', 'gpt-4', {
+  messages: [{ role: 'user', content: input.question }]
+});
+
+// サブワークフロー呼び出し
+const result = await ctx.workflow.run('workflow-id-123', input);
+
+// 人間介入
+const approval = await ctx.human.requestApproval({
+  instructions: '承認してください',
+  data: input
+});
+
+// アダプタ呼び出し
+const slackResult = await ctx.adapter.call('slack', {
+  channel: '#general',
+  message: 'Hello'
+});
+
+// シークレット利用
+const apiKey = ctx.secrets.OPENAI_API_KEY;
+
+// ログ出力
+ctx.log('info', 'Processing started', { inputSize: input.items.length });
+```
 
 ---
 
@@ -127,14 +170,14 @@ interface Block {
 | ブロック | code の概要 | 編集可能 |
 |---------|------------|---------|
 | `start` | `return input` | ❌ |
-| `code` | ユーザー定義 | ✅ |
-| `http` | `await call('https://...', input)` | ✅ |
-| `llm` | `await call('llm://...', {...})` | ✅ |
-| `tool` | `await call('adapter://...', input)` | ✅ |
-| `branch` | `return {...input, __branch: eval(...)}` | ✅ |
-| `parallel` | `await Promise.all(...)` | ✅ |
-| `subflow` | `await call('workflow://...', input)` | ✅ |
-| `human` | `await call('human://...', {...})` | ✅ |
+| `code` | ユーザー定義（任意のJS） | ✅ |
+| `http` | `ctx.http.request(...)` | ✅ |
+| `llm` | `ctx.llm.chat(...)` | ✅ |
+| `tool` | `ctx.adapter.call(...)` | ✅ |
+| `branch` | `return {..., __branch: ...}` | ✅ |
+| `parallel` | `Promise.all(ctx.workflow.run(...))` | ✅ |
+| `subflow` | `ctx.workflow.run(...)` | ✅ |
+| `human` | `ctx.human.requestApproval(...)` | ✅ |
 
 ---
 
@@ -143,118 +186,118 @@ interface Block {
 ### start
 
 ```javascript
-// 入力をそのまま出力（バリデーション可）
-async function execute(input, ctx) {
-  return input;
-}
+// 入力をそのまま出力
+return input;
+```
+
+### code（ユーザー定義）
+
+```javascript
+// ユーザーが自由にコードを記述
+// 任意のctx APIを利用可能
+
+const result = await ctx.http.get('https://api.example.com/data');
+return {
+  ...input,
+  apiData: result.body
+};
 ```
 
 ### http
 
 ```javascript
 // HTTP呼び出し
-async function execute(input, ctx) {
-  const url = config.url.replace(/\$\{([^}]+)\}/g, (_, key) => {
-    return getPath(input, key) ?? '';
-  });
+const url = renderTemplate(config.url, input);
 
-  const response = await ctx.call(url, {
-    method: config.method || 'POST',
-    headers: config.headers || {},
-    body: config.body ? renderTemplate(config.body, input) : input
-  });
+const response = await ctx.http.request(url, {
+  method: config.method || 'POST',
+  headers: config.headers || {},
+  body: config.body ? renderTemplate(config.body, input) : input
+});
 
-  return response;
-}
+return response;
 ```
 
 ### llm
 
 ```javascript
 // LLM呼び出し
-async function execute(input, ctx) {
-  const prompt = renderTemplate(config.promptTemplate, input);
+const prompt = renderTemplate(config.promptTemplate, input);
 
-  const response = await ctx.call(
-    `llm://${config.provider}/${config.model}`,
-    {
-      messages: [
-        ...(config.systemPrompt ? [{ role: 'system', content: config.systemPrompt }] : []),
-        { role: 'user', content: prompt }
-      ],
-      temperature: config.temperature ?? 0.7,
-      maxTokens: config.maxTokens ?? 1000
-    }
-  );
+const response = await ctx.llm.chat(config.provider, config.model, {
+  messages: [
+    ...(config.systemPrompt ? [{ role: 'system', content: config.systemPrompt }] : []),
+    { role: 'user', content: prompt }
+  ],
+  temperature: config.temperature ?? 0.7,
+  maxTokens: config.maxTokens ?? 1000
+});
 
-  return {
-    content: response.content,
-    usage: response.usage
-  };
-}
+return {
+  content: response.content,
+  usage: response.usage
+};
 ```
 
 ### branch
 
 ```javascript
 // 条件分岐
-async function execute(input, ctx) {
-  const result = evaluate(config.expression, input);
+const result = evaluate(config.expression, input);
 
-  return {
-    ...input,
-    __branch: result ? 'then' : 'else'
-  };
-}
+return {
+  ...input,
+  __branch: result ? 'then' : 'else'
+};
 ```
 
 ### parallel
 
 ```javascript
 // 並列実行
-async function execute(input, ctx) {
-  const items = getPath(input, config.inputPath) || [];
+const items = getPath(input, config.inputPath) || [];
 
-  const results = await Promise.all(
-    items.map(async (item, index) => {
-      // 各アイテムに対してサブブロックを実行
-      return await ctx.call(`workflow://${config.subBlockId}`, {
-        item,
-        index,
-        parent: input
-      });
-    })
-  );
+const results = await Promise.all(
+  items.map(async (item, index) => {
+    return await ctx.workflow.run(config.subWorkflowId, {
+      item,
+      index,
+      parent: input
+    });
+  })
+);
 
-  return {
-    ...input,
-    results,
-    count: results.length
-  };
-}
+return {
+  ...input,
+  results,
+  count: results.length
+};
 ```
 
 ### subflow
 
 ```javascript
 // サブワークフロー呼び出し
-async function execute(input, ctx) {
-  return await ctx.call(`workflow://${config.workflowId}`, input);
-}
+return await ctx.workflow.run(config.workflowId, input);
 ```
 
 ### human
 
 ```javascript
 // 人間介入
-async function execute(input, ctx) {
-  return await ctx.call('human://approval', {
-    instructions: config.instructions,
-    timeout: config.timeoutHours,
-    data: input,
-    approvers: config.approvers
-  });
-}
+return await ctx.human.requestApproval({
+  instructions: config.instructions,
+  timeout: config.timeoutHours,
+  data: input,
+  approvers: config.approvers
+});
+```
+
+### tool（アダプタ呼び出し）
+
+```javascript
+// 登録済みアダプタを呼び出し
+return await ctx.adapter.call(config.adapterId, input);
 ```
 
 ---
@@ -603,7 +646,7 @@ Response:
 | 無限ループ | タイムアウト設定（デフォルト30秒） |
 | メモリ消費 | メモリ制限（Gojaの制限） |
 | ファイルアクセス | Sandbox内でファイルAPI無効化 |
-| ネットワーク制御 | call() 経由のみ許可、直接fetch禁止 |
+| ネットワーク制御 | ctx.http 経由のみ許可、直接fetch禁止 |
 | シークレット漏洩 | ログにシークレット値を出力しない |
 | コードインジェクション | ユーザー入力のサニタイズ |
 
@@ -620,89 +663,62 @@ Response:
 
 ## Sandbox 実装詳細
 
-### call() プロトコルルーティング
+### Context 構造体
 
 ```go
-// backend/internal/sandbox/sandbox.go
+// backend/internal/sandbox/context.go
 
 package sandbox
 
 import (
     "context"
     "encoding/json"
-    "fmt"
-    "net/url"
-    "strings"
+    "time"
 )
 
-// Sandbox はブロック実行時に注入されるコンテキスト
-type Sandbox struct {
-    ctx        context.Context
-    tenantID   string
-    secrets    map[string]string
-    env        map[string]string
-    logs       []LogEntry
+// Context はブロック実行時に注入されるコンテキスト（JSの ctx オブジェクト）
+type Context struct {
+    goCtx    context.Context
+    tenantID string
 
-    // プロトコルハンドラ
-    handlers   map[string]ProtocolHandler
+    // 各サービスへのアクセス
+    HTTP     *HTTPService
+    LLM      *LLMService
+    Workflow *WorkflowService
+    Human    *HumanService
+    Adapter  *AdapterService
+
+    // ユーティリティ
+    Secrets map[string]string
+    Env     map[string]string
+    logs    []LogEntry
 }
 
-// ProtocolHandler は各プロトコルの処理を担当
-type ProtocolHandler interface {
-    Handle(ctx context.Context, target string, input json.RawMessage) (json.RawMessage, error)
+type LogEntry struct {
+    Level     string    `json:"level"`
+    Message   string    `json:"message"`
+    Data      any       `json:"data,omitempty"`
+    Timestamp time.Time `json:"timestamp"`
 }
 
-// Call は統一された外部呼び出しインターフェース
-func (s *Sandbox) Call(target string, input any) (any, error) {
-    inputJSON, err := json.Marshal(input)
-    if err != nil {
-        return nil, fmt.Errorf("failed to marshal input: %w", err)
-    }
-
-    // プロトコル判定
-    protocol, path := s.parseTarget(target)
-
-    handler, ok := s.handlers[protocol]
-    if !ok {
-        return nil, fmt.Errorf("unknown protocol: %s", protocol)
-    }
-
-    result, err := handler.Handle(s.ctx, path, inputJSON)
-    if err != nil {
-        return nil, err
-    }
-
-    var output any
-    if err := json.Unmarshal(result, &output); err != nil {
-        return nil, fmt.Errorf("failed to unmarshal output: %w", err)
-    }
-
-    return output, nil
+func (c *Context) Log(level, message string, data any) {
+    c.logs = append(c.logs, LogEntry{
+        Level:     level,
+        Message:   message,
+        Data:      data,
+        Timestamp: time.Now(),
+    })
 }
 
-// parseTarget はターゲット文字列からプロトコルとパスを抽出
-func (s *Sandbox) parseTarget(target string) (protocol, path string) {
-    // URL形式の場合
-    if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
-        return "http", target
-    }
-
-    // カスタムプロトコル形式: protocol://path
-    if idx := strings.Index(target, "://"); idx != -1 {
-        return target[:idx], target[idx+3:]
-    }
-
-    // デフォルトはHTTP
-    return "http", target
+func (c *Context) GetLogs() []LogEntry {
+    return c.logs
 }
 ```
 
-### プロトコルハンドラ実装
-
-#### HTTP ハンドラ
+### HTTP サービス
 
 ```go
-// backend/internal/sandbox/handler_http.go
+// backend/internal/sandbox/http_service.go
 
 package sandbox
 
@@ -715,111 +731,126 @@ import (
     "time"
 )
 
-type HTTPHandler struct {
-    client  *http.Client
-    secrets map[string]string
+type HTTPService struct {
+    client *http.Client
 }
 
-func NewHTTPHandler(secrets map[string]string) *HTTPHandler {
-    return &HTTPHandler{
-        client: &http.Client{
-            Timeout: 30 * time.Second,
-        },
-        secrets: secrets,
+func NewHTTPService() *HTTPService {
+    return &HTTPService{
+        client: &http.Client{Timeout: 30 * time.Second},
     }
 }
 
-type HTTPRequest struct {
+type RequestOptions struct {
     Method  string            `json:"method"`
     Headers map[string]string `json:"headers"`
-    Body    json.RawMessage   `json:"body"`
+    Body    any               `json:"body"`
 }
 
-func (h *HTTPHandler) Handle(ctx context.Context, target string, input json.RawMessage) (json.RawMessage, error) {
-    var req HTTPRequest
-    if err := json.Unmarshal(input, &req); err != nil {
-        // 入力がHTTPRequest形式でない場合、BODYとして扱う
-        req = HTTPRequest{
-            Method: "POST",
-            Body:   input,
-        }
-    }
+type HTTPResponse struct {
+    Status     int               `json:"status"`
+    StatusText string            `json:"statusText"`
+    Headers    map[string]string `json:"headers"`
+    Body       any               `json:"body"`
+}
 
-    if req.Method == "" {
-        req.Method = "POST"
-    }
-
-    // シークレットの展開
-    target = h.expandSecrets(target)
-    for k, v := range req.Headers {
-        req.Headers[k] = h.expandSecrets(v)
+func (s *HTTPService) Request(ctx context.Context, url string, opts RequestOptions) (*HTTPResponse, error) {
+    method := opts.Method
+    if method == "" {
+        method = "GET"
     }
 
     var bodyReader io.Reader
-    if len(req.Body) > 0 {
-        bodyReader = bytes.NewReader(req.Body)
+    if opts.Body != nil {
+        bodyBytes, _ := json.Marshal(opts.Body)
+        bodyReader = bytes.NewReader(bodyBytes)
     }
 
-    httpReq, err := http.NewRequestWithContext(ctx, req.Method, target, bodyReader)
+    req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
     if err != nil {
         return nil, err
     }
 
-    httpReq.Header.Set("Content-Type", "application/json")
-    for k, v := range req.Headers {
-        httpReq.Header.Set(k, v)
+    req.Header.Set("Content-Type", "application/json")
+    for k, v := range opts.Headers {
+        req.Header.Set(k, v)
     }
 
-    resp, err := h.client.Do(httpReq)
+    resp, err := s.client.Do(req)
     if err != nil {
         return nil, err
     }
     defer resp.Body.Close()
 
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return nil, err
+    body, _ := io.ReadAll(resp.Body)
+    var bodyJSON any
+    json.Unmarshal(body, &bodyJSON)
+
+    headers := make(map[string]string)
+    for k, v := range resp.Header {
+        if len(v) > 0 {
+            headers[k] = v[0]
+        }
     }
 
-    // レスポンスをラップ
-    result := map[string]any{
-        "status":     resp.StatusCode,
-        "statusText": resp.Status,
-        "headers":    resp.Header,
-        "body":       json.RawMessage(body),
-    }
-
-    return json.Marshal(result)
+    return &HTTPResponse{
+        Status:     resp.StatusCode,
+        StatusText: resp.Status,
+        Headers:    headers,
+        Body:       bodyJSON,
+    }, nil
 }
 
-func (h *HTTPHandler) expandSecrets(s string) string {
-    for k, v := range h.secrets {
-        s = strings.ReplaceAll(s, "${secrets."+k+"}", v)
+func (s *HTTPService) Get(ctx context.Context, url string, opts *RequestOptions) (*HTTPResponse, error) {
+    o := RequestOptions{Method: "GET"}
+    if opts != nil {
+        o.Headers = opts.Headers
     }
-    return s
+    return s.Request(ctx, url, o)
+}
+
+func (s *HTTPService) Post(ctx context.Context, url string, body any, opts *RequestOptions) (*HTTPResponse, error) {
+    o := RequestOptions{Method: "POST", Body: body}
+    if opts != nil {
+        o.Headers = opts.Headers
+    }
+    return s.Request(ctx, url, o)
+}
+
+func (s *HTTPService) Put(ctx context.Context, url string, body any, opts *RequestOptions) (*HTTPResponse, error) {
+    o := RequestOptions{Method: "PUT", Body: body}
+    if opts != nil {
+        o.Headers = opts.Headers
+    }
+    return s.Request(ctx, url, o)
+}
+
+func (s *HTTPService) Delete(ctx context.Context, url string, opts *RequestOptions) (*HTTPResponse, error) {
+    o := RequestOptions{Method: "DELETE"}
+    if opts != nil {
+        o.Headers = opts.Headers
+    }
+    return s.Request(ctx, url, o)
 }
 ```
 
-#### LLM ハンドラ
+### LLM サービス
 
 ```go
-// backend/internal/sandbox/handler_llm.go
+// backend/internal/sandbox/llm_service.go
 
 package sandbox
 
 import (
     "context"
-    "encoding/json"
-    "fmt"
-    "strings"
 )
 
-type LLMHandler struct {
+type LLMService struct {
     adapters map[string]LLMAdapter
 }
 
 type LLMAdapter interface {
-    Chat(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
+    Chat(ctx context.Context, model string, req *LLMRequest) (*LLMResponse, error)
 }
 
 type LLMRequest struct {
@@ -844,56 +875,42 @@ type LLMUsage struct {
     TotalTokens      int `json:"totalTokens"`
 }
 
-func NewLLMHandler(adapters map[string]LLMAdapter) *LLMHandler {
-    return &LLMHandler{adapters: adapters}
+func NewLLMService(adapters map[string]LLMAdapter) *LLMService {
+    return &LLMService{adapters: adapters}
 }
 
-// Handle は llm://provider/model 形式のターゲットを処理
-func (h *LLMHandler) Handle(ctx context.Context, target string, input json.RawMessage) (json.RawMessage, error) {
-    // target: "openai/gpt-4" or "anthropic/claude-3-opus"
-    parts := strings.SplitN(target, "/", 2)
-    if len(parts) != 2 {
-        return nil, fmt.Errorf("invalid LLM target format: %s (expected provider/model)", target)
-    }
-
-    provider, model := parts[0], parts[1]
-
-    adapter, ok := h.adapters[provider]
+func (s *LLMService) Chat(ctx context.Context, provider, model string, req *LLMRequest) (*LLMResponse, error) {
+    adapter, ok := s.adapters[provider]
     if !ok {
         return nil, fmt.Errorf("unknown LLM provider: %s", provider)
     }
+    return adapter.Chat(ctx, model, req)
+}
 
-    var req LLMRequest
-    if err := json.Unmarshal(input, &req); err != nil {
-        return nil, fmt.Errorf("invalid LLM request: %w", err)
-    }
-
-    // モデルをコンテキストに追加（アダプタが使用）
-    ctx = context.WithValue(ctx, "model", model)
-
-    resp, err := adapter.Chat(ctx, &req)
+func (s *LLMService) Complete(ctx context.Context, provider, model, prompt string) (string, error) {
+    resp, err := s.Chat(ctx, provider, model, &LLMRequest{
+        Messages: []Message{{Role: "user", Content: prompt}},
+    })
     if err != nil {
-        return nil, err
+        return "", err
     }
-
-    return json.Marshal(resp)
+    return resp.Content, nil
 }
 ```
 
-#### Workflow ハンドラ（Subflow）
+### Workflow サービス
 
 ```go
-// backend/internal/sandbox/handler_workflow.go
+// backend/internal/sandbox/workflow_service.go
 
 package sandbox
 
 import (
     "context"
     "encoding/json"
-    "fmt"
 )
 
-type WorkflowHandler struct {
+type WorkflowService struct {
     executor WorkflowExecutor
     tenantID string
 }
@@ -902,39 +919,34 @@ type WorkflowExecutor interface {
     Execute(ctx context.Context, tenantID, workflowID string, input json.RawMessage) (json.RawMessage, error)
 }
 
-func NewWorkflowHandler(executor WorkflowExecutor, tenantID string) *WorkflowHandler {
-    return &WorkflowHandler{
-        executor: executor,
-        tenantID: tenantID,
-    }
+func NewWorkflowService(executor WorkflowExecutor, tenantID string) *WorkflowService {
+    return &WorkflowService{executor: executor, tenantID: tenantID}
 }
 
-// Handle は workflow://workflow-id 形式のターゲットを処理
-func (h *WorkflowHandler) Handle(ctx context.Context, target string, input json.RawMessage) (json.RawMessage, error) {
-    workflowID := target
-
-    if workflowID == "" {
-        return nil, fmt.Errorf("workflow ID is required")
+func (s *WorkflowService) Run(ctx context.Context, workflowID string, input any) (any, error) {
+    inputJSON, _ := json.Marshal(input)
+    resultJSON, err := s.executor.Execute(ctx, s.tenantID, workflowID, inputJSON)
+    if err != nil {
+        return nil, err
     }
-
-    return h.executor.Execute(ctx, h.tenantID, workflowID, input)
+    var result any
+    json.Unmarshal(resultJSON, &result)
+    return result, nil
 }
 ```
 
-#### Human ハンドラ
+### Human サービス
 
 ```go
-// backend/internal/sandbox/handler_human.go
+// backend/internal/sandbox/human_service.go
 
 package sandbox
 
 import (
     "context"
-    "encoding/json"
-    "fmt"
 )
 
-type HumanHandler struct {
+type HumanService struct {
     store    HumanTaskStore
     tenantID string
     runID    string
@@ -947,124 +959,115 @@ type HumanTaskStore interface {
 }
 
 type HumanTask struct {
-    ID           string          `json:"id"`
-    TenantID     string          `json:"tenantId"`
-    RunID        string          `json:"runId"`
-    StepID       string          `json:"stepId"`
-    Type         string          `json:"type"` // approval, input, review
-    Instructions string          `json:"instructions"`
-    Data         json.RawMessage `json:"data"`
-    TimeoutHours int             `json:"timeoutHours"`
-    Approvers    []string        `json:"approvers"`
-    Status       string          `json:"status"` // pending, approved, rejected, timeout
-}
-
-type HumanTaskResult struct {
-    Approved bool            `json:"approved"`
-    Approver string          `json:"approver"`
-    Comment  string          `json:"comment"`
-    Data     json.RawMessage `json:"data"`
-}
-
-type HumanRequest struct {
+    ID           string   `json:"id"`
+    TenantID     string   `json:"tenantId"`
+    RunID        string   `json:"runId"`
+    StepID       string   `json:"stepId"`
+    Type         string   `json:"type"`
     Instructions string   `json:"instructions"`
-    Timeout      int      `json:"timeout"` // hours
+    Data         any      `json:"data"`
+    TimeoutHours int      `json:"timeoutHours"`
+    Approvers    []string `json:"approvers"`
+    Status       string   `json:"status"`
+}
+
+type ApprovalRequest struct {
+    Instructions string   `json:"instructions"`
+    Timeout      int      `json:"timeout"`
     Data         any      `json:"data"`
     Approvers    []string `json:"approvers"`
 }
 
-func NewHumanHandler(store HumanTaskStore, tenantID, runID, stepID string) *HumanHandler {
-    return &HumanHandler{
-        store:    store,
-        tenantID: tenantID,
-        runID:    runID,
-        stepID:   stepID,
-    }
+type HumanTaskResult struct {
+    Approved bool   `json:"approved"`
+    Approver string `json:"approver"`
+    Comment  string `json:"comment"`
+    Data     any    `json:"data"`
 }
 
-// Handle は human://type 形式のターゲットを処理
-func (h *HumanHandler) Handle(ctx context.Context, target string, input json.RawMessage) (json.RawMessage, error) {
-    taskType := target // "approval", "input", "review"
-    if taskType == "" {
-        taskType = "approval"
-    }
+func NewHumanService(store HumanTaskStore, tenantID, runID, stepID string) *HumanService {
+    return &HumanService{store: store, tenantID: tenantID, runID: runID, stepID: stepID}
+}
 
-    var req HumanRequest
-    if err := json.Unmarshal(input, &req); err != nil {
-        return nil, fmt.Errorf("invalid human request: %w", err)
-    }
-
-    dataJSON, _ := json.Marshal(req.Data)
-
+func (s *HumanService) RequestApproval(ctx context.Context, req ApprovalRequest) (*HumanTaskResult, error) {
     task := &HumanTask{
-        TenantID:     h.tenantID,
-        RunID:        h.runID,
-        StepID:       h.stepID,
-        Type:         taskType,
+        TenantID:     s.tenantID,
+        RunID:        s.runID,
+        StepID:       s.stepID,
+        Type:         "approval",
         Instructions: req.Instructions,
-        Data:         dataJSON,
+        Data:         req.Data,
         TimeoutHours: req.Timeout,
         Approvers:    req.Approvers,
         Status:       "pending",
     }
 
-    if err := h.store.CreateTask(ctx, task); err != nil {
+    if err := s.store.CreateTask(ctx, task); err != nil {
         return nil, err
     }
 
-    // タスク完了を待機（非同期の場合はここで中断）
-    result, err := h.store.WaitForCompletion(ctx, task.ID)
-    if err != nil {
-        return nil, err
-    }
-
-    return json.Marshal(result)
+    return s.store.WaitForCompletion(ctx, task.ID)
 }
 ```
 
-#### Adapter ハンドラ
+### Adapter サービス
 
 ```go
-// backend/internal/sandbox/handler_adapter.go
+// backend/internal/sandbox/adapter_service.go
 
 package sandbox
 
 import (
     "context"
     "encoding/json"
-    "fmt"
 )
 
-type AdapterHandler struct {
+type AdapterService struct {
     registry AdapterRegistry
 }
 
 type AdapterRegistry interface {
     Get(id string) (Adapter, bool)
+    List() []AdapterInfo
 }
 
 type Adapter interface {
     Execute(ctx context.Context, input json.RawMessage) (json.RawMessage, error)
 }
 
-func NewAdapterHandler(registry AdapterRegistry) *AdapterHandler {
-    return &AdapterHandler{registry: registry}
+type AdapterInfo struct {
+    ID          string `json:"id"`
+    Name        string `json:"name"`
+    Description string `json:"description"`
 }
 
-// Handle は adapter://adapter-id 形式のターゲットを処理
-func (h *AdapterHandler) Handle(ctx context.Context, target string, input json.RawMessage) (json.RawMessage, error) {
-    adapterID := target
+func NewAdapterService(registry AdapterRegistry) *AdapterService {
+    return &AdapterService{registry: registry}
+}
 
-    adapter, ok := h.registry.Get(adapterID)
+func (s *AdapterService) Call(ctx context.Context, adapterID string, input any) (any, error) {
+    adapter, ok := s.registry.Get(adapterID)
     if !ok {
         return nil, fmt.Errorf("unknown adapter: %s", adapterID)
     }
 
-    return adapter.Execute(ctx, input)
+    inputJSON, _ := json.Marshal(input)
+    resultJSON, err := adapter.Execute(ctx, inputJSON)
+    if err != nil {
+        return nil, err
+    }
+
+    var result any
+    json.Unmarshal(resultJSON, &result)
+    return result, nil
+}
+
+func (s *AdapterService) List() []AdapterInfo {
+    return s.registry.List()
 }
 ```
 
-### Sandbox ファクトリ
+### Context ファクトリ
 
 ```go
 // backend/internal/sandbox/factory.go
@@ -1075,20 +1078,20 @@ import (
     "context"
 )
 
-type SandboxFactory struct {
+type ContextFactory struct {
     llmAdapters     map[string]LLMAdapter
     adapterRegistry AdapterRegistry
     workflowExec    WorkflowExecutor
     humanStore      HumanTaskStore
 }
 
-func NewSandboxFactory(
+func NewContextFactory(
     llmAdapters map[string]LLMAdapter,
     adapterRegistry AdapterRegistry,
     workflowExec WorkflowExecutor,
     humanStore HumanTaskStore,
-) *SandboxFactory {
-    return &SandboxFactory{
+) *ContextFactory {
+    return &ContextFactory{
         llmAdapters:     llmAdapters,
         adapterRegistry: adapterRegistry,
         workflowExec:    workflowExec,
@@ -1096,7 +1099,7 @@ func NewSandboxFactory(
     }
 }
 
-type SandboxConfig struct {
+type ContextConfig struct {
     TenantID string
     RunID    string
     StepID   string
@@ -1104,22 +1107,17 @@ type SandboxConfig struct {
     Env      map[string]string
 }
 
-func (f *SandboxFactory) Create(ctx context.Context, cfg SandboxConfig) *Sandbox {
-    handlers := map[string]ProtocolHandler{
-        "http":     NewHTTPHandler(cfg.Secrets),
-        "https":    NewHTTPHandler(cfg.Secrets),
-        "llm":      NewLLMHandler(f.llmAdapters),
-        "adapter":  NewAdapterHandler(f.adapterRegistry),
-        "workflow": NewWorkflowHandler(f.workflowExec, cfg.TenantID),
-        "human":    NewHumanHandler(f.humanStore, cfg.TenantID, cfg.RunID, cfg.StepID),
-    }
-
-    return &Sandbox{
-        ctx:      ctx,
+func (f *ContextFactory) Create(goCtx context.Context, cfg ContextConfig) *Context {
+    return &Context{
+        goCtx:    goCtx,
         tenantID: cfg.TenantID,
-        secrets:  cfg.Secrets,
-        env:      cfg.Env,
-        handlers: handlers,
+        HTTP:     NewHTTPService(),
+        LLM:      NewLLMService(f.llmAdapters),
+        Workflow: NewWorkflowService(f.workflowExec, cfg.TenantID),
+        Human:    NewHumanService(f.humanStore, cfg.TenantID, cfg.RunID, cfg.StepID),
+        Adapter:  NewAdapterService(f.adapterRegistry),
+        Secrets:  cfg.Secrets,
+        Env:      cfg.Env,
         logs:     []LogEntry{},
     }
 }
@@ -1155,11 +1153,11 @@ type ExecuteResult struct {
     Error  error
 }
 
-func (r *Runtime) Execute(ctx context.Context, code string, input json.RawMessage, sandbox *Sandbox) *ExecuteResult {
+func (r *Runtime) Execute(goCtx context.Context, code string, input json.RawMessage, ctx *Context) *ExecuteResult {
     result := &ExecuteResult{}
 
     // タイムアウト付きコンテキスト
-    ctx, cancel := context.WithTimeout(ctx, r.timeout)
+    goCtx, cancel := context.WithTimeout(goCtx, r.timeout)
     defer cancel()
 
     vm := goja.New()
@@ -1176,53 +1174,135 @@ func (r *Runtime) Execute(ctx context.Context, code string, input json.RawMessag
     // ctx オブジェクトを設定
     ctxObj := vm.NewObject()
 
-    // ctx.call() を設定
-    ctxObj.Set("call", func(call goja.FunctionCall) goja.Value {
-        if len(call.Arguments) < 2 {
-            panic(vm.ToValue("call requires target and input"))
-        }
-
-        target := call.Arguments[0].String()
-        callInput := call.Arguments[1].Export()
-
-        output, err := sandbox.Call(target, callInput)
+    // ctx.http を設定
+    httpObj := vm.NewObject()
+    httpObj.Set("get", func(url string, opts map[string]any) any {
+        resp, err := ctx.HTTP.Get(goCtx, url, nil)
         if err != nil {
             panic(vm.ToValue(err.Error()))
         }
-
-        return vm.ToValue(output)
+        return resp
     })
-
-    // ctx.secrets を設定
-    ctxObj.Set("secrets", sandbox.secrets)
-
-    // ctx.env を設定
-    ctxObj.Set("env", sandbox.env)
-
-    // ctx.log() を設定
-    ctxObj.Set("log", func(call goja.FunctionCall) goja.Value {
-        level := "info"
-        message := ""
-        var data any
-
-        if len(call.Arguments) >= 1 {
-            level = call.Arguments[0].String()
+    httpObj.Set("post", func(url string, body any, opts map[string]any) any {
+        resp, err := ctx.HTTP.Post(goCtx, url, body, nil)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
         }
-        if len(call.Arguments) >= 2 {
-            message = call.Arguments[1].String()
+        return resp
+    })
+    httpObj.Set("put", func(url string, body any, opts map[string]any) any {
+        resp, err := ctx.HTTP.Put(goCtx, url, body, nil)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
         }
-        if len(call.Arguments) >= 3 {
-            data = call.Arguments[2].Export()
+        return resp
+    })
+    httpObj.Set("delete", func(url string, opts map[string]any) any {
+        resp, err := ctx.HTTP.Delete(goCtx, url, nil)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
         }
+        return resp
+    })
+    httpObj.Set("request", func(url string, opts map[string]any) any {
+        reqOpts := RequestOptions{
+            Method:  opts["method"].(string),
+            Headers: opts["headers"].(map[string]string),
+            Body:    opts["body"],
+        }
+        resp, err := ctx.HTTP.Request(goCtx, url, reqOpts)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
+        }
+        return resp
+    })
+    ctxObj.Set("http", httpObj)
 
-        sandbox.logs = append(sandbox.logs, LogEntry{
-            Level:     level,
-            Message:   message,
-            Data:      data,
-            Timestamp: time.Now(),
-        })
+    // ctx.llm を設定
+    llmObj := vm.NewObject()
+    llmObj.Set("chat", func(provider, model string, req map[string]any) any {
+        llmReq := &LLMRequest{
+            Temperature: req["temperature"].(float64),
+            MaxTokens:   int(req["maxTokens"].(float64)),
+        }
+        // messages の変換
+        if msgs, ok := req["messages"].([]any); ok {
+            for _, m := range msgs {
+                msg := m.(map[string]any)
+                llmReq.Messages = append(llmReq.Messages, Message{
+                    Role:    msg["role"].(string),
+                    Content: msg["content"].(string),
+                })
+            }
+        }
+        resp, err := ctx.LLM.Chat(goCtx, provider, model, llmReq)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
+        }
+        return resp
+    })
+    llmObj.Set("complete", func(provider, model, prompt string) string {
+        result, err := ctx.LLM.Complete(goCtx, provider, model, prompt)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
+        }
+        return result
+    })
+    ctxObj.Set("llm", llmObj)
 
-        return goja.Undefined()
+    // ctx.workflow を設定
+    workflowObj := vm.NewObject()
+    workflowObj.Set("run", func(workflowID string, input any) any {
+        result, err := ctx.Workflow.Run(goCtx, workflowID, input)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
+        }
+        return result
+    })
+    ctxObj.Set("workflow", workflowObj)
+
+    // ctx.human を設定
+    humanObj := vm.NewObject()
+    humanObj.Set("requestApproval", func(req map[string]any) any {
+        approvalReq := ApprovalRequest{
+            Instructions: req["instructions"].(string),
+            Timeout:      int(req["timeout"].(float64)),
+            Data:         req["data"],
+        }
+        if approvers, ok := req["approvers"].([]any); ok {
+            for _, a := range approvers {
+                approvalReq.Approvers = append(approvalReq.Approvers, a.(string))
+            }
+        }
+        result, err := ctx.Human.RequestApproval(goCtx, approvalReq)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
+        }
+        return result
+    })
+    ctxObj.Set("human", humanObj)
+
+    // ctx.adapter を設定
+    adapterObj := vm.NewObject()
+    adapterObj.Set("call", func(adapterID string, input any) any {
+        result, err := ctx.Adapter.Call(goCtx, adapterID, input)
+        if err != nil {
+            panic(vm.ToValue(err.Error()))
+        }
+        return result
+    })
+    adapterObj.Set("list", func() []AdapterInfo {
+        return ctx.Adapter.List()
+    })
+    ctxObj.Set("adapter", adapterObj)
+
+    // ctx.secrets, ctx.env を設定
+    ctxObj.Set("secrets", ctx.Secrets)
+    ctxObj.Set("env", ctx.Env)
+
+    // ctx.log を設定
+    ctxObj.Set("log", func(level, message string, data any) {
+        ctx.Log(level, message, data)
     })
 
     vm.Set("ctx", ctxObj)
@@ -1248,20 +1328,16 @@ func (r *Runtime) Execute(ctx context.Context, code string, input json.RawMessag
         }
 
         function evaluate(expression, data) {
-            // Simple expression evaluator for conditions
             const match = expression.match(/^\$\.(.+?)\s*(==|!=|>|<|>=|<=)\s*(.+)$/);
             if (match) {
                 const [, path, op, rawValue] = match;
                 const left = getPath(data, path);
                 let right = rawValue.trim();
-
-                // Parse right value
                 if (right === 'true') right = true;
                 else if (right === 'false') right = false;
                 else if (right === 'null') right = null;
-                else if (/^".*"$/.test(right) || /^'.*'$/.test(right)) right = right.slice(1, -1);
+                else if (/^["'].*["']$/.test(right)) right = right.slice(1, -1);
                 else if (!isNaN(Number(right))) right = Number(right);
-
                 switch (op) {
                     case '==': return left == right;
                     case '!=': return left != right;
@@ -1271,74 +1347,50 @@ func (r *Runtime) Execute(ctx context.Context, code string, input json.RawMessag
                     case '<=': return left <= right;
                 }
             }
-            // Truthy check
             return !!getPath(data, expression.replace(/^\$\.?/, ''));
         }
     `)
 
-    // 割り込み設定（タイムアウト用）
+    // タイムアウト割り込み
     go func() {
-        <-ctx.Done()
+        <-goCtx.Done()
         vm.Interrupt("execution timeout")
     }()
 
     // コード実行
-    wrappedCode := fmt.Sprintf(`
-        (async function() {
-            %s
-        })()
-    `, code)
-
+    wrappedCode := fmt.Sprintf(`(async function() { %s })()`, code)
     val, err := vm.RunString(wrappedCode)
     if err != nil {
         result.Error = err
-        result.Logs = sandbox.logs
+        result.Logs = ctx.GetLogs()
         return result
     }
 
-    // Promise の解決を待つ
-    promise, ok := val.Export().(*goja.Promise)
-    if ok {
-        // Promise が解決されるまで待つ
+    // Promise 解決待ち
+    if promise, ok := val.Export().(*goja.Promise); ok {
         for promise.State() == goja.PromiseStatePending {
             select {
-            case <-ctx.Done():
-                result.Error = ctx.Err()
-                result.Logs = sandbox.logs
+            case <-goCtx.Done():
+                result.Error = goCtx.Err()
+                result.Logs = ctx.GetLogs()
                 return result
             default:
                 time.Sleep(10 * time.Millisecond)
             }
         }
-
         if promise.State() == goja.PromiseStateRejected {
             result.Error = fmt.Errorf("promise rejected: %v", promise.Result().Export())
-            result.Logs = sandbox.logs
+            result.Logs = ctx.GetLogs()
             return result
         }
-
         val = promise.Result()
     }
 
-    // 結果をJSONに変換
     output := val.Export()
-    outputJSON, err := json.Marshal(output)
-    if err != nil {
-        result.Error = fmt.Errorf("failed to marshal output: %w", err)
-        result.Logs = sandbox.logs
-        return result
-    }
-
+    outputJSON, _ := json.Marshal(output)
     result.Output = outputJSON
-    result.Logs = sandbox.logs
+    result.Logs = ctx.GetLogs()
     return result
-}
-
-type LogEntry struct {
-    Level     string    `json:"level"`
-    Message   string    `json:"message"`
-    Data      any       `json:"data,omitempty"`
-    Timestamp time.Time `json:"timestamp"`
 }
 ```
 
