@@ -222,14 +222,93 @@ jobs:
 
 ## Coverage Goals
 
-| Metric | Target |
-|--------|--------|
-| Statements | 70% |
-| Branches | 60% |
-| Functions | 70% |
-| Lines | 70% |
+| Metric | Minimum | Target |
+|--------|---------|--------|
+| Statements | 40% | 70% |
+| Branches | 30% | 60% |
+| Functions | 40% | 70% |
+| Lines | 40% | 70% |
+
+**新規ファイルはTargetを満たすこと。**
+
+## Coverage Maintenance Rules
+
+### 新規コード = 新規テスト (Mandatory)
+
+| 追加するコード | 必要なテスト |
+|--------------|-------------|
+| 新規Composable | Composable unit tests |
+| 新規Component | Component tests (mount, props, events) |
+| 新規Page | Page tests (routing, data fetching) |
+| Util関数 | Unit tests |
+
+### テストなしでマージ禁止
+
+以下のケースではテストなしのコードをマージしない：
+
+- 新規Composable
+- 認証関連の変更
+- APIクライアントの変更
+- 重要なUIコンポーネント
+
+### バグ修正時のテストフロー
+
+```
+1. バグを再現するテストを書く（失敗確認）
+2. コードを修正
+3. テストがパスすることを確認
+4. 関連するエッジケースも追加
+```
+
+### テスト品質基準
+
+| 基準 | 説明 |
+|------|------|
+| 独立性 | 他のテストに依存しない |
+| 再現性 | 何度実行しても同じ結果 |
+| 高速 | 1テスト100ms以内を目標 |
+| 明確性 | テスト名から目的がわかる |
+
+### カバレッジレポート確認
+
+```bash
+# カバレッジレポート生成
+npm run test:coverage
+
+# HTMLレポートを開く（生成後）
+open coverage/index.html
+```
+
+## Priority Test Targets
+
+現在のテストカバレッジが低いため、以下の順序でテストを追加：
+
+### P0 (Critical)
+
+| File | Reason |
+|------|--------|
+| `useAuth.ts` | 認証の失敗は全ユーザーに影響 |
+| `useApi.ts` | API通信の失敗は全機能に影響 |
+
+### P1 (High)
+
+| File | Reason |
+|------|--------|
+| `useWorkflows.ts` | コア機能 |
+| `useRuns.ts` | コア機能 |
+| `useSteps.ts` | コア機能 |
+| `useCopilot.ts` | AI機能 |
+
+### P2 (Medium)
+
+| File | Reason |
+|------|--------|
+| `DagEditor.vue` | 複雑なUI |
+| `PropertiesPanel.vue` | 設定UI |
+| `DynamicConfigForm.vue` | フォーム生成 |
 
 ## Related Documentation
 
-- [FRONTEND.md](./FRONTEND.md) - Frontend architecture
-- [CLAUDE.md](../CLAUDE.md) - Project conventions
+- [FRONTEND.md](../../docs/FRONTEND.md) - Frontend architecture
+- [CLAUDE.md](../../CLAUDE.md) - Project conventions
+- [TEST_PLAN.md](../../docs/TEST_PLAN.md) - Overall test plan
