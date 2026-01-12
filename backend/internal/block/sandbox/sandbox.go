@@ -100,9 +100,7 @@ type ExecutionContext struct {
 	// Accessible in scripts as context.credentials.name.field
 	// e.g., context.credentials.api_key.access_token
 	Credentials map[string]interface{}
-	// Credential is the legacy single credential (deprecated, use Credentials)
-	Credential map[string]interface{}
-	Logger     func(args ...interface{})
+	Logger      func(args ...interface{})
 }
 
 // Sandbox provides a secure JavaScript execution environment
@@ -354,16 +352,9 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		}
 	}
 
-	// Add credentials map if available (new format)
+	// Add credentials map if available
 	if execCtx != nil && execCtx.Credentials != nil {
 		if err := contextObj.Set("credentials", execCtx.Credentials); err != nil {
-			return err
-		}
-	}
-
-	// Add legacy single credential if available (deprecated, for backward compatibility)
-	if execCtx != nil && execCtx.Credential != nil {
-		if err := contextObj.Set("credential", execCtx.Credential); err != nil {
 			return err
 		}
 	}

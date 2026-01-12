@@ -2,7 +2,6 @@
 import type { Step, StepType, BlockDefinition, InputPort, OutputPort, Run } from '~/types/api'
 import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
-import type { ExecutionLog } from '~/types/execution'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 
 const { t } = useI18n()
@@ -20,9 +19,13 @@ const props = defineProps<{
 // Active tab state
 const activeTab = ref<'settings' | 'copilot' | 'execution'>('settings')
 
-// Reset to settings tab when step changes
-watch(() => props.step, () => {
-  activeTab.value = 'settings'
+// Reset to settings tab when step changes, or when step is deselected while on execution tab
+watch(() => props.step, (newStep) => {
+  if (!newStep && activeTab.value === 'execution') {
+    activeTab.value = 'settings'
+  } else if (newStep) {
+    activeTab.value = 'settings'
+  }
 })
 
 const emit = defineEmits<{
@@ -31,7 +34,6 @@ const emit = defineEmits<{
   (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
   (e: 'execute', data: { stepId: string; input: object; mode: 'test' | 'production' }): void
   (e: 'execute-workflow', mode: 'test' | 'production', input: object): void
-  (e: 'log', log: ExecutionLog): void
   (e: 'update:name', name: string): void
 }>()
 
@@ -330,6 +332,7 @@ const expressionTemplates = {
         {{ t('editor.tabs.copilot') }}
       </button>
       <button
+        v-if="step"
         class="tab-button"
         :class="{ active: activeTab === 'execution' }"
         @click="activeTab = 'execution'"
@@ -1161,7 +1164,6 @@ const expressionTemplates = {
         :latest-run="latestRun || null"
         @execute="(data) => emit('execute', data)"
         @execute-workflow="(mode, input) => emit('execute-workflow', mode, input)"
-        @log="(log) => emit('log', log)"
       />
     </div>
 

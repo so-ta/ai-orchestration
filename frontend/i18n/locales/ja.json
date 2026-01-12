@@ -6,6 +6,7 @@
     "edit": "編集",
     "create": "作成",
     "close": "閉じる",
+    "copy": "コピー",
     "loading": "読み込み中...",
     "saving": "保存中...",
     "retry": "再試行",
@@ -227,17 +228,10 @@
     }
   },
   "execution": {
-    "modes": {
-      "single": "ブロック実行",
-      "workflow": "ワークフロー",
-      "abTest": "A/Bテスト",
-      "promptTest": "プロンプトテスト"
-    },
-    "selectStepToExecute": "実行するステップを選択してください",
-    "selectLLMStep": "A/Bテストまたはプロンプトテストを行うにはLLMステップを選択してください",
-    "useCustomInput": "カスタム入力を使用",
+    "customInput": "入力データ",
     "inputPlaceholder": "{'{'}\"key\": \"value\"{'}'}",
-    "executeTest": "テスト実行",
+    "executeThisStepOnly": "このステップのみ実行",
+    "executeFromThisStep": "このステップから実行",
     "executing": "実行中...",
     "waitingForResult": "結果を待機中...",
     "stepExecuted": "ステップを実行しました",
@@ -248,6 +242,15 @@
     "inlineTestInfo": "既存の実行がないため、新しいテスト実行が作成されます。",
     "history": "実行履歴",
     "attempt": "実行 #{n}",
+    "duration": "実行時間",
+    "startedAt": "開始日時",
+    "completedAt": "完了日時",
+    "error": "エラー",
+    "input": "入力",
+    "output": "出力",
+    "noInputData": "入力データがありません",
+    "noOutputData": "出力データがありません",
+    "pollingTimeout": "タイムアウトしました",
     "workflowDesc": "ワークフロー全体を実行します。結果はログパネルに表示されます。",
     "testRun": "テスト実行",
     "productionRun": "本番実行",
@@ -281,6 +284,7 @@
     },
     "logs": {
       "startingStep": "ステップ「{name}」を実行中...",
+      "startingFromStep": "ステップ「{name}」からワークフローを開始...",
       "stepCompleted": "ステップ「{name}」が完了しました",
       "stepFailed": "ステップ「{name}」が失敗しました: {error}",
       "stepQueued": "ステップ「{name}」をキューに追加しました（Run ID: {runId}）",
@@ -1035,14 +1039,10 @@
       "configSchema": "設定スキーマ（JSON）",
       "inputSchema": "入力スキーマ（JSON）",
       "outputSchema": "出力スキーマ（JSON）",
-      "executorType": "実行タイプ",
-      "executorConfig": "実行設定（JSON）",
+      "code": "実行コード（JavaScript）",
+      "codePlaceholder": "// ctx.http, ctx.llm, ctx.secrets などが利用可能です\nconst result = await ctx.http.get(config.url);\nreturn result;",
+      "uiConfig": "UI設定（JSON）",
       "enabled": "有効"
-    },
-    "executorTypes": {
-      "builtin": "組み込み",
-      "http": "HTTP API",
-      "function": "カスタム関数"
     },
     "messages": {
       "created": "ブロックを作成しました",

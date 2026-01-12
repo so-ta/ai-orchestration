@@ -97,11 +97,6 @@ export function useWorkflows() {
     return api.post<ApiResponse<Workflow>>(`/workflows/${id}/restore`, { version })
   }
 
-  // Publish workflow (deprecated - kept for backward compatibility)
-  async function publish(id: string) {
-    return api.post<ApiResponse<Workflow>>(`/workflows/${id}/publish`)
-  }
-
   // Steps
   async function listSteps(workflowId: string) {
     return api.get<ApiResponse<Step[]>>(`/workflows/${workflowId}/steps`)
@@ -167,7 +162,6 @@ export function useWorkflows() {
     saveDraft,
     discardDraft,
     restoreVersion,
-    publish, // Deprecated
     listSteps,
     createStep,
     updateStep,

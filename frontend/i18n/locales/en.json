@@ -6,6 +6,7 @@
     "edit": "Edit",
     "create": "Create",
     "close": "Close",
+    "copy": "Copy",
     "loading": "Loading...",
     "saving": "Saving...",
     "retry": "Retry",
@@ -227,17 +228,10 @@
     }
   },
   "execution": {
-    "modes": {
-      "single": "Block",
-      "workflow": "Workflow",
-      "abTest": "A/B Test",
-      "promptTest": "Prompt Test"
-    },
-    "selectStepToExecute": "Select a step to execute",
-    "selectLLMStep": "Select an LLM step to run A/B or prompt tests",
-    "useCustomInput": "Use custom input",
+    "customInput": "Input Data",
     "inputPlaceholder": "{'{'}\"key\": \"value\"{'}'}",
-    "executeTest": "Test Run",
+    "executeThisStepOnly": "Execute This Step Only",
+    "executeFromThisStep": "Execute From This Step",
     "executing": "Executing...",
     "waitingForResult": "Waiting for result...",
     "stepExecuted": "Step executed",
@@ -248,6 +242,15 @@
     "inlineTestInfo": "No existing run found. A new test run will be created.",
     "history": "Execution History",
     "attempt": "Attempt #{n}",
+    "duration": "Duration",
+    "startedAt": "Started At",
+    "completedAt": "Completed At",
+    "error": "Error",
+    "input": "Input",
+    "output": "Output",
+    "noInputData": "No input data",
+    "noOutputData": "No output data",
+    "pollingTimeout": "Request timed out",
     "workflowDesc": "Execute the entire workflow. Results will appear in the log panel.",
     "testRun": "Test Run",
     "productionRun": "Production Run",
@@ -281,6 +284,7 @@
     },
     "logs": {
       "startingStep": "Executing step \"{name}\"...",
+      "startingFromStep": "Starting workflow from step \"{name}\"...",
       "stepCompleted": "Step \"{name}\" completed",
       "stepFailed": "Step \"{name}\" failed: {error}",
       "stepQueued": "Step \"{name}\" queued (Run ID: {runId})",
@@ -1035,14 +1039,10 @@
       "configSchema": "Config Schema (JSON)",
       "inputSchema": "Input Schema (JSON)",
       "outputSchema": "Output Schema (JSON)",
-      "executorType": "Executor Type",
-      "executorConfig": "Executor Config (JSON)",
+      "code": "Execution Code (JavaScript)",
+      "codePlaceholder": "// ctx.http, ctx.llm, ctx.secrets are available\nconst result = await ctx.http.get(config.url);\nreturn result;",
+      "uiConfig": "UI Config (JSON)",
       "enabled": "Enabled"
-    },
-    "executorTypes": {
-      "builtin": "Built-in",
-      "http": "HTTP API",
-      "function": "Custom Function"
     },
     "messages": {
       "created": "Block created successfully",

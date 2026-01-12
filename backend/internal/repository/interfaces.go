@@ -166,11 +166,10 @@ type BlockDefinitionRepository interface {
 
 // BlockDefinitionFilter defines filtering options for block definition list
 type BlockDefinitionFilter struct {
-	Category     *domain.BlockCategory
-	ExecutorType *domain.ExecutorType
-	EnabledOnly  bool
-	SystemOnly   bool // If true, only return system blocks (tenant_id IS NULL)
-	IsSystem     *bool // Filter by is_system flag
+	Category    *domain.BlockCategory
+	EnabledOnly bool
+	SystemOnly  bool  // If true, only return system blocks (tenant_id IS NULL)
+	IsSystem    *bool // Filter by is_system flag
 }
 
 // BlockVersionRepository defines the interface for block version persistence
@@ -250,22 +249,6 @@ type SystemCredentialRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	// UpdateStatus updates the status of a system credential
 	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.CredentialStatus) error
-}
-
-// BlockTemplateRepository defines the interface for block template persistence
-type BlockTemplateRepository interface {
-	// Create creates a new block template
-	Create(ctx context.Context, template *domain.BlockTemplate) error
-	// GetByID retrieves a block template by ID
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockTemplate, error)
-	// GetBySlug retrieves a block template by slug
-	GetBySlug(ctx context.Context, slug string) (*domain.BlockTemplate, error)
-	// List retrieves all block templates
-	List(ctx context.Context) ([]*domain.BlockTemplate, error)
-	// Update updates a block template (only non-builtin templates)
-	Update(ctx context.Context, template *domain.BlockTemplate) error
-	// Delete deletes a block template (only non-builtin templates)
-	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // CopilotSessionRepository defines the interface for copilot session persistence

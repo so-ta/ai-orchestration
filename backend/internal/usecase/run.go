@@ -279,6 +279,23 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 			break
 		}
 	}
+
+	// 4. If step not found in version snapshot, try current workflow (for steps not in flow)
+	if targetStep == nil {
+		currentSteps, err := u.stepRepo.ListByWorkflow(ctx, run.WorkflowID)
+		if err != nil {
+			return nil, err
+		}
+		for _, step := range currentSteps {
+			if step.ID == input.StepID {
+				targetStep = step
+				// Add the step to definition for worker execution
+				definition.Steps = append(definition.Steps, *step)
+				break
+			}
+		}
+	}
+
 	if targetStep == nil {
 		return nil, domain.ErrStepNotFound
 	}

@@ -210,6 +210,52 @@ func processJob(
 			return domain.ErrStepNotFound
 		}
 
+		// Check if step exists in the definition, if not fallback to current workflow
+		stepExistsInDef := false
+		for _, s := range def.Steps {
+			if s.ID == *job.TargetStepID {
+				stepExistsInDef = true
+				break
+			}
+		}
+
+		// If step not found in version definition, try current workflow (for steps not in flow)
+		if !stepExistsInDef {
+			logger.Info("Step not found in version definition, trying current workflow",
+				"step_id", job.TargetStepID,
+				"workflow_id", job.WorkflowID,
+			)
+			currentWorkflow, err := workflowRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.WorkflowID)
+			if err != nil {
+				return err
+			}
+			// Look for the step in current workflow
+			for _, s := range currentWorkflow.Steps {
+				if s.ID == *job.TargetStepID {
+					// Add the step to definition for execution
+					def.Steps = append(def.Steps, s)
+					// Update execution context with new definition
+					execCtx = engine.NewExecutionContext(run, def)
+					if job.InjectedOutputs != nil && len(job.InjectedOutputs) > 0 {
+						execCtx.InjectPreviousOutputs(job.InjectedOutputs)
+					}
+					stepExistsInDef = true
+					logger.Info("Step found in current workflow",
+						"step_id", job.TargetStepID,
+						"step_name", s.Name,
+					)
+					break
+				}
+			}
+		}
+
+		if !stepExistsInDef {
+			logger.Error("Step not found in version or current workflow",
+				"step_id", job.TargetStepID,
+			)
+			return domain.ErrStepNotFound
+		}
+
 		logger.Info("Executing single step",
 			"run_id", job.RunID,
 			"step_id", job.TargetStepID,

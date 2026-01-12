@@ -14,7 +14,7 @@ type Edge struct {
 	TargetStepID uuid.UUID `json:"target_step_id"`
 	SourcePort   string    `json:"source_port,omitempty"` // Output port name (e.g., "true", "false")
 	TargetPort   string    `json:"target_port,omitempty"` // Input port name (e.g., "input", "items")
-	Condition    string    `json:"condition,omitempty"`   // Legacy: condition expression
+	Condition    string    `json:"condition,omitempty"`   // Optional condition expression for edge traversal
 	CreatedAt    time.Time `json:"created_at"`
 }
 

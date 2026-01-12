@@ -34,7 +34,6 @@ const createForm = reactive({
   description: '',
   category: 'integration' as BlockCategory,
   icon: '',
-  executor_type: 'builtin',
 })
 
 // Edit form state (includes code editing)
@@ -103,7 +102,6 @@ function resetCreateForm() {
   createForm.description = ''
   createForm.category = 'integration'
   createForm.icon = ''
-  createForm.executor_type = 'builtin'
 }
 
 function openCreateModal() {
@@ -154,7 +152,6 @@ async function submitCreate() {
       description: createForm.description || undefined,
       category: createForm.category,
       icon: createForm.icon || undefined,
-      executor_type: createForm.executor_type,
     })
     showMessageToast('success', t('admin.blocks.messages.created'))
     showCreateModal.value = false

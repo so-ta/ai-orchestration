@@ -48,8 +48,8 @@ const blockFormData = reactive({
   config_schema: '{}',
   input_schema: '{}',
   output_schema: '{}',
-  executor_type: 'http',
-  executor_config: '{}',
+  code: '',
+  ui_config: '{}',
 })
 
 async function fetchBlocks() {
@@ -75,8 +75,8 @@ function openAddBlockModal() {
   blockFormData.config_schema = '{}'
   blockFormData.input_schema = '{}'
   blockFormData.output_schema = '{}'
-  blockFormData.executor_type = 'http'
-  blockFormData.executor_config = '{}'
+  blockFormData.code = ''
+  blockFormData.ui_config = '{}'
   showBlockModal.value = true
 }
 
@@ -90,8 +90,8 @@ function openEditBlockModal(block: BlockDefinition) {
   blockFormData.config_schema = JSON.stringify(block.config_schema || {}, null, 2)
   blockFormData.input_schema = JSON.stringify(block.input_schema || {}, null, 2)
   blockFormData.output_schema = JSON.stringify(block.output_schema || {}, null, 2)
-  blockFormData.executor_type = block.executor_type
-  blockFormData.executor_config = JSON.stringify(block.executor_config || {}, null, 2)
+  blockFormData.code = block.code || ''
+  blockFormData.ui_config = JSON.stringify(block.ui_config || {}, null, 2)
   showBlockModal.value = true
 }
 
@@ -102,12 +102,12 @@ async function submitBlockForm() {
   }
 
   // Validate JSON fields
-  let configSchema, inputSchema, outputSchema, executorConfig
+  let configSchema, inputSchema, outputSchema, uiConfig
   try {
     configSchema = JSON.parse(blockFormData.config_schema)
     inputSchema = JSON.parse(blockFormData.input_schema)
     outputSchema = JSON.parse(blockFormData.output_schema)
-    executorConfig = JSON.parse(blockFormData.executor_config)
+    uiConfig = JSON.parse(blockFormData.ui_config)
   } catch {
     toast.error(t('tenantBlocks.messages.invalidJson'))
     return
@@ -123,7 +123,8 @@ async function submitBlockForm() {
         config_schema: configSchema,
         input_schema: inputSchema,
         output_schema: outputSchema,
-        executor_config: executorConfig,
+        code: blockFormData.code || undefined,
+        ui_config: uiConfig,
       })
       toast.success(t('tenantBlocks.messages.updated'))
     } else {
@@ -136,8 +137,8 @@ async function submitBlockForm() {
         config_schema: configSchema,
         input_schema: inputSchema,
         output_schema: outputSchema,
-        executor_type: blockFormData.executor_type,
-        executor_config: executorConfig,
+        code: blockFormData.code || undefined,
+        ui_config: uiConfig,
       })
       toast.success(t('tenantBlocks.messages.created'))
     }
@@ -378,12 +379,6 @@ const categoryOptions = [
   { value: 'integration', label: 'Integration' },
   { value: 'control', label: 'Control' },
   { value: 'utility', label: 'Utility' },
-]
-
-const executorTypes = [
-  { value: 'builtin', label: t('tenantBlocks.executorTypes.builtin') },
-  { value: 'http', label: t('tenantBlocks.executorTypes.http') },
-  { value: 'function', label: t('tenantBlocks.executorTypes.function') },
 ]
 
 const credentialTypes = [
@@ -712,14 +707,6 @@ function getStatusClass(status: CredentialStatus): string {
             </select>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">{{ $t('tenantBlocks.form.executorType') }}</label>
-            <select v-model="blockFormData.executor_type" class="form-input" :disabled="!!selectedBlock">
-              <option v-for="et in executorTypes" :key="et.value" :value="et.value">
-                {{ et.label }}
-              </option>
-            </select>
-          </div>
         </div>
 
         <div class="form-group">
@@ -732,9 +719,19 @@ function getStatusClass(status: CredentialStatus): string {
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ $t('tenantBlocks.form.executorConfig') }}</label>
+          <label class="form-label">{{ $t('tenantBlocks.form.code') }}</label>
           <textarea
-            v-model="blockFormData.executor_config"
+            v-model="blockFormData.code"
+            class="form-input code-input"
+            rows="8"
+            :placeholder="$t('tenantBlocks.form.codePlaceholder')"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{{ $t('tenantBlocks.form.uiConfig') }}</label>
+          <textarea
+            v-model="blockFormData.ui_config"
             class="form-input code-input"
             rows="4"
           />

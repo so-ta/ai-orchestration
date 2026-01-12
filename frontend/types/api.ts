@@ -137,7 +137,6 @@ export type StepRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'sk
 
 // Block Registry Types
 export type BlockCategory = 'ai' | 'logic' | 'integration' | 'data' | 'control' | 'utility'
-export type ExecutorType = 'builtin' | 'http' | 'function'
 
 export interface ErrorCodeDef {
   code: string
@@ -177,8 +176,6 @@ export interface BlockDefinition {
   output_schema?: object
   input_ports: InputPort[]   // Multiple input ports for merging (e.g., join, aggregate)
   output_ports: OutputPort[] // Multiple output ports for branching (e.g., condition, switch)
-  executor_type: ExecutorType
-  executor_config?: object
   error_codes: ErrorCodeDef[]
   // Unified Block Model fields
   code?: string              // JavaScript code executed in sandbox

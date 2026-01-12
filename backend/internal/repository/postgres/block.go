@@ -44,11 +44,10 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		INSERT INTO block_definitions (
 			id, tenant_id, slug, name, description, category, icon,
 			config_schema, input_schema, output_schema, input_ports, output_ports,
-			executor_type, executor_config, error_codes,
-			template_id, template_config, custom_code, required_credentials, is_public,
+			error_codes, required_credentials, is_public,
 			code, ui_config, is_system, version,
 			enabled, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 	`
 
 	_, err = r.pool.Exec(ctx, query,
@@ -64,12 +63,7 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		block.OutputSchema,
 		inputPortsJSON,
 		outputPortsJSON,
-		block.ExecutorType,
-		block.ExecutorConfig,
 		errorCodesJSON,
-		block.TemplateID,
-		block.TemplateConfig,
-		block.CustomCode,
 		block.RequiredCredentials,
 		block.IsPublic,
 		block.Code,
@@ -91,8 +85,7 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
-			   executor_type, executor_config, error_codes,
-			   template_id, template_config, COALESCE(custom_code, ''), required_credentials, COALESCE(is_public, false),
+			   error_codes, required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   enabled, created_at, updated_at
 		FROM block_definitions
@@ -117,12 +110,7 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 		&block.OutputSchema,
 		&inputPortsJSON,
 		&outputPortsJSON,
-		&block.ExecutorType,
-		&block.ExecutorConfig,
 		&errorCodesJSON,
-		&block.TemplateID,
-		&block.TemplateConfig,
-		&block.CustomCode,
 		&block.RequiredCredentials,
 		&block.IsPublic,
 		&block.Code,
@@ -164,8 +152,7 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
-			   executor_type, executor_config, error_codes,
-			   template_id, template_config, COALESCE(custom_code, ''), required_credentials, COALESCE(is_public, false),
+			   error_codes, required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   enabled, created_at, updated_at
 		FROM block_definitions
@@ -192,12 +179,7 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 		&block.OutputSchema,
 		&inputPortsJSON,
 		&outputPortsJSON,
-		&block.ExecutorType,
-		&block.ExecutorConfig,
 		&errorCodesJSON,
-		&block.TemplateID,
-		&block.TemplateConfig,
-		&block.CustomCode,
 		&block.RequiredCredentials,
 		&block.IsPublic,
 		&block.Code,
@@ -256,12 +238,6 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		argNum++
 	}
 
-	if filter.ExecutorType != nil {
-		conditions = append(conditions, fmt.Sprintf("executor_type = $%d", argNum))
-		args = append(args, *filter.ExecutorType)
-		argNum++
-	}
-
 	if filter.EnabledOnly {
 		conditions = append(conditions, "enabled = true")
 	}
@@ -280,8 +256,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 	query := fmt.Sprintf(`
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
-			   executor_type, executor_config, error_codes,
-			   template_id, template_config, COALESCE(custom_code, ''), required_credentials, COALESCE(is_public, false),
+			   error_codes, required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   enabled, created_at, updated_at
 		FROM block_definitions
@@ -315,12 +290,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			&block.OutputSchema,
 			&inputPortsJSON,
 			&outputPortsJSON,
-			&block.ExecutorType,
-			&block.ExecutorConfig,
 			&errorCodesJSON,
-			&block.TemplateID,
-			&block.TemplateConfig,
-			&block.CustomCode,
 			&block.RequiredCredentials,
 			&block.IsPublic,
 			&block.Code,
@@ -381,10 +351,9 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		UPDATE block_definitions
 		SET name = $2, description = $3, category = $4, icon = $5,
 			config_schema = $6, input_schema = $7, output_schema = $8, input_ports = $9, output_ports = $10,
-			executor_type = $11, executor_config = $12, error_codes = $13,
-			template_id = $14, template_config = $15, custom_code = $16, required_credentials = $17, is_public = $18,
-			code = $19, ui_config = $20, is_system = $21, version = $22,
-			enabled = $23, updated_at = NOW()
+			error_codes = $11, required_credentials = $12, is_public = $13,
+			code = $14, ui_config = $15, is_system = $16, version = $17,
+			enabled = $18, updated_at = NOW()
 		WHERE id = $1
 	`
 
@@ -399,12 +368,7 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		block.OutputSchema,
 		inputPortsJSON,
 		outputPortsJSON,
-		block.ExecutorType,
-		block.ExecutorConfig,
 		errorCodesJSON,
-		block.TemplateID,
-		block.TemplateConfig,
-		block.CustomCode,
 		block.RequiredCredentials,
 		block.IsPublic,
 		block.Code,

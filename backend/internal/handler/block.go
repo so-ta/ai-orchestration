@@ -28,16 +28,16 @@ func NewBlockHandler(blockRepo repository.BlockDefinitionRepository, blockUsecas
 
 // CreateBlockRequest represents a create block definition request
 type CreateBlockRequest struct {
-	Slug           string          `json:"slug"`
-	Name           string          `json:"name"`
-	Description    string          `json:"description"`
-	Category       string          `json:"category"`
-	Icon           string          `json:"icon"`
-	ConfigSchema   json.RawMessage `json:"config_schema"`
-	InputSchema    json.RawMessage `json:"input_schema"`
-	OutputSchema   json.RawMessage `json:"output_schema"`
-	ExecutorType   string          `json:"executor_type"`
-	ExecutorConfig json.RawMessage `json:"executor_config"`
+	Slug         string          `json:"slug"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Category     string          `json:"category"`
+	Icon         string          `json:"icon"`
+	ConfigSchema json.RawMessage `json:"config_schema"`
+	InputSchema  json.RawMessage `json:"input_schema"`
+	OutputSchema json.RawMessage `json:"output_schema"`
+	Code         string          `json:"code"`
+	UIConfig     json.RawMessage `json:"ui_config"`
 }
 
 // List handles GET /api/v1/blocks
@@ -117,16 +117,6 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate executor type
-	executorType := domain.ExecutorType(req.ExecutorType)
-	if req.ExecutorType != "" && !executorType.IsValid() {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid executor_type", nil)
-		return
-	}
-	if req.ExecutorType == "" {
-		executorType = domain.ExecutorTypeHTTP // Default for custom blocks
-	}
-
 	// Check for existing block with same slug
 	existing, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, req.Slug)
 	if err != nil {
@@ -142,7 +132,7 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 	block := domain.NewBlockDefinition(&tenantID, req.Slug, req.Name, category)
 	block.Description = req.Description
 	block.Icon = req.Icon
-	block.ExecutorType = executorType
+	block.Code = req.Code
 
 	if req.ConfigSchema != nil {
 		block.ConfigSchema = req.ConfigSchema
@@ -153,8 +143,8 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.OutputSchema != nil {
 		block.OutputSchema = req.OutputSchema
 	}
-	if req.ExecutorConfig != nil {
-		block.ExecutorConfig = req.ExecutorConfig
+	if req.UIConfig != nil {
+		block.UIConfig = req.UIConfig
 	}
 
 	if err := h.blockRepo.Create(r.Context(), block); err != nil {
@@ -167,14 +157,15 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // UpdateBlockRequest represents an update block definition request
 type UpdateBlockRequest struct {
-	Name           string          `json:"name"`
-	Description    string          `json:"description"`
-	Icon           string          `json:"icon"`
-	ConfigSchema   json.RawMessage `json:"config_schema"`
-	InputSchema    json.RawMessage `json:"input_schema"`
-	OutputSchema   json.RawMessage `json:"output_schema"`
-	ExecutorConfig json.RawMessage `json:"executor_config"`
-	Enabled        *bool           `json:"enabled"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	Icon         string          `json:"icon"`
+	ConfigSchema json.RawMessage `json:"config_schema"`
+	InputSchema  json.RawMessage `json:"input_schema"`
+	OutputSchema json.RawMessage `json:"output_schema"`
+	Code         *string         `json:"code"`
+	UIConfig     json.RawMessage `json:"ui_config"`
+	Enabled      *bool           `json:"enabled"`
 }
 
 // Update handles PUT /api/v1/blocks/{slug}
@@ -224,8 +215,11 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.OutputSchema != nil {
 		block.OutputSchema = req.OutputSchema
 	}
-	if req.ExecutorConfig != nil {
-		block.ExecutorConfig = req.ExecutorConfig
+	if req.Code != nil {
+		block.Code = *req.Code
+	}
+	if req.UIConfig != nil {
+		block.UIConfig = req.UIConfig
 	}
 	if req.Enabled != nil {
 		block.Enabled = *req.Enabled

@@ -299,12 +299,10 @@ Indexes:
 | config_schema | JSONB | NOT NULL DEFAULT '{}' | Config JSON Schema |
 | input_schema | JSONB | | Input JSON Schema |
 | output_schema | JSONB | | Output JSON Schema |
-| executor_type | VARCHAR(20) | NOT NULL | builtin, http, function, code |
-| executor_config | JSONB | | Legacy executor config |
-| **code** | TEXT | | **JavaScript code (Unified Block Model)** |
-| **ui_config** | JSONB | NOT NULL DEFAULT '{}' | **{icon, color, configSchema}** |
-| **is_system** | BOOLEAN | NOT NULL DEFAULT FALSE | **System block = admin only** |
-| **version** | INTEGER | NOT NULL DEFAULT 1 | **Version number** |
+| code | TEXT | | JavaScript code (Unified Block Model) |
+| ui_config | JSONB | NOT NULL DEFAULT '{}' | {icon, color, configSchema} |
+| is_system | BOOLEAN | NOT NULL DEFAULT FALSE | System block = admin only |
+| version | INTEGER | NOT NULL DEFAULT 1 | Version number |
 | error_codes | JSONB | DEFAULT '[]' | Error code definitions |
 | enabled | BOOLEAN | DEFAULT true | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |

@@ -50,7 +50,8 @@ export function useRuns() {
 
   // Create run (execute workflow)
   // version: 0 or omitted means latest version
-  async function create(workflowId: string, data: { input?: object; mode?: 'test' | 'production'; version?: number }) {
+  // start_step_id: if provided, execution starts from this step
+  async function create(workflowId: string, data: { input?: object; mode?: 'test' | 'production'; version?: number; start_step_id?: string }) {
     return api.post<ApiResponse<Run>>(`/workflows/${workflowId}/runs`, data)
   }
 

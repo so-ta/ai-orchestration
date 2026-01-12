@@ -84,40 +84,20 @@ CREATE TABLE public.block_definitions (
     config_schema jsonb DEFAULT '{}'::jsonb NOT NULL,
     input_schema jsonb,
     output_schema jsonb,
-    executor_type character varying(20) DEFAULT 'builtin'::character varying NOT NULL,
-    executor_config jsonb,
     error_codes jsonb DEFAULT '[]'::jsonb,
     enabled boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     output_ports jsonb DEFAULT '[]'::jsonb,
     input_ports jsonb DEFAULT '[]'::jsonb,
-    template_id uuid,
-    template_config jsonb,
-    custom_code text,
     required_credentials jsonb DEFAULT '[]'::jsonb,
     is_public boolean DEFAULT false,
     code text,
     ui_config jsonb DEFAULT '{}'::jsonb NOT NULL,
     is_system boolean DEFAULT false NOT NULL,
     version integer DEFAULT 1 NOT NULL,
-    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying])::text[]))),
-    CONSTRAINT valid_executor_type CHECK (((executor_type)::text = ANY ((ARRAY['builtin'::character varying, 'http'::character varying, 'function'::character varying, 'code'::character varying])::text[])))
+    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying])::text[])))
 );
-
-
---
--- Name: COLUMN block_definitions.template_id; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.block_definitions.template_id IS 'Reference to block_templates for template-based blocks';
-
-
---
--- Name: COLUMN block_definitions.custom_code; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.block_definitions.custom_code IS 'Custom JavaScript code for code-based blocks (hidden in system blocks)';
 
 
 --
@@ -229,31 +209,6 @@ COMMENT ON COLUMN public.block_groups.config IS 'Type-specific configuration (JS
 --
 
 COMMENT ON COLUMN public.block_groups.parent_group_id IS 'Reference to parent group for nested structures';
-
-
---
--- Name: block_templates; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.block_templates (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    slug character varying(100) NOT NULL,
-    name character varying(200) NOT NULL,
-    description text,
-    config_schema jsonb DEFAULT '{}'::jsonb NOT NULL,
-    executor_type character varying(20) DEFAULT 'builtin'::character varying NOT NULL,
-    executor_code text,
-    is_builtin boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: TABLE block_templates; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.block_templates IS 'Reusable block templates (http_api, graphql, transform, etc.)';
 
 
 --
@@ -930,22 +885,6 @@ ALTER TABLE ONLY public.block_groups
 
 
 --
--- Name: block_templates block_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_templates
-    ADD CONSTRAINT block_templates_pkey PRIMARY KEY (id);
-
-
---
--- Name: block_templates block_templates_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_templates
-    ADD CONSTRAINT block_templates_slug_key UNIQUE (slug);
-
-
---
 -- Name: block_versions block_versions_block_id_version_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1582,14 +1521,6 @@ ALTER TABLE ONLY public.adapters
 
 ALTER TABLE ONLY public.audit_logs
     ADD CONSTRAINT audit_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: block_definitions block_definitions_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_definitions
-    ADD CONSTRAINT block_definitions_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.block_templates(id) ON DELETE SET NULL;
 
 
 --

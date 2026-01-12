@@ -44,18 +44,20 @@ function execute(input, context) {
 	assert.Equal(t, "Hello, World!", result["greeting"])
 }
 
-func TestSandbox_Execute_WithCredential(t *testing.T) {
+func TestSandbox_Execute_WithCredentials(t *testing.T) {
 	sb := New(DefaultConfig())
 
 	input := map[string]interface{}{}
 
 	execCtx := &ExecutionContext{
-		Credential: map[string]interface{}{
-			"api_key": "sk-test-12345",
+		Credentials: map[string]interface{}{
+			"my_api": map[string]interface{}{
+				"api_key": "sk-test-12345",
+			},
 		},
 	}
 
-	code := `return { key: context.credential.api_key };`
+	code := `return { key: context.credentials.my_api.api_key };`
 
 	result, err := sb.Execute(context.Background(), code, input, execCtx)
 	require.NoError(t, err)

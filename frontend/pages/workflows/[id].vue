@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
-import type { ExecutionLog } from '~/types/execution'
 import { calculateLayout } from '~/utils/graph-layout'
 
 const { t } = useI18n()
@@ -23,9 +22,6 @@ const saving = ref(false)
 
 // Execution state
 const latestRun = ref<Run | null>(null)
-const executionLogs = ref<ExecutionLog[]>([])
-const logPanelOpen = ref(false)
-const logPanelHeight = ref(200)
 
 // Tab state
 const activeTab = ref<'editor' | 'history'>('editor')
@@ -993,19 +989,6 @@ async function loadLatestRun() {
   }
 }
 
-// Execution log handlers
-function handleExecutionLog(log: ExecutionLog) {
-  executionLogs.value.push(log)
-  // Auto-open log panel when first log arrives
-  if (executionLogs.value.length === 1) {
-    logPanelOpen.value = true
-  }
-}
-
-function clearExecutionLogs() {
-  executionLogs.value = []
-}
-
 // Handle execute workflow from execution tab
 async function handleExecuteWorkflowFromTab(mode: 'test' | 'production', input: object) {
   if (!workflow.value) return
@@ -1098,7 +1081,7 @@ onMounted(() => {
       </div>
 
       <!-- Editor Tab Content -->
-      <div v-show="activeTab === 'editor'" class="editor-tab-content" :class="{ 'log-panel-open': logPanelOpen }" :style="logPanelOpen ? { paddingBottom: logPanelHeight + 'px' } : {}">
+      <div v-show="activeTab === 'editor'" class="editor-tab-content">
         <!-- Actions Bar -->
         <div class="actions-bar">
           <div class="actions-left">
@@ -1217,21 +1200,10 @@ onMounted(() => {
             @delete="handleDeleteStep"
             @apply-workflow="handleApplyWorkflow"
             @execute-workflow="handleExecuteWorkflowFromTab"
-            @log="handleExecutionLog"
             @update:name="handleUpdateStepName"
           />
         </template>
       </WorkflowEditorLayout>
-
-      <!-- Execution Log Panel -->
-      <ExecutionLogPanel
-        :logs="executionLogs"
-        :is-open="logPanelOpen"
-        :panel-height="logPanelHeight"
-        @update:is-open="logPanelOpen = $event"
-        @update:panel-height="logPanelHeight = $event"
-        @clear="clearExecutionLogs"
-      />
       </div>
 
       <!-- History Tab Content -->
@@ -1464,10 +1436,5 @@ onMounted(() => {
 /* Editor Tab Content */
 .editor-tab-content {
   position: relative;
-  transition: padding-bottom 0.2s ease;
-}
-
-.editor-tab-content.log-panel-open {
-  /* padding-bottom is set inline based on logPanelHeight */
 }
 </style>

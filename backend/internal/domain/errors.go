@@ -60,11 +60,6 @@ var (
 	ErrSystemCredentialExpired  = errors.New("system credential has expired")
 	ErrSystemCredentialRevoked  = errors.New("system credential has been revoked")
 
-	// Block Template errors
-	ErrBlockTemplateNotFound     = errors.New("block template not found")
-	ErrBlockTemplateIsBuiltin    = errors.New("cannot modify built-in template")
-	ErrBlockTemplateSlugExists   = errors.New("block template slug already exists")
-
 	// Copilot Session errors
 	ErrCopilotSessionNotFound = errors.New("copilot session not found")
 

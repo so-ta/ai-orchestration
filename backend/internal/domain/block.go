@@ -42,36 +42,6 @@ func (c BlockCategory) IsValid() bool {
 	return false
 }
 
-// ExecutorType represents how a block is executed
-type ExecutorType string
-
-const (
-	ExecutorTypeBuiltin  ExecutorType = "builtin"  // Go code implementation (legacy)
-	ExecutorTypeHTTP     ExecutorType = "http"     // HTTP request (legacy)
-	ExecutorTypeFunction ExecutorType = "function" // JavaScript function (legacy)
-	ExecutorTypeCode     ExecutorType = "code"     // Unified code-based execution
-)
-
-// ValidExecutorTypes returns all valid executor types
-func ValidExecutorTypes() []ExecutorType {
-	return []ExecutorType{
-		ExecutorTypeBuiltin,
-		ExecutorTypeHTTP,
-		ExecutorTypeFunction,
-		ExecutorTypeCode,
-	}
-}
-
-// IsValid checks if the executor type is valid
-func (e ExecutorType) IsValid() bool {
-	for _, valid := range ValidExecutorTypes() {
-		if e == valid {
-			return true
-		}
-	}
-	return false
-}
-
 // ErrorCodeDef defines an error code for a block
 type ErrorCodeDef struct {
 	Code        string `json:"code"`        // e.g., "LLM_001"
@@ -135,18 +105,6 @@ type BlockDefinition struct {
 	// Output ports (for blocks with multiple outputs like condition, switch)
 	OutputPorts []OutputPort `json:"output_ports"`
 
-	// Executor (legacy fields, for backward compatibility)
-	ExecutorType   ExecutorType    `json:"executor_type"`
-	ExecutorConfig json.RawMessage `json:"executor_config,omitempty"`
-
-	// Template-based execution (new)
-	TemplateID     *uuid.UUID      `json:"template_id,omitempty"`     // Reference to block_templates
-	TemplateConfig json.RawMessage `json:"template_config,omitempty"` // Template configuration
-
-	// Custom code execution (for code-based blocks)
-	// Hidden for system blocks when accessed by tenant users
-	CustomCode string `json:"custom_code,omitempty"`
-
 	// === Unified Block Model fields ===
 	// Code: JavaScript code executed in sandbox (all blocks are code-based)
 	Code string `json:"code,omitempty"`
@@ -187,7 +145,6 @@ func NewBlockDefinition(tenantID *uuid.UUID, slug, name string, category BlockCa
 		Slug:         slug,
 		Name:         name,
 		Category:     category,
-		ExecutorType: ExecutorTypeBuiltin,
 		ConfigSchema: json.RawMessage("{}"),
 		InputPorts:   []InputPort{{Name: "input", Label: "Input", Required: true}}, // Default single input
 		OutputPorts:  []OutputPort{{Name: "output", Label: "Output", IsDefault: true}}, // Default single output
@@ -266,22 +223,6 @@ const (
 	ErrCodeRateLimit      = "RATE_001"
 )
 
-// HTTPExecutorConfig represents configuration for HTTP executor
-type HTTPExecutorConfig struct {
-	Method       string            `json:"method"`                  // GET, POST, PUT, DELETE
-	URL          string            `json:"url"`                     // URL template
-	Headers      map[string]string `json:"headers,omitempty"`       // Request headers
-	BodyTemplate string            `json:"body_template,omitempty"` // Request body template
-	TimeoutMs    int               `json:"timeout_ms,omitempty"`    // Request timeout
-}
-
-// FunctionExecutorConfig represents configuration for function executor
-type FunctionExecutorConfig struct {
-	Code      string `json:"code"`                 // JavaScript code
-	Language  string `json:"language,omitempty"`   // javascript (default)
-	TimeoutMs int    `json:"timeout_ms,omitempty"` // Execution timeout
-}
-
 // BlockExecutionRequest represents a request to execute a block
 type BlockExecutionRequest struct {
 	BlockSlug     string          `json:"block_slug"`
@@ -296,67 +237,6 @@ type BlockExecutionResponse struct {
 	Output     json.RawMessage   `json:"output"`
 	DurationMs int               `json:"duration_ms"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
-}
-
-// ============================================================================
-// BlockTemplate - Reusable patterns for block definitions
-// ============================================================================
-
-// TemplateExecutorType represents how a template is executed
-type TemplateExecutorType string
-
-const (
-	TemplateExecutorBuiltin    TemplateExecutorType = "builtin"    // Go code implementation
-	TemplateExecutorJavaScript TemplateExecutorType = "javascript" // JavaScript code
-)
-
-// BlockTemplate represents a reusable block pattern
-type BlockTemplate struct {
-	ID           uuid.UUID            `json:"id"`
-	Slug         string               `json:"slug"` // Unique identifier (e.g., "http_api", "graphql")
-	Name         string               `json:"name"`
-	Description  string               `json:"description,omitempty"`
-	ConfigSchema json.RawMessage      `json:"config_schema"`     // What users configure when using this template
-	ExecutorType TemplateExecutorType `json:"executor_type"`     // "builtin" or "javascript"
-	ExecutorCode string               `json:"executor_code,omitempty"` // For javascript templates
-	IsBuiltin    bool                 `json:"is_builtin"`        // Cannot be deleted if true
-	CreatedAt    time.Time            `json:"created_at"`
-	UpdatedAt    time.Time            `json:"updated_at"`
-}
-
-// NewBlockTemplate creates a new block template
-func NewBlockTemplate(slug, name string) *BlockTemplate {
-	now := time.Now().UTC()
-	return &BlockTemplate{
-		ID:           uuid.New(),
-		Slug:         slug,
-		Name:         name,
-		ConfigSchema: json.RawMessage("{}"),
-		ExecutorType: TemplateExecutorBuiltin,
-		IsBuiltin:    false,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-}
-
-// BuiltinTemplates returns the slugs of all built-in templates
-func BuiltinTemplates() []string {
-	return []string{
-		"http_api",
-		"graphql",
-		"transform",
-		"llm_call",
-	}
-}
-
-// IsBuiltinTemplate checks if a slug is a built-in template
-func IsBuiltinTemplate(slug string) bool {
-	for _, builtin := range BuiltinTemplates() {
-		if slug == builtin {
-			return true
-		}
-	}
-	return false
 }
 
 // ============================================================================

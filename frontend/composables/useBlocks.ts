@@ -40,8 +40,8 @@ export function useBlocks() {
     config_schema?: object
     input_schema?: object
     output_schema?: object
-    executor_type: string
-    executor_config?: object
+    code?: string
+    ui_config?: object
   }) {
     return api.post<ApiResponse<BlockDefinition>>('/blocks', data)
   }
@@ -54,7 +54,8 @@ export function useBlocks() {
     config_schema?: object
     input_schema?: object
     output_schema?: object
-    executor_config?: object
+    code?: string
+    ui_config?: object
     enabled?: boolean
   }) {
     return api.put<ApiResponse<BlockDefinition>>(`/blocks/${slug}`, data)

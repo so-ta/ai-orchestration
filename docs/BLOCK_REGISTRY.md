@@ -126,10 +126,6 @@ CREATE TABLE block_definitions (
     input_schema JSONB,
     output_schema JSONB,
 
-    -- Legacy (backward compatibility)
-    executor_type VARCHAR(20) NOT NULL DEFAULT 'builtin',
-    executor_config JSONB,
-
     error_codes JSONB DEFAULT '[]',
 
     enabled BOOLEAN DEFAULT true,
@@ -351,7 +347,7 @@ return {
 ```sql
 INSERT INTO block_definitions (
     id, tenant_id, slug, name, description, category, icon,
-    executor_type, config_schema, error_codes, code, ui_config, is_system, enabled
+    config_schema, error_codes, code, ui_config, is_system, enabled
 ) VALUES (
     gen_random_uuid(),
     NULL,  -- システムブロック（全ユーザーに提供）
@@ -360,7 +356,6 @@ INSERT INTO block_definitions (
     'Discord Webhookにメッセージを送信',
     'integration',
     'message-circle',
-    'builtin',
     '{
         "type": "object",
         "properties": {
