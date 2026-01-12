@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/souta/ai-orchestration/internal/handler"
@@ -134,6 +136,23 @@ func main() {
 	authMiddleware := authmw.NewAuthMiddleware(authConfig)
 	log.Printf("Auth middleware enabled: %v", authConfig.Enabled)
 
+	// Initialize rate limiter
+	rateLimitConfig := &authmw.RateLimitConfig{
+		Enabled:        getEnv("RATE_LIMIT_ENABLED", "true") == "true",
+		TenantLimit:    getEnvInt("RATE_LIMIT_TENANT", 1000),
+		TenantWindow:   time.Minute,
+		WorkflowLimit:  getEnvInt("RATE_LIMIT_WORKFLOW", 100),
+		WorkflowWindow: time.Minute,
+		WebhookLimit:   getEnvInt("RATE_LIMIT_WEBHOOK", 60),
+		WebhookWindow:  time.Minute,
+	}
+	rateLimiter := authmw.NewRateLimiter(redisClient, rateLimitConfig)
+	log.Printf("Rate limiter enabled: %v (tenant: %d/min, workflow: %d/min, webhook: %d/min)",
+		rateLimitConfig.Enabled,
+		rateLimitConfig.TenantLimit,
+		rateLimitConfig.WorkflowLimit,
+		rateLimitConfig.WebhookLimit)
+
 	// Setup router
 	r := chi.NewRouter()
 
@@ -167,6 +186,8 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth middleware
 		r.Use(authMiddleware.Handler)
+		// Tenant-level rate limiting
+		r.Use(rateLimiter.TenantRateLimitMiddleware())
 
 		// Workflows
 		r.Route("/workflows", func(r chi.Router) {
@@ -238,10 +259,12 @@ func main() {
 					})
 				})
 
-				// Runs
+				// Runs (with workflow-level rate limiting for creation)
 				r.Route("/runs", func(r chi.Router) {
 					r.Get("/", runHandler.List)
-					r.Post("/", runHandler.Create)
+					r.With(rateLimiter.WorkflowRateLimitMiddleware(func(req *http.Request) (uuid.UUID, error) {
+						return uuid.Parse(chi.URLParam(req, "id"))
+					})).Post("/", runHandler.Create)
 				})
 			})
 		})
@@ -386,8 +409,10 @@ func main() {
 		})
 	})
 
-	// Public webhook trigger endpoint (no auth required)
-	r.Post("/api/v1/webhooks/{webhook_id}/trigger", webhookHandler.Trigger)
+	// Public webhook trigger endpoint (no auth required, but with webhook rate limiting)
+	r.With(rateLimiter.WebhookRateLimitMiddleware(func(req *http.Request) (string, error) {
+		return chi.URLParam(req, "webhook_id"), nil
+	})).Post("/api/v1/webhooks/{webhook_id}/trigger", webhookHandler.Trigger)
 
 	// Server
 	port := getEnv("PORT", "8080")
@@ -472,6 +497,15 @@ func readinessHandler(pool *pgxpool.Pool, redisClient redisPinger) http.HandlerF
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
+		}
 	}
 	return defaultValue
 }

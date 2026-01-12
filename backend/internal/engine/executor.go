@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/souta/ai-orchestration/internal/adapter"
 	"github.com/souta/ai-orchestration/internal/block/sandbox"
 	"github.com/souta/ai-orchestration/internal/domain"
@@ -28,6 +29,7 @@ type Executor struct {
 	evaluator     *ConditionEvaluator
 	sandbox       *sandbox.Sandbox
 	usageRecorder *UsageRecorder
+	pool          *pgxpool.Pool // Database pool for sandbox services
 }
 
 // ExecutorOption is a functional option for Executor
@@ -37,6 +39,13 @@ type ExecutorOption func(*Executor)
 func WithUsageRecorder(recorder *UsageRecorder) ExecutorOption {
 	return func(e *Executor) {
 		e.usageRecorder = recorder
+	}
+}
+
+// WithDatabase sets the database pool for sandbox services
+func WithDatabase(pool *pgxpool.Pool) ExecutorOption {
+	return func(e *Executor) {
+		e.pool = pool
 	}
 }
 
@@ -252,7 +261,7 @@ func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionC
 	case domain.StepTypeWait:
 		return e.executeWaitStep(ctx, step, input)
 	case domain.StepTypeFunction:
-		return e.executeFunctionStep(ctx, step, input)
+		return e.executeFunctionStep(ctx, execCtx, step, input)
 	case domain.StepTypeRouter:
 		return e.executeRouterStep(ctx, step, input)
 	case domain.StepTypeHumanInLoop:
@@ -509,7 +518,7 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	case domain.StepTypeWait:
 		output, err = e.executeWaitStep(ctx, step, input)
 	case domain.StepTypeFunction:
-		output, err = e.executeFunctionStep(ctx, step, input)
+		output, err = e.executeFunctionStep(ctx, execCtx, step, input)
 	case domain.StepTypeRouter:
 		output, err = e.executeRouterStep(ctx, step, input)
 	case domain.StepTypeHumanInLoop:
@@ -1169,7 +1178,7 @@ func (e *Executor) executeWaitStep(ctx context.Context, step domain.Step, input 
 	return json.Marshal(output)
 }
 
-func (e *Executor) executeFunctionStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
 	// Parse function config
 	var config domain.FunctionStepConfig
 	if err := json.Unmarshal(step.Config, &config); err != nil {
@@ -1199,16 +1208,23 @@ func (e *Executor) executeFunctionStep(ctx context.Context, step domain.Step, in
 		}
 	}
 
-	// Create execution context with HTTP client and logger
-	execCtx := &sandbox.ExecutionContext{
+	// Create sandbox execution context with HTTP client and logger
+	sandboxCtx := &sandbox.ExecutionContext{
 		HTTP: sandbox.NewHTTPClient(30 * time.Second),
 		Logger: func(args ...interface{}) {
 			e.logger.Info("Script log", "step_id", step.ID, "message", fmt.Sprint(args...))
 		},
 	}
 
+	// Add sandbox services if database pool is available (for Copilot/meta-workflow features)
+	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
+		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Runs = sandbox.NewRunsService(ctx, e.pool, execCtx.Run.TenantID)
+	}
+
 	// Execute the code in sandbox
-	result, err := e.sandbox.Execute(ctx, config.Code, inputMap, execCtx)
+	result, err := e.sandbox.Execute(ctx, config.Code, inputMap, sandboxCtx)
 	if err != nil {
 		e.logger.Error("Function execution failed",
 			"step_id", step.ID,

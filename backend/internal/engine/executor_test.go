@@ -593,7 +593,7 @@ func TestExecutor_ExecuteFunctionStep(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{"value": 5}`)
-	output, err := executor.executeFunctionStep(context.Background(), step, input)
+	output, err := executor.executeFunctionStep(context.Background(), nil, step, input)
 
 	require.NoError(t, err)
 
@@ -618,7 +618,7 @@ func TestExecutor_ExecuteFunctionStep_WithExecuteFunction(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{"name": "World"}`)
-	output, err := executor.executeFunctionStep(context.Background(), step, input)
+	output, err := executor.executeFunctionStep(context.Background(), nil, step, input)
 
 	require.NoError(t, err)
 
@@ -643,7 +643,7 @@ func TestExecutor_ExecuteFunctionStep_UnsupportedLanguage(t *testing.T) {
 	}
 
 	input := json.RawMessage(`{}`)
-	_, err := executor.executeFunctionStep(context.Background(), step, input)
+	_, err := executor.executeFunctionStep(context.Background(), nil, step, input)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported language")
