@@ -10,7 +10,7 @@
 2. [ ] このファイルで関連ドキュメントを特定
 3. [ ] 作業対象のドキュメントを読む
 4. [ ] 既存コードパターンを確認
-5. [ ] テスト手順を確認（frontend/docs/TESTING.md）
+5. [ ] テスト手順を確認（frontend/docs/TESTING.md, docs/TEST_PLAN.md）
 ```
 
 ## Quick Reference
@@ -25,6 +25,8 @@
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, Kubernetes, environment config | DevOps, deployment |
 | [DOCUMENTATION_RULES.md](./DOCUMENTATION_RULES.md) | Doc format, MECE, templates | Creating/updating documentation |
 | [TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules, Vitest | Frontend code changes |
+| **[TEST_PLAN.md](./TEST_PLAN.md)** | **Test plan, coverage rules, templates** | **Adding tests, coverage review** |
+| [BACKEND_TESTING.md](./BACKEND_TESTING.md) | Go backend testing patterns | Backend test implementation |
 | [SIM_FEATURES.md](./SIM_FEATURES.md) | Sim.ai互換機能の実装状況 | 新機能追加時 |
 | **[BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md)** | **Block definitions, error codes** | **新規ブロック追加時（必読）** |
 | **[INTEGRATIONS.md](./INTEGRATIONS.md)** | **外部サービス連携一覧** | **連携ブロック追加・利用時** |

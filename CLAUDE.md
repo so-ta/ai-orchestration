@@ -91,6 +91,7 @@ Multi-tenant SaaS for designing, executing, and monitoring DAG workflows with LL
 | DEPLOYMENT | Docker, K8s, config | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | DOCUMENTATION_RULES | Doc format, MECE rules | [docs/DOCUMENTATION_RULES.md](docs/DOCUMENTATION_RULES.md) |
 | TESTING | Frontend testing rules | [frontend/docs/TESTING.md](frontend/docs/TESTING.md) |
+| **TEST_PLAN** | **Test plan & coverage rules** | [docs/TEST_PLAN.md](docs/TEST_PLAN.md) |
 | OpenAPI | Machine-readable spec | [docs/openapi.yaml](docs/openapi.yaml) |
 | **UNIFIED_BLOCK_MODEL** | **Block architecture (MUST READ for integrations)** | [docs/designs/UNIFIED_BLOCK_MODEL.md](docs/designs/UNIFIED_BLOCK_MODEL.md) |
 | BLOCK_REGISTRY | Block definitions, error codes | [docs/BLOCK_REGISTRY.md](docs/BLOCK_REGISTRY.md) |
@@ -473,6 +474,75 @@ npm run check
 - プラットフォーム固有パッケージ（`@rollup/rollup-darwin-*`等）をdependenciesに追加
 
 **詳細は [frontend/docs/TESTING.md](frontend/docs/TESTING.md) を参照**
+
+### Test Coverage Maintenance (REQUIRED)
+
+**テストカバレッジを維持・向上させるためのルール**
+
+詳細は [docs/TEST_PLAN.md](docs/TEST_PLAN.md) を参照。
+
+#### 新規コード = 新規テスト (Mandatory)
+
+| 追加するコード | 必要なテスト |
+|--------------|-------------|
+| 新規Handler | Handler unit tests + request validation |
+| 新規Usecase | Usecase unit tests + edge cases |
+| 新規Repository | Repository tests (DB mock or test container) |
+| 新規Adapter | Adapter tests with mock external service |
+| 新規Composable | Composable unit tests |
+| 新規Component | Component tests (mount, props, events) |
+
+#### バグ修正 = 回帰テスト (Mandatory)
+
+```
+1. バグを再現するテストを書く（失敗することを確認）
+2. コードを修正
+3. テストがパスすることを確認
+4. 関連するエッジケースのテストも追加
+```
+
+#### カバレッジ閾値
+
+| Area | Minimum | Target |
+|------|---------|--------|
+| Backend Unit | 50% | 70% |
+| Frontend Unit | 40% | 60% |
+| E2E Critical Paths | 60% | 80% |
+
+**新規ファイルは上記Targetを満たすこと。**
+
+#### テストなしでマージ禁止
+
+以下のケースではテストなしのコードをマージしない：
+
+- 新規Handler/Usecase/Repository
+- バグ修正
+- セキュリティ関連の変更
+- 外部API連携
+
+#### テスト品質基準
+
+| 基準 | 説明 |
+|------|------|
+| 独立性 | 他のテストに依存しない |
+| 再現性 | 何度実行しても同じ結果 |
+| 高速 | 単体テストは100ms以内 |
+| 明確性 | テスト名から目的がわかる |
+
+#### テスト実行チェックリスト
+
+コード変更完了前に確認：
+
+```bash
+# Backend
+cd backend && go test ./...
+
+# Frontend
+cd frontend && npm run check
+
+# E2E (重要な変更時)
+cd backend && go test ./tests/e2e/... -v
+```
 
 ### DAG Editor Modification (REQUIRED)
 

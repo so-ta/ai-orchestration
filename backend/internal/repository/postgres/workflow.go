@@ -14,12 +14,18 @@ import (
 
 // WorkflowRepository implements repository.WorkflowRepository
 type WorkflowRepository struct {
-	pool *pgxpool.Pool
+	db DB
 }
 
 // NewWorkflowRepository creates a new WorkflowRepository
 func NewWorkflowRepository(pool *pgxpool.Pool) *WorkflowRepository {
-	return &WorkflowRepository{pool: pool}
+	return &WorkflowRepository{db: pool}
+}
+
+// NewWorkflowRepositoryWithDB creates a new WorkflowRepository with a custom DB implementation
+// This is primarily used for testing with mock databases
+func NewWorkflowRepositoryWithDB(db DB) *WorkflowRepository {
+	return &WorkflowRepository{db: db}
 }
 
 // Create creates a new workflow
@@ -28,7 +34,7 @@ func (r *WorkflowRepository) Create(ctx context.Context, w *domain.Workflow) err
 		INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, created_at, updated_at, is_system, system_slug)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
-	_, err := r.pool.Exec(ctx, query,
+	_, err := r.db.Exec(ctx, query,
 		w.ID, w.TenantID, w.Name, w.Description, w.Status, w.Version,
 		w.InputSchema, w.OutputSchema, w.Draft, w.CreatedBy, w.CreatedAt, w.UpdatedAt,
 		w.IsSystem, w.SystemSlug,
@@ -45,7 +51,7 @@ func (r *WorkflowRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID
 		WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
 	`
 	var w domain.Workflow
-	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
+	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
 		&w.ID, &w.TenantID, &w.Name, &w.Description, &w.Status, &w.Version,
 		&w.InputSchema, &w.OutputSchema, &w.Draft, &w.CreatedBy, &w.PublishedAt,
 		&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt, &w.IsSystem, &w.SystemSlug,
@@ -75,7 +81,7 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 	}
 
 	var total int
-	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -103,7 +109,7 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 		args = append(args, filter.Limit, offset)
 	}
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -136,7 +142,7 @@ func (r *WorkflowRepository) Update(ctx context.Context, w *domain.Workflow) err
 		    input_schema = $5, output_schema = $6, draft = $7, published_at = $8, updated_at = $9
 		WHERE id = $10 AND tenant_id = $11 AND deleted_at IS NULL
 	`
-	result, err := r.pool.Exec(ctx, query,
+	result, err := r.db.Exec(ctx, query,
 		w.Name, w.Description, w.Status, w.Version,
 		w.InputSchema, w.OutputSchema, w.Draft, w.PublishedAt, w.UpdatedAt,
 		w.ID, w.TenantID,
@@ -153,7 +159,7 @@ func (r *WorkflowRepository) Update(ctx context.Context, w *domain.Workflow) err
 // Delete soft-deletes a workflow
 func (r *WorkflowRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
 	query := `UPDATE workflows SET deleted_at = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL`
-	result, err := r.pool.Exec(ctx, query, time.Now().UTC(), id, tenantID)
+	result, err := r.db.Exec(ctx, query, time.Now().UTC(), id, tenantID)
 	if err != nil {
 		return err
 	}
@@ -196,7 +202,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 		WHERE workflow_id = $1
 		ORDER BY created_at
 	`
-	rows, err := r.pool.Query(ctx, stepsQuery, id)
+	rows, err := r.db.Query(ctx, stepsQuery, id)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +230,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 		FROM edges
 		WHERE workflow_id = $1
 	`
-	rows, err = r.pool.Query(ctx, edgesQuery, id)
+	rows, err = r.db.Query(ctx, edgesQuery, id)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +259,7 @@ func (r *WorkflowRepository) GetSystemBySlug(ctx context.Context, slug string) (
 		WHERE system_slug = $1 AND is_system = TRUE AND deleted_at IS NULL
 	`
 	var w domain.Workflow
-	err := r.pool.QueryRow(ctx, query, slug).Scan(
+	err := r.db.QueryRow(ctx, query, slug).Scan(
 		&w.ID, &w.TenantID, &w.Name, &w.Description, &w.Status, &w.Version,
 		&w.InputSchema, &w.OutputSchema, &w.Draft, &w.CreatedBy, &w.PublishedAt,
 		&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt, &w.IsSystem, &w.SystemSlug,
