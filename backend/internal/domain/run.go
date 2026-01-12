@@ -33,6 +33,7 @@ const (
 	TriggerTypeManual   TriggerType = "manual"
 	TriggerTypeSchedule TriggerType = "schedule"
 	TriggerTypeWebhook  TriggerType = "webhook"
+	TriggerTypeInternal TriggerType = "internal" // Internal system calls (e.g., Copilot)
 )
 
 // Run represents a workflow execution
@@ -51,6 +52,10 @@ type Run struct {
 	StartedAt       *time.Time      `json:"started_at,omitempty"`
 	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
 	CreatedAt       time.Time       `json:"created_at"`
+
+	// Internal trigger metadata (for TriggerTypeInternal)
+	TriggerSource   *string         `json:"trigger_source,omitempty"`   // e.g., "copilot", "audit-system"
+	TriggerMetadata json.RawMessage `json:"trigger_metadata,omitempty"` // e.g., {"feature": "generate", "user_id": "..."}
 
 	// Loaded relations
 	StepRuns []StepRun `json:"step_runs,omitempty"`
@@ -108,4 +113,17 @@ func (r *Run) DurationMs() *int64 {
 	}
 	ms := r.CompletedAt.Sub(*r.StartedAt).Milliseconds()
 	return &ms
+}
+
+// SetInternalTrigger sets the internal trigger metadata
+func (r *Run) SetInternalTrigger(source string, metadata map[string]interface{}) error {
+	r.TriggerSource = &source
+	if metadata != nil {
+		metaJSON, err := json.Marshal(metadata)
+		if err != nil {
+			return err
+		}
+		r.TriggerMetadata = metaJSON
+	}
+	return nil
 }

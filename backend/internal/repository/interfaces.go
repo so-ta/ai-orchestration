@@ -16,6 +16,8 @@ type WorkflowRepository interface {
 	Update(ctx context.Context, workflow *domain.Workflow) error
 	Delete(ctx context.Context, tenantID, id uuid.UUID) error
 	GetWithStepsAndEdges(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
+	// GetSystemBySlug retrieves a system workflow by its slug (accessible across all tenants)
+	GetSystemBySlug(ctx context.Context, slug string) (*domain.Workflow, error)
 }
 
 // WorkflowFilter defines filtering options for workflow list

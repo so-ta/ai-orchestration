@@ -120,7 +120,7 @@ func main() {
 	blockHandler := handler.NewBlockHandler(blockRepo, blockUsecase)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
-	copilotHandler := handler.NewCopilotHandler(copilotUsecase)
+	copilotHandler := handler.NewCopilotHandler(copilotUsecase, runUsecase)
 	usageHandler := handler.NewUsageHandler(usageUsecase)
 	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
 
@@ -317,11 +317,23 @@ func main() {
 
 		// Copilot (AI-assisted workflow building)
 		r.Route("/copilot", func(r chi.Router) {
+			// Legacy synchronous endpoints
 			r.Post("/suggest", copilotHandler.Suggest)
 			r.Post("/diagnose", copilotHandler.Diagnose)
 			r.Post("/explain", copilotHandler.Explain)
 			r.Post("/optimize", copilotHandler.Optimize)
 			r.Post("/chat", copilotHandler.Chat)
+
+			// Async endpoints (meta-workflow architecture)
+			r.Route("/async", func(r chi.Router) {
+				r.Post("/generate", copilotHandler.AsyncGenerateWorkflow)
+				r.Post("/suggest", copilotHandler.AsyncSuggest)
+				r.Post("/diagnose", copilotHandler.AsyncDiagnose)
+				r.Post("/optimize", copilotHandler.AsyncOptimize)
+			})
+
+			// Polling endpoint for async results
+			r.Get("/runs/{id}", copilotHandler.GetCopilotRun)
 		})
 
 		// Usage tracking and cost management

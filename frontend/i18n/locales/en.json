@@ -247,6 +247,8 @@
     "generatePlaceholder": "Example: Create a workflow that classifies user inquiries and routes technical questions to the support team and sales-related ones to the sales team.",
     "generate": "Generate",
     "generating": "Generating...",
+    "statusPending": "Starting...",
+    "statusRunning": "Processing...",
     "workflowGenerated": "Workflow generated. It will be applied to the canvas.",
     "actions": {
       "suggest": "Suggest",

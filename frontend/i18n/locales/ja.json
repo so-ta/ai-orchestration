@@ -247,6 +247,8 @@
     "generatePlaceholder": "例: ユーザーからの問い合わせを分類し、技術的な質問はサポートチームに、営業関連は営業チームに振り分けるワークフローを作成してください。",
     "generate": "生成",
     "generating": "生成中...",
+    "statusPending": "準備中...",
+    "statusRunning": "処理中...",
     "workflowGenerated": "ワークフローを生成しました。キャンバスに反映されます。",
     "actions": {
       "suggest": "提案",

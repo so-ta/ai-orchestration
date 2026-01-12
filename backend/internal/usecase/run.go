@@ -443,6 +443,79 @@ func (u *RunUsecase) GetStepHistory(ctx context.Context, tenantID, runID, stepID
 	return u.stepRunRepo.ListByStep(ctx, runID, stepID)
 }
 
+// ExecuteSystemWorkflowInput represents input for executing a system workflow
+type ExecuteSystemWorkflowInput struct {
+	TenantID        uuid.UUID              // Tenant context for the run
+	SystemSlug      string                 // System workflow slug (e.g., "copilot-generate")
+	Input           json.RawMessage        // Workflow input
+	Mode            domain.RunMode         // Execution mode (test/production)
+	TriggerSource   string                 // Internal caller identifier (e.g., "copilot")
+	TriggerMetadata map[string]interface{} // Additional metadata (feature, user_id, session_id, etc.)
+	UserID          *uuid.UUID             // User who triggered the execution
+}
+
+// ExecuteSystemWorkflowOutput represents output for system workflow execution
+type ExecuteSystemWorkflowOutput struct {
+	RunID      uuid.UUID `json:"run_id"`
+	WorkflowID uuid.UUID `json:"workflow_id"`
+	Version    int       `json:"version"`
+}
+
+// ExecuteSystemWorkflow executes a system workflow by its slug
+// This is used for internal system calls (e.g., Copilot meta-workflow)
+// Returns immediately after creating the run - execution happens asynchronously
+func (u *RunUsecase) ExecuteSystemWorkflow(ctx context.Context, input ExecuteSystemWorkflowInput) (*ExecuteSystemWorkflowOutput, error) {
+	// 1. Look up system workflow by slug
+	workflow, err := u.workflowRepo.GetSystemBySlug(ctx, input.SystemSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Validate workflow is published
+	if workflow.Status != domain.WorkflowStatusPublished || workflow.Version < 1 {
+		return nil, domain.ErrWorkflowNotPublished
+	}
+
+	// 3. Create run with internal trigger type
+	run := domain.NewRun(
+		input.TenantID,
+		workflow.ID,
+		workflow.Version,
+		input.Input,
+		input.Mode,
+		domain.TriggerTypeInternal,
+	)
+	run.TriggeredByUser = input.UserID
+
+	// 4. Set internal trigger metadata
+	if err := run.SetInternalTrigger(input.TriggerSource, input.TriggerMetadata); err != nil {
+		return nil, err
+	}
+
+	// 5. Save run to database
+	if err := u.runRepo.Create(ctx, run); err != nil {
+		return nil, err
+	}
+
+	// 6. Enqueue job for async execution
+	job := &engine.Job{
+		TenantID:        input.TenantID,
+		WorkflowID:      workflow.ID,
+		WorkflowVersion: workflow.Version,
+		RunID:           run.ID,
+		Input:           input.Input,
+	}
+	if err := u.queue.Enqueue(ctx, job); err != nil {
+		return nil, err
+	}
+
+	return &ExecuteSystemWorkflowOutput{
+		RunID:      run.ID,
+		WorkflowID: workflow.ID,
+		Version:    workflow.Version,
+	}, nil
+}
+
 // collectDownstreamSteps collects all steps reachable from the starting step (BFS)
 func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUID) []uuid.UUID {
 	// Build adjacency list
