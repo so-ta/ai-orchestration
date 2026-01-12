@@ -13,12 +13,17 @@ import (
 
 // RunRepository implements repository.RunRepository
 type RunRepository struct {
-	pool *pgxpool.Pool
+	db DB
 }
 
 // NewRunRepository creates a new RunRepository
 func NewRunRepository(pool *pgxpool.Pool) *RunRepository {
-	return &RunRepository{pool: pool}
+	return &RunRepository{db: pool}
+}
+
+// NewRunRepositoryWithDB creates a new RunRepository with a custom DB implementation
+func NewRunRepositoryWithDB(db DB) *RunRepository {
+	return &RunRepository{db: db}
 }
 
 // Create creates a new run
@@ -28,7 +33,7 @@ func (r *RunRepository) Create(ctx context.Context, run *domain.Run) error {
 		                  triggered_by, triggered_by_user, created_at, trigger_source, trigger_metadata)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
-	_, err := r.pool.Exec(ctx, query,
+	_, err := r.db.Exec(ctx, query,
 		run.ID, run.TenantID, run.WorkflowID, run.WorkflowVersion, run.Status, run.Mode,
 		run.Input, run.TriggeredBy, run.TriggeredByUser, run.CreatedAt,
 		run.TriggerSource, run.TriggerMetadata,
@@ -46,7 +51,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 		WHERE id = $1 AND tenant_id = $2
 	`
 	var run domain.Run
-	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
+	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
 		&run.ID, &run.TenantID, &run.WorkflowID, &run.WorkflowVersion, &run.Status, &run.Mode,
 		&run.Input, &run.Output, &run.Error, &run.TriggeredBy, &run.TriggeredByUser,
 		&run.StartedAt, &run.CompletedAt, &run.CreatedAt,
@@ -68,7 +73,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 	args := []interface{}{tenantID, workflowID}
 
 	var total int
-	if err := r.pool.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -88,7 +93,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 		args = append(args, filter.Limit, offset)
 	}
 
-	rows, err := r.pool.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -118,7 +123,7 @@ func (r *RunRepository) Update(ctx context.Context, run *domain.Run) error {
 		SET status = $1, output = $2, error = $3, started_at = $4, completed_at = $5
 		WHERE id = $6 AND tenant_id = $7
 	`
-	result, err := r.pool.Exec(ctx, query,
+	result, err := r.db.Exec(ctx, query,
 		run.Status, run.Output, run.Error, run.StartedAt, run.CompletedAt,
 		run.ID, run.TenantID,
 	)
@@ -145,7 +150,7 @@ func (r *RunRepository) GetWithStepRuns(ctx context.Context, tenantID, id uuid.U
 		WHERE run_id = $1
 		ORDER BY created_at
 	`
-	rows, err := r.pool.Query(ctx, query, id)
+	rows, err := r.db.Query(ctx, query, id)
 	if err != nil {
 		return nil, err
 	}
