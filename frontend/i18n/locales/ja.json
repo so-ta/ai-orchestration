@@ -24,7 +24,10 @@
     "updatedAt": "更新日時",
     "noData": "データがありません",
     "error": "エラー",
-    "success": "成功"
+    "success": "成功",
+    "all": "すべて",
+    "enabled": "有効",
+    "disabled": "無効"
   },
   "nav": {
     "dashboard": "ダッシュボード",
@@ -635,7 +638,8 @@
         "outputSchema": "出力スキーマ（JSON Schema）",
         "credentialType": "必要な認証タイプ",
         "credentialTypeHint": "このブロックで使用する認証情報のタイプ",
-        "enabled": "有効"
+        "enabled": "有効",
+        "icon": "アイコン"
       },
       "messages": {
         "created": "ブロックを作成しました",
