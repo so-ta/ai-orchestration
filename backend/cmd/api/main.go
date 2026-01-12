@@ -221,6 +221,9 @@ func main() {
 					r.Put("/{step_id}", stepHandler.Update)
 					r.Delete("/{step_id}", stepHandler.Delete)
 
+					// Inline step testing (without existing run)
+					r.Post("/{step_id}/test", runHandler.TestStepInline)
+
 					// Step-specific Copilot
 					r.Route("/{step_id}/copilot", func(r chi.Router) {
 						r.Post("/suggest", copilotHandler.SuggestForStep)

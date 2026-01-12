@@ -516,6 +516,94 @@ func (u *RunUsecase) ExecuteSystemWorkflow(ctx context.Context, input ExecuteSys
 	}, nil
 }
 
+// TestStepInlineInput represents input for inline step testing
+type TestStepInlineInput struct {
+	TenantID   uuid.UUID
+	WorkflowID uuid.UUID
+	StepID     uuid.UUID
+	Input      json.RawMessage // Custom input for testing
+	UserID     *uuid.UUID
+}
+
+// TestStepInlineOutput represents output for inline step testing
+type TestStepInlineOutput struct {
+	RunID     uuid.UUID `json:"run_id"`
+	StepID    uuid.UUID `json:"step_id"`
+	StepName  string    `json:"step_name"`
+	IsQueued  bool      `json:"is_queued"`
+}
+
+// TestStepInline creates a test run and executes only a single step
+// This allows testing a step without requiring an existing run
+func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInput) (*TestStepInlineOutput, error) {
+	// 1. Get the current workflow (draft state)
+	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Get current steps from the workflow
+	steps, err := u.stepRepo.ListByWorkflow(ctx, input.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Find the target step
+	var targetStep *domain.Step
+	for _, step := range steps {
+		if step.ID == input.StepID {
+			targetStep = step
+			break
+		}
+	}
+	if targetStep == nil {
+		return nil, domain.ErrStepNotFound
+	}
+
+	// 4. Create a test run with version 0
+	// The worker will automatically fall back to current workflow definition
+	// when version 0 is not found (see worker/main.go processJob function)
+	run := domain.NewRun(
+		input.TenantID,
+		workflow.ID,
+		0, // Version 0 indicates inline test with current draft
+		input.Input,
+		domain.RunModeTest,
+		domain.TriggerTypeManual,
+	)
+	run.TriggeredByUser = input.UserID
+
+	if err := u.runRepo.Create(ctx, run); err != nil {
+		return nil, err
+	}
+
+	// 5. Enqueue the job for single step execution
+	// The worker will:
+	// - Try to find version 0 (won't exist)
+	// - Fall back to current workflow definition
+	// - Execute only the target step
+	job := &engine.Job{
+		TenantID:        input.TenantID,
+		WorkflowID:      workflow.ID,
+		WorkflowVersion: 0, // Worker will fall back to current workflow
+		RunID:           run.ID,
+		ExecutionMode:   engine.ExecutionModeSingleStep,
+		TargetStepID:    &input.StepID,
+		StepInput:       input.Input,
+		InjectedOutputs: make(map[string]json.RawMessage), // No previous outputs for inline test
+	}
+	if err := u.queue.Enqueue(ctx, job); err != nil {
+		return nil, err
+	}
+
+	return &TestStepInlineOutput{
+		RunID:    run.ID,
+		StepID:   input.StepID,
+		StepName: targetStep.Name,
+		IsQueued: true,
+	}, nil
+}
+
 // collectDownstreamSteps collects all steps reachable from the starting step (BFS)
 func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUID) []uuid.UUID {
 	// Build adjacency list

@@ -60,10 +60,10 @@ function parseCustomInput(): object | null {
   }
 }
 
-// Execute single step
+// Execute single step (with or without existing run)
 async function executeStep(mode: 'test' | 'production') {
-  if (!props.step || !props.latestRun) {
-    toast.error(t('execution.errors.noRunAvailable'))
+  if (!props.step) {
+    toast.error(t('execution.errors.noStepSelected'))
     return
   }
 
@@ -83,24 +83,49 @@ async function executeStep(mode: 'test' | 'production') {
   })
 
   try {
-    const response = await runs.executeSingleStep(
-      props.latestRun.id,
-      props.step.id,
-      Object.keys(input).length > 0 ? input : undefined
-    )
+    if (props.latestRun) {
+      // Use existing run for re-execution
+      const response = await runs.executeSingleStep(
+        props.latestRun.id,
+        props.step.id,
+        Object.keys(input).length > 0 ? input : undefined
+      )
 
-    emit('log', {
-      id: crypto.randomUUID(),
-      timestamp: new Date(),
-      level: 'success',
-      message: t('execution.logs.stepCompleted', { name: props.step.name }),
-      stepId: props.step.id,
-      stepName: props.step.name,
-      data: response.data,
-    })
+      emit('log', {
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        level: 'success',
+        message: t('execution.logs.stepCompleted', { name: props.step.name }),
+        stepId: props.step.id,
+        stepName: props.step.name,
+        data: response.data,
+      })
 
-    toast.success(t('execution.stepExecuted'))
-    await loadStepHistory()
+      toast.success(t('execution.stepExecuted'))
+      await loadStepHistory()
+    } else {
+      // Use inline test API (creates new test run)
+      const response = await runs.testStepInline(
+        props.workflowId,
+        props.step.id,
+        Object.keys(input).length > 0 ? input : undefined
+      )
+
+      emit('log', {
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        level: 'success',
+        message: t('execution.logs.stepQueued', { name: props.step.name, runId: response.data.run_id }),
+        stepId: props.step.id,
+        stepName: props.step.name,
+        data: response.data,
+      })
+
+      toast.success(t('execution.stepQueued'))
+
+      // Start polling for result
+      startPolling(response.data.run_id, props.step.id)
+    }
   } catch (e) {
     emit('log', {
       id: crypto.randomUUID(),
@@ -115,6 +140,80 @@ async function executeStep(mode: 'test' | 'production') {
     executing.value = false
   }
 }
+
+// Poll for inline test result
+const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const pollingRunId = ref<string | null>(null)
+
+async function startPolling(runId: string, stepId: string) {
+  pollingRunId.value = runId
+  let attempts = 0
+  const maxAttempts = 60 // 60 seconds timeout
+
+  pollingInterval.value = setInterval(async () => {
+    attempts++
+    if (attempts > maxAttempts) {
+      stopPolling()
+      emit('log', {
+        id: crypto.randomUUID(),
+        timestamp: new Date(),
+        level: 'warn',
+        message: t('execution.logs.pollingTimeout'),
+      })
+      return
+    }
+
+    try {
+      const response = await runs.get(runId)
+      const run = response.data
+
+      // Check if step has completed
+      const stepRun = run.step_runs?.find((sr: { step_id: string }) => sr.step_id === stepId)
+      if (stepRun) {
+        if (stepRun.status === 'completed') {
+          stopPolling()
+          emit('log', {
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            level: 'success',
+            message: t('execution.logs.stepTestCompleted', { name: stepRun.step_name }),
+            stepId: stepId,
+            stepName: stepRun.step_name,
+            data: stepRun,
+          })
+          toast.success(t('execution.stepTestCompleted'))
+        } else if (stepRun.status === 'failed') {
+          stopPolling()
+          emit('log', {
+            id: crypto.randomUUID(),
+            timestamp: new Date(),
+            level: 'error',
+            message: t('execution.logs.stepTestFailed', { name: stepRun.step_name, error: stepRun.error || 'Unknown error' }),
+            stepId: stepId,
+            stepName: stepRun.step_name,
+            data: stepRun,
+          })
+          toast.error(t('execution.stepTestFailed'))
+        }
+      }
+    } catch (e) {
+      console.error('Polling error:', e)
+    }
+  }, 1000)
+}
+
+function stopPolling() {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+    pollingInterval.value = null
+  }
+  pollingRunId.value = null
+}
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopPolling()
+})
 
 // Execute entire workflow
 async function executeWorkflow(mode: 'test' | 'production') {
@@ -413,18 +512,21 @@ const isLLMStep = computed(() => {
         <div class="execution-buttons">
           <button
             class="btn btn-primary"
-            :disabled="executing || !latestRun"
+            :disabled="executing || !!pollingRunId"
             @click="executeStep('test')"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg v-if="!pollingRunId" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
-            {{ executing ? t('execution.executing') : t('execution.executeTest') }}
+            <svg v-else class="spinning" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+            </svg>
+            {{ pollingRunId ? t('execution.waitingForResult') : (executing ? t('execution.executing') : t('execution.executeTest')) }}
           </button>
         </div>
 
-        <p v-if="!latestRun" class="warning-text">
-          {{ t('execution.noRunWarning') }}
+        <p v-if="!latestRun" class="info-text">
+          {{ t('execution.inlineTestInfo') }}
         </p>
 
         <!-- Step History -->
@@ -901,6 +1003,29 @@ function getStepColor(type: string): string {
   padding: 0.5rem;
   background: #fef3c7;
   border-radius: 4px;
+}
+
+.info-text {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  padding: 0.5rem;
+  background: #f0f9ff;
+  border-radius: 4px;
+  border: 1px solid #bae6fd;
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Step History */
