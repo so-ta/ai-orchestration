@@ -17,16 +17,20 @@ tenants
         └── workflow_versions
         └── steps
         └── edges
+        └── block_groups
         └── schedules
         └── webhooks
   └── runs
         └── step_runs
+        └── block_group_runs
         └── usage_records
   └── usage_daily_aggregates
   └── usage_budgets
   └── secrets
   └── audit_logs
   └── adapters
+  └── block_definitions (※ tenant_id NULL = system)
+        └── block_versions
 ```
 
 ## Tables
@@ -273,6 +277,66 @@ Indexes:
 | enabled | BOOLEAN | NOT NULL DEFAULT true | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+### block_definitions
+
+ブロック定義（Unified Block Model）。システムブロックとテナントカスタムブロックを管理。
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| tenant_id | UUID | FK tenants(id) | NULL = system block |
+| slug | VARCHAR(100) | NOT NULL | Unique identifier |
+| name | VARCHAR(255) | NOT NULL | Display name |
+| description | TEXT | | |
+| category | VARCHAR(50) | NOT NULL | ai, logic, integration, data, control, utility |
+| icon | VARCHAR(50) | | Icon identifier |
+| config_schema | JSONB | NOT NULL DEFAULT '{}' | Config JSON Schema |
+| input_schema | JSONB | | Input JSON Schema |
+| output_schema | JSONB | | Output JSON Schema |
+| executor_type | VARCHAR(20) | NOT NULL | builtin, http, function, code |
+| executor_config | JSONB | | Legacy executor config |
+| **code** | TEXT | | **JavaScript code (Unified Block Model)** |
+| **ui_config** | JSONB | NOT NULL DEFAULT '{}' | **{icon, color, configSchema}** |
+| **is_system** | BOOLEAN | NOT NULL DEFAULT FALSE | **System block = admin only** |
+| **version** | INTEGER | NOT NULL DEFAULT 1 | **Version number** |
+| error_codes | JSONB | DEFAULT '[]' | Error code definitions |
+| enabled | BOOLEAN | DEFAULT true | |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+Unique: (tenant_id, slug)
+
+Indexes:
+- `idx_block_definitions_tenant` ON (tenant_id)
+- `idx_block_definitions_category` ON (category)
+- `idx_block_definitions_enabled` ON (enabled)
+
+**See**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
+
+### block_versions
+
+ブロック定義のバージョン履歴。ロールバック機能をサポート。
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| block_id | UUID | FK block_definitions(id) ON DELETE CASCADE, NOT NULL | |
+| version | INTEGER | NOT NULL | Version number |
+| code | TEXT | NOT NULL | Code snapshot |
+| config_schema | JSONB | NOT NULL | Config schema snapshot |
+| input_schema | JSONB | | Input schema snapshot |
+| output_schema | JSONB | | Output schema snapshot |
+| ui_config | JSONB | NOT NULL | UI config snapshot |
+| change_summary | TEXT | | Change description |
+| changed_by | UUID | | User who made the change |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
+
+Unique: (block_id, version)
+
+Indexes:
+- `idx_block_versions_block_id` ON (block_id)
+- `idx_block_versions_created_at` ON (created_at)
 
 ### usage_records
 
