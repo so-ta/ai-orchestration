@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BlockDefinition, BlockCategory } from '~/types/api'
-import { categoryConfig } from '~/composables/useBlocks'
+import { useAdminBlocks, type BlockVersion, categoryConfig } from '~/composables/useBlocks'
 
 const { t } = useI18n()
 
@@ -10,6 +10,7 @@ definePageMeta({
 })
 
 const blocksApi = useBlocks()
+const adminBlocks = useAdminBlocks()
 
 // State
 const blocks = ref<BlockDefinition[]>([])
@@ -18,27 +19,53 @@ const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 
 // Modal state
 const showCreateModal = ref(false)
+const showEditModal = ref(false)
 const showDeleteModal = ref(false)
+const showVersionModal = ref(false)
 const selectedBlock = ref<BlockDefinition | null>(null)
 
 // Filter state
 const selectedCategory = ref<BlockCategory | ''>('')
 
-// Form state
-const formData = reactive({
+// Create form state
+const createForm = reactive({
   slug: '',
   name: '',
   description: '',
   category: 'integration' as BlockCategory,
   icon: '',
   executor_type: 'builtin',
-  enabled: true,
 })
+
+// Edit form state (includes code editing)
+const editForm = reactive({
+  name: '',
+  description: '',
+  icon: '',
+  enabled: true,
+  code: '',
+  configSchema: '{}',
+  uiConfig: '{}',
+  changeSummary: '',
+})
+
+// Version state
+const versions = ref<BlockVersion[]>([])
+const loadingVersions = ref(false)
 
 // Computed
 const filteredBlocks = computed(() => {
-  if (!selectedCategory.value) return blocks.value
-  return blocks.value.filter(b => b.category === selectedCategory.value)
+  let result = blocks.value
+  if (selectedCategory.value) {
+    result = result.filter(b => b.category === selectedCategory.value)
+  }
+  // Sort by category then name
+  return [...result].sort((a, b) => {
+    if (a.category !== b.category) {
+      return a.category.localeCompare(b.category)
+    }
+    return a.name.localeCompare(b.name)
+  })
 })
 
 const categories: BlockCategory[] = ['ai', 'logic', 'data', 'integration', 'control', 'utility']
@@ -54,41 +81,47 @@ function showMessageToast(type: 'success' | 'error', text: string) {
 async function fetchBlocks() {
   try {
     loading.value = true
-    const response = await blocksApi.list()
+    // Use admin API to get all blocks with code
+    const response = await adminBlocks.listSystemBlocks()
     blocks.value = response.blocks || []
   } catch (err) {
-    showMessageToast('error', t('errors.loadFailed'))
+    // Fallback to regular API
+    try {
+      const response = await blocksApi.list()
+      blocks.value = response.blocks || []
+    } catch {
+      showMessageToast('error', t('errors.loadFailed'))
+    }
   } finally {
     loading.value = false
   }
 }
 
-function resetForm() {
-  formData.slug = ''
-  formData.name = ''
-  formData.description = ''
-  formData.category = 'integration'
-  formData.icon = ''
-  formData.executor_type = 'builtin'
-  formData.enabled = true
+function resetCreateForm() {
+  createForm.slug = ''
+  createForm.name = ''
+  createForm.description = ''
+  createForm.category = 'integration'
+  createForm.icon = ''
+  createForm.executor_type = 'builtin'
 }
 
 function openCreateModal() {
-  resetForm()
-  selectedBlock.value = null
+  resetCreateForm()
   showCreateModal.value = true
 }
 
 function openEditModal(block: BlockDefinition) {
   selectedBlock.value = block
-  formData.slug = block.slug
-  formData.name = block.name
-  formData.description = block.description || ''
-  formData.category = block.category
-  formData.icon = block.icon || ''
-  formData.executor_type = block.executor_type
-  formData.enabled = block.enabled
-  showCreateModal.value = true
+  editForm.name = block.name
+  editForm.description = block.description || ''
+  editForm.icon = block.icon || ''
+  editForm.enabled = block.enabled
+  editForm.code = block.code || ''
+  editForm.configSchema = JSON.stringify(block.config_schema || {}, null, 2)
+  editForm.uiConfig = JSON.stringify(block.ui_config || {}, null, 2)
+  editForm.changeSummary = ''
+  showEditModal.value = true
 }
 
 function openDeleteModal(block: BlockDefinition) {
@@ -96,35 +129,73 @@ function openDeleteModal(block: BlockDefinition) {
   showDeleteModal.value = true
 }
 
-async function submitForm() {
+async function openVersionModal(block: BlockDefinition) {
+  selectedBlock.value = block
+  versions.value = []
+  loadingVersions.value = true
+  showVersionModal.value = true
+
   try {
-    if (selectedBlock.value) {
-      // Update existing
-      await blocksApi.update(selectedBlock.value.slug, {
-        name: formData.name,
-        description: formData.description || undefined,
-        icon: formData.icon || undefined,
-        enabled: formData.enabled,
-      })
-      showMessageToast('success', t('admin.blocks.messages.updated'))
-    } else {
-      // Create new
-      await blocksApi.create({
-        slug: formData.slug,
-        name: formData.name,
-        description: formData.description || undefined,
-        category: formData.category,
-        icon: formData.icon || undefined,
-        executor_type: formData.executor_type,
-      })
-      showMessageToast('success', t('admin.blocks.messages.created'))
-    }
+    const response = await adminBlocks.listVersions(block.id)
+    versions.value = response.versions || []
+  } catch (err) {
+    showMessageToast('error', t('admin.blocks.messages.versionLoadFailed'))
+    console.error('Error loading versions:', err)
+  } finally {
+    loadingVersions.value = false
+  }
+}
+
+async function submitCreate() {
+  try {
+    await blocksApi.create({
+      slug: createForm.slug,
+      name: createForm.name,
+      description: createForm.description || undefined,
+      category: createForm.category,
+      icon: createForm.icon || undefined,
+      executor_type: createForm.executor_type,
+    })
+    showMessageToast('success', t('admin.blocks.messages.created'))
     showCreateModal.value = false
-    resetForm()
+    resetCreateForm()
     await fetchBlocks()
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : t('errors.generic')
     showMessageToast('error', errorMessage)
+  }
+}
+
+async function submitEdit() {
+  if (!selectedBlock.value) return
+
+  try {
+    // Parse JSON fields
+    let configSchema
+    let uiConfig
+    try {
+      configSchema = JSON.parse(editForm.configSchema)
+      uiConfig = JSON.parse(editForm.uiConfig)
+    } catch {
+      showMessageToast('error', t('admin.blocks.messages.invalidJson'))
+      return
+    }
+
+    await adminBlocks.updateSystemBlock(selectedBlock.value.id, {
+      name: editForm.name,
+      description: editForm.description || undefined,
+      code: editForm.code,
+      config_schema: configSchema,
+      ui_config: uiConfig,
+      change_summary: editForm.changeSummary,
+    })
+
+    showMessageToast('success', t('admin.blocks.messages.updated'))
+    showEditModal.value = false
+    await fetchBlocks()
+  } catch (err) {
+    showMessageToast('error', t('admin.blocks.messages.updateFailed'))
+    console.error('Error updating block:', err)
   }
 }
 
@@ -142,14 +213,32 @@ async function confirmDelete() {
   }
 }
 
+async function rollbackToVersion(version: BlockVersion) {
+  if (!selectedBlock.value) return
+
+  if (!confirm(t('admin.blocks.confirmRollback', { version: version.version }))) {
+    return
+  }
+
+  try {
+    await adminBlocks.rollback(selectedBlock.value.id, version.version)
+    showMessageToast('success', t('admin.blocks.messages.rolledBack', { version: version.version }))
+    showVersionModal.value = false
+    await fetchBlocks()
+  } catch (err) {
+    showMessageToast('error', t('admin.blocks.messages.rollbackFailed'))
+    console.error('Error rolling back:', err)
+  }
+}
+
 function formatDate(date: string | undefined): string {
   if (!date) return '-'
-  return new Date(date).toLocaleDateString()
+  return new Date(date).toLocaleString()
 }
 
 function generateSlug() {
-  if (!selectedBlock.value && formData.name) {
-    formData.slug = formData.name
+  if (createForm.name) {
+    createForm.slug = createForm.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
@@ -159,6 +248,11 @@ function generateSlug() {
 function getCategoryName(category: BlockCategory): string {
   const config = categoryConfig[category]
   return config ? t(config.nameKey) : category
+}
+
+function truncateCode(code: string | undefined, maxLength: number = 50): string {
+  if (!code) return '-'
+  return code.length > maxLength ? code.substring(0, maxLength) + '...' : code
 }
 
 onMounted(() => {
@@ -235,6 +329,8 @@ onMounted(() => {
           <tr>
             <th>{{ $t('admin.blocks.table.name') }}</th>
             <th>{{ $t('admin.blocks.table.category') }}</th>
+            <th>{{ $t('admin.blocks.table.code') }}</th>
+            <th>{{ $t('admin.blocks.table.version') }}</th>
             <th>{{ $t('admin.blocks.table.enabled') }}</th>
             <th>{{ $t('admin.blocks.table.updatedAt') }}</th>
             <th>{{ $t('admin.blocks.table.actions') }}</th>
@@ -257,6 +353,14 @@ onMounted(() => {
               </span>
             </td>
             <td>
+              <div class="code-preview" :title="block.code">
+                {{ truncateCode(block.code) }}
+              </div>
+            </td>
+            <td>
+              <span class="version-badge">v{{ block.version || 1 }}</span>
+            </td>
+            <td>
               <span :class="['status-badge', block.enabled ? 'status-enabled' : 'status-disabled']">
                 {{ block.enabled ? $t('common.enabled') : $t('common.disabled') }}
               </span>
@@ -265,10 +369,16 @@ onMounted(() => {
             <td>
               <div class="flex gap-2">
                 <button
-                  class="btn btn-sm btn-secondary"
+                  class="btn btn-sm btn-primary"
                   @click="openEditModal(block)"
                 >
                   {{ $t('common.edit') }}
+                </button>
+                <button
+                  class="btn btn-sm btn-secondary"
+                  @click="openVersionModal(block)"
+                >
+                  {{ $t('admin.blocks.versions') }}
                 </button>
                 <button
                   class="btn btn-sm btn-danger"
@@ -283,19 +393,19 @@ onMounted(() => {
       </table>
     </div>
 
-    <!-- Create/Edit Modal -->
+    <!-- Create Modal -->
     <UiModal
       :show="showCreateModal"
-      :title="selectedBlock ? $t('admin.blocks.editBlock') : $t('admin.blocks.newBlock')"
+      :title="$t('admin.blocks.newBlock')"
       size="lg"
       @close="showCreateModal = false"
     >
-      <form @submit.prevent="submitForm">
+      <form @submit.prevent="submitCreate">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">{{ $t('admin.blocks.form.name') }} *</label>
             <input
-              v-model="formData.name"
+              v-model="createForm.name"
               type="text"
               class="form-input"
               :placeholder="$t('admin.blocks.form.namePlaceholder')"
@@ -306,13 +416,12 @@ onMounted(() => {
           <div class="form-group">
             <label class="form-label">Slug *</label>
             <input
-              v-model="formData.slug"
+              v-model="createForm.slug"
               type="text"
               class="form-input"
               placeholder="e.g., slack_message"
               required
               pattern="[a-z0-9_]+"
-              :disabled="!!selectedBlock"
             />
           </div>
         </div>
@@ -320,7 +429,7 @@ onMounted(() => {
         <div class="form-group">
           <label class="form-label">{{ $t('admin.blocks.form.description') }}</label>
           <textarea
-            v-model="formData.description"
+            v-model="createForm.description"
             class="form-input"
             :placeholder="$t('admin.blocks.form.descriptionPlaceholder')"
             rows="2"
@@ -331,10 +440,9 @@ onMounted(() => {
           <div class="form-group">
             <label class="form-label">{{ $t('admin.blocks.form.category') }} *</label>
             <select
-              v-model="formData.category"
+              v-model="createForm.category"
               class="form-input"
               required
-              :disabled="!!selectedBlock"
             >
               <option v-for="cat in categories" :key="cat" :value="cat">
                 {{ getCategoryName(cat) }}
@@ -344,7 +452,50 @@ onMounted(() => {
           <div class="form-group">
             <label class="form-label">{{ $t('admin.blocks.form.icon') }}</label>
             <input
-              v-model="formData.icon"
+              v-model="createForm.icon"
+              type="text"
+              class="form-input"
+              placeholder="e.g., message-circle"
+            />
+          </div>
+        </div>
+      </form>
+
+      <template #footer>
+        <button class="btn btn-secondary" @click="showCreateModal = false">
+          {{ $t('common.cancel') }}
+        </button>
+        <button class="btn btn-primary" :disabled="loading" @click="submitCreate">
+          {{ $t('common.create') }}
+        </button>
+      </template>
+    </UiModal>
+
+    <!-- Edit Modal (with code editing) -->
+    <UiModal
+      :show="showEditModal"
+      :title="$t('admin.blocks.editBlock') + ': ' + (selectedBlock?.name || '')"
+      size="xl"
+      @close="showEditModal = false"
+    >
+      <form @submit.prevent="submitEdit">
+        <!-- Basic Info Section -->
+        <div class="section-title">{{ $t('admin.blocks.sections.basicInfo') }}</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ $t('admin.blocks.form.name') }} *</label>
+            <input
+              v-model="editForm.name"
+              type="text"
+              class="form-input"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ $t('admin.blocks.form.icon') }}</label>
+            <input
+              v-model="editForm.icon"
               type="text"
               class="form-input"
               placeholder="e.g., message-circle"
@@ -353,23 +504,69 @@ onMounted(() => {
         </div>
 
         <div class="form-group">
-          <label class="form-label flex items-center gap-2">
-            <input
-              v-model="formData.enabled"
-              type="checkbox"
-              class="form-checkbox"
+          <label class="form-label">{{ $t('admin.blocks.form.description') }}</label>
+          <input
+            v-model="editForm.description"
+            type="text"
+            class="form-input"
+          />
+        </div>
+
+        <!-- Code Section -->
+        <div class="section-title">{{ $t('admin.blocks.sections.code') }}</div>
+
+        <div class="form-group">
+          <label class="form-label">{{ $t('admin.blocks.form.code') }} (JavaScript)</label>
+          <textarea
+            v-model="editForm.code"
+            class="form-input code-editor"
+            rows="12"
+            spellcheck="false"
+          />
+        </div>
+
+        <!-- Schema Section -->
+        <div class="section-title">{{ $t('admin.blocks.sections.schemas') }}</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ $t('admin.blocks.form.configSchema') }} (JSON)</label>
+            <textarea
+              v-model="editForm.configSchema"
+              class="form-input code-editor"
+              rows="6"
+              spellcheck="false"
             />
-            {{ $t('admin.blocks.table.enabled') }}
-          </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ $t('admin.blocks.form.uiConfig') }} (JSON)</label>
+            <textarea
+              v-model="editForm.uiConfig"
+              class="form-input code-editor"
+              rows="6"
+              spellcheck="false"
+            />
+          </div>
+        </div>
+
+        <!-- Change Summary -->
+        <div class="form-group">
+          <label class="form-label">{{ $t('admin.blocks.form.changeSummary') }}</label>
+          <input
+            v-model="editForm.changeSummary"
+            type="text"
+            class="form-input"
+            :placeholder="$t('admin.blocks.form.changeSummaryPlaceholder')"
+          />
         </div>
       </form>
 
       <template #footer>
-        <button class="btn btn-secondary" @click="showCreateModal = false">
+        <button class="btn btn-secondary" @click="showEditModal = false">
           {{ $t('common.cancel') }}
         </button>
-        <button class="btn btn-primary" :disabled="loading" @click="submitForm">
-          {{ loading ? $t('common.saving') : $t('common.save') }}
+        <button class="btn btn-primary" :disabled="loading" @click="submitEdit">
+          {{ $t('common.save') }}
         </button>
       </template>
     </UiModal>
@@ -389,6 +586,48 @@ onMounted(() => {
         </button>
         <button class="btn btn-danger" :disabled="loading" @click="confirmDelete">
           {{ $t('common.delete') }}
+        </button>
+      </template>
+    </UiModal>
+
+    <!-- Versions Modal -->
+    <UiModal
+      :show="showVersionModal"
+      :title="$t('admin.blocks.versionHistory') + ': ' + (selectedBlock?.name || '')"
+      size="lg"
+      @close="showVersionModal = false"
+    >
+      <div v-if="loadingVersions" style="text-align: center; padding: 2rem;">
+        {{ $t('common.loading') }}
+      </div>
+
+      <div v-else-if="versions.length === 0" style="text-align: center; padding: 2rem;">
+        <p class="text-secondary">{{ $t('admin.blocks.noVersions') }}</p>
+      </div>
+
+      <div v-else class="version-list">
+        <div v-for="version in versions" :key="version.id" class="version-item">
+          <div class="version-header">
+            <span class="version-badge">v{{ version.version }}</span>
+            <span class="version-date">{{ formatDate(version.created_at) }}</span>
+          </div>
+          <p v-if="version.change_summary" class="version-summary">
+            {{ version.change_summary }}
+          </p>
+          <div class="version-actions">
+            <button
+              class="btn btn-sm btn-secondary"
+              @click="rollbackToVersion(version)"
+            >
+              {{ $t('admin.blocks.rollbackTo') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <button class="btn btn-secondary" @click="showVersionModal = false">
+          {{ $t('common.close') }}
         </button>
       </template>
     </UiModal>
@@ -500,6 +739,26 @@ onMounted(() => {
   color: var(--color-primary);
 }
 
+.version-badge {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--color-primary);
+}
+
+.code-preview {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-badge {
   display: inline-block;
   padding: 0.125rem 0.5rem;
@@ -530,6 +789,20 @@ onMounted(() => {
 
 .btn-danger:hover {
   background: #dc2626;
+}
+
+.section-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.section-title:first-child {
+  margin-top: 0;
 }
 
 .form-group {
@@ -569,15 +842,51 @@ textarea.form-input {
   min-height: 60px;
 }
 
+.code-editor {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 100px;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
 }
 
-.form-checkbox {
-  width: 1rem;
-  height: 1rem;
-  cursor: pointer;
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.version-item {
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+}
+
+.version-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.version-date {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.version-summary {
+  font-size: 0.875rem;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+}
+
+.version-actions {
+  margin-top: 0.5rem;
 }
 </style>

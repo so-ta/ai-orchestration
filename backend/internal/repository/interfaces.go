@@ -323,3 +323,35 @@ type BudgetRepository interface {
 	// Delete deletes a budget
 	Delete(ctx context.Context, tenantID, id uuid.UUID) error
 }
+
+// TenantRepository defines the interface for tenant persistence
+type TenantRepository interface {
+	// Create creates a new tenant
+	Create(ctx context.Context, tenant *domain.Tenant) error
+	// GetByID retrieves a tenant by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.Tenant, error)
+	// GetBySlug retrieves a tenant by slug
+	GetBySlug(ctx context.Context, slug string) (*domain.Tenant, error)
+	// List retrieves tenants with optional filtering
+	List(ctx context.Context, filter TenantFilter) ([]*domain.Tenant, int, error)
+	// Update updates a tenant
+	Update(ctx context.Context, tenant *domain.Tenant) error
+	// Delete soft-deletes a tenant
+	Delete(ctx context.Context, id uuid.UUID) error
+	// UpdateStatus updates the status of a tenant
+	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.TenantStatus, reason string) error
+	// GetStats retrieves aggregated statistics for a tenant
+	GetStats(ctx context.Context, id uuid.UUID) (*domain.TenantStats, error)
+	// GetAllStats retrieves aggregated statistics for all tenants
+	GetAllStats(ctx context.Context) (map[uuid.UUID]*domain.TenantStats, error)
+}
+
+// TenantFilter defines filtering options for tenant list
+type TenantFilter struct {
+	Status         *domain.TenantStatus
+	Plan           *domain.TenantPlan
+	Search         string
+	Page           int
+	Limit          int
+	IncludeDeleted bool
+}

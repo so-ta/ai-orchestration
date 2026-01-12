@@ -138,6 +138,41 @@ function handleSelectGroup(group: BlockGroup) {
   clearSelection() // Deselect step when selecting group
 }
 
+// Delete block group
+async function handleDeleteGroup() {
+  if (!selectedGroupId.value || isReadonly.value) return
+
+  const groupId = selectedGroupId.value
+
+  try {
+    saving.value = true
+    selectedGroupId.value = null
+
+    // Remove group from local state immediately (optimistic update)
+    blockGroups.value = blockGroups.value.filter(g => g.id !== groupId)
+
+    // Clear block_group_id from steps that were in this group
+    if (workflow.value?.steps) {
+      for (const step of workflow.value.steps) {
+        if (step.block_group_id === groupId) {
+          step.block_group_id = undefined
+          step.group_role = undefined
+        }
+      }
+    }
+
+    // Delete from API
+    await blockGroupsApi.remove(workflowId, groupId)
+    toast.success(t('editor.groupDeleted'))
+  } catch (e) {
+    toast.error(t('editor.groupDeleteFailed'), e instanceof Error ? e.message : undefined)
+    // On error, reload to get correct state
+    await loadWorkflow()
+  } finally {
+    saving.value = false
+  }
+}
+
 async function handleUpdateGroupPosition(groupId: string, updates: { position?: { x: number; y: number }; size?: { width: number; height: number } }) {
   if (isReadonly.value) return
   try {
@@ -890,11 +925,16 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
 // Keyboard shortcuts (Delete, Cmd/Ctrl+C, Cmd/Ctrl+V, Escape)
 useKeyboardShortcuts({
   selectedStep,
+  selectedGroupId,
   isReadonly,
   onDelete: handleDeleteStep,
+  onDeleteGroup: handleDeleteGroup,
   onCopy: () => {},
   onPaste: handlePasteStep,
-  onClearSelection: clearSelection,
+  onClearSelection: () => {
+    clearSelection()
+    selectedGroupId.value = null
+  },
 })
 
 // Load block definitions for output port information

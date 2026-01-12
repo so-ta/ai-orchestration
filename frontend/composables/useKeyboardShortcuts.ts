@@ -3,8 +3,10 @@ import type { Step, StepType } from '~/types/api'
 
 interface KeyboardShortcutsOptions {
   selectedStep: Ref<Step | null>
+  selectedGroupId?: Ref<string | null>
   isReadonly: Ref<boolean>
   onDelete: () => void
+  onDeleteGroup?: () => void
   onCopy: () => void
   onPaste: (data: { type: StepType; name: string; config: Record<string, any> }) => void
   onClearSelection: () => void
@@ -26,8 +28,10 @@ const stepClipboard = ref<ClipboardData | null>(null)
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
   const {
     selectedStep,
+    selectedGroupId,
     isReadonly,
     onDelete,
+    onDeleteGroup,
     onCopy,
     onPaste,
     onClearSelection,
@@ -53,11 +57,20 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
     const modKey = isMac ? event.metaKey : event.ctrlKey
 
-    // Delete or Backspace - delete selected step
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedStep.value && !isReadonly.value) {
-      event.preventDefault()
-      onDelete()
-      return
+    // Delete or Backspace - delete selected step or group
+    if ((event.key === 'Delete' || event.key === 'Backspace') && !isReadonly.value) {
+      // Delete group if a group is selected
+      if (selectedGroupId?.value && onDeleteGroup) {
+        event.preventDefault()
+        onDeleteGroup()
+        return
+      }
+      // Delete step if a step is selected
+      if (selectedStep.value) {
+        event.preventDefault()
+        onDelete()
+        return
+      }
     }
 
     // Cmd/Ctrl + C - copy selected step
@@ -81,7 +94,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
     }
 
     // Escape - clear selection
-    if (event.key === 'Escape' && selectedStep.value) {
+    if (event.key === 'Escape' && (selectedStep.value || selectedGroupId?.value)) {
       event.preventDefault()
       onClearSelection()
       return

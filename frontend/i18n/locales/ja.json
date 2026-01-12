@@ -34,6 +34,8 @@
     "workflows": "ワークフロー",
     "runs": "実行履歴",
     "schedules": "スケジュール",
+    "webhooks": "Webhook",
+    "auditLogs": "監査ログ",
     "settings": "設定",
     "admin": "管理者",
     "login": "ログイン",
@@ -165,6 +167,8 @@
       "utility": "ユーティリティ"
     },
     "autoLayout": "自動整形",
+    "groupDeleted": "グループを削除しました",
+    "groupDeleteFailed": "グループの削除に失敗しました",
     "stepTypes": {
       "start": "スタート",
       "startDesc": "ワークフローのエントリーポイント",
@@ -533,13 +537,187 @@
   },
   "schedules": {
     "title": "スケジュール",
+    "subtitle": "ワークフローの定期実行を管理",
     "newSchedule": "新規スケジュール",
+    "editSchedule": "スケジュールを編集",
     "noSchedules": "スケジュールがありません",
+    "noSchedulesDesc": "ワークフローの定期実行を設定してください",
+    "confirmDelete": "このスケジュールを削除しますか？この操作は取り消せません。",
+    "allStatuses": "すべてのステータス",
+    "allWorkflows": "すべてのワークフロー",
     "cronExpression": "Cron式",
     "nextRun": "次回実行",
     "lastRun": "前回実行",
-    "enabled": "有効",
-    "disabled": "無効"
+    "runCount": "実行回数",
+    "status": {
+      "active": "有効",
+      "paused": "一時停止",
+      "disabled": "無効"
+    },
+    "table": {
+      "name": "名前",
+      "workflow": "ワークフロー",
+      "cron": "Cron式",
+      "status": "ステータス",
+      "nextRun": "次回実行",
+      "lastRun": "前回実行",
+      "runCount": "実行回数",
+      "actions": "アクション"
+    },
+    "form": {
+      "name": "スケジュール名",
+      "namePlaceholder": "例: 毎日午前9時実行",
+      "description": "説明",
+      "descriptionPlaceholder": "説明を入力",
+      "workflow": "ワークフロー",
+      "workflowPlaceholder": "ワークフローを選択",
+      "cronExpression": "Cron式",
+      "cronExpressionPlaceholder": "0 9 * * *",
+      "cronHint": "分 時 日 月 曜日（例: 0 9 * * * = 毎日9:00）",
+      "timezone": "タイムゾーン",
+      "input": "入力データ（JSON）",
+      "inputPlaceholder": "空のオブジェクト"
+    },
+    "actions": {
+      "pause": "一時停止",
+      "resume": "再開",
+      "run": "今すぐ実行"
+    },
+    "cronExamples": {
+      "title": "Cron式の例",
+      "everyMinute": "毎分",
+      "everyHour": "毎時0分",
+      "everyDay9am": "毎日9:00",
+      "everyMonday": "毎週月曜日9:00",
+      "firstOfMonth": "毎月1日0:00"
+    },
+    "messages": {
+      "created": "スケジュールを作成しました",
+      "updated": "スケジュールを更新しました",
+      "deleted": "スケジュールを削除しました",
+      "paused": "スケジュールを一時停止しました",
+      "resumed": "スケジュールを再開しました",
+      "createFailed": "スケジュールの作成に失敗しました",
+      "updateFailed": "スケジュールの更新に失敗しました",
+      "deleteFailed": "スケジュールの削除に失敗しました",
+      "pauseFailed": "スケジュールの一時停止に失敗しました",
+      "resumeFailed": "スケジュールの再開に失敗しました",
+      "invalidJson": "無効なJSONフォーマットです"
+    }
+  },
+  "webhooks": {
+    "title": "Webhook",
+    "subtitle": "外部からのワークフロー呼び出しを管理",
+    "newWebhook": "新規Webhook",
+    "editWebhook": "Webhookを編集",
+    "noWebhooks": "Webhookがありません",
+    "noWebhooksDesc": "外部からワークフローを呼び出すWebhookを作成してください",
+    "confirmDelete": "このWebhookを削除しますか？この操作は取り消せません。",
+    "allWorkflows": "すべてのワークフロー",
+    "webhookUrl": "Webhook URL",
+    "secret": "シークレット",
+    "copyUrl": "URLをコピー",
+    "copySecret": "シークレットをコピー",
+    "regenerateSecret": "シークレット再生成",
+    "confirmRegenerate": "シークレットを再生成しますか？既存の連携が動作しなくなります。",
+    "triggerCount": "トリガー回数",
+    "lastTriggered": "最終トリガー",
+    "table": {
+      "name": "名前",
+      "workflow": "ワークフロー",
+      "enabled": "有効",
+      "triggerCount": "トリガー回数",
+      "lastTriggered": "最終トリガー",
+      "actions": "アクション"
+    },
+    "form": {
+      "name": "Webhook名",
+      "namePlaceholder": "例: GitHub連携",
+      "description": "説明",
+      "descriptionPlaceholder": "説明を入力",
+      "workflow": "ワークフロー",
+      "workflowPlaceholder": "ワークフローを選択",
+      "inputMapping": "入力マッピング（JSON）",
+      "inputMappingPlaceholder": "空のオブジェクト",
+      "inputMappingHint": "Webhookリクエストボディからワークフロー入力へのマッピング"
+    },
+    "actions": {
+      "enable": "有効化",
+      "disable": "無効化",
+      "test": "テスト"
+    },
+    "usage": {
+      "title": "使用方法",
+      "curlExample": "curlの例",
+      "method": "メソッド: POST",
+      "headers": "ヘッダー",
+      "body": "リクエストボディ"
+    },
+    "messages": {
+      "created": "Webhookを作成しました",
+      "updated": "Webhookを更新しました",
+      "deleted": "Webhookを削除しました",
+      "enabled": "Webhookを有効化しました",
+      "disabled": "Webhookを無効化しました",
+      "secretRegenerated": "シークレットを再生成しました",
+      "urlCopied": "URLをコピーしました",
+      "secretCopied": "シークレットをコピーしました",
+      "createFailed": "Webhookの作成に失敗しました",
+      "updateFailed": "Webhookの更新に失敗しました",
+      "deleteFailed": "Webhookの削除に失敗しました",
+      "enableFailed": "Webhookの有効化に失敗しました",
+      "disableFailed": "Webhookの無効化に失敗しました",
+      "regenerateFailed": "シークレットの再生成に失敗しました",
+      "invalidJson": "無効なJSONフォーマットです"
+    }
+  },
+  "auditLogs": {
+    "title": "監査ログ",
+    "subtitle": "テナント内のすべての操作履歴を確認",
+    "noLogs": "監査ログがありません",
+    "noLogsDesc": "操作を行うと監査ログが記録されます",
+    "allResources": "すべてのリソース",
+    "allActions": "すべてのアクション",
+    "dateRange": "期間",
+    "from": "開始日",
+    "to": "終了日",
+    "action": {
+      "create": "作成",
+      "update": "更新",
+      "delete": "削除",
+      "publish": "公開",
+      "execute": "実行",
+      "cancel": "キャンセル",
+      "approve": "承認",
+      "reject": "拒否"
+    },
+    "resourceType": {
+      "workflow": "ワークフロー",
+      "step": "ステップ",
+      "edge": "エッジ",
+      "run": "実行",
+      "schedule": "スケジュール",
+      "webhook": "Webhook",
+      "credential": "クレデンシャル",
+      "block": "ブロック",
+      "tenant": "テナント"
+    },
+    "table": {
+      "timestamp": "日時",
+      "action": "アクション",
+      "resource": "リソース",
+      "user": "ユーザー",
+      "changes": "変更内容",
+      "ipAddress": "IPアドレス"
+    },
+    "details": {
+      "title": "詳細",
+      "changes": "変更内容",
+      "metadata": "メタデータ",
+      "noChanges": "変更なし"
+    },
+    "export": "エクスポート",
+    "refresh": "更新"
   },
   "settings": {
     "title": "設定",
@@ -585,60 +763,83 @@
   "admin": {
     "title": "管理者設定",
     "subtitle": "運営者専用の管理機能",
-    "operatorNote": "このセクションは運営者（Operator）専用です。ブロックテンプレートとシステムブロックを管理します。",
-    "templates": {
-      "title": "ブロックテンプレート",
-      "subtitle": "カスタムブロックの実行ロジックテンプレートを管理",
-      "newTemplate": "新規テンプレート",
-      "editTemplate": "テンプレートを編集",
-      "deleteTemplate": "テンプレートを削除",
-      "noTemplates": "テンプレートがありません",
-      "noTemplatesDesc": "カスタムブロックのテンプレートを作成してください",
-      "createFirst": "最初のテンプレートを作成",
-      "builtinSection": "ビルトインテンプレート",
-      "builtinDesc": "システムに組み込まれたテンプレート（編集不可）",
-      "customSection": "カスタムテンプレート",
-      "customDesc": "運営者が作成したカスタムテンプレート",
-      "noCustomTemplates": "カスタムテンプレートがありません",
-      "builtin": "ビルトイン",
-      "viewCode": "コードを表示",
-      "cannotEditBuiltin": "ビルトインテンプレートは編集できません",
-      "cannotDeleteBuiltin": "ビルトインテンプレートは削除できません",
-      "invalidJson": "無効なJSONフォーマットです",
-      "confirmDelete": "このテンプレートを削除しますか？この操作は取り消せません。",
+    "operatorNote": "このセクションは運営者（Operator）専用です。テナントとシステムブロックを管理します。",
+    "tenants": {
+      "title": "テナント管理",
+      "subtitle": "すべてのテナントを管理",
+      "createTenant": "新規テナント",
+      "editTenant": "テナントを編集",
+      "noTenants": "テナントがありません",
+      "allStatuses": "すべてのステータス",
+      "allPlans": "すべてのプラン",
+      "searchPlaceholder": "名前、Slug、メールで検索...",
+      "suspend": "停止",
+      "activate": "有効化",
+      "status": {
+        "active": "有効",
+        "suspended": "停止中",
+        "pending": "保留中",
+        "inactive": "無効"
+      },
+      "plan": {
+        "free": "無料",
+        "starter": "スターター",
+        "professional": "プロフェッショナル",
+        "enterprise": "エンタープライズ"
+      },
+      "stats": {
+        "totalTenants": "総テナント数",
+        "activeCount": "有効テナント",
+        "totalWorkflows": "ワークフロー数",
+        "runsThisMonth": "今月の実行数",
+        "costThisMonth": "今月のコスト"
+      },
       "table": {
         "name": "名前",
-        "slug": "スラッグ",
-        "executorType": "実行タイプ",
-        "updatedAt": "更新日時",
+        "status": "ステータス",
+        "plan": "プラン",
+        "owner": "オーナー",
+        "workflows": "WF数",
+        "runs": "実行数",
+        "cost": "コスト",
         "actions": "アクション"
       },
       "form": {
-        "name": "テンプレート名",
-        "namePlaceholder": "例: HTTP API Call",
-        "slug": "スラッグ",
-        "slugPlaceholder": "例: http_api",
-        "slugHint": "小文字英数字とアンダースコアのみ使用可能",
-        "description": "説明",
-        "descriptionPlaceholder": "テンプレートの説明を入力（任意）",
-        "executorType": "実行タイプ",
-        "executorCode": "実行コード",
-        "executorCodePlaceholder": "JavaScriptの実行コードを入力",
-        "configSchema": "設定スキーマ（JSON Schema）",
-        "configSchemaPlaceholder": "空のオブジェクト",
-        "configSchemaHint": "ブロック設定のバリデーション用JSONスキーマ"
+        "name": "テナント名",
+        "namePlaceholder": "会社名を入力",
+        "slug": "Slug",
+        "slugPlaceholder": "company-name",
+        "plan": "プラン",
+        "ownerEmail": "オーナーメール",
+        "ownerEmailPlaceholder": "owner{'@'}example.com",
+        "ownerName": "オーナー名",
+        "ownerNamePlaceholder": "山田 太郎",
+        "billingEmail": "請求先メール",
+        "billingEmailPlaceholder": "billing{'@'}example.com"
       },
-      "executorTypes": {
-        "javascriptDesc": "JavaScript（Sandbox）で実行",
-        "builtinDesc": "Go言語で実装されたビルトイン実行"
+      "deleteConfirm": {
+        "title": "テナントを削除",
+        "message": "テナント「{name}」を削除しますか？",
+        "warning": "この操作は取り消せません。関連するすべてのデータが削除されます。"
+      },
+      "suspendConfirm": {
+        "title": "テナントを停止",
+        "message": "テナント「{name}」を停止しますか？",
+        "reason": "停止理由",
+        "reasonPlaceholder": "停止理由を入力してください..."
       },
       "messages": {
-        "created": "テンプレートを作成しました",
-        "updated": "テンプレートを更新しました",
-        "deleted": "テンプレートを削除しました",
-        "createFailed": "テンプレートの作成に失敗しました",
-        "updateFailed": "テンプレートの更新に失敗しました",
-        "deleteFailed": "テンプレートの削除に失敗しました"
+        "created": "テナントを作成しました",
+        "updated": "テナントを更新しました",
+        "deleted": "テナントを削除しました",
+        "suspended": "テナントを停止しました",
+        "activated": "テナントを有効化しました",
+        "fetchFailed": "テナントの取得に失敗しました",
+        "createFailed": "テナントの作成に失敗しました",
+        "updateFailed": "テナントの更新に失敗しました",
+        "deleteFailed": "テナントの削除に失敗しました",
+        "suspendFailed": "テナントの停止に失敗しました",
+        "activateFailed": "テナントの有効化に失敗しました"
       }
     },
     "blocks": {
@@ -655,11 +856,13 @@
         "name": "名前",
         "category": "カテゴリ",
         "template": "テンプレート",
+        "code": "コード",
         "version": "バージョン",
         "enabled": "有効",
         "updatedAt": "更新日時",
         "actions": "アクション"
       },
+      "versions": "履歴",
       "form": {
         "name": "ブロック名",
         "namePlaceholder": "例: Slack メッセージ送信",
@@ -685,55 +888,154 @@
         "credentialType": "必要な認証タイプ",
         "credentialTypeHint": "このブロックで使用する認証情報のタイプ",
         "enabled": "有効",
-        "icon": "アイコン"
+        "icon": "アイコン",
+        "code": "コード",
+        "codePlaceholder": "// ブロック実行コードを入力\nconst result = await doSomething(input);\nreturn result;",
+        "configSchema": "設定スキーマ（JSON Schema）",
+        "configSchemaPlaceholder": "空のオブジェクト",
+        "uiConfig": "UI設定（JSON）",
+        "uiConfigPlaceholder": "空のオブジェクト",
+        "changeSummary": "変更概要",
+        "changeSummaryPlaceholder": "変更内容を入力してください..."
       },
+      "sections": {
+        "basicInfo": "基本情報",
+        "code": "コード",
+        "schemas": "スキーマ"
+      },
+      "versionHistory": "バージョン履歴",
+      "noVersions": "バージョン履歴がありません",
+      "rollbackTo": "このバージョンにロールバック",
+      "confirmRollback": "バージョン {version} にロールバックしますか？現在の変更は上書きされます。",
       "messages": {
         "created": "ブロックを作成しました",
         "updated": "ブロックを更新しました",
         "deleted": "ブロックを削除しました",
         "createFailed": "ブロックの作成に失敗しました",
         "updateFailed": "ブロックの更新に失敗しました",
-        "deleteFailed": "ブロックの削除に失敗しました"
+        "deleteFailed": "ブロックの削除に失敗しました",
+        "invalidJson": "無効なJSONフォーマットです",
+        "versionLoadFailed": "バージョン履歴の読み込みに失敗しました",
+        "rolledBack": "バージョン {version} にロールバックしました",
+        "rollbackFailed": "ロールバックに失敗しました"
       }
     }
   },
-  "credentials": {
-    "title": "環境変数",
-    "subtitle": "ブロックで使用する環境変数（APIキー等）を管理",
-    "systemBlockSection": "システムブロック用",
-    "systemBlockDesc": "運営者が提供するシステムブロックで使用する環境変数",
-    "tenantBlockSection": "テナントブロック用",
-    "tenantBlockDesc": "自分で作成したカスタムブロックで使用する環境変数",
-    "noCredentials": "環境変数がありません",
-    "noCredentialsDesc": "ブロックで使用する環境変数を追加してください",
-    "addVariable": "環境変数を追加",
-    "editVariable": "環境変数を編集",
-    "deleteVariable": "環境変数を削除",
-    "form": {
-      "key": "キー",
-      "keyPlaceholder": "例: OPENAI_API_KEY",
-      "keyHint": "大文字英数字とアンダースコアのみ使用可能",
-      "value": "値",
-      "valuePlaceholder": "値を入力",
-      "valueHidden": "（保存済み - 編集時は新しい値を入力）"
-    },
+  "tenantBlocks": {
+    "title": "カスタムブロック",
+    "subtitle": "自分のワークフローで使用するカスタムブロックを管理",
+    "newBlock": "新規ブロック",
+    "editBlock": "ブロックを編集",
+    "noBlocks": "カスタムブロックがありません",
+    "noBlocksDesc": "独自のブロックを作成してワークフローで利用できます",
+    "confirmDelete": "このブロックを削除しますか？この操作は取り消せません。",
     "table": {
-      "key": "キー",
-      "createdAt": "作成日時",
+      "name": "名前",
+      "slug": "Slug",
+      "category": "カテゴリ",
+      "enabled": "有効",
       "updatedAt": "更新日時",
       "actions": "アクション"
     },
-    "actions": {
-      "confirmDelete": "この環境変数を削除しますか？この操作は取り消せません。"
+    "form": {
+      "name": "ブロック名",
+      "namePlaceholder": "例: カスタムAPI呼び出し",
+      "slug": "Slug",
+      "slugPlaceholder": "例: custom-api-call",
+      "slugHint": "英数字、ハイフン、アンダースコアのみ使用可能",
+      "description": "説明",
+      "descriptionPlaceholder": "ブロックの説明を入力",
+      "category": "カテゴリ",
+      "icon": "アイコン",
+      "configSchema": "設定スキーマ（JSON）",
+      "inputSchema": "入力スキーマ（JSON）",
+      "outputSchema": "出力スキーマ（JSON）",
+      "executorType": "実行タイプ",
+      "executorConfig": "実行設定（JSON）",
+      "enabled": "有効"
+    },
+    "executorTypes": {
+      "builtin": "組み込み",
+      "http": "HTTP API",
+      "function": "カスタム関数"
     },
     "messages": {
-      "created": "環境変数を追加しました",
-      "updated": "環境変数を更新しました",
-      "deleted": "環境変数を削除しました",
-      "createFailed": "環境変数の追加に失敗しました",
-      "updateFailed": "環境変数の更新に失敗しました",
-      "deleteFailed": "環境変数の削除に失敗しました"
+      "created": "ブロックを作成しました",
+      "updated": "ブロックを更新しました",
+      "deleted": "ブロックを削除しました",
+      "createFailed": "ブロックの作成に失敗しました",
+      "updateFailed": "ブロックの更新に失敗しました",
+      "deleteFailed": "ブロックの削除に失敗しました",
+      "invalidJson": "無効なJSONフォーマットです"
+    }
+  },
+  "credentials": {
+    "title": "クレデンシャル",
+    "subtitle": "APIキーや認証情報を安全に管理",
+    "newCredential": "新規クレデンシャル",
+    "editCredential": "クレデンシャルを編集",
+    "noCredentials": "クレデンシャルがありません",
+    "noCredentialsDesc": "ブロックで使用するAPIキーや認証情報を追加してください",
+    "confirmDelete": "このクレデンシャルを削除しますか？この操作は取り消せません。",
+    "allTypes": "すべてのタイプ",
+    "allStatuses": "すべてのステータス",
+    "type": {
+      "api_key": "APIキー",
+      "oauth2": "OAuth2",
+      "basic_auth": "Basic認証",
+      "custom": "カスタム"
     },
-    "securityNote": "環境変数は暗号化されて安全に保存されます。システムブロック用とテナントブロック用は独立しており、相互に参照することはできません。"
+    "status": {
+      "active": "有効",
+      "expired": "期限切れ",
+      "revoked": "失効"
+    },
+    "table": {
+      "name": "名前",
+      "type": "タイプ",
+      "provider": "プロバイダー",
+      "status": "ステータス",
+      "expiresAt": "有効期限",
+      "updatedAt": "更新日時",
+      "actions": "アクション"
+    },
+    "form": {
+      "name": "名前",
+      "namePlaceholder": "例: OpenAI API Key",
+      "description": "説明",
+      "descriptionPlaceholder": "説明を入力",
+      "credentialType": "認証タイプ",
+      "provider": "プロバイダー",
+      "providerPlaceholder": "例: openai, anthropic, github",
+      "expiresAt": "有効期限",
+      "apiKey": "APIキー",
+      "apiKeyPlaceholder": "APIキーを入力",
+      "headerName": "ヘッダー名",
+      "headerNamePlaceholder": "例: Authorization, X-API-Key",
+      "headerPrefix": "ヘッダープレフィックス",
+      "headerPrefixPlaceholder": "例: Bearer , Token ",
+      "username": "ユーザー名",
+      "usernamePlaceholder": "ユーザー名を入力",
+      "password": "パスワード",
+      "passwordPlaceholder": "パスワードを入力",
+      "valueHidden": "（保存済み - 編集時は新しい値を入力）"
+    },
+    "actions": {
+      "revoke": "失効",
+      "activate": "有効化"
+    },
+    "messages": {
+      "created": "クレデンシャルを作成しました",
+      "updated": "クレデンシャルを更新しました",
+      "deleted": "クレデンシャルを削除しました",
+      "revoked": "クレデンシャルを失効しました",
+      "activated": "クレデンシャルを有効化しました",
+      "createFailed": "クレデンシャルの作成に失敗しました",
+      "updateFailed": "クレデンシャルの更新に失敗しました",
+      "deleteFailed": "クレデンシャルの削除に失敗しました",
+      "revokeFailed": "クレデンシャルの失効に失敗しました",
+      "activateFailed": "クレデンシャルの有効化に失敗しました"
+    },
+    "securityNote": "認証情報は暗号化されて安全に保存されます。APIキーやパスワードは保存後に表示することはできません。"
   }
 }

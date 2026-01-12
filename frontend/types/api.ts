@@ -400,36 +400,191 @@ export interface UpdateSystemCredentialRequest {
   expires_at?: string
 }
 
-// Block Template Types
-export type TemplateExecutorType = 'builtin' | 'javascript'
+// Tenant Management Types
+export type TenantStatus = 'active' | 'suspended' | 'pending' | 'inactive'
+export type TenantPlan = 'free' | 'starter' | 'professional' | 'enterprise'
 
-export interface BlockTemplate {
+export interface TenantFeatureFlags {
+  copilot_enabled: boolean
+  advanced_analytics: boolean
+  custom_blocks: boolean
+  api_access: boolean
+  sso_enabled: boolean
+  audit_logs: boolean
+  max_concurrent_runs: number
+}
+
+export interface TenantLimits {
+  max_workflows: number
+  max_runs_per_day: number
+  max_users: number
+  max_credentials: number
+  max_storage_mb: number
+  retention_days: number
+}
+
+export interface TenantMetadata {
+  industry?: string
+  company_size?: string
+  website?: string
+  country?: string
+  notes?: string
+}
+
+export interface TenantStats {
+  workflow_count: number
+  published_workflows: number
+  run_count: number
+  runs_this_month: number
+  user_count: number
+  credential_count: number
+  total_cost_usd: number
+  cost_this_month: number
+}
+
+export interface Tenant {
   id: string
+  name: string
   slug: string
+  status: TenantStatus
+  plan: TenantPlan
+  owner_email?: string
+  owner_name?: string
+  billing_email?: string
+  settings: object
+  metadata: TenantMetadata
+  feature_flags: TenantFeatureFlags
+  limits: TenantLimits
+  suspended_at?: string
+  suspended_reason?: string
+  created_at: string
+  updated_at: string
+  stats?: TenantStats
+}
+
+export interface CreateTenantRequest {
+  name: string
+  slug: string
+  plan?: TenantPlan
+  owner_email?: string
+  owner_name?: string
+  billing_email?: string
+  metadata?: TenantMetadata
+  feature_flags?: Partial<TenantFeatureFlags>
+  limits?: Partial<TenantLimits>
+}
+
+export interface UpdateTenantRequest {
+  name?: string
+  slug?: string
+  plan?: TenantPlan
+  owner_email?: string
+  owner_name?: string
+  billing_email?: string
+  metadata?: TenantMetadata
+  feature_flags?: Partial<TenantFeatureFlags>
+  limits?: Partial<TenantLimits>
+}
+
+export interface SuspendTenantRequest {
+  reason: string
+}
+
+export interface TenantOverviewStats {
+  total_tenants: number
+  status_counts: Record<TenantStatus, number>
+  plan_counts: Record<TenantPlan, number>
+  total_workflows: number
+  total_runs: number
+  total_runs_this_month: number
+  total_cost_usd: number
+  cost_this_month: number
+}
+
+// Schedule Types
+export type ScheduleStatus = 'active' | 'paused' | 'disabled'
+
+export interface Schedule {
+  id: string
+  tenant_id: string
+  workflow_id: string
+  workflow_version: number
   name: string
   description?: string
-  config_schema: object
-  executor_type: TemplateExecutorType
-  executor_code?: string
-  is_builtin: boolean
+  cron_expression: string
+  timezone: string
+  input?: object
+  status: ScheduleStatus
+  next_run_at?: string
+  last_run_at?: string
+  last_run_id?: string
+  run_count: number
+  created_by?: string
   created_at: string
   updated_at: string
 }
 
-export interface CreateBlockTemplateRequest {
-  slug: string
+export interface CreateScheduleRequest {
+  workflow_id: string
   name: string
   description?: string
-  config_schema?: object
-  executor_type: TemplateExecutorType
-  executor_code?: string
+  cron_expression: string
+  timezone?: string
+  input?: object
 }
 
-export interface UpdateBlockTemplateRequest {
-  slug?: string
+export interface UpdateScheduleRequest {
   name?: string
   description?: string
-  config_schema?: object
-  executor_type?: TemplateExecutorType
-  executor_code?: string
+  cron_expression?: string
+  timezone?: string
+  input?: object
+}
+
+// Webhook Types
+export interface Webhook {
+  id: string
+  tenant_id: string
+  workflow_id: string
+  workflow_version: number
+  name: string
+  description?: string
+  secret: string
+  input_mapping?: object
+  enabled: boolean
+  last_triggered_at?: string
+  trigger_count: number
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateWebhookRequest {
+  workflow_id: string
+  name: string
+  description?: string
+  input_mapping?: object
+}
+
+export interface UpdateWebhookRequest {
+  name?: string
+  description?: string
+  input_mapping?: object
+}
+
+// Audit Log Types
+export type AuditAction = 'create' | 'update' | 'delete' | 'publish' | 'execute' | 'cancel' | 'approve' | 'reject'
+
+export interface AuditLog {
+  id: string
+  tenant_id: string
+  user_id?: string
+  resource_type: string
+  resource_id: string
+  action: AuditAction
+  changes?: object
+  metadata?: object
+  ip_address?: string
+  user_agent?: string
+  created_at: string
 }

@@ -93,6 +93,7 @@ func main() {
 	copilotSessionRepo := postgres.NewCopilotSessionRepository(pool)
 	usageRepo := postgres.NewUsageRepository(pool)
 	budgetRepo := postgres.NewBudgetRepository(pool)
+	tenantRepo := postgres.NewTenantRepository(pool)
 
 	// Initialize usecases
 	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo)
@@ -121,6 +122,7 @@ func main() {
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase)
 	copilotHandler := handler.NewCopilotHandler(copilotUsecase)
 	usageHandler := handler.NewUsageHandler(usageUsecase)
+	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -352,6 +354,22 @@ func main() {
 				r.Get("/versions", blockHandler.ListBlockVersions)
 				r.Get("/versions/{version}", blockHandler.GetBlockVersion)
 				r.Post("/rollback", blockHandler.RollbackBlock)
+			})
+		})
+
+		// Admin routes for tenant management
+		r.Route("/admin/tenants", func(r chi.Router) {
+			// TODO: Add admin role check middleware
+			r.Get("/", adminTenantHandler.List)
+			r.Post("/", adminTenantHandler.Create)
+			r.Get("/stats/overview", adminTenantHandler.GetOverviewStats)
+			r.Route("/{tenant_id}", func(r chi.Router) {
+				r.Get("/", adminTenantHandler.Get)
+				r.Put("/", adminTenantHandler.Update)
+				r.Delete("/", adminTenantHandler.Delete)
+				r.Post("/suspend", adminTenantHandler.Suspend)
+				r.Post("/activate", adminTenantHandler.Activate)
+				r.Get("/stats", adminTenantHandler.GetStats)
 			})
 		})
 	})

@@ -12,6 +12,8 @@ const baseMenuItems = computed(() => [
   { name: t('nav.workflows'), path: '/workflows', icon: 'workflow' },
   { name: t('nav.runs'), path: '/runs', icon: 'play' },
   { name: t('nav.schedules'), path: '/schedules', icon: 'clock' },
+  { name: t('nav.webhooks'), path: '/webhooks', icon: 'webhook' },
+  { name: t('nav.auditLogs'), path: '/audit-logs', icon: 'audit' },
   { name: t('nav.settings'), path: '/settings', icon: 'settings' }
 ])
 
@@ -89,6 +91,18 @@ async function handleLogout() {
                 <svg v-else-if="item.icon === 'clock'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"></circle>
                   <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <!-- Webhook icon (link) -->
+                <svg v-else-if="item.icon === 'webhook'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+                <!-- Audit icon (clipboard list) -->
+                <svg v-else-if="item.icon === 'audit'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                  <line x1="12" y1="11" x2="12" y2="17"></line>
+                  <line x1="9" y1="14" x2="15" y2="14"></line>
                 </svg>
                 <svg v-else-if="item.icon === 'settings'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="3"></circle>

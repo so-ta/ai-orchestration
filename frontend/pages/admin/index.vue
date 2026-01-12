@@ -8,22 +8,16 @@ definePageMeta({
 
 const adminLinks = [
   {
-    title: 'admin.templates.title',
-    description: 'admin.templates.subtitle',
-    href: '/admin/templates',
-    icon: 'template',
+    title: 'admin.tenants.title',
+    description: 'admin.tenants.subtitle',
+    href: '/admin/tenants',
+    icon: 'tenant',
   },
   {
     title: 'admin.blocks.title',
     description: 'admin.blocks.subtitle',
     href: '/admin/blocks',
     icon: 'block',
-  },
-  {
-    title: 'System Blocks',
-    description: 'Edit system block code and configuration',
-    href: '/admin/system-blocks',
-    icon: 'system',
   },
 ]
 </script>
@@ -53,9 +47,8 @@ const adminLinks = [
         class="admin-card"
       >
         <div class="admin-card-icon">
-          <span v-if="link.icon === 'template'" class="icon-template">📦</span>
+          <span v-if="link.icon === 'tenant'" class="icon-tenant">🏢</span>
           <span v-if="link.icon === 'block'" class="icon-block">🧩</span>
-          <span v-if="link.icon === 'system'" class="icon-system">⚙️</span>
         </div>
         <div class="admin-card-content">
           <h3>{{ $t(link.title) }}</h3>
