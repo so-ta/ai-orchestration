@@ -111,7 +111,10 @@ async function handleStepDrop(data: { type: StepType; name: string; position: { 
       })
     }
 
-    await loadWorkflow()
+    // Add step to local state instead of reloading entire workflow
+    if (workflow.value) {
+      workflow.value.steps = [...(workflow.value.steps || []), response.data]
+    }
     selectStep(response.data.id)
   } catch (e) {
     toast.error('Failed to add step', e instanceof Error ? e.message : undefined)
@@ -613,13 +616,16 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
   if (!workflow.value || isReadonly.value) return
 
   try {
-    await workflows.createEdge(workflowId, {
+    const response = await workflows.createEdge(workflowId, {
       source_step_id: source,
       target_step_id: target,
       source_port: sourcePort,
       target_port: targetPort,
     })
-    await loadWorkflow()
+    // Add edge to local state instead of reloading entire workflow
+    if (workflow.value && response?.data) {
+      workflow.value.edges = [...(workflow.value.edges || []), response.data]
+    }
   } catch (e) {
     toast.error('Failed to add edge', e instanceof Error ? e.message : undefined)
   }
@@ -738,14 +744,19 @@ async function handleSaveStep(formData: { name: string; type: string; config: Re
 
 // Delete step from properties panel (confirmation handled in PropertiesPanel)
 async function handleDeleteStep() {
-  if (!selectedStep.value) return
+  if (!selectedStep.value || !workflow.value) return
 
   try {
     saving.value = true
     const stepId = selectedStep.value.id
     clearSelection()
     await workflows.deleteStep(workflowId, stepId)
-    await loadWorkflow()
+
+    // Remove step and related edges from local state instead of reloading
+    workflow.value.steps = (workflow.value.steps || []).filter(s => s.id !== stepId)
+    workflow.value.edges = (workflow.value.edges || []).filter(
+      e => e.source_step_id !== stepId && e.target_step_id !== stepId
+    )
   } catch (e) {
     toast.error('Failed to delete step', e instanceof Error ? e.message : undefined)
   } finally {
@@ -764,7 +775,8 @@ async function handlePasteStep(data: { type: StepType; name: string; config: Rec
       config: data.config,
       position: { x: 200, y: 200 }, // Default paste position
     })
-    await loadWorkflow()
+    // Add step to local state instead of reloading entire workflow
+    workflow.value.steps = [...(workflow.value.steps || []), response.data]
     selectStep(response.data.id)
   } catch (e) {
     toast.error('Failed to paste step', e instanceof Error ? e.message : undefined)
@@ -811,6 +823,9 @@ async function handleAutoLayout() {
 async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) {
   if (!workflow.value || isReadonly.value) return
 
+  // Debug: Log the generated workflow
+  console.log('Generated workflow:', JSON.stringify(generatedWorkflow, null, 2))
+
   try {
     saving.value = true
 
@@ -837,10 +852,17 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
       idMapping[genStep.temp_id] = response.data.id
     }
 
+    // Debug: Log ID mapping
+    console.log('ID Mapping:', idMapping)
+    console.log('Edges to create:', generatedWorkflow.edges)
+
     // Create edges using the id mapping
     for (const genEdge of generatedWorkflow.edges) {
       const sourceId = idMapping[genEdge.source_temp_id]
       const targetId = idMapping[genEdge.target_temp_id]
+
+      console.log(`Edge: ${genEdge.source_temp_id} -> ${genEdge.target_temp_id}`)
+      console.log(`  Resolved: ${sourceId} -> ${targetId}`)
 
       if (sourceId && targetId) {
         await workflows.createEdge(workflowId, {
@@ -848,6 +870,9 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
           target_step_id: targetId,
           source_port: genEdge.source_port,
         })
+        console.log('  Edge created successfully')
+      } else {
+        console.warn(`  Edge skipped: sourceId=${sourceId}, targetId=${targetId}`)
       }
     }
 

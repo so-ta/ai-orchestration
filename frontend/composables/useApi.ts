@@ -36,7 +36,19 @@ export function useApi() {
       throw new Error(error.error?.message || 'Request failed')
     }
 
-    return response.json()
+    // Handle empty responses (e.g., 204 No Content or DELETE requests)
+    const contentLength = response.headers.get('content-length')
+    if (response.status === 204 || contentLength === '0') {
+      return undefined as T
+    }
+
+    // Try to parse JSON, return undefined if empty
+    const text = await response.text()
+    if (!text) {
+      return undefined as T
+    }
+
+    return JSON.parse(text)
   }
 
   return {

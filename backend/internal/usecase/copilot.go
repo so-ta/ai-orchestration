@@ -615,6 +615,22 @@ func (u *CopilotUsecase) mockLLMResponse(prompt string) string {
 	if strings.Contains(prompt, "optimization") || strings.Contains(prompt, "improvements") {
 		return `{"optimizations": [{"category": "configuration", "title": "Enable AI features", "description": "Configure OPENAI_API_KEY to enable AI-powered optimizations", "impact": "high", "effort": "low"}], "summary": "Mock response - configure API key for real suggestions"}`
 	}
+	// Workflow generation mock response
+	if strings.Contains(prompt, "workflow generator") || strings.Contains(prompt, "Available Step Types") {
+		return `{
+  "response": "サンプルワークフローを生成しました。これはモックレスポンスです。OPENAI_API_KEYを設定すると、AIが実際にワークフローを生成します。",
+  "steps": [
+    {"temp_id": "step_start", "name": "開始", "type": "start", "description": "ワークフローの開始点", "config": {}, "position_x": 400, "position_y": 50},
+    {"temp_id": "step_llm", "name": "LLM処理", "type": "llm", "description": "入力をLLMで処理", "config": {"provider": "openai", "model": "gpt-4o-mini", "system_prompt": "You are a helpful assistant.", "user_prompt": "Process the input: {{$.input}}"}, "position_x": 400, "position_y": 200},
+    {"temp_id": "step_log", "name": "結果をログ", "type": "log", "description": "処理結果をログに出力", "config": {"message": "Processing complete", "level": "info"}, "position_x": 400, "position_y": 350}
+  ],
+  "edges": [
+    {"source_temp_id": "step_start", "target_temp_id": "step_llm", "source_port": "default"},
+    {"source_temp_id": "step_llm", "target_temp_id": "step_log", "source_port": "default"}
+  ],
+  "start_step_id": "step_start"
+}`
+	}
 	// Default chat response
 	return `{"response": "こんにちは！Copilotのモックモードです。OPENAI_API_KEYを設定すると、AIによる本格的なサポートを受けられます。ワークフローの構築について何かお手伝いできることはありますか？", "suggestions": []}`
 }
@@ -888,6 +904,9 @@ func (u *CopilotUsecase) GenerateWorkflow(ctx context.Context, input GenerateWor
 		}, nil
 	}
 
+	// Validate and filter step types
+	result = filterInvalidSteps(result)
+
 	// Assign positions if not provided
 	assignPositions(&result)
 
@@ -906,7 +925,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 		sb.WriteString("\n\n")
 	}
 
-	sb.WriteString("## Available Step Types\n")
+	sb.WriteString("## Available Step Types (ONLY use these exact types)\n")
 	sb.WriteString("- start: Entry point (required, exactly one)\n")
 	sb.WriteString("- llm: LLM/AI call (config: provider, model, system_prompt, user_prompt)\n")
 	sb.WriteString("- tool: External tool/adapter (config: adapter_id)\n")
@@ -914,12 +933,19 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 	sb.WriteString("- switch: Multi-way branching (config: expression, cases)\n")
 	sb.WriteString("- map: Parallel array processing (config: input_path, parallel)\n")
 	sb.WriteString("- join: Merge parallel branches (config: join_mode)\n")
+	sb.WriteString("- subflow: Nested workflow (config: workflow_id)\n")
 	sb.WriteString("- loop: Iteration (config: loop_type, count, condition)\n")
 	sb.WriteString("- wait: Delay/timer (config: duration_ms)\n")
 	sb.WriteString("- function: Custom code execution (config: code, language)\n")
 	sb.WriteString("- router: AI-based dynamic routing (config: routes, provider, model)\n")
 	sb.WriteString("- human_in_loop: Human approval gate (config: instructions, timeout_hours)\n")
+	sb.WriteString("- filter: Filter items (config: expression)\n")
+	sb.WriteString("- split: Split into batches (config: batch_size)\n")
+	sb.WriteString("- aggregate: Aggregate data (config: method)\n")
+	sb.WriteString("- error: Stop and error (config: message)\n")
+	sb.WriteString("- note: Documentation/comment (config: text)\n")
 	sb.WriteString("- log: Debug logging (config: message, level)\n")
+	sb.WriteString("\nIMPORTANT: Do NOT use 'end' type. Workflow ends when last step completes.\n")
 	sb.WriteString("\n")
 
 	sb.WriteString("## User Request\n")
@@ -933,7 +959,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
     {
       "temp_id": "step_1",
       "name": "Step Name",
-      "type": "start|llm|tool|condition|switch|map|join|loop|wait|function|router|human_in_loop|log",
+      "type": "start|llm|tool|condition|switch|map|join|subflow|loop|wait|function|router|human_in_loop|filter|split|aggregate|error|note|log",
       "description": "What this step does",
       "config": { ... },
       "position_x": 400,
@@ -978,5 +1004,58 @@ func assignPositions(output *GenerateWorkflowOutput) {
 		if output.Steps[i].PositionY == 0 {
 			output.Steps[i].PositionY = startY + (i * ySpacing)
 		}
+	}
+}
+
+// filterInvalidSteps removes steps with invalid types and their related edges
+func filterInvalidSteps(output GenerateWorkflowOutput) GenerateWorkflowOutput {
+	// Valid step types
+	validTypes := map[string]bool{
+		"start":         true,
+		"llm":           true,
+		"tool":          true,
+		"condition":     true,
+		"switch":        true,
+		"map":           true,
+		"join":          true,
+		"subflow":       true,
+		"loop":          true,
+		"wait":          true,
+		"function":      true,
+		"router":        true,
+		"human_in_loop": true,
+		"filter":        true,
+		"split":         true,
+		"aggregate":     true,
+		"error":         true,
+		"note":          true,
+		"log":           true,
+	}
+
+	// Filter steps and track valid temp_ids
+	validTempIDs := make(map[string]bool)
+	var validSteps []GeneratedStep
+
+	for _, step := range output.Steps {
+		if validTypes[step.Type] {
+			validSteps = append(validSteps, step)
+			validTempIDs[step.TempID] = true
+		}
+		// Log skipped steps for debugging (in production, consider proper logging)
+	}
+
+	// Filter edges to only include those between valid steps
+	var validEdges []GeneratedEdge
+	for _, edge := range output.Edges {
+		if validTempIDs[edge.SourceTempID] && validTempIDs[edge.TargetTempID] {
+			validEdges = append(validEdges, edge)
+		}
+	}
+
+	return GenerateWorkflowOutput{
+		Response:    output.Response,
+		Steps:       validSteps,
+		Edges:       validEdges,
+		StartStepID: output.StartStepID,
 	}
 }
