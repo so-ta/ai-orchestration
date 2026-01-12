@@ -384,7 +384,7 @@ func main() {
 
 		// Admin routes for system block management
 		r.Route("/admin/blocks", func(r chi.Router) {
-			// TODO: Add admin role check middleware
+			r.Use(authmw.RequireAdmin)
 			r.Get("/", blockHandler.ListSystemBlocks)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", blockHandler.GetSystemBlock)
@@ -397,7 +397,7 @@ func main() {
 
 		// Admin routes for tenant management
 		r.Route("/admin/tenants", func(r chi.Router) {
-			// TODO: Add admin role check middleware
+			r.Use(authmw.RequireAdmin)
 			r.Get("/", adminTenantHandler.List)
 			r.Post("/", adminTenantHandler.Create)
 			r.Get("/stats/overview", adminTenantHandler.GetOverviewStats)

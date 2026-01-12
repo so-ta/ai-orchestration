@@ -246,6 +246,104 @@ func TestHasRole_NoRoles(t *testing.T) {
 	assert.False(t, HasRole(ctx, "admin"))
 }
 
+func TestIsAdmin(t *testing.T) {
+	tests := []struct {
+		name     string
+		roles    []string
+		expected bool
+	}{
+		{"with admin role", []string{"admin", "user"}, true},
+		{"without admin role", []string{"user", "builder"}, false},
+		{"empty roles", []string{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.WithValue(context.Background(), UserRolesKey, tt.roles)
+			assert.Equal(t, tt.expected, IsAdmin(ctx))
+		})
+	}
+}
+
+func TestIsAdmin_NoRoles(t *testing.T) {
+	ctx := context.Background()
+	assert.False(t, IsAdmin(ctx))
+}
+
+func TestRequireRole_WithRole(t *testing.T) {
+	handler := RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("success"))
+	}))
+
+	ctx := context.WithValue(context.Background(), UserRolesKey, []string{"admin", "user"})
+	req := httptest.NewRequest(http.MethodGet, "/test", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "success", rec.Body.String())
+}
+
+func TestRequireRole_WithoutRole(t *testing.T) {
+	handler := RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	ctx := context.WithValue(context.Background(), UserRolesKey, []string{"user", "builder"})
+	req := httptest.NewRequest(http.MethodGet, "/test", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "insufficient permissions")
+}
+
+func TestRequireRole_NoRoles(t *testing.T) {
+	handler := RequireRole("admin")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Contains(t, rec.Body.String(), "insufficient permissions")
+}
+
+func TestRequireAdmin(t *testing.T) {
+	handler := RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("admin access granted"))
+	}))
+
+	t.Run("with admin role", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), UserRolesKey, []string{"admin"})
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "admin access granted", rec.Body.String())
+	})
+
+	t.Run("without admin role", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), UserRolesKey, []string{"user"})
+		req := httptest.NewRequest(http.MethodGet, "/admin", nil).WithContext(ctx)
+		rec := httptest.NewRecorder()
+
+		handler.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+		assert.Contains(t, rec.Body.String(), "insufficient permissions")
+	})
+}
+
 // createTestJWT creates a test JWT token (without signature verification)
 func createTestJWT(t *testing.T, claims Claims) string {
 	t.Helper()
