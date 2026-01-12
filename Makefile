@@ -25,6 +25,12 @@ help:
 	@echo "  make dev-worker      - Start Worker with hot reload"
 	@echo "  make dev-frontend    - Start Frontend with hot reload"
 	@echo ""
+	@echo "Database:"
+	@echo "  make db-apply     - Apply schema to database"
+	@echo "  make db-seed      - Load seed data (initial data)"
+	@echo "  make db-reset     - Reset database (drop, recreate, seed)"
+	@echo "  make db-export    - Export current schema for backup"
+	@echo ""
 	@echo "Setup:"
 	@echo "  make install-tools   - Install development tools (air for Go hot reload)"
 	@echo ""
@@ -146,6 +152,37 @@ logs-middleware:
 
 logs-api:
 	@tail -f backend/tmp/api.log 2>/dev/null || echo "API not running or no log file"
+
+# Database management
+DB_USER := aio
+DB_NAME := ai_orchestration
+
+# Apply schema (creates all tables)
+db-apply:
+	@echo "Applying schema..."
+	@docker compose exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -f /dev/stdin < backend/schema/schema.sql
+	@echo "Schema applied successfully!"
+
+# Load seed data (initial data)
+db-seed:
+	@echo "Loading seed data..."
+	@docker compose exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -f /dev/stdin < backend/schema/seed.sql
+	@echo "Seed data loaded!"
+
+# Reset database (drop all tables and recreate with seed data)
+db-reset:
+	@echo "Resetting database..."
+	@docker compose exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+	@$(MAKE) db-apply
+	@$(MAKE) db-seed
+	@echo "Database reset complete!"
+
+# Export current schema (for reference/backup)
+db-export:
+	@echo "Exporting current schema..."
+	@docker compose exec -T postgres pg_dump -U $(DB_USER) -d $(DB_NAME) --schema-only --no-owner --no-privileges \
+		> backend/schema/schema_exported.sql
+	@echo "Schema exported to backend/schema/schema_exported.sql"
 
 # Clean
 clean:

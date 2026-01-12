@@ -115,7 +115,8 @@ ai-orchestration/
 │   │   ├── engine/           # DAG executor
 │   │   └── middleware/       # Auth
 │   ├── pkg/                  # Shared packages
-│   ├── migrations/           # SQL migrations
+│   ├── schema/               # DB schema (schema.sql, seed.sql)
+│   ├── migrations/           # PostgreSQL init only
 │   └── tests/e2e/            # Integration tests
 ├── frontend/
 │   ├── pages/                # Nuxt pages
@@ -802,11 +803,30 @@ Go Adapter追加が必要な場合のみ:
 3. Add usecase if needed
 4. Update docs/API.md and docs/openapi.yaml
 
-### Add Database Migration
+### Database Schema Management
 
-1. Create SQL in `backend/migrations/`
-2. Run: `docker compose exec api migrate -path /migrations -database "$DB_URL" up`
-3. Update docs/DATABASE.md
+スキーマは `backend/schema/` で宣言的に管理:
+
+| ファイル | 用途 |
+|---------|------|
+| `schema.sql` | テーブル定義（Single Source of Truth） |
+| `seed.sql` | 初期データ（ブロック定義、システムワークフロー等） |
+
+**スキーマ変更手順:**
+
+1. `backend/schema/schema.sql` を編集
+2. `make db-reset` でDBを再構築
+3. 動作確認
+4. `docs/DATABASE.md` を更新
+
+**Makeコマンド:**
+
+```bash
+make db-apply   # スキーマ適用
+make db-seed    # 初期データ投入
+make db-reset   # DBリセット（drop→apply→seed）
+make db-export  # 現在のスキーマをエクスポート
+```
 
 ## Implementation Status
 
