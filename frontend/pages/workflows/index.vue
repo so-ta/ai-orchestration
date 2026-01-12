@@ -66,7 +66,7 @@ async function runWorkflow(workflow: Workflow) {
 
   runningWorkflows.value.add(workflow.id)
   try {
-    const response = await runsApi.create(workflow.id, { input: {}, mode: 'test' })
+    const response = await runsApi.create(workflow.id, { input: {}, mode: 'production' })
     navigateTo(`/runs/${response.data.id}`)
   } catch (e) {
     toast.error('Failed to start run', e instanceof Error ? e.message : undefined)

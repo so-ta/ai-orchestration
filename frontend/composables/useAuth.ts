@@ -21,12 +21,22 @@ const isDevMode = ref(false)
 
 // Initialize flag to prevent multiple initializations
 let initPromise: Promise<boolean> | null = null
+let devModeInitialized = false
 
-// Load dev role from localStorage
+// Load dev role and dev mode state from localStorage (only in development)
 if (import.meta.client) {
   const savedRole = localStorage.getItem('devRole') as DevRole
   if (savedRole === 'admin' || savedRole === 'user') {
     devRole.value = savedRole
+  }
+  // Check if dev mode was previously enabled (Keycloak unavailable)
+  // Only use cached dev mode in development environment
+  if (import.meta.dev) {
+    const savedDevMode = localStorage.getItem('authDevMode')
+    if (savedDevMode === 'true') {
+      isDevMode.value = true
+      devModeInitialized = true
+    }
   }
 }
 
@@ -39,9 +49,16 @@ export function useAuth() {
       return initPromise
     }
 
-    // Skip if already initialized
+    // Skip if already initialized with Keycloak
     if (keycloak.value) {
       return isAuthenticated.value
+    }
+
+    // Skip Keycloak init if dev mode was previously enabled (cached)
+    if (devModeInitialized && isDevMode.value) {
+      setDevModeUser()
+      isLoading.value = false
+      return false
     }
 
     initPromise = (async () => {
@@ -53,12 +70,20 @@ export function useAuth() {
         })
 
         // Initialize with check-sso to silently check if user is logged in
-        const authenticated = await kc.init({
-          onLoad: 'check-sso',
-          silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
-          checkLoginIframe: false,
-          pkceMethod: 'S256'
-        })
+        // Add timeout to prevent hanging
+        const initWithTimeout = Promise.race([
+          kc.init({
+            onLoad: 'check-sso',
+            silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
+            checkLoginIframe: false,
+            pkceMethod: 'S256'
+          }),
+          new Promise<boolean>((_, reject) =>
+            setTimeout(() => reject(new Error('Keycloak init timeout')), 5000)
+          )
+        ])
+
+        const authenticated = await initWithTimeout
 
         keycloak.value = kc
         isAuthenticated.value = authenticated
@@ -70,11 +95,20 @@ export function useAuth() {
 
         isLoading.value = false
         isDevMode.value = false
+        // Clear dev mode cache if Keycloak works
+        if (import.meta.client) {
+          localStorage.removeItem('authDevMode')
+        }
         return authenticated
       } catch (error) {
         console.error('Keycloak init error:', error)
-        // If Keycloak fails, fall back to dev mode
+        // If Keycloak fails or times out, fall back to dev mode
         isDevMode.value = true
+        devModeInitialized = true
+        // Cache dev mode state to skip Keycloak init on next load (only in development)
+        if (import.meta.client && import.meta.dev) {
+          localStorage.setItem('authDevMode', 'true')
+        }
         setDevModeUser()
         isLoading.value = false
         return false

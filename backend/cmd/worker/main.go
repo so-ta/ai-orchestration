@@ -54,6 +54,7 @@ func main() {
 	stepRunRepo := postgres.NewStepRunRepository(pool)
 	versionRepo := postgres.NewWorkflowVersionRepository(pool)
 	usageRepo := postgres.NewUsageRepository(pool)
+	blockDefRepo := postgres.NewBlockDefinitionRepository(pool)
 
 	// Initialize adapter registry
 	registry := adapter.NewRegistry()
@@ -65,8 +66,12 @@ func main() {
 	// Initialize usage recorder for cost tracking
 	usageRecorder := engine.NewUsageRecorder(usageRepo, logger)
 
-	// Initialize executor with usage recorder and database pool
-	executor := engine.NewExecutor(registry, logger, engine.WithUsageRecorder(usageRecorder), engine.WithDatabase(pool))
+	// Initialize executor with usage recorder, database pool, and block definition repository
+	executor := engine.NewExecutor(registry, logger,
+		engine.WithUsageRecorder(usageRecorder),
+		engine.WithDatabase(pool),
+		engine.WithBlockDefinitionRepository(blockDefRepo),
+	)
 
 	// Initialize queue
 	queue := engine.NewQueue(redisClient)

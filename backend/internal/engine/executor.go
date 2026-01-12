@@ -22,6 +22,12 @@ import (
 
 var tracer = otel.Tracer("ai-orchestration/engine")
 
+// BlockDefinitionGetter is an interface for getting block definitions
+type BlockDefinitionGetter interface {
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error)
+	GetBySlug(ctx context.Context, tenantID *uuid.UUID, slug string) (*domain.BlockDefinition, error)
+}
+
 // Executor executes a workflow DAG
 type Executor struct {
 	registry      *adapter.Registry
@@ -29,7 +35,8 @@ type Executor struct {
 	evaluator     *ConditionEvaluator
 	sandbox       *sandbox.Sandbox
 	usageRecorder *UsageRecorder
-	pool          *pgxpool.Pool // Database pool for sandbox services
+	pool          *pgxpool.Pool           // Database pool for sandbox services
+	blockDefRepo  BlockDefinitionGetter   // Repository for custom block definitions
 }
 
 // ExecutorOption is a functional option for Executor
@@ -46,6 +53,13 @@ func WithUsageRecorder(recorder *UsageRecorder) ExecutorOption {
 func WithDatabase(pool *pgxpool.Pool) ExecutorOption {
 	return func(e *Executor) {
 		e.pool = pool
+	}
+}
+
+// WithBlockDefinitionRepository sets the block definition repository for custom block execution
+func WithBlockDefinitionRepository(repo BlockDefinitionGetter) ExecutorOption {
+	return func(e *Executor) {
+		e.blockDefRepo = repo
 	}
 }
 
@@ -283,6 +297,14 @@ func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionC
 	case domain.StepTypeSubflow:
 		return input, nil
 	default:
+		// Check if this is a custom block
+		// First check by BlockDefinitionID, then try to find by step type (slug)
+		if step.BlockDefinitionID != nil {
+			return e.executeCustomBlockStep(ctx, execCtx, step, input)
+		} else if e.blockDefRepo != nil {
+			// Try to find block definition by step type (slug)
+			return e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
+		}
 		return input, nil
 	}
 }
@@ -541,8 +563,17 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		// Subflow not yet implemented
 		output = input
 	default:
-		// For unimplemented types, pass through
-		output = input
+		// Check if this is a custom block
+		// First check by BlockDefinitionID, then try to find by step type (slug)
+		if step.BlockDefinitionID != nil {
+			output, err = e.executeCustomBlockStep(ctx, execCtx, step, input)
+		} else if e.blockDefRepo != nil {
+			// Try to find block definition by step type (slug)
+			output, err = e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
+		} else {
+			// For unimplemented types without block definition, pass through
+			output = input
+		}
 	}
 
 	if err != nil {
@@ -1861,6 +1892,221 @@ func (e *Executor) executeLogStep(ctx context.Context, step domain.Step, input j
 	}
 
 	return output, nil
+}
+
+// executeCustomBlockStep executes a custom block defined in the block_definitions table
+func (e *Executor) executeCustomBlockStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+	if e.blockDefRepo == nil {
+		return nil, fmt.Errorf("block definition repository not configured, cannot execute custom block")
+	}
+
+	if step.BlockDefinitionID == nil {
+		return nil, fmt.Errorf("step has no block definition ID")
+	}
+
+	e.logger.Info("Executing custom block step",
+		"step_id", step.ID,
+		"step_name", step.Name,
+		"block_definition_id", step.BlockDefinitionID,
+	)
+
+	// Get block definition from repository
+	blockDef, err := e.blockDefRepo.GetByID(ctx, *step.BlockDefinitionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block definition: %w", err)
+	}
+
+	if blockDef.Code == "" {
+		return nil, fmt.Errorf("block definition has no executable code")
+	}
+
+	// Parse input to map
+	var inputMap map[string]interface{}
+	if err := json.Unmarshal(input, &inputMap); err != nil {
+		// If input is not a valid JSON object, wrap it
+		inputMap = map[string]interface{}{
+			"raw": string(input),
+		}
+	}
+
+	// Parse step config
+	var configMap map[string]interface{}
+	if step.Config != nil && len(step.Config) > 0 {
+		if err := json.Unmarshal(step.Config, &configMap); err != nil {
+			configMap = make(map[string]interface{})
+		}
+	}
+
+	// Pass original input to sandbox (not wrapped)
+	// The config will be made available via the wrapper code below
+	sandboxInput := inputMap
+
+	// Add __config to input so the wrapper code can access it
+	sandboxInput["__config"] = configMap
+
+	// Create sandbox execution context with HTTP client and logger
+	sandboxCtx := &sandbox.ExecutionContext{
+		HTTP: sandbox.NewHTTPClient(30 * time.Second),
+		Logger: func(args ...interface{}) {
+			e.logger.Info("Custom block script log", "step_id", step.ID, "block", blockDef.Slug, "message", fmt.Sprint(args...))
+		},
+	}
+
+	// Add sandbox services if database pool is available
+	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
+		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Runs = sandbox.NewRunsService(ctx, e.pool, execCtx.Run.TenantID)
+	}
+
+	// Wrap the block code with setup code that provides:
+	// - config: from input.__config
+	// - renderTemplate: simple template substitution function
+	wrappedCode := wrapCustomBlockCode(blockDef.Code)
+
+	// Execute the wrapped code in sandbox
+	result, err := e.sandbox.Execute(ctx, wrappedCode, sandboxInput, sandboxCtx)
+	if err != nil {
+		e.logger.Error("Custom block execution failed",
+			"step_id", step.ID,
+			"block", blockDef.Slug,
+			"error", err,
+		)
+		return nil, fmt.Errorf("custom block execution failed: %w", err)
+	}
+
+	e.logger.Info("Custom block execution completed",
+		"step_id", step.ID,
+		"block", blockDef.Slug,
+	)
+
+	return json.Marshal(result)
+}
+
+// executeCustomBlockStepBySlug executes a custom block by looking up the block definition by slug (step type)
+func (e *Executor) executeCustomBlockStepBySlug(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+	if e.blockDefRepo == nil {
+		return input, nil // No repo, pass through
+	}
+
+	// Try to find block definition by step type (slug)
+	// First try tenant-specific, then system blocks (tenant_id = NULL)
+	var blockDef *domain.BlockDefinition
+	var err error
+
+	if execCtx != nil && execCtx.Run != nil {
+		blockDef, err = e.blockDefRepo.GetBySlug(ctx, &execCtx.Run.TenantID, string(step.Type))
+	}
+	if err != nil || blockDef == nil {
+		// Try system blocks
+		blockDef, err = e.blockDefRepo.GetBySlug(ctx, nil, string(step.Type))
+	}
+	if err != nil || blockDef == nil {
+		// No block definition found, pass through
+		e.logger.Debug("No block definition found for step type, passing through",
+			"step_id", step.ID,
+			"step_type", step.Type,
+		)
+		return input, nil
+	}
+
+	if blockDef.Code == "" {
+		// Block has no code, pass through
+		return input, nil
+	}
+
+	e.logger.Info("Executing custom block step by slug",
+		"step_id", step.ID,
+		"step_name", step.Name,
+		"step_type", step.Type,
+		"block_slug", blockDef.Slug,
+	)
+
+	// Parse input to map
+	var inputMap map[string]interface{}
+	if err := json.Unmarshal(input, &inputMap); err != nil {
+		inputMap = map[string]interface{}{
+			"raw": string(input),
+		}
+	}
+
+	// Parse step config
+	var configMap map[string]interface{}
+	if step.Config != nil && len(step.Config) > 0 {
+		if err := json.Unmarshal(step.Config, &configMap); err != nil {
+			configMap = make(map[string]interface{})
+		}
+	}
+
+	// Pass original input to sandbox
+	sandboxInput := inputMap
+	sandboxInput["__config"] = configMap
+
+	// Create sandbox execution context
+	sandboxCtx := &sandbox.ExecutionContext{
+		HTTP: sandbox.NewHTTPClient(30 * time.Second),
+		Logger: func(args ...interface{}) {
+			e.logger.Info("Custom block script log", "step_id", step.ID, "block", blockDef.Slug, "message", fmt.Sprint(args...))
+		},
+	}
+
+	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
+		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Runs = sandbox.NewRunsService(ctx, e.pool, execCtx.Run.TenantID)
+	}
+
+	// Wrap and execute
+	wrappedCode := wrapCustomBlockCode(blockDef.Code)
+	result, err := e.sandbox.Execute(ctx, wrappedCode, sandboxInput, sandboxCtx)
+	if err != nil {
+		e.logger.Error("Custom block execution failed",
+			"step_id", step.ID,
+			"block", blockDef.Slug,
+			"error", err,
+		)
+		return nil, fmt.Errorf("custom block execution failed: %w", err)
+	}
+
+	e.logger.Info("Custom block execution completed",
+		"step_id", step.ID,
+		"block", blockDef.Slug,
+	)
+
+	return json.Marshal(result)
+}
+
+// wrapCustomBlockCode wraps custom block code with setup that provides expected globals
+func wrapCustomBlockCode(code string) string {
+	// Wrapper provides:
+	// - config: the step configuration
+	// - renderTemplate: simple {{variable}} substitution
+	return `
+// Setup globals for custom block
+var config = input.__config || {};
+delete input.__config;
+
+// Simple template rendering function
+function renderTemplate(template, data) {
+	if (!template) return '';
+	if (typeof template !== 'string') return String(template);
+
+	return template.replace(/\{\{([^}]+)\}\}/g, function(match, path) {
+		var value = data;
+		var parts = path.trim().split('.');
+		for (var i = 0; i < parts.length; i++) {
+			if (value == null) return '';
+			value = value[parts[i]];
+		}
+		return value != null ? String(value) : '';
+	});
+}
+
+// Execute the block code
+(function() {
+` + code + `
+})();
+`
 }
 
 // substituteLogTemplateVariables replaces {{$.path}} patterns in the message with values from input

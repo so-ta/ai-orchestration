@@ -384,6 +384,11 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		return err
 	}
 
+	// Add ctx as an alias for context (for Unified Block Model compatibility)
+	if err := vm.Set("ctx", contextObj); err != nil {
+		return err
+	}
+
 	// Add console.log for debugging
 	console := vm.NewObject()
 	if execCtx != nil && execCtx.Logger != nil {

@@ -757,15 +757,28 @@ async function handleDiscardDraft() {
 }
 
 // Run workflow
-async function handleRun(mode: 'test' | 'production') {
+async function handleRun() {
   if (!workflow.value) return
 
   try {
-    const response = await runs.create(workflowId, { mode, input: {} })
+    const response = await runs.create(workflowId, { mode: 'production', input: {} })
     // Open run page in a new tab
     window.open(`/runs/${response.data.id}`, '_blank')
   } catch (e) {
     toast.error('Failed to start run', e instanceof Error ? e.message : undefined)
+  }
+}
+
+// Update step name reactively (without saving to API)
+function handleUpdateStepName(name: string) {
+  if (!selectedStep.value || !workflow.value) return
+
+  const stepIndex = workflow.value.steps?.findIndex(s => s.id === selectedStep.value!.id)
+  if (stepIndex !== undefined && stepIndex >= 0 && workflow.value.steps) {
+    workflow.value.steps[stepIndex] = {
+      ...workflow.value.steps[stepIndex],
+      name,
+    }
   }
 }
 
@@ -1129,19 +1142,10 @@ onMounted(() => {
             <div class="separator"></div>
             <button
               class="btn btn-outline"
-              @click="handleRun('test')"
+              @click="handleRun()"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
-              </svg>
-              {{ t('workflows.testRun') }}
-            </button>
-            <button
-              class="btn btn-outline"
-              @click="handleRun('production')"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
               </svg>
               {{ t('workflows.run') }}
             </button>
@@ -1214,6 +1218,7 @@ onMounted(() => {
             @apply-workflow="handleApplyWorkflow"
             @execute-workflow="handleExecuteWorkflowFromTab"
             @log="handleExecutionLog"
+            @update:name="handleUpdateStepName"
           />
         </template>
       </WorkflowEditorLayout>

@@ -31,6 +31,11 @@ export function useApi() {
       ;(headers as Record<string, string>)['X-Dev-Role'] = devRole.value
     }
 
+    // Skip during SSR - only make requests on client
+    if (!import.meta.client) {
+      throw new Error('API requests are only available on client side')
+    }
+
     const response = await fetch(url, {
       ...options,
       headers,

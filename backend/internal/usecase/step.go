@@ -11,18 +11,21 @@ import (
 
 // StepUsecase handles step business logic
 type StepUsecase struct {
-	workflowRepo repository.WorkflowRepository
-	stepRepo     repository.StepRepository
+	workflowRepo     repository.WorkflowRepository
+	stepRepo         repository.StepRepository
+	blockDefRepo     repository.BlockDefinitionRepository
 }
 
 // NewStepUsecase creates a new StepUsecase
 func NewStepUsecase(
 	workflowRepo repository.WorkflowRepository,
 	stepRepo repository.StepRepository,
+	blockDefRepo repository.BlockDefinitionRepository,
 ) *StepUsecase {
 	return &StepUsecase{
-		workflowRepo: workflowRepo,
-		stepRepo:     stepRepo,
+		workflowRepo:     workflowRepo,
+		stepRepo:         stepRepo,
+		blockDefRepo:     blockDefRepo,
 	}
 }
 
@@ -52,11 +55,26 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 	if input.Name == "" {
 		return nil, domain.NewValidationError("name", "name is required")
 	}
+
+	// Check if type is a built-in step type or a custom block definition
+	var blockDef *domain.BlockDefinition
 	if !input.Type.IsValid() {
-		return nil, domain.ErrInvalidStepType
+		// Try to find as a custom block definition
+		var err error
+		blockDef, err = u.blockDefRepo.GetBySlug(ctx, &input.TenantID, string(input.Type))
+		if err != nil || blockDef == nil {
+			// Also try system blocks (tenant_id = NULL)
+			blockDef, err = u.blockDefRepo.GetBySlug(ctx, nil, string(input.Type))
+			if err != nil || blockDef == nil {
+				return nil, domain.ErrInvalidStepType
+			}
+		}
 	}
 
 	step := domain.NewStep(input.WorkflowID, input.Name, input.Type, input.Config)
+	if blockDef != nil {
+		step.BlockDefinitionID = &blockDef.ID
+	}
 	step.SetPosition(input.PositionX, input.PositionY)
 
 	if err := u.stepRepo.Create(ctx, step); err != nil {

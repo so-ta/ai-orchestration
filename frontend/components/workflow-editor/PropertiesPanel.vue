@@ -32,6 +32,7 @@ const emit = defineEmits<{
   (e: 'execute', data: { stepId: string; input: object; mode: 'test' | 'production' }): void
   (e: 'execute-workflow', mode: 'test' | 'production', input: object): void
   (e: 'log', log: ExecutionLog): void
+  (e: 'update:name', name: string): void
 }>()
 
 // Form state
@@ -51,6 +52,13 @@ watch(() => props.step, (newStep) => {
     formConfig.value = {}
   }
 }, { immediate: true, deep: true })
+
+// Emit name changes for reactive updates in the flow editor
+watch(formName, (newName) => {
+  if (props.step && newName !== props.step.name) {
+    emit('update:name', newName)
+  }
+})
 
 // Step type descriptions (computed for i18n reactivity)
 const stepTypeDescriptions = computed(() => ({
@@ -421,46 +429,6 @@ const expressionTemplates = {
             >
           </div>
 
-          <div class="form-group">
-            <label class="form-label">{{ t('stepConfig.stepType') }}</label>
-            <select
-              v-model="formType"
-              class="form-input"
-              :disabled="readonlyMode || isStartNode"
-            >
-              <optgroup :label="t('editor.categories.ai')">
-                <option value="llm">{{ t('editor.stepTypes.llm') }}</option>
-                <option value="router">{{ t('editor.stepTypes.router') }}</option>
-              </optgroup>
-              <optgroup :label="t('editor.categories.logic')">
-                <option value="condition">{{ t('editor.stepTypes.condition') }}</option>
-                <option value="switch">{{ t('editor.stepTypes.switch') }}</option>
-                <option value="loop">{{ t('editor.stepTypes.loop') }}</option>
-                <option value="map">{{ t('editor.stepTypes.map') }}</option>
-                <option value="join">{{ t('editor.stepTypes.join') }}</option>
-              </optgroup>
-              <optgroup :label="t('editor.categories.data')">
-                <option value="filter">{{ t('editor.stepTypes.filter') }}</option>
-                <option value="split">{{ t('editor.stepTypes.split') }}</option>
-                <option value="aggregate">{{ t('editor.stepTypes.aggregate') }}</option>
-              </optgroup>
-              <optgroup :label="t('editor.categories.integration')">
-                <option value="tool">{{ t('editor.stepTypes.tool') }}</option>
-                <option value="function">{{ t('editor.stepTypes.function') }}</option>
-                <option value="subflow">{{ t('editor.stepTypes.subflow') }}</option>
-              </optgroup>
-              <optgroup :label="t('editor.categories.control')">
-                <option value="wait">{{ t('editor.stepTypes.wait') }}</option>
-                <option value="human_in_loop">{{ t('editor.stepTypes.humanInLoop') }}</option>
-                <option value="error">{{ t('editor.stepTypes.error') }}</option>
-              </optgroup>
-              <optgroup :label="t('editor.categories.utility')">
-                <option value="note">{{ t('editor.stepTypes.note') }}</option>
-                <option value="log">{{ t('editor.stepTypes.log') }}</option>
-              </optgroup>
-            </select>
-            <p class="form-hint">{{ stepTypeDescriptions[formType] }}</p>
-          </div>
         </div>
 
         <!-- Dynamic Config Form (when config_schema is defined) -->
