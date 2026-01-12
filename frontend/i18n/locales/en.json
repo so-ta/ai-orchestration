@@ -142,7 +142,9 @@
       "version": "Version",
       "noRuns": "No runs yet",
       "noRunsDesc": "Execute this workflow to see run history"
-    }
+    },
+    "runStarted": "Workflow started",
+    "runFailed": "Failed to start workflow"
   },
   "editor": {
     "blocks": "Blocks",
@@ -220,7 +222,78 @@
     "shortcutPaste": "Paste step",
     "tabs": {
       "settings": "Settings",
-      "copilot": "Copilot"
+      "copilot": "Copilot",
+      "execution": "Execution"
+    }
+  },
+  "execution": {
+    "modes": {
+      "single": "Block",
+      "workflow": "Workflow",
+      "abTest": "A/B Test",
+      "promptTest": "Prompt Test"
+    },
+    "selectStepToExecute": "Select a step to execute",
+    "selectLLMStep": "Select an LLM step to run A/B or prompt tests",
+    "useCustomInput": "Use custom input",
+    "inputPlaceholder": "{\"key\": \"value\"}",
+    "executeTest": "Test Run",
+    "executing": "Executing...",
+    "stepExecuted": "Step executed",
+    "noRunWarning": "No run history for this workflow yet. Execute the workflow first.",
+    "history": "Execution History",
+    "attempt": "Attempt #{n}",
+    "workflowDesc": "Execute the entire workflow. Results will appear in the log panel.",
+    "testRun": "Test Run",
+    "productionRun": "Production Run",
+    "workflowStarted": "Workflow started",
+    "abTestDesc": "Compare different model configurations with the same input.",
+    "promptTestDesc": "Compare different prompts with the same model.",
+    "variantName": "Variant name",
+    "modelName": "Model name",
+    "addVariant": "Add Variant",
+    "runABTest": "Run A/B Test",
+    "copyCurrentPrompt": "Copy current prompt",
+    "promptPlaceholder": "Enter prompt...",
+    "addPromptVariant": "Add Prompt Variant",
+    "runPromptTest": "Run Prompt Test",
+    "abTestPlaceholder": "A/B test feature coming soon",
+    "promptTestPlaceholder": "Prompt test feature coming soon",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "errors": {
+      "noRunAvailable": "No run available. Execute the workflow first.",
+      "executionFailed": "Execution failed",
+      "invalidJson": "Invalid JSON format",
+      "invalidJsonObject": "Please enter a JSON object",
+      "needTwoVariants": "A/B test requires at least 2 enabled variants",
+      "needPromptVariant": "At least one prompt variant is required"
+    },
+    "logs": {
+      "startingStep": "Executing step \"{name}\"...",
+      "stepCompleted": "Step \"{name}\" completed",
+      "stepFailed": "Step \"{name}\" failed: {error}",
+      "startingWorkflow": "Starting workflow in {mode} mode...",
+      "workflowStarted": "Workflow execution started (ID: {id})",
+      "workflowFailed": "Failed to start workflow: {error}",
+      "startingABTest": "Starting A/B test with {count} variants...",
+      "runningVariant": "Running variant \"{name}\" ({provider}/{model})",
+      "startingPromptTest": "Starting prompt test with {count} prompts...",
+      "testingPrompt": "Testing prompt \"{name}\"..."
+    },
+    "logPanel": {
+      "title": "Execution Log",
+      "copy": "Copy Logs",
+      "clear": "Clear",
+      "open": "Open",
+      "close": "Close",
+      "empty": "No execution logs yet",
+      "showData": "Show Data",
+      "scrollToBottom": "Scroll to latest"
     }
   },
   "copilot": {
