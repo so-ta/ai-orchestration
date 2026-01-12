@@ -3,6 +3,7 @@
 > **Status**: ✅ Implemented (Unified Block Model)
 > **Updated**: 2025-01-12
 > **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
+> **Migration**: `013_add_integration_blocks.sql` - 外部連携ブロック追加
 
 ## Overview
 
@@ -227,6 +228,22 @@ func (e *BlockError) Error() string {
 | `note` | Note | utility | ドキュメント用（`return input;`） |
 | `code` | Code | utility | ユーザー定義JavaScript |
 
+### 外部連携ブロック一覧
+
+| Slug | Name | Category | 説明 | 必要シークレット |
+|------|------|----------|------|-----------------|
+| `slack` | Slack | integration | Slackチャンネルにメッセージ送信 | `SLACK_WEBHOOK_URL` |
+| `discord` | Discord | integration | Discord Webhookに通知 | `DISCORD_WEBHOOK_URL` |
+| `notion_create_page` | Notion: ページ作成 | integration | Notionにページを作成 | `NOTION_API_KEY` |
+| `notion_query_db` | Notion: DB検索 | integration | Notionデータベースを検索 | `NOTION_API_KEY` |
+| `gsheets_append` | Google Sheets: 行追加 | integration | スプレッドシートに行を追加 | `GOOGLE_API_KEY` |
+| `gsheets_read` | Google Sheets: 読み取り | integration | スプレッドシートから読み取り | `GOOGLE_API_KEY` |
+| `github_create_issue` | GitHub: Issue作成 | integration | GitHubにIssueを作成 | `GITHUB_TOKEN` |
+| `github_add_comment` | GitHub: コメント追加 | integration | Issue/PRにコメント追加 | `GITHUB_TOKEN` |
+| `web_search` | Web検索 | integration | Tavily APIでWeb検索 | `TAVILY_API_KEY` |
+| `email_sendgrid` | Email (SendGrid) | integration | SendGridでメール送信 | `SENDGRID_API_KEY` |
+| `linear_create_issue` | Linear: Issue作成 | integration | LinearにIssueを作成 | `LINEAR_API_KEY` |
+
 ### システムブロックのコード例
 
 ```javascript
@@ -260,6 +277,52 @@ const response = await ctx.http.request(url, {
 });
 
 return response;
+```
+
+### 外部連携ブロックのコード例
+
+```javascript
+// slack block
+const webhookUrl = config.webhook_url || ctx.secrets.SLACK_WEBHOOK_URL;
+if (!webhookUrl) {
+    throw new Error('[SLACK_001] Webhook URLが設定されていません');
+}
+
+const payload = {
+    text: renderTemplate(config.message, input),
+    channel: config.channel,
+    username: config.username,
+    icon_emoji: config.icon_emoji
+};
+
+const response = await ctx.http.post(webhookUrl, payload, {
+    headers: { 'Content-Type': 'application/json' }
+});
+
+return { success: true, status: response.status };
+```
+
+```javascript
+// github_create_issue block
+const token = config.token || ctx.secrets.GITHUB_TOKEN;
+const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/issues';
+
+const response = await ctx.http.post(url, {
+    title: renderTemplate(config.title, input),
+    body: renderTemplate(config.body, input),
+    labels: config.labels,
+    assignees: config.assignees
+}, {
+    headers: {
+        'Authorization': 'Bearer ' + token,
+        'Accept': 'application/vnd.github+json'
+    }
+});
+
+return {
+    number: response.body.number,
+    html_url: response.body.html_url
+};
 ```
 
 ## Adding New Blocks
@@ -428,6 +491,7 @@ Block config formはJSON Schemaから動的に生成:
 |-------|--------|-------------|
 | DB Schema | ✅ 完了 | `block_definitions`, `block_versions` テーブル |
 | System Blocks | ✅ 完了 | 18個のシステムブロック登録済み |
+| Integration Blocks | ✅ 完了 | 11個の外部連携ブロック（013_add_integration_blocks.sql） |
 | Sandbox (ctx) | ✅ 完了 | http, llm, workflow, human, adapter |
 | Admin API | ✅ 完了 | バージョン管理、ロールバック |
 | Frontend | ✅ 完了 | StepPalette, PropertiesPanel |

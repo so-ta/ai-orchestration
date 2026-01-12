@@ -56,7 +56,8 @@ async function fetchBlocks() {
   blocksLoading.value = true
   try {
     const response = await blocks.list()
-    blocksList.value = response.blocks || []
+    // Filter to show only tenant blocks (exclude system blocks)
+    blocksList.value = (response.blocks || []).filter(block => !block.is_system)
   } catch {
     toast.error(t('tenantBlocks.messages.createFailed'))
   } finally {

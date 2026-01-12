@@ -27,6 +27,7 @@
 | [TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules, Vitest | Frontend code changes |
 | [SIM_FEATURES.md](./SIM_FEATURES.md) | Sim.ai互換機能の実装状況 | 新機能追加時 |
 | **[BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md)** | **Block definitions, error codes** | **新規ブロック追加時（必読）** |
+| **[INTEGRATIONS.md](./INTEGRATIONS.md)** | **外部サービス連携一覧** | **連携ブロック追加・利用時** |
 
 ## Architecture Designs
 
