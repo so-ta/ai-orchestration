@@ -1,13 +1,17 @@
 # API Reference
 
-## Base
+REST API endpoints, request/response schemas, and authentication.
 
-```
-URL: /api/v1
-Auth: Bearer <JWT>
-Content-Type: application/json
-Tenant: X-Tenant-ID header (dev mode) or JWT claim (prod)
-```
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Base URL | `/api/v1` |
+| Auth | Bearer JWT |
+| Content-Type | `application/json` |
+| Tenant (Dev) | `X-Tenant-ID` header |
+| Tenant (Prod) | JWT claim |
+| Health Check | `GET /health`, `GET /ready` |
 
 ## Headers
 
@@ -38,6 +42,56 @@ Tenant: X-Tenant-ID header (dev mode) or JWT claim (prod)
 | `VALIDATION_ERROR` | 400 | Invalid request body |
 | `CONFLICT` | 409 | Resource conflict |
 | `INTERNAL_ERROR` | 500 | Server error |
+| `RATE_LIMIT_EXCEEDED` | 429 | Rate limit exceeded |
+
+---
+
+## Rate Limiting
+
+API requests are rate limited at multiple scopes to ensure fair usage.
+
+### Rate Limit Scopes
+
+| Scope | Default Limit | Window | Description |
+|-------|--------------|--------|-------------|
+| `tenant` | 1000 req | 1 min | Per-tenant limit across all endpoints |
+| `workflow` | 100 req | 1 min | Per-workflow limit for run creation |
+| `webhook` | 60 req | 1 min | Per-webhook-key limit for trigger endpoint |
+
+### Rate Limit Headers
+
+All responses include rate limit headers:
+
+```
+X-RateLimit-tenant-Limit: 1000
+X-RateLimit-tenant-Remaining: 999
+X-RateLimit-tenant-Reset: 1704067200
+```
+
+### Rate Limit Error Response
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Rate limit exceeded for tenant scope",
+    "retry_at": "2024-01-01T00:00:00Z",
+    "limit": 1000,
+    "scope": "tenant"
+  }
+}
+```
+
+### Configuration
+
+Rate limits can be configured via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
+| `RATE_LIMIT_TENANT` | `1000` | Requests per minute per tenant |
+| `RATE_LIMIT_WORKFLOW` | `100` | Requests per minute per workflow |
+| `RATE_LIMIT_WEBHOOK` | `60` | Requests per minute per webhook key |
 
 ---
 
@@ -1219,3 +1273,10 @@ TOKEN=$(curl -s -X POST http://localhost:8180/realms/ai-orchestration/protocol/o
 # Use token
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/workflows
 ```
+
+## Related Documents
+
+- [BACKEND.md](./BACKEND.md) - Backend code structure and handlers
+- [DATABASE.md](./DATABASE.md) - Database schema
+- [openapi.yaml](./openapi.yaml) - Machine-readable OpenAPI spec
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Environment and authentication setup

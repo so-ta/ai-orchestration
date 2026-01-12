@@ -45,6 +45,10 @@ type Workflow struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 	DeletedAt    *time.Time      `json:"deleted_at,omitempty"`
 
+	// System workflow fields
+	IsSystem   bool    `json:"is_system"`             // True for system workflows (e.g., Copilot)
+	SystemSlug *string `json:"system_slug,omitempty"` // Unique slug for system workflows (e.g., "copilot-generate")
+
 	// Loaded relations
 	Steps []Step `json:"steps,omitempty"`
 	Edges []Edge `json:"edges,omitempty"`

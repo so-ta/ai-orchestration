@@ -25,12 +25,13 @@ func NewRunRepository(pool *pgxpool.Pool) *RunRepository {
 func (r *RunRepository) Create(ctx context.Context, run *domain.Run) error {
 	query := `
 		INSERT INTO runs (id, tenant_id, workflow_id, workflow_version, status, mode, input,
-		                  triggered_by, triggered_by_user, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		                  triggered_by, triggered_by_user, created_at, trigger_source, trigger_metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 	_, err := r.pool.Exec(ctx, query,
 		run.ID, run.TenantID, run.WorkflowID, run.WorkflowVersion, run.Status, run.Mode,
 		run.Input, run.TriggeredBy, run.TriggeredByUser, run.CreatedAt,
+		run.TriggerSource, run.TriggerMetadata,
 	)
 	return err
 }
@@ -39,7 +40,8 @@ func (r *RunRepository) Create(ctx context.Context, run *domain.Run) error {
 func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Run, error) {
 	query := `
 		SELECT id, tenant_id, workflow_id, workflow_version, status, mode, input, output, error,
-		       triggered_by, triggered_by_user, started_at, completed_at, created_at
+		       triggered_by, triggered_by_user, started_at, completed_at, created_at,
+		       trigger_source, trigger_metadata
 		FROM runs
 		WHERE id = $1 AND tenant_id = $2
 	`
@@ -48,6 +50,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 		&run.ID, &run.TenantID, &run.WorkflowID, &run.WorkflowVersion, &run.Status, &run.Mode,
 		&run.Input, &run.Output, &run.Error, &run.TriggeredBy, &run.TriggeredByUser,
 		&run.StartedAt, &run.CompletedAt, &run.CreatedAt,
+		&run.TriggerSource, &run.TriggerMetadata,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrRunNotFound
@@ -72,7 +75,8 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 	// List query
 	query := `
 		SELECT id, tenant_id, workflow_id, workflow_version, status, mode, input, output, error,
-		       triggered_by, triggered_by_user, started_at, completed_at, created_at
+		       triggered_by, triggered_by_user, started_at, completed_at, created_at,
+		       trigger_source, trigger_metadata
 		FROM runs
 		WHERE tenant_id = $1 AND workflow_id = $2
 		ORDER BY created_at DESC
@@ -97,6 +101,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 			&run.ID, &run.TenantID, &run.WorkflowID, &run.WorkflowVersion, &run.Status, &run.Mode,
 			&run.Input, &run.Output, &run.Error, &run.TriggeredBy, &run.TriggeredByUser,
 			&run.StartedAt, &run.CompletedAt, &run.CreatedAt,
+			&run.TriggerSource, &run.TriggerMetadata,
 		); err != nil {
 			return nil, 0, err
 		}

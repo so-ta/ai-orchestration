@@ -6,18 +6,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/middleware"
 	"github.com/souta/ai-orchestration/internal/usecase"
 )
 
 // CopilotHandler handles copilot API requests
 type CopilotHandler struct {
-	usecase *usecase.CopilotUsecase
+	usecase    *usecase.CopilotUsecase
+	runUsecase *usecase.RunUsecase
 }
 
 // NewCopilotHandler creates a new CopilotHandler
-func NewCopilotHandler(uc *usecase.CopilotUsecase) *CopilotHandler {
-	return &CopilotHandler{usecase: uc}
+func NewCopilotHandler(uc *usecase.CopilotUsecase, runUC *usecase.RunUsecase) *CopilotHandler {
+	return &CopilotHandler{usecase: uc, runUsecase: runUC}
 }
 
 // SuggestRequest represents the request body for suggestions
@@ -516,4 +518,261 @@ func (h *CopilotHandler) GenerateWorkflow(w http.ResponseWriter, r *http.Request
 	}
 
 	JSON(w, http.StatusOK, output)
+}
+
+// ========== Async System Workflow Endpoints (Meta-Workflow Architecture) ==========
+
+// AsyncGenerateRequest represents the request body for async workflow generation
+type AsyncGenerateRequest struct {
+	Prompt    string `json:"prompt"`
+	SessionID string `json:"session_id,omitempty"`
+}
+
+// AsyncGenerateWorkflow handles POST /api/v1/copilot/async/generate
+// Returns run_id immediately, client polls GET /copilot/runs/{id} for result
+func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+	userID := middleware.GetUserID(ctx)
+
+	var req AsyncGenerateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
+		return
+	}
+
+	if req.Prompt == "" {
+		Error(w, http.StatusBadRequest, "EMPTY_PROMPT", "Prompt cannot be empty", nil)
+		return
+	}
+
+	// Build input for system workflow
+	inputData, _ := json.Marshal(map[string]interface{}{
+		"prompt":    req.Prompt,
+		"tenant_id": tenantID.String(),
+	})
+
+	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+		TenantID:      tenantID,
+		SystemSlug:    "copilot-generate",
+		Input:         inputData,
+		Mode:          domain.RunModeProduction,
+		TriggerSource: "copilot",
+		TriggerMetadata: map[string]interface{}{
+			"feature":    "generate",
+			"user_id":    userID.String(),
+			"session_id": req.SessionID,
+		},
+		UserID: &userID,
+	})
+
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "GENERATE_FAILED", err.Error(), nil)
+		return
+	}
+
+	JSON(w, http.StatusAccepted, map[string]interface{}{
+		"run_id": result.RunID,
+		"status": "pending",
+	})
+}
+
+// AsyncSuggestRequest represents the request body for async suggestions
+type AsyncSuggestRequest struct {
+	WorkflowID string `json:"workflow_id"`
+	Context    string `json:"context,omitempty"`
+}
+
+// AsyncSuggest handles POST /api/v1/copilot/async/suggest
+func (h *CopilotHandler) AsyncSuggest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+	userID := middleware.GetUserID(ctx)
+
+	var req AsyncSuggestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
+		return
+	}
+
+	if req.WorkflowID == "" {
+		Error(w, http.StatusBadRequest, "EMPTY_WORKFLOW_ID", "Workflow ID cannot be empty", nil)
+		return
+	}
+
+	inputData, _ := json.Marshal(map[string]interface{}{
+		"workflow_id": req.WorkflowID,
+		"context":     req.Context,
+		"tenant_id":   tenantID.String(),
+	})
+
+	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+		TenantID:      tenantID,
+		SystemSlug:    "copilot-suggest",
+		Input:         inputData,
+		Mode:          domain.RunModeProduction,
+		TriggerSource: "copilot",
+		TriggerMetadata: map[string]interface{}{
+			"feature":     "suggest",
+			"user_id":     userID.String(),
+			"workflow_id": req.WorkflowID,
+		},
+		UserID: &userID,
+	})
+
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "SUGGEST_FAILED", err.Error(), nil)
+		return
+	}
+
+	JSON(w, http.StatusAccepted, map[string]interface{}{
+		"run_id": result.RunID,
+		"status": "pending",
+	})
+}
+
+// AsyncDiagnoseRequest represents the request body for async diagnosis
+type AsyncDiagnoseRequest struct {
+	RunID string `json:"run_id"`
+}
+
+// AsyncDiagnose handles POST /api/v1/copilot/async/diagnose
+func (h *CopilotHandler) AsyncDiagnose(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+	userID := middleware.GetUserID(ctx)
+
+	var req AsyncDiagnoseRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
+		return
+	}
+
+	if req.RunID == "" {
+		Error(w, http.StatusBadRequest, "EMPTY_RUN_ID", "Run ID cannot be empty", nil)
+		return
+	}
+
+	inputData, _ := json.Marshal(map[string]interface{}{
+		"run_id":    req.RunID,
+		"tenant_id": tenantID.String(),
+	})
+
+	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+		TenantID:      tenantID,
+		SystemSlug:    "copilot-diagnose",
+		Input:         inputData,
+		Mode:          domain.RunModeProduction,
+		TriggerSource: "copilot",
+		TriggerMetadata: map[string]interface{}{
+			"feature":       "diagnose",
+			"user_id":       userID.String(),
+			"target_run_id": req.RunID,
+		},
+		UserID: &userID,
+	})
+
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "DIAGNOSE_FAILED", err.Error(), nil)
+		return
+	}
+
+	JSON(w, http.StatusAccepted, map[string]interface{}{
+		"run_id": result.RunID,
+		"status": "pending",
+	})
+}
+
+// AsyncOptimizeRequest represents the request body for async optimization
+type AsyncOptimizeRequest struct {
+	WorkflowID string `json:"workflow_id"`
+}
+
+// AsyncOptimize handles POST /api/v1/copilot/async/optimize
+func (h *CopilotHandler) AsyncOptimize(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+	userID := middleware.GetUserID(ctx)
+
+	var req AsyncOptimizeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
+		return
+	}
+
+	if req.WorkflowID == "" {
+		Error(w, http.StatusBadRequest, "EMPTY_WORKFLOW_ID", "Workflow ID cannot be empty", nil)
+		return
+	}
+
+	inputData, _ := json.Marshal(map[string]interface{}{
+		"workflow_id": req.WorkflowID,
+		"tenant_id":   tenantID.String(),
+	})
+
+	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+		TenantID:      tenantID,
+		SystemSlug:    "copilot-optimize",
+		Input:         inputData,
+		Mode:          domain.RunModeProduction,
+		TriggerSource: "copilot",
+		TriggerMetadata: map[string]interface{}{
+			"feature":     "optimize",
+			"user_id":     userID.String(),
+			"workflow_id": req.WorkflowID,
+		},
+		UserID: &userID,
+	})
+
+	if err != nil {
+		Error(w, http.StatusInternalServerError, "OPTIMIZE_FAILED", err.Error(), nil)
+		return
+	}
+
+	JSON(w, http.StatusAccepted, map[string]interface{}{
+		"run_id": result.RunID,
+		"status": "pending",
+	})
+}
+
+// GetCopilotRun handles GET /api/v1/copilot/runs/{id}
+// Used for polling the result of async copilot operations
+func (h *CopilotHandler) GetCopilotRun(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+
+	runID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_RUN_ID", "Invalid run ID", nil)
+		return
+	}
+
+	run, err := h.runUsecase.GetByID(ctx, tenantID, runID)
+	if err != nil {
+		Error(w, http.StatusNotFound, "RUN_NOT_FOUND", "Run not found", nil)
+		return
+	}
+
+	response := map[string]interface{}{
+		"run_id": run.ID,
+		"status": run.Status,
+	}
+
+	if run.StartedAt != nil {
+		response["started_at"] = run.StartedAt
+	}
+	if run.CompletedAt != nil {
+		response["completed_at"] = run.CompletedAt
+	}
+	if run.Status == domain.RunStatusCompleted && run.Output != nil {
+		var output interface{}
+		if err := json.Unmarshal(run.Output, &output); err == nil {
+			response["output"] = output
+		}
+	}
+	if run.Status == domain.RunStatusFailed && run.Error != nil {
+		response["error"] = *run.Error
+	}
+
+	JSON(w, http.StatusOK, response)
 }

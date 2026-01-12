@@ -1,5 +1,21 @@
 # Backend Technical Reference
 
+Go backend code structure, interfaces, and patterns.
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Language | Go 1.22+ |
+| Architecture | Clean Architecture (Handler → Usecase → Domain → Repository) |
+| Entry Points | `cmd/api/main.go`, `cmd/worker/main.go` |
+| Domain Models | `internal/domain/` |
+| API Handlers | `internal/handler/` |
+| Business Logic | `internal/usecase/` |
+| Database | `internal/repository/postgres/` |
+| External APIs | `internal/adapter/` |
+| DAG Engine | `internal/engine/` |
+
 ## Directory Structure
 
 ```
@@ -151,7 +167,9 @@ Loop types:
 }
 ```
 
-Note: Maximum wait duration is capped at 1 hour (3600000 ms).
+| Constraint | Value |
+|------------|-------|
+| Maximum duration | 1 hour (3600000 ms) |
 
 #### Function Step
 ```json
@@ -162,7 +180,9 @@ Note: Maximum wait duration is capped at 1 hour (3600000 ms).
 }
 ```
 
-Note: Function execution is not fully implemented. Currently passes through input with warning.
+| Status | Description |
+|--------|-------------|
+| Implementation | Partial - passes through input with warning |
 
 #### Router Step
 ```json
@@ -177,7 +197,9 @@ Note: Function execution is not fully implemented. Currently passes through inpu
 }
 ```
 
-Router uses LLM to classify input and select appropriate route.
+| Behavior | Description |
+|----------|-------------|
+| Routing | Uses LLM to classify input and select appropriate route |
 
 #### Human-in-Loop Step
 ```json
@@ -196,7 +218,10 @@ Router uses LLM to classify input and select appropriate route.
 }
 ```
 
-Note: In test mode, human-in-loop steps are auto-approved. In production mode, workflow pauses until approval is received.
+| Mode | Behavior |
+|------|----------|
+| Test | Auto-approved |
+| Production | Workflow pauses until approval received |
 
 ### Edge (domain/edge.go)
 
@@ -618,3 +643,10 @@ go test -race ./...
 # Generate mocks (if using mockgen)
 go generate ./...
 ```
+
+## Related Documents
+
+- [API.md](./API.md) - REST API endpoints and schemas
+- [DATABASE.md](./DATABASE.md) - Database schema and queries
+- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definitions and error codes
+- [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - Block execution architecture

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Step } from '~/types/api'
-import type { StepSuggestion, ExplainResponse, CopilotSession, CopilotMessage, GenerateWorkflowResponse } from '~/composables/useCopilot'
+import type { StepSuggestion, ExplainResponse, CopilotSession, CopilotMessage, GenerateWorkflowResponse, CopilotRunStatus } from '~/composables/useCopilot'
 
 const props = defineProps<{
   step: Step | null
@@ -184,40 +184,61 @@ function applySuggestion(suggestion: StepSuggestion) {
 const isGenerating = ref(false)
 const generateDescription = ref('')
 const showGenerateModal = ref(false)
+const generateStatus = ref<CopilotRunStatus | null>(null)
 
-// Generate workflow from description
+// Generate workflow from description (async polling)
 async function generateWorkflow() {
   if (!generateDescription.value.trim() || isGenerating.value) return
 
   isGenerating.value = true
+  generateStatus.value = 'pending'
+
+  // Add user message to chat history immediately
+  chatHistory.value.push({
+    role: 'user',
+    content: `[Workflow Generation] ${generateDescription.value.trim()}`
+  })
+
   try {
-    const response = await copilot.generateWorkflow(
-      props.workflowId,
-      generateDescription.value.trim()
+    // Use async polling approach
+    const result = await copilot.asyncGenerateWorkflow(
+      generateDescription.value.trim(),
+      {
+        sessionId: currentSession.value?.id,
+        onProgress: (status) => {
+          generateStatus.value = status
+        }
+      }
     )
 
-    // Add to chat history
-    chatHistory.value.push({
-      role: 'user',
-      content: `[Workflow Generation] ${generateDescription.value.trim()}`
-    })
-    chatHistory.value.push({
-      role: 'assistant',
-      content: response.response
-    })
+    // Check for errors
+    if (result.status === 'failed') {
+      throw new Error(result.error || 'Workflow generation failed')
+    }
 
-    // Emit workflow to parent for canvas application
-    emit('apply-workflow', response)
+    if (result.output) {
+      // Add response to chat history
+      chatHistory.value.push({
+        role: 'assistant',
+        content: result.output.response
+      })
+
+      // Emit workflow to parent for canvas application
+      emit('apply-workflow', result.output)
+      toast.success(t('copilot.workflowGenerated'))
+    }
 
     // Close modal and clear input
     showGenerateModal.value = false
     generateDescription.value = ''
-    toast.success(t('copilot.workflowGenerated'))
   } catch (error: unknown) {
+    // Remove user message if generation failed
+    chatHistory.value.pop()
     toast.error(t('copilot.errors.generateFailed'))
     console.error('Generate workflow error:', error)
   } finally {
     isGenerating.value = false
+    generateStatus.value = null
   }
 }
 
@@ -426,7 +447,12 @@ const quickActions = [
               @click="generateWorkflow"
             >
               <div v-if="isGenerating" class="btn-spinner" />
-              {{ isGenerating ? t('copilot.generating') : t('copilot.generate') }}
+              <template v-if="isGenerating && generateStatus">
+                {{ generateStatus === 'pending' ? t('copilot.statusPending') : generateStatus === 'running' ? t('copilot.statusRunning') : t('copilot.generating') }}
+              </template>
+              <template v-else>
+                {{ t('copilot.generate') }}
+              </template>
             </button>
           </div>
         </div>

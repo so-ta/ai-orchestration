@@ -52,10 +52,10 @@ func TestAuthMiddleware_DevMode(t *testing.T) {
 	assert.Equal(t, uuid.MustParse("00000000-0000-0000-0000-000000000002"), tenantID)
 
 	userEmail := GetUserEmail(capturedCtx)
-	assert.Equal(t, "dev@example.com", userEmail)
+	assert.Equal(t, "admin@example.com", userEmail) // Default dev mode email
 
 	roles := GetUserRoles(capturedCtx)
-	assert.Contains(t, roles, "tenant_admin")
+	assert.Contains(t, roles, "admin") // Default dev mode role
 }
 
 func TestAuthMiddleware_MissingHeader(t *testing.T) {

@@ -1,5 +1,20 @@
 # Deployment Reference
 
+Docker, Kubernetes, and environment configuration for development and production.
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Development | Docker Compose |
+| Production | Kubernetes |
+| Container Registry | Local build / Custom |
+| API Port | 8080 |
+| Frontend Port | 3000 |
+| Keycloak Port | 8180 |
+| Jaeger Port | 16686 |
+| Health Endpoint | `/health`, `/ready` |
+
 ## Development Environment
 
 ### Docker Compose Services
@@ -417,25 +432,16 @@ kubectl exec -it deployment/api -n ai-orchestration -- \
 
 ## Scaling Considerations
 
-### API
+| Component | Strategy | Notes |
+|-----------|----------|-------|
+| API | Horizontal scaling | Stateless, HPA with CPU target 70% |
+| Worker | Queue-based scaling | Each worker processes sequentially, more workers = more parallelism |
+| Database | Connection pooling | PgBouncer recommended, read replicas for read-heavy |
+| Redis | Cluster mode | Separate instances for cache vs queue (optional) |
 
-- Stateless, scale horizontally
-- Use HPA with CPU target 70%
-- Consider memory-based scaling for large payloads
+## Related Documents
 
-### Worker
-
-- Scale based on queue depth
-- Each worker processes jobs sequentially
-- More workers = more parallel job execution
-
-### Database
-
-- Connection pooling essential
-- Read replicas for read-heavy workloads
-- Consider PgBouncer for connection management
-
-### Redis
-
-- Cluster mode for high availability
-- Separate instances for cache vs queue (optional)
+- [BACKEND.md](./BACKEND.md) - Backend architecture
+- [FRONTEND.md](./FRONTEND.md) - Frontend architecture
+- [DATABASE.md](./DATABASE.md) - Database schema and connection settings
+- [API.md](./API.md) - Health check endpoints

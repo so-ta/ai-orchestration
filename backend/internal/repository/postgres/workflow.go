@@ -25,12 +25,13 @@ func NewWorkflowRepository(pool *pgxpool.Pool) *WorkflowRepository {
 // Create creates a new workflow
 func (r *WorkflowRepository) Create(ctx context.Context, w *domain.Workflow) error {
 	query := `
-		INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, created_at, updated_at, is_system, system_slug)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 	_, err := r.pool.Exec(ctx, query,
 		w.ID, w.TenantID, w.Name, w.Description, w.Status, w.Version,
 		w.InputSchema, w.OutputSchema, w.Draft, w.CreatedBy, w.CreatedAt, w.UpdatedAt,
+		w.IsSystem, w.SystemSlug,
 	)
 	return err
 }
@@ -39,7 +40,7 @@ func (r *WorkflowRepository) Create(ctx context.Context, w *domain.Workflow) err
 func (r *WorkflowRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error) {
 	query := `
 		SELECT id, tenant_id, name, description, status, version, input_schema, output_schema, draft,
-		       created_by, published_at, created_at, updated_at, deleted_at
+		       created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug
 		FROM workflows
 		WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
 	`
@@ -47,7 +48,7 @@ func (r *WorkflowRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID
 	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
 		&w.ID, &w.TenantID, &w.Name, &w.Description, &w.Status, &w.Version,
 		&w.InputSchema, &w.OutputSchema, &w.Draft, &w.CreatedBy, &w.PublishedAt,
-		&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
+		&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt, &w.IsSystem, &w.SystemSlug,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrWorkflowNotFound
@@ -81,7 +82,7 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 	// List query
 	query := `
 		SELECT id, tenant_id, name, description, status, version, input_schema, output_schema, draft,
-		       created_by, published_at, created_at, updated_at, deleted_at
+		       created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug
 		FROM workflows
 		WHERE tenant_id = $1 AND deleted_at IS NULL
 	`
@@ -114,7 +115,7 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 		if err := rows.Scan(
 			&w.ID, &w.TenantID, &w.Name, &w.Description, &w.Status, &w.Version,
 			&w.InputSchema, &w.OutputSchema, &w.Draft, &w.CreatedBy, &w.PublishedAt,
-			&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt,
+			&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt, &w.IsSystem, &w.SystemSlug,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -240,4 +241,30 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 	}
 
 	return w, nil
+}
+
+// GetSystemBySlug retrieves a system workflow by its slug
+// System workflows are accessible across all tenants
+func (r *WorkflowRepository) GetSystemBySlug(ctx context.Context, slug string) (*domain.Workflow, error) {
+	query := `
+		SELECT id, tenant_id, name, description, status, version, input_schema, output_schema, draft,
+		       created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug
+		FROM workflows
+		WHERE system_slug = $1 AND is_system = TRUE AND deleted_at IS NULL
+	`
+	var w domain.Workflow
+	err := r.pool.QueryRow(ctx, query, slug).Scan(
+		&w.ID, &w.TenantID, &w.Name, &w.Description, &w.Status, &w.Version,
+		&w.InputSchema, &w.OutputSchema, &w.Draft, &w.CreatedBy, &w.PublishedAt,
+		&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt, &w.IsSystem, &w.SystemSlug,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrWorkflowNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	// Set HasDraft flag
+	w.HasDraft = w.HasUnsavedDraft()
+	return &w, nil
 }

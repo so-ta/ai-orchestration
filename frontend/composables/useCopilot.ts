@@ -121,6 +121,23 @@ export interface GenerateWorkflowResponse {
   start_step_id: string
 }
 
+// Async execution types (meta-workflow architecture)
+export type CopilotRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface AsyncRunResponse {
+  run_id: string
+  status: CopilotRunStatus
+}
+
+export interface CopilotRunResult<T = unknown> {
+  run_id: string
+  status: CopilotRunStatus
+  started_at?: string
+  completed_at?: string
+  output?: T
+  error?: string
+}
+
 export function useCopilot() {
   const api = useApi()
 
@@ -260,7 +277,134 @@ export function useCopilot() {
     )
   }
 
+  // ========== Async Operations with Polling (Meta-Workflow Architecture) ==========
+
+  // Polling interval in milliseconds
+  const POLL_INTERVAL = 1000
+  const MAX_POLL_DURATION = 120000 // 2 minutes max
+
+  // Get copilot run status
+  async function getCopilotRun<T = unknown>(runId: string): Promise<CopilotRunResult<T>> {
+    return api.get<CopilotRunResult<T>>(`/copilot/runs/${runId}`)
+  }
+
+  // Poll for run completion
+  async function pollForCompletion<T = unknown>(
+    runId: string,
+    onProgress?: (status: CopilotRunStatus) => void
+  ): Promise<CopilotRunResult<T>> {
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < MAX_POLL_DURATION) {
+      const result = await getCopilotRun<T>(runId)
+
+      if (onProgress) {
+        onProgress(result.status)
+      }
+
+      if (result.status === 'completed' || result.status === 'failed' || result.status === 'cancelled') {
+        return result
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL))
+    }
+
+    // Timeout
+    throw new Error('Copilot operation timed out')
+  }
+
+  // Async generate workflow with polling
+  async function asyncGenerateWorkflow(
+    prompt: string,
+    options?: { sessionId?: string; onProgress?: (status: CopilotRunStatus) => void }
+  ): Promise<CopilotRunResult<GenerateWorkflowResponse>> {
+    // Start async operation
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/generate', {
+      prompt,
+      session_id: options?.sessionId,
+    })
+
+    // Poll for completion
+    return pollForCompletion<GenerateWorkflowResponse>(run_id, options?.onProgress)
+  }
+
+  // Async suggest with polling
+  async function asyncSuggest(
+    workflowId: string,
+    options?: { context?: string; onProgress?: (status: CopilotRunStatus) => void }
+  ): Promise<CopilotRunResult<SuggestResponse>> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/suggest', {
+      workflow_id: workflowId,
+      context: options?.context,
+    })
+
+    return pollForCompletion<SuggestResponse>(run_id, options?.onProgress)
+  }
+
+  // Async diagnose with polling
+  async function asyncDiagnose(
+    runId: string,
+    options?: { onProgress?: (status: CopilotRunStatus) => void }
+  ): Promise<CopilotRunResult<DiagnoseResponse>> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/diagnose', {
+      run_id: runId,
+    })
+
+    return pollForCompletion<DiagnoseResponse>(run_id, options?.onProgress)
+  }
+
+  // Async optimize with polling
+  async function asyncOptimize(
+    workflowId: string,
+    options?: { onProgress?: (status: CopilotRunStatus) => void }
+  ): Promise<CopilotRunResult<OptimizeResponse>> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/optimize', {
+      workflow_id: workflowId,
+    })
+
+    return pollForCompletion<OptimizeResponse>(run_id, options?.onProgress)
+  }
+
+  // Start async operation without waiting (for manual polling)
+  async function startAsyncGenerate(
+    prompt: string,
+    sessionId?: string
+  ): Promise<string> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/generate', {
+      prompt,
+      session_id: sessionId,
+    })
+    return run_id
+  }
+
+  async function startAsyncSuggest(
+    workflowId: string,
+    context?: string
+  ): Promise<string> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/suggest', {
+      workflow_id: workflowId,
+      context,
+    })
+    return run_id
+  }
+
+  async function startAsyncDiagnose(runId: string): Promise<string> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/diagnose', {
+      run_id: runId,
+    })
+    return run_id
+  }
+
+  async function startAsyncOptimize(workflowId: string): Promise<string> {
+    const { run_id } = await api.post<AsyncRunResponse>('/copilot/async/optimize', {
+      workflow_id: workflowId,
+    })
+    return run_id
+  }
+
   return {
+    // Legacy sync functions
     suggest,
     diagnose,
     explain,
@@ -274,7 +418,18 @@ export function useCopilot() {
     startNewSession,
     getSessionMessages,
     chatWithSession,
-    // Workflow generation
+    // Workflow generation (sync)
     generateWorkflow,
+    // Async functions with polling (meta-workflow architecture)
+    getCopilotRun,
+    asyncGenerateWorkflow,
+    asyncSuggest,
+    asyncDiagnose,
+    asyncOptimize,
+    // Start async without waiting (for manual polling)
+    startAsyncGenerate,
+    startAsyncSuggest,
+    startAsyncDiagnose,
+    startAsyncOptimize,
   }
 }

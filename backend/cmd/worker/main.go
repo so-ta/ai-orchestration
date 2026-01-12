@@ -65,8 +65,8 @@ func main() {
 	// Initialize usage recorder for cost tracking
 	usageRecorder := engine.NewUsageRecorder(usageRepo, logger)
 
-	// Initialize executor with usage recorder
-	executor := engine.NewExecutor(registry, logger, engine.WithUsageRecorder(usageRecorder))
+	// Initialize executor with usage recorder and database pool
+	executor := engine.NewExecutor(registry, logger, engine.WithUsageRecorder(usageRecorder), engine.WithDatabase(pool))
 
 	// Initialize queue
 	queue := engine.NewQueue(redisClient)

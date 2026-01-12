@@ -60,6 +60,30 @@ type AdapterService interface {
 	Call(adapterID string, input map[string]interface{}) (map[string]interface{}, error)
 }
 
+// BlocksService provides block definition access to scripts
+type BlocksService interface {
+	// List returns all available block definitions
+	List() ([]map[string]interface{}, error)
+	// Get retrieves a block definition by slug
+	Get(slug string) (map[string]interface{}, error)
+}
+
+// WorkflowsService provides workflow read access to scripts
+type WorkflowsService interface {
+	// Get retrieves a workflow by ID
+	Get(workflowID string) (map[string]interface{}, error)
+	// List retrieves all workflows
+	List() ([]map[string]interface{}, error)
+}
+
+// RunsService provides run read access to scripts
+type RunsService interface {
+	// Get retrieves a run by ID
+	Get(runID string) (map[string]interface{}, error)
+	// GetStepRuns retrieves all step runs for a run
+	GetStepRuns(runID string) ([]map[string]interface{}, error)
+}
+
 // ExecutionContext provides runtime context to scripts
 type ExecutionContext struct {
 	HTTP *HTTPClient
@@ -68,6 +92,10 @@ type ExecutionContext struct {
 	Workflow WorkflowService
 	Human    HumanService
 	Adapter  AdapterService
+	// Copilot/meta-workflow services (read-only data access)
+	Blocks    BlocksService
+	Workflows WorkflowsService
+	Runs      RunsService
 	// Credentials is a map of credential name to credential data
 	// Accessible in scripts as context.credentials.name.field
 	// e.g., context.credentials.api_key.access_token
@@ -268,6 +296,60 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 			return err
 		}
 		if err := contextObj.Set("adapter", adapterObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Blocks service if available (for Copilot/meta-workflow)
+	if execCtx != nil && execCtx.Blocks != nil {
+		blocksObj := vm.NewObject()
+		if err := blocksObj.Set("list", func(call goja.FunctionCall) goja.Value {
+			return s.blocksList(vm, execCtx.Blocks, call)
+		}); err != nil {
+			return err
+		}
+		if err := blocksObj.Set("get", func(call goja.FunctionCall) goja.Value {
+			return s.blocksGet(vm, execCtx.Blocks, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("blocks", blocksObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Workflows service if available (for Copilot/meta-workflow)
+	if execCtx != nil && execCtx.Workflows != nil {
+		workflowsObj := vm.NewObject()
+		if err := workflowsObj.Set("get", func(call goja.FunctionCall) goja.Value {
+			return s.workflowsGet(vm, execCtx.Workflows, call)
+		}); err != nil {
+			return err
+		}
+		if err := workflowsObj.Set("list", func(call goja.FunctionCall) goja.Value {
+			return s.workflowsList(vm, execCtx.Workflows, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("workflows", workflowsObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Runs service if available (for Copilot/meta-workflow)
+	if execCtx != nil && execCtx.Runs != nil {
+		runsObj := vm.NewObject()
+		if err := runsObj.Set("get", func(call goja.FunctionCall) goja.Value {
+			return s.runsGet(vm, execCtx.Runs, call)
+		}); err != nil {
+			return err
+		}
+		if err := runsObj.Set("getStepRuns", func(call goja.FunctionCall) goja.Value {
+			return s.runsGetStepRuns(vm, execCtx.Runs, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("runs", runsObj); err != nil {
 			return err
 		}
 	}
@@ -591,6 +673,92 @@ func (s *Sandbox) adapterCall(vm *goja.Runtime, service AdapterService, call goj
 	result, err := service.Call(adapterID, input)
 	if err != nil {
 		panic(vm.ToValue(fmt.Sprintf("Adapter call failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// ============================================================================
+// Copilot/Meta-Workflow Service Methods (Read-Only)
+// ============================================================================
+
+// blocksList handles ctx.blocks.list() calls
+func (s *Sandbox) blocksList(vm *goja.Runtime, service BlocksService, call goja.FunctionCall) goja.Value {
+	result, err := service.List()
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Blocks list failed: %v", err)))
+	}
+	return vm.ToValue(result)
+}
+
+// blocksGet handles ctx.blocks.get(slug) calls
+func (s *Sandbox) blocksGet(vm *goja.Runtime, service BlocksService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.blocks.get requires slug argument"))
+	}
+
+	slug := call.Arguments[0].String()
+
+	result, err := service.Get(slug)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Blocks get failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// workflowsGet handles ctx.workflows.get(workflowID) calls
+func (s *Sandbox) workflowsGet(vm *goja.Runtime, service WorkflowsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.workflows.get requires workflowID argument"))
+	}
+
+	workflowID := call.Arguments[0].String()
+
+	result, err := service.Get(workflowID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Workflows get failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// workflowsList handles ctx.workflows.list() calls
+func (s *Sandbox) workflowsList(vm *goja.Runtime, service WorkflowsService, call goja.FunctionCall) goja.Value {
+	result, err := service.List()
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Workflows list failed: %v", err)))
+	}
+	return vm.ToValue(result)
+}
+
+// runsGet handles ctx.runs.get(runID) calls
+func (s *Sandbox) runsGet(vm *goja.Runtime, service RunsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.runs.get requires runID argument"))
+	}
+
+	runID := call.Arguments[0].String()
+
+	result, err := service.Get(runID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Runs get failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// runsGetStepRuns handles ctx.runs.getStepRuns(runID) calls
+func (s *Sandbox) runsGetStepRuns(vm *goja.Runtime, service RunsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.runs.getStepRuns requires runID argument"))
+	}
+
+	runID := call.Arguments[0].String()
+
+	result, err := service.GetStepRuns(runID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Runs getStepRuns failed: %v", err)))
 	}
 
 	return vm.ToValue(result)

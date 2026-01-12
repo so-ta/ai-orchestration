@@ -1,5 +1,17 @@
 # Phase 10: Copilot 実装計画
 
+> **Status**: 📋 未実装
+> **Updated**: 2025-01-12
+
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| アーキテクチャ | メタワークフロー（Copilot機能をワークフローとして実装） |
+| 実行方式 | 非同期 + ポーリング |
+| TriggerType | `internal`（新規追加） |
+| システムWF | `copilot-generate`, `copilot-diagnose`, `copilot-optimize`, `copilot-suggest` |
+
 ## 概要
 
 **目的**: AIアシスタントによるワークフロー構築支援機能を提供し、ユーザーが自然言語でワークフローを設計・最適化できるようにする。
@@ -44,303 +56,437 @@
 
 ## 技術設計
 
-### アーキテクチャ
+### アーキテクチャ：メタワークフロー方式
+
+**設計思想**: Copilot機能自体をワークフローとして定義し、サービス内のワークフロー実行エンジンで処理する（ドッグフーディング）。
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │  CopilotChat │  │ SuggestionUI │  │ CommandPalette│   │
-│  └──────────────┘  └──────────────┘  └──────────────┘   │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Backend API                           │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              CopilotHandler                       │   │
-│  └──────────────────────────────────────────────────┘   │
-│                           │                              │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │              CopilotUsecase                       │   │
-│  │  - Generate  - Suggest  - Diagnose  - Optimize    │   │
-│  └──────────────────────────────────────────────────┘   │
-│                           │                              │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │            PromptBuilder + LLM Adapter            │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    メタワークフローアーキテクチャ                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  Frontend                                                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
+│  │ CopilotPanel │  │ SuggestionUI │  │CommandPalette│               │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘               │
+│         │                 │                 │                        │
+│         └─────────────────┴─────────────────┘                        │
+│                           │                                          │
+│                           ▼                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │                    CopilotHandler                                │ │
+│  │  POST /copilot/generate → run_id返却                             │ │
+│  │  GET /copilot/runs/{id} → 結果取得（ポーリング）                  │ │
+│  └──────────────────────────┬──────────────────────────────────────┘ │
+│                             │                                        │
+│                             ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │              RunUsecase.ExecuteSystemWorkflow()                  │ │
+│  │                                                                   │ │
+│  │  - slug: "copilot-generate"                                      │ │
+│  │  - TriggerType: internal                                          │ │
+│  │  - TriggerSource: "copilot"                                       │ │
+│  │  - TriggerMetadata: {feature, user_id, session_id}               │ │
+│  └──────────────────────────┬──────────────────────────────────────┘ │
+│                             │                                        │
+│                             ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │            System Workflow: "copilot-generate"                   │ │
+│  │                                                                   │ │
+│  │  [Start] → [Get Blocks] → [Build Prompt] → [LLM] → [Validate]   │ │
+│  │                                                                   │ │
+│  └──────────────────────────┬──────────────────────────────────────┘ │
+│                             │                                        │
+│                             ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │                 Workflow Engine (既存)                           │ │
+│  │                                                                   │ │
+│  │  Run作成 → Worker実行 → 結果保存                                 │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+│                                                                       │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### プロンプト設計
+### メリット
 
-**ファイル**: `backend/internal/adapter/copilot_prompts.go`
+| メリット | 説明 |
+|---------|------|
+| **ドッグフーディング** | 自サービスの機能を使って自サービスを構築 |
+| **カスタマイズ可能** | 管理者がCopilotの動作をワークフローとして編集可能 |
+| **一貫性** | すべての処理が同じワークフローエンジンで実行される |
+| **可観測性** | Copilot実行もRun/StepRunとして記録・トレース可能 |
+| **拡張性** | 新しいCopilot機能もワークフローとして追加可能 |
+
+---
+
+## データモデル拡張
+
+### TriggerType 追加
 
 ```go
-package adapter
+// domain/run.go
+type TriggerType string
 
-const SystemPromptGenerate = `
-You are an AI workflow builder assistant. Your task is to convert natural language descriptions into structured workflow definitions.
-
-## Available Step Types
-- llm: LLM API calls (OpenAI, Anthropic)
-- tool: External tool/adapter execution
-- condition: Conditional branching
-- map: Parallel array processing
-- loop: Iteration (for, forEach, while)
-- wait: Delay/timer
-- human_in_loop: Human approval gate
-- router: AI-based dynamic routing
-- guardrails: Content safety checks
-- evaluator: Output quality evaluation
-
-## Available Adapters
-{{range .Adapters}}
-- {{.ID}}: {{.Description}}
-{{end}}
-
-## Output Format
-Return a JSON object with:
-{
-  "workflow": {
-    "name": "Workflow Name",
-    "description": "Description",
-    "steps": [...],
-    "edges": [...]
-  },
-  "explanation": "Step-by-step explanation of how this workflow works"
-}
-
-## Guidelines
-1. Create minimal viable workflows - avoid unnecessary complexity
-2. Use appropriate step types for each task
-3. Include error handling where appropriate
-4. Consider performance and cost implications
-5. Add clear step names and descriptions
-`
-
-const SystemPromptSuggest = `
-You are an AI assistant helping users build workflows. Based on the current workflow state, suggest the next step to add.
-
-## Current Workflow
-{{.WorkflowJSON}}
-
-## Last Added Step
-{{.LastStep}}
-
-## Task
-Suggest 2-3 possible next steps that would logically follow. Consider:
-1. What typically comes next in this type of workflow
-2. Error handling needs
-3. Data transformation needs
-4. Output/notification needs
-
-Return JSON:
-{
-  "suggestions": [
-    {
-      "type": "step_type",
-      "name": "Suggested Step Name",
-      "description": "Why this step is recommended",
-      "config": {...}
-    }
-  ]
-}
-`
-
-const SystemPromptDiagnose = `
-You are an AI debugging assistant. Analyze the workflow execution error and provide diagnosis.
-
-## Workflow Definition
-{{.WorkflowJSON}}
-
-## Failed Step
-{{.FailedStepJSON}}
-
-## Error Information
-{{.ErrorMessage}}
-{{.StackTrace}}
-
-## Recent Step Outputs
-{{.RecentOutputs}}
-
-## Task
-1. Identify the root cause of the failure
-2. Explain what went wrong in simple terms
-3. Provide specific fix recommendations
-4. Suggest preventive measures
-
-Return JSON:
-{
-  "diagnosis": {
-    "root_cause": "Clear explanation of what caused the error",
-    "category": "config_error|input_error|api_error|logic_error|timeout|unknown",
-    "severity": "high|medium|low"
-  },
-  "fixes": [
-    {
-      "description": "What to fix",
-      "steps": ["Step 1", "Step 2"],
-      "code_change": {...}  // Optional: actual config changes
-    }
-  ],
-  "prevention": ["Tip 1", "Tip 2"]
-}
-`
-
-const SystemPromptOptimize = `
-You are an AI optimization assistant. Analyze the workflow and suggest improvements.
-
-## Workflow Definition
-{{.WorkflowJSON}}
-
-## Usage Statistics
-- Total runs: {{.TotalRuns}}
-- Avg duration: {{.AvgDuration}}ms
-- Avg cost: ${{.AvgCost}}
-- Failure rate: {{.FailureRate}}%
-
-## Task
-Analyze and suggest optimizations for:
-1. Performance (latency reduction)
-2. Cost (cheaper models, fewer API calls)
-3. Reliability (error handling, retries)
-4. Maintainability (simplification, documentation)
-
-Return JSON:
-{
-  "optimizations": [
-    {
-      "category": "performance|cost|reliability|maintainability",
-      "title": "Optimization Title",
-      "description": "Detailed explanation",
-      "impact": "high|medium|low",
-      "effort": "high|medium|low",
-      "changes": {...}  // Optional: specific changes
-    }
-  ],
-  "summary": "Overall assessment and top recommendations"
-}
-`
+const (
+    TriggerTypeManual   TriggerType = "manual"   // UI操作
+    TriggerTypeSchedule TriggerType = "schedule" // Cron
+    TriggerTypeWebhook  TriggerType = "webhook"  // 外部API
+    TriggerTypeInternal TriggerType = "internal" // 内部呼び出し（NEW）
+)
 ```
 
-### API設計
+### Run テーブル拡張
+
+```sql
+-- Migration: add_trigger_metadata.sql
+
+-- runs テーブル拡張
+ALTER TABLE runs ADD COLUMN trigger_source VARCHAR(100);
+ALTER TABLE runs ADD COLUMN trigger_metadata JSONB DEFAULT '{}';
+
+-- インデックス追加
+CREATE INDEX idx_runs_trigger_source ON runs(trigger_source)
+    WHERE trigger_source IS NOT NULL;
+
+-- コメント
+COMMENT ON COLUMN runs.trigger_source IS
+    'Internal trigger source identifier: copilot, audit-system, etc.';
+COMMENT ON COLUMN runs.trigger_metadata IS
+    'Additional metadata about the trigger: feature, user_id, session_id, etc.';
+```
+
+### Run ドメインモデル拡張
+
+```go
+type Run struct {
+    // 既存フィールド
+    ID              uuid.UUID
+    TenantID        uuid.UUID
+    WorkflowID      uuid.UUID
+    WorkflowVersion int
+    Status          RunStatus
+    Mode            RunMode
+    TriggerType     TriggerType  // manual, schedule, webhook, internal
+    Input           json.RawMessage
+    Output          json.RawMessage
+
+    // 新規フィールド
+    TriggerSource   string          `json:"trigger_source,omitempty"`   // "copilot", "audit", etc.
+    TriggerMetadata json.RawMessage `json:"trigger_metadata,omitempty"` // {"feature": "generate", ...}
+}
+```
+
+### システムワークフロー
+
+```sql
+-- workflows テーブル拡張
+ALTER TABLE workflows ADD COLUMN is_system BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE workflows ADD COLUMN system_slug VARCHAR(100);
+
+-- ユニーク制約（システムワークフローはslugで一意）
+CREATE UNIQUE INDEX idx_workflows_system_slug ON workflows(system_slug)
+    WHERE system_slug IS NOT NULL;
+```
+
+---
+
+## API設計
+
+### エンドポイント
 
 | Method | Path | 説明 |
 |--------|------|------|
-| POST | `/api/v1/copilot/generate` | 自然言語からWF生成 |
-| POST | `/api/v1/copilot/suggest` | 次ステップ提案 |
-| POST | `/api/v1/copilot/diagnose` | エラー診断 |
-| POST | `/api/v1/copilot/optimize` | 最適化提案 |
-| POST | `/api/v1/copilot/explain` | WF説明生成 |
-| POST | `/api/v1/copilot/chat` | 汎用チャット |
+| POST | `/api/v1/copilot/generate` | WF生成リクエスト → run_id返却 |
+| POST | `/api/v1/copilot/suggest` | 次ステップ提案 → run_id返却 |
+| POST | `/api/v1/copilot/diagnose` | エラー診断 → run_id返却 |
+| POST | `/api/v1/copilot/optimize` | 最適化提案 → run_id返却 |
+| GET | `/api/v1/copilot/runs/{id}` | Copilot実行結果取得（ポーリング用） |
 
 ### Request/Response
 
-**ワークフロー生成**:
+**ワークフロー生成（非同期）**:
+
 ```json
 // POST /api/v1/copilot/generate
 {
-  "prompt": "顧客からの問い合わせメールを受信し、AIで分類して、緊急の場合はSlack通知、それ以外はチケット作成",
-  "context": {
-    "available_adapters": ["slack", "email", "jira"]
-  }
+  "prompt": "顧客メールを分類してSlackに通知するワークフローを作って",
+  "session_id": "optional-session-id"
 }
 
-// Response
+// Response (即座に返却)
 {
-  "workflow": {
-    "name": "Customer Inquiry Handler",
-    "description": "Receives customer emails, classifies them with AI, and routes urgent ones to Slack while creating tickets for others",
-    "steps": [
-      {
-        "id": "step-1",
-        "name": "Receive Email",
-        "type": "tool",
-        "config": {"adapter_id": "email", "action": "receive"}
-      },
-      {
-        "id": "step-2",
-        "name": "Classify with AI",
-        "type": "llm",
-        "config": {
-          "provider": "openai",
-          "model": "gpt-4o-mini",
-          "prompt": "Classify the following customer inquiry as 'urgent' or 'normal':\n\n{{$.email.body}}"
-        }
-      },
-      {
-        "id": "step-3",
-        "name": "Check Urgency",
-        "type": "condition",
-        "config": {"expression": "$.classification == 'urgent'"}
-      },
-      {
-        "id": "step-4",
-        "name": "Send Slack Alert",
-        "type": "tool",
-        "config": {"adapter_id": "slack", "channel": "#urgent"}
-      },
-      {
-        "id": "step-5",
-        "name": "Create Ticket",
-        "type": "tool",
-        "config": {"adapter_id": "jira", "action": "create_issue"}
-      }
-    ],
-    "edges": [
-      {"source": "step-1", "target": "step-2"},
-      {"source": "step-2", "target": "step-3"},
-      {"source": "step-3", "target": "step-4", "condition": "true"},
-      {"source": "step-3", "target": "step-5", "condition": "false"}
-    ]
-  },
-  "explanation": "このワークフローは以下の流れで動作します：\n1. メールアダプターで受信メールを取得\n2. GPT-4o-miniで問い合わせ内容を分析し、緊急度を判定\n3. 条件分岐で緊急/通常を振り分け\n4. 緊急の場合はSlackの#urgentチャンネルに通知\n5. 通常の場合はJiraにチケットを作成"
+  "run_id": "uuid",
+  "status": "pending"
 }
 ```
 
-**エラー診断**:
+**結果取得（ポーリング）**:
+
 ```json
-// POST /api/v1/copilot/diagnose
+// GET /api/v1/copilot/runs/{id}
+
+// Response (実行中)
 {
   "run_id": "uuid",
-  "step_run_id": "uuid"
+  "status": "running",
+  "started_at": "2025-01-12T10:00:00Z"
 }
 
-// Response
+// Response (完了)
 {
-  "diagnosis": {
-    "root_cause": "OpenAI APIのレート制限に達しました。短時間に多くのリクエストを送信したため、429エラーが発生しています。",
-    "category": "api_error",
-    "severity": "medium"
-  },
-  "fixes": [
-    {
-      "description": "リトライロジックを追加する",
-      "steps": [
-        "LLMステップの設定で max_retries を 3 に設定",
-        "retry_delay_ms を 1000 に設定"
-      ],
-      "code_change": {
-        "step_id": "step-2",
-        "config_patch": {
-          "max_retries": 3,
-          "retry_delay_ms": 1000
-        }
-      }
+  "run_id": "uuid",
+  "status": "completed",
+  "completed_at": "2025-01-12T10:00:05Z",
+  "output": {
+    "workflow": {
+      "name": "Customer Email Classifier",
+      "description": "...",
+      "steps": [...],
+      "edges": [...]
     },
-    {
-      "description": "より安価なモデルに変更してレート制限を回避",
-      "steps": [
-        "gpt-4o から gpt-4o-mini に変更"
-      ]
-    }
-  ],
-  "prevention": [
-    "大量実行前にバッチサイズを制限する",
-    "mapステップで parallel: false を使用して順次実行する"
-  ]
+    "explanation": "このワークフローは..."
+  }
 }
+
+// Response (失敗)
+{
+  "run_id": "uuid",
+  "status": "failed",
+  "error": "LLM API rate limit exceeded"
+}
+```
+
+---
+
+## Backend実装
+
+### 内部呼び出しインターフェース
+
+```go
+// usecase/run.go
+
+type InternalTriggerOptions struct {
+    Source   string                 // "copilot", "audit", etc.
+    Feature  string                 // "generate", "diagnose", etc.
+    Metadata map[string]interface{} // 任意の追加情報
+}
+
+func (u *RunUsecase) ExecuteSystemWorkflow(
+    ctx context.Context,
+    slug string,                    // "copilot-generate"
+    input map[string]interface{},
+    opts InternalTriggerOptions,
+) (*domain.Run, error) {
+    // 1. システムワークフロー取得
+    workflow, err := u.workflowRepo.GetSystemBySlug(ctx, slug)
+    if err != nil {
+        return nil, ErrSystemWorkflowNotFound
+    }
+
+    // 2. Run作成
+    run := domain.NewRun(
+        workflow.ID,
+        workflow.Version,
+        domain.RunModeProduction,
+        domain.TriggerTypeInternal,
+    )
+    run.TriggerSource = opts.Source
+    run.TriggerMetadata = toJSON(map[string]interface{}{
+        "feature":  opts.Feature,
+        "metadata": opts.Metadata,
+    })
+    run.Input = toJSON(input)
+
+    // 3. 保存 & キュー投入
+    if err := u.runRepo.Create(ctx, run); err != nil {
+        return nil, err
+    }
+
+    // 4. ジョブキューに投入
+    if err := u.jobQueue.Enqueue(ctx, run.ID); err != nil {
+        return nil, err
+    }
+
+    return run, nil
+}
+```
+
+### CopilotHandler
+
+```go
+// handler/copilot.go
+
+type CopilotHandler struct {
+    runUsecase usecase.RunUsecase
+}
+
+func (h *CopilotHandler) Generate(w http.ResponseWriter, r *http.Request) {
+    var req struct {
+        Prompt    string `json:"prompt"`
+        SessionID string `json:"session_id,omitempty"`
+    }
+    json.NewDecoder(r.Body).Decode(&req)
+
+    userID := getUserID(r.Context())
+    tenantID := getTenantID(r.Context())
+
+    run, err := h.runUsecase.ExecuteSystemWorkflow(
+        r.Context(),
+        "copilot-generate",
+        map[string]interface{}{
+            "prompt":    req.Prompt,
+            "tenant_id": tenantID.String(),
+        },
+        usecase.InternalTriggerOptions{
+            Source:  "copilot",
+            Feature: "generate",
+            Metadata: map[string]interface{}{
+                "user_id":    userID.String(),
+                "session_id": req.SessionID,
+            },
+        },
+    )
+    if err != nil {
+        respondError(w, err)
+        return
+    }
+
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "run_id": run.ID,
+        "status": run.Status,
+    })
+}
+
+func (h *CopilotHandler) GetRun(w http.ResponseWriter, r *http.Request) {
+    runID := chi.URLParam(r, "id")
+
+    run, err := h.runUsecase.GetByID(r.Context(), uuid.MustParse(runID))
+    if err != nil {
+        respondError(w, err)
+        return
+    }
+
+    // Copilot用のレスポンス形式に変換
+    resp := map[string]interface{}{
+        "run_id": run.ID,
+        "status": run.Status,
+    }
+
+    if run.StartedAt != nil {
+        resp["started_at"] = run.StartedAt
+    }
+    if run.CompletedAt != nil {
+        resp["completed_at"] = run.CompletedAt
+    }
+    if run.Status == domain.RunStatusCompleted {
+        resp["output"] = run.Output
+    }
+    if run.Status == domain.RunStatusFailed {
+        resp["error"] = run.Error
+    }
+
+    json.NewEncoder(w).Encode(resp)
+}
+```
+
+---
+
+## システムワークフロー定義
+
+### copilot-generate
+
+```
+[Start]
+   ↓
+[Get Available Blocks]
+   code: return { blocks: await ctx.blocks.list() }
+   ↓
+[Get Available Adapters]
+   code: return { adapters: await ctx.adapter.list() }
+   ↓
+[Build Prompt]
+   code: // プロンプトテンプレート構築
+   ↓
+[LLM Call]
+   type: llm
+   config: { provider: "openai", model: "gpt-4o", prompt: "{{$.prompt}}" }
+   ↓
+[Parse Response]
+   code: return JSON.parse(input.content)
+   ↓
+[Validate Workflow]
+   code: // 構造検証
+   ↓
+[Return Result]
+```
+
+### Migration例
+
+```sql
+-- backend/migrations/XXX_copilot_system_workflows.sql
+
+-- 1. copilot-generate ワークフロー
+INSERT INTO workflows (
+    id, tenant_id, name, description, status,
+    is_system, system_slug, version
+) VALUES (
+    'a0000000-0000-0000-0000-000000000001',
+    NULL,  -- システムワークフロー
+    'Copilot: Generate Workflow',
+    '自然言語からワークフローを生成するシステムワークフロー',
+    'published',
+    TRUE,
+    'copilot-generate',
+    1
+);
+
+-- 2. ステップ定義
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y) VALUES
+('b0000001-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+ 'Start', 'start', '{}', 0, 0),
+
+('b0000002-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+ 'Get Blocks', 'code',
+ '{"code": "return { blocks: await ctx.blocks.list() }"}', 200, 0),
+
+('b0000003-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+ 'Build Prompt', 'code',
+ '{"code": "const prompt = `...`; return { prompt };"}', 400, 0),
+
+('b0000004-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+ 'Generate with LLM', 'llm',
+ '{"provider": "openai", "model": "gpt-4o", "user_prompt": "{{$.prompt}}"}', 600, 0),
+
+('b0000005-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+ 'Parse & Validate', 'code',
+ '{"code": "const parsed = JSON.parse(input.content); return parsed;"}', 800, 0);
+
+-- 3. エッジ定義
+INSERT INTO edges (workflow_id, source_step_id, target_step_id) VALUES
+('a0000000-0000-0000-0000-000000000001', 'b0000001-0000-0000-0000-000000000001', 'b0000002-0000-0000-0000-000000000001'),
+('a0000000-0000-0000-0000-000000000001', 'b0000002-0000-0000-0000-000000000001', 'b0000003-0000-0000-0000-000000000001'),
+('a0000000-0000-0000-0000-000000000001', 'b0000003-0000-0000-0000-000000000001', 'b0000004-0000-0000-0000-000000000001'),
+('a0000000-0000-0000-0000-000000000001', 'b0000004-0000-0000-0000-000000000001', 'b0000005-0000-0000-0000-000000000001');
+```
+
+---
+
+## ctx インターフェース拡張
+
+Copilotワークフロー内で使用する新しいctx機能：
+
+```javascript
+// ctx.blocks - ブロック定義操作
+ctx.blocks.list()              // ブロック一覧取得
+ctx.blocks.get(slug)           // 特定ブロック取得
+
+// ctx.workflows - ワークフロー操作（読み取りのみ）
+ctx.workflows.get(id)          // ワークフロー取得
+ctx.workflows.list()           // ワークフロー一覧
+
+// ctx.runs - Run操作（読み取りのみ）
+ctx.runs.get(id)               // Run取得
+ctx.runs.getStepRuns(runId)    // StepRun一覧取得
 ```
 
 ---
@@ -357,11 +503,103 @@ frontend/
 │       ├── CopilotChat.vue       # チャットUI
 │       ├── CopilotInput.vue      # 入力フォーム
 │       ├── CopilotMessage.vue    # メッセージ表示
+│       ├── CopilotLoading.vue    # ローディング表示
 │       ├── SuggestionList.vue    # 提案リスト
 │       ├── DiagnosisCard.vue     # 診断結果表示
 │       └── OptimizationCard.vue  # 最適化提案表示
 └── composables/
-    └── useCopilot.ts             # Copilot API呼び出し
+    └── useCopilot.ts             # Copilot API呼び出し（ポーリング対応）
+```
+
+### useCopilot.ts（ポーリング対応）
+
+```typescript
+export function useCopilot() {
+  const messages = ref<CopilotMessage[]>([])
+  const polling = ref(false)
+  const currentRunId = ref<string | null>(null)
+  const { $api } = useNuxtApp()
+
+  async function generate(prompt: string): Promise<CopilotResult | null> {
+    // 1. リクエスト送信
+    const { run_id } = await $api.post('/copilot/generate', { prompt })
+    currentRunId.value = run_id
+
+    // ユーザーメッセージ追加
+    messages.value.push({
+      id: nanoid(),
+      role: 'user',
+      type: 'text',
+      content: prompt
+    })
+
+    // ローディングメッセージ追加
+    const loadingMsg: CopilotMessage = {
+      id: nanoid(),
+      role: 'assistant',
+      type: 'loading',
+      content: 'ワークフローを生成中...'
+    }
+    messages.value.push(loadingMsg)
+
+    // 2. ポーリング開始
+    polling.value = true
+
+    while (polling.value) {
+      await sleep(1000)  // 1秒間隔
+
+      const run = await $api.get(`/copilot/runs/${run_id}`)
+
+      if (run.status === 'completed') {
+        // ローディングを結果に置換
+        const idx = messages.value.findIndex(m => m.id === loadingMsg.id)
+        if (idx >= 0) {
+          messages.value[idx] = {
+            id: loadingMsg.id,
+            role: 'assistant',
+            type: 'workflow',
+            content: run.output.explanation,
+            data: run.output.workflow
+          }
+        }
+        polling.value = false
+        return run.output
+
+      } else if (run.status === 'failed') {
+        // ローディングをエラーに置換
+        const idx = messages.value.findIndex(m => m.id === loadingMsg.id)
+        if (idx >= 0) {
+          messages.value[idx] = {
+            id: loadingMsg.id,
+            role: 'assistant',
+            type: 'error',
+            content: run.error
+          }
+        }
+        polling.value = false
+        return null
+      }
+      // running の場合は継続
+    }
+
+    return null
+  }
+
+  function cancel() {
+    polling.value = false
+    currentRunId.value = null
+  }
+
+  // 他の機能（diagnose, optimize, suggest）も同様のパターン
+
+  return {
+    messages,
+    polling,
+    currentRunId,
+    generate,
+    cancel
+  }
+}
 ```
 
 ### CopilotPanel.vue
@@ -372,7 +610,7 @@ frontend/
     <header class="copilot-header">
       <h3>
         <Icon name="sparkles" />
-        {{ $t('copilot.title') }}
+        Copilot
       </h3>
       <button @click="close">
         <Icon name="x" />
@@ -386,23 +624,23 @@ frontend/
           v-for="msg in messages"
           :key="msg.id"
           :message="msg"
-          @apply="applyChange"
+          @apply="applyWorkflow"
         />
       </div>
 
       <!-- クイックアクション -->
       <div class="quick-actions" v-if="messages.length === 0">
-        <button @click="generateWorkflow">
+        <button @click="showGenerateInput = true">
           <Icon name="wand" />
-          {{ $t('copilot.generateWorkflow') }}
+          ワークフロー生成
         </button>
-        <button @click="optimizeWorkflow" :disabled="!hasWorkflow">
+        <button @click="optimizeWorkflow" :disabled="!hasWorkflow || polling">
           <Icon name="zap" />
-          {{ $t('copilot.optimize') }}
+          最適化提案
         </button>
-        <button @click="diagnoseError" :disabled="!hasError">
+        <button @click="diagnoseError" :disabled="!hasError || polling">
           <Icon name="bug" />
-          {{ $t('copilot.diagnose') }}
+          エラー診断
         </button>
       </div>
     </div>
@@ -410,186 +648,96 @@ frontend/
     <footer class="copilot-footer">
       <CopilotInput
         v-model="input"
-        @submit="sendMessage"
-        :loading="loading"
-        :placeholder="$t('copilot.inputPlaceholder')"
+        @submit="handleSubmit"
+        :loading="polling"
+        :disabled="polling"
+        placeholder="ワークフローを説明してください..."
       />
+      <button v-if="polling" @click="cancel" class="cancel-btn">
+        キャンセル
+      </button>
     </footer>
   </aside>
 </template>
 
 <script setup lang="ts">
-const { messages, sendMessage, loading } = useCopilot()
-const { workflow, selectedStep, lastError } = useWorkflowEditor()
+const { messages, polling, generate, cancel } = useCopilot()
+const { workflow, lastError } = useWorkflowEditor()
 
 const hasWorkflow = computed(() => workflow.value?.steps?.length > 0)
 const hasError = computed(() => !!lastError.value)
 
-async function generateWorkflow() {
-  await sendMessage({
-    type: 'generate',
-    prompt: input.value
-  })
+async function handleSubmit() {
+  if (!input.value.trim() || polling.value) return
+
+  const prompt = input.value
+  input.value = ''
+
+  await generate(prompt)
 }
 
-async function applyChange(change: WorkflowChange) {
-  // エディタにワークフロー変更を適用
-  emit('apply-change', change)
+function applyWorkflow(workflowData: WorkflowDefinition) {
+  emit('apply-workflow', workflowData)
 }
 </script>
-```
-
-### useCopilot.ts
-
-```typescript
-export function useCopilot() {
-  const messages = ref<CopilotMessage[]>([])
-  const loading = ref(false)
-  const { $api } = useNuxtApp()
-
-  async function generate(prompt: string): Promise<GenerateResponse> {
-    loading.value = true
-    try {
-      const response = await $api.post('/copilot/generate', { prompt })
-      messages.value.push({
-        id: nanoid(),
-        role: 'assistant',
-        type: 'workflow',
-        content: response.explanation,
-        data: response.workflow
-      })
-      return response
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function suggest(workflowId: string, lastStepId?: string): Promise<SuggestResponse> {
-    loading.value = true
-    try {
-      const response = await $api.post('/copilot/suggest', {
-        workflow_id: workflowId,
-        last_step_id: lastStepId
-      })
-      return response
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function diagnose(runId: string, stepRunId?: string): Promise<DiagnoseResponse> {
-    loading.value = true
-    try {
-      const response = await $api.post('/copilot/diagnose', {
-        run_id: runId,
-        step_run_id: stepRunId
-      })
-      messages.value.push({
-        id: nanoid(),
-        role: 'assistant',
-        type: 'diagnosis',
-        content: response.diagnosis.root_cause,
-        data: response
-      })
-      return response
-    } finally {
-      loading.value = false
-    }
-  }
-
-  async function optimize(workflowId: string): Promise<OptimizeResponse> {
-    loading.value = true
-    try {
-      const response = await $api.post('/copilot/optimize', {
-        workflow_id: workflowId
-      })
-      messages.value.push({
-        id: nanoid(),
-        role: 'assistant',
-        type: 'optimization',
-        content: response.summary,
-        data: response.optimizations
-      })
-      return response
-    } finally {
-      loading.value = false
-    }
-  }
-
-  return {
-    messages,
-    loading,
-    generate,
-    suggest,
-    diagnose,
-    optimize
-  }
-}
 ```
 
 ---
 
 ## 実装ステップ
 
-### Step 1: プロンプトテンプレート作成（1日）
+### Phase 1: 基盤整備（2日）
 
-**ファイル**: `backend/internal/adapter/copilot_prompts.go`
+| タスク | 工数 |
+|--------|------|
+| TriggerType に `internal` 追加 | 0.5日 |
+| runs テーブル拡張（trigger_source, trigger_metadata） | 0.5日 |
+| workflows テーブル拡張（is_system, system_slug） | 0.5日 |
+| ExecuteSystemWorkflow メソッド実装 | 0.5日 |
 
-- Generate, Suggest, Diagnose, Optimize各プロンプト
-- テンプレート変数の埋め込みロジック
+### Phase 2: システムワークフロー（2.5日）
 
-### Step 2: Usecase実装（2日）
+| タスク | 工数 |
+|--------|------|
+| ctx 拡張（blocks.list, workflows.get, runs.get） | 0.5日 |
+| copilot-generate ワークフロー定義 | 1日 |
+| copilot-diagnose, copilot-optimize, copilot-suggest 定義 | 1日 |
 
-**ファイル**: `backend/internal/usecase/copilot.go`
+### Phase 3: API実装（1日）
 
-```go
-type CopilotUsecase struct {
-    llmAdapter   adapter.LLMAdapter
-    workflowRepo repository.WorkflowRepository
-    runRepo      repository.RunRepository
-    usageRepo    repository.UsageRepository
-}
+| タスク | 工数 |
+|--------|------|
+| CopilotHandler 実装 | 0.5日 |
+| ルーティング設定 | 0.5日 |
 
-func (u *CopilotUsecase) Generate(ctx context.Context, input GenerateInput) (*GenerateOutput, error) {
-    // 1. 利用可能なアダプター一覧を取得
-    // 2. プロンプト構築
-    // 3. LLM呼び出し
-    // 4. JSON解析・検証
-    // 5. ワークフロー構造を返却
-}
+### Phase 4: フロントエンド（2.5日）
 
-func (u *CopilotUsecase) Diagnose(ctx context.Context, input DiagnoseInput) (*DiagnoseOutput, error) {
-    // 1. Run, StepRun情報取得
-    // 2. ワークフロー定義取得
-    // 3. エラー情報収集
-    // 4. プロンプト構築
-    // 5. LLM呼び出し
-    // 6. 診断結果を返却
-}
-```
+| タスク | 工数 |
+|--------|------|
+| useCopilot.ts（ポーリング対応） | 1日 |
+| CopilotPanel, CopilotChat コンポーネント | 1日|
+| ワークフローエディタへの統合 | 0.5日 |
 
-### Step 3: Handler実装（0.5日）
+### Phase 5: テスト・調整（2日）
 
-**ファイル**: `backend/internal/handler/copilot.go`
+| タスク | 工数 |
+|--------|------|
+| 単体テスト | 0.5日 |
+| E2Eテスト | 0.5日 |
+| プロンプト調整 | 1日 |
 
-### Step 4: フロントエンド - 基本UI（2日）
+---
 
-**ファイル**:
-- `frontend/components/copilot/CopilotPanel.vue`
-- `frontend/components/copilot/CopilotChat.vue`
-- `frontend/composables/useCopilot.ts`
+## 工数見積
 
-### Step 5: フロントエンド - 機能統合（2日）
-
-- ワークフローエディタへの統合
-- 提案の適用機能
-- 診断結果からの修正適用
-
-### Step 6: テスト・調整（2日）
-
-- プロンプトの調整
-- エッジケースのハンドリング
-- UXの改善
+| フェーズ | 工数 |
+|---------|------|
+| Phase 1: 基盤整備 | 2日 |
+| Phase 2: システムワークフロー | 2.5日 |
+| Phase 3: API実装 | 1日 |
+| Phase 4: フロントエンド | 2.5日 |
+| Phase 5: テスト・調整 | 2日 |
+| **合計** | **10日** |
 
 ---
 
@@ -599,21 +747,30 @@ func (u *CopilotUsecase) Diagnose(ctx context.Context, input DiagnoseInput) (*Di
 
 | テスト | 内容 |
 |--------|------|
+| ExecuteSystemWorkflow | システムWF実行、TriggerType/Source記録 |
 | プロンプト生成 | テンプレート変数の正しい埋め込み |
 | JSON解析 | LLM出力の解析 |
 | ワークフロー検証 | 生成されたWFの構造検証 |
 
 ### E2Eテスト
 
-1. 自然言語からWF生成 → 有効なWF構造
-2. エラー診断 → 適切な診断結果
-3. 最適化提案 → 実行可能な提案
+1. POST /copilot/generate → run_id取得
+2. GET /copilot/runs/{id} ポーリング → status: completed
+3. output.workflow の構造検証
 
-### プロンプト評価
+### 結果確認
 
-- 生成されたWFの妥当性
-- 診断の正確性
-- 提案の実用性
+```sql
+-- Copilot実行履歴の確認
+SELECT
+    id, status, trigger_type, trigger_source,
+    trigger_metadata->>'feature' as feature,
+    created_at
+FROM runs
+WHERE trigger_type = 'internal'
+  AND trigger_source = 'copilot'
+ORDER BY created_at DESC;
+```
 
 ---
 
@@ -622,30 +779,28 @@ func (u *CopilotUsecase) Diagnose(ctx context.Context, input DiagnoseInput) (*Di
 | リスク | 対策 |
 |--------|------|
 | LLM出力が不正なJSON | リトライ + フォールバック |
-| 生成されたWFが実行不可 | 構造検証 + ユーザー確認 |
+| 生成されたWFが実行不可 | 構造検証ステップ |
 | コストが高い | 軽量モデルのデフォルト使用 |
-| レスポンス遅延 | ストリーミング対応 |
+| ポーリング負荷 | 間隔調整、タイムアウト設定 |
+| システムWFの循環呼び出し | ガードチェック実装 |
 
 ---
 
 ## 将来の拡張
 
-- **ストリーミング応答**: リアルタイムで生成結果を表示
-- **マルチターン会話**: コンテキストを保持した対話
-- **テンプレートライブラリ**: よく使うパターンの保存・共有
-- **学習機能**: ユーザーのフィードバックを反映
+| 機能 | 説明 |
+|------|------|
+| **ストリーミング応答** | SSE/WebSocketでリアルタイム表示 |
+| **マルチターン会話** | コンテキストを保持した対話 |
+| **テンプレートライブラリ** | よく使うパターンの保存・共有 |
+| **学習機能** | ユーザーのフィードバックを反映 |
+| **外部公開** | システムWFにWebhook作成で外部API化 |
 
 ---
 
-## 工数見積
+## Related Documents
 
-| タスク | 工数 |
-|--------|------|
-| プロンプトテンプレート | 1日 |
-| Usecase実装 | 2日 |
-| Handler実装 | 0.5日 |
-| フロントエンド基本UI | 2日 |
-| フロントエンド統合 | 2日 |
-| テスト・調整 | 2日 |
-| ドキュメント | 0.5日 |
-| **合計** | **10日** |
+- [BACKEND.md](../BACKEND.md) - Backend architecture
+- [API.md](../API.md) - API documentation
+- [DATABASE.md](../DATABASE.md) - Database schema
+- [UNIFIED_BLOCK_MODEL.md](../designs/UNIFIED_BLOCK_MODEL.md) - Block execution architecture

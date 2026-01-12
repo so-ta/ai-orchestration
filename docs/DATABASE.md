@@ -1,12 +1,17 @@
 # Database Reference
 
-## Connection
+PostgreSQL schema, migrations, and query patterns.
 
-```
-Driver: PostgreSQL 16
-URL: postgres://user:pass@localhost:5432/ai_orchestration?sslmode=disable
-Pool: pgx connection pool
-```
+## Quick Reference
+
+| Item | Value |
+|------|-------|
+| Driver | PostgreSQL 16 |
+| Connection URL | `postgres://user:pass@localhost:5432/ai_orchestration?sslmode=disable` |
+| Pool | pgx connection pool |
+| Migrations | `backend/migrations/` |
+| Default Tenant | `00000000-0000-0000-0000-000000000001` |
+| Soft Delete | `deleted_at` column |
 
 ## Schema Overview
 
@@ -613,3 +618,10 @@ pg_dump -h localhost -U postgres ai_orchestration > backup.sql
 # Restore
 psql -h localhost -U postgres ai_orchestration < backup.sql
 ```
+
+## Related Documents
+
+- [BACKEND.md](./BACKEND.md) - Repository interfaces and data access patterns
+- [API.md](./API.md) - API endpoints that interact with database
+- [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - Block definitions schema
+- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definition tables
