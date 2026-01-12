@@ -1,5 +1,15 @@
 # Phase 9: Cost Tracking 実装計画
 
+> **Status: ✅ 実装済み**
+>
+> このフェーズは `usage_records`, `usage_budgets`, `usage_daily_aggregates` テーブルとして実装済みです。
+> 実装の詳細は以下を参照:
+> - `backend/internal/domain/usage.go`
+> - `backend/internal/handler/usage.go`
+> - `backend/internal/usecase/usage.go`
+> - `backend/internal/repository/postgres/usage.go`
+> - APIエンドポイント: `/api/v1/usage/*`
+
 ## 概要
 
 **目的**: LLM API使用量とコストを追跡・可視化し、コスト管理と予算制御を可能にする。
