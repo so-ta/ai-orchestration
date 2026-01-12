@@ -1,7 +1,8 @@
 # Unified Block Model - 統一ブロックモデル設計
 
-> **Status**: Draft
+> **Status**: ✅ Implemented
 > **Created**: 2025-01-12
+> **Updated**: 2025-01-12
 > **Author**: AI Agent
 
 ---
@@ -601,39 +602,44 @@ Response:
 
 ---
 
-## 移行計画
+## 実装状況
 
-### Phase 1: データベース準備
+### Phase 1: データベース準備 ✅
 
-1. `blocks` テーブル作成
-2. `block_versions` テーブル作成
-3. 既存の Step Types をシステムブロックとして投入
+- `block_definitions` テーブル拡張（code, ui_config, is_system, version カラム追加）
+- `block_versions` テーブル作成（バージョン履歴管理）
+- マイグレーション: `011_unified_block_model.sql`
 
-### Phase 2: バックエンド実装
+### Phase 2: バックエンド実装 ✅
 
-1. Block CRUD API 実装
-2. Sandbox 実装（call() プロトコルルーティング）
-3. コード実行エンジン統合
-4. テスト実行 API 実装
+- Domain: `domain/block.go` - BlockVersion エンティティ追加
+- Repository: `repository/postgres/block_version.go` - バージョン履歴CRUD
+- Usecase: `usecase/block.go` - システムブロック管理ロジック
+- Handler: `handler/block.go` - 管理者API追加
 
-### Phase 3: フロントエンド実装
+### Phase 3: Sandbox実装 ✅
 
-1. ブロック管理画面（一覧・編集）
-2. コードエディタ統合（Monaco Editor）
-3. スキーマエディタ
-4. テスト実行UI
+- `block/sandbox/sandbox.go` - ctx サービスインターフェース拡張
+  - LLMService: LLM API呼び出し
+  - WorkflowService: サブワークフロー実行
+  - HumanService: 人間介入リクエスト
+  - AdapterService: アダプタ呼び出し
 
-### Phase 4: ワークフローエディタ統合
+### Phase 4: フロントエンド実装 ✅
 
-1. ブロックパレットをAPIから動的取得
-2. ブロック設定UIを configSchema から動的生成
-3. 既存ワークフローの移行
+- 管理画面: `pages/admin/system-blocks.vue`
+- Composable: `composables/useBlocks.ts` - useAdminBlocks()
+- 型定義: `types/api.ts` - BlockDefinition拡張
 
-### Phase 5: 移行完了
+### Phase 5: ワークフローエディタ統合 ✅
 
-1. 旧 Step Type 実行ロジック削除
-2. ドキュメント更新
-3. 移行ガイド作成
+- 既存の `engine/executor.go` が sandbox を使用
+- function ステップタイプで統合済み
+
+### Phase 6: ドキュメント更新 ✅
+
+- 本ドキュメント更新
+- API.md に管理者API追加
 
 ---
 

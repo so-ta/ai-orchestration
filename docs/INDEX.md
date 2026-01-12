@@ -33,7 +33,7 @@
 
 | Design | Description | Status | Document |
 |--------|-------------|--------|----------|
-| Unified Block Model | ブロック実行の統一モデル | 🚧 設計中 | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) |
+| Unified Block Model | ブロック実行の統一モデル | ✅ 実装済み | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) |
 
 ## Feature Implementation Plans
 

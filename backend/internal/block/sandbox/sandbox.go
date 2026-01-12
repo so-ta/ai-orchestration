@@ -35,9 +35,39 @@ func DefaultConfig() Config {
 	}
 }
 
+// LLMService provides LLM API access to scripts
+type LLMService interface {
+	// Chat performs a chat completion request
+	// Returns { content: string, usage: { input_tokens: int, output_tokens: int } }
+	Chat(provider, model string, request map[string]interface{}) (map[string]interface{}, error)
+}
+
+// WorkflowService provides subflow execution capability
+type WorkflowService interface {
+	// Run executes a subflow and returns its output
+	Run(workflowID string, input map[string]interface{}) (map[string]interface{}, error)
+}
+
+// HumanService provides human-in-the-loop functionality
+type HumanService interface {
+	// RequestApproval requests human approval and waits for response
+	RequestApproval(request map[string]interface{}) (map[string]interface{}, error)
+}
+
+// AdapterService provides adapter execution capability
+type AdapterService interface {
+	// Call executes an adapter and returns its output
+	Call(adapterID string, input map[string]interface{}) (map[string]interface{}, error)
+}
+
 // ExecutionContext provides runtime context to scripts
 type ExecutionContext struct {
 	HTTP *HTTPClient
+	// Unified Block Model services
+	LLM      LLMService
+	Workflow WorkflowService
+	Human    HumanService
+	Adapter  AdapterService
 	// Credentials is a map of credential name to credential data
 	// Accessible in scripts as context.credentials.name.field
 	// e.g., context.credentials.api_key.access_token
@@ -186,6 +216,58 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		}
 
 		if err := contextObj.Set("http", httpObj); err != nil {
+			return err
+		}
+	}
+
+	// Add LLM service if available
+	if execCtx != nil && execCtx.LLM != nil {
+		llmObj := vm.NewObject()
+		if err := llmObj.Set("chat", func(call goja.FunctionCall) goja.Value {
+			return s.llmChat(vm, execCtx.LLM, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("llm", llmObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Workflow service if available
+	if execCtx != nil && execCtx.Workflow != nil {
+		workflowObj := vm.NewObject()
+		if err := workflowObj.Set("run", func(call goja.FunctionCall) goja.Value {
+			return s.workflowRun(vm, execCtx.Workflow, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("workflow", workflowObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Human service if available
+	if execCtx != nil && execCtx.Human != nil {
+		humanObj := vm.NewObject()
+		if err := humanObj.Set("requestApproval", func(call goja.FunctionCall) goja.Value {
+			return s.humanRequestApproval(vm, execCtx.Human, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("human", humanObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Adapter service if available
+	if execCtx != nil && execCtx.Adapter != nil {
+		adapterObj := vm.NewObject()
+		if err := adapterObj.Set("call", func(call goja.FunctionCall) goja.Value {
+			return s.adapterCall(vm, execCtx.Adapter, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("adapter", adapterObj); err != nil {
 			return err
 		}
 	}
@@ -421,4 +503,95 @@ func headersToMap(h http.Header) map[string]string {
 		}
 	}
 	return result
+}
+
+// ============================================================================
+// Unified Block Model Service Methods
+// ============================================================================
+
+// llmChat handles ctx.llm.chat(provider, model, request) calls
+func (s *Sandbox) llmChat(vm *goja.Runtime, service LLMService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 3 {
+		panic(vm.ToValue("ctx.llm.chat requires provider, model, and request arguments"))
+	}
+
+	provider := call.Arguments[0].String()
+	model := call.Arguments[1].String()
+
+	requestArg := call.Arguments[2].Export()
+	request, ok := requestArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.llm.chat request must be an object"))
+	}
+
+	result, err := service.Chat(provider, model, request)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("LLM chat failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// workflowRun handles ctx.workflow.run(workflowID, input) calls
+func (s *Sandbox) workflowRun(vm *goja.Runtime, service WorkflowService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.workflow.run requires workflowID and input arguments"))
+	}
+
+	workflowID := call.Arguments[0].String()
+
+	inputArg := call.Arguments[1].Export()
+	input, ok := inputArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.workflow.run input must be an object"))
+	}
+
+	result, err := service.Run(workflowID, input)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Workflow run failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// humanRequestApproval handles ctx.human.requestApproval(request) calls
+func (s *Sandbox) humanRequestApproval(vm *goja.Runtime, service HumanService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.human.requestApproval requires a request argument"))
+	}
+
+	requestArg := call.Arguments[0].Export()
+	request, ok := requestArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.human.requestApproval request must be an object"))
+	}
+
+	result, err := service.RequestApproval(request)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Human approval request failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// adapterCall handles ctx.adapter.call(adapterID, input) calls
+func (s *Sandbox) adapterCall(vm *goja.Runtime, service AdapterService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.adapter.call requires adapterID and input arguments"))
+	}
+
+	adapterID := call.Arguments[0].String()
+
+	inputArg := call.Arguments[1].Export()
+	input, ok := inputArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.adapter.call input must be an object"))
+	}
+
+	result, err := service.Call(adapterID, input)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Adapter call failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
 }

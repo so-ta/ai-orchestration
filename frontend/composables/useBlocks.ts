@@ -126,3 +126,86 @@ export const defaultBlockColor = '#6b7280'
 export function getBlockColor(slug: string): string {
   return blockColors[slug] || defaultBlockColor
 }
+
+// ============================================================================
+// Admin API for System Block Management
+// ============================================================================
+
+// Block Version type
+export interface BlockVersion {
+  id: string
+  block_id: string
+  version: number
+  code: string
+  config_schema: object
+  input_schema?: object
+  output_schema?: object
+  ui_config: object
+  change_summary?: string
+  changed_by?: string
+  created_at: string
+}
+
+// System block list response
+interface SystemBlockListResponse {
+  blocks: BlockDefinition[]
+}
+
+// Block versions list response
+interface BlockVersionsResponse {
+  versions: BlockVersion[]
+}
+
+export function useAdminBlocks() {
+  const api = useApi()
+
+  // List all system blocks
+  async function listSystemBlocks(): Promise<SystemBlockListResponse> {
+    const response = await api.get<{ data: SystemBlockListResponse }>('/admin/blocks')
+    return response.data
+  }
+
+  // Get a specific system block by ID
+  async function getSystemBlock(id: string) {
+    return api.get<{ data: BlockDefinition }>(`/admin/blocks/${id}`)
+  }
+
+  // Update a system block (code, schema, etc.)
+  async function updateSystemBlock(id: string, data: {
+    name?: string
+    description?: string
+    code?: string
+    config_schema?: object
+    input_schema?: object
+    output_schema?: object
+    ui_config?: object
+    change_summary?: string
+  }) {
+    return api.put<{ data: BlockDefinition }>(`/admin/blocks/${id}`, data)
+  }
+
+  // List versions of a block
+  async function listVersions(blockId: string): Promise<BlockVersionsResponse> {
+    const response = await api.get<{ data: BlockVersionsResponse }>(`/admin/blocks/${blockId}/versions`)
+    return response.data
+  }
+
+  // Get a specific version
+  async function getVersion(blockId: string, version: number) {
+    return api.get<{ data: BlockVersion }>(`/admin/blocks/${blockId}/versions/${version}`)
+  }
+
+  // Rollback to a previous version
+  async function rollback(blockId: string, version: number) {
+    return api.post<{ data: BlockDefinition }>(`/admin/blocks/${blockId}/rollback`, { version })
+  }
+
+  return {
+    listSystemBlocks,
+    getSystemBlock,
+    updateSystemBlock,
+    listVersions,
+    getVersion,
+    rollback,
+  }
+}

@@ -46,9 +46,10 @@ func (c BlockCategory) IsValid() bool {
 type ExecutorType string
 
 const (
-	ExecutorTypeBuiltin  ExecutorType = "builtin"  // Go code implementation
-	ExecutorTypeHTTP     ExecutorType = "http"     // HTTP request
-	ExecutorTypeFunction ExecutorType = "function" // JavaScript function
+	ExecutorTypeBuiltin  ExecutorType = "builtin"  // Go code implementation (legacy)
+	ExecutorTypeHTTP     ExecutorType = "http"     // HTTP request (legacy)
+	ExecutorTypeFunction ExecutorType = "function" // JavaScript function (legacy)
+	ExecutorTypeCode     ExecutorType = "code"     // Unified code-based execution
 )
 
 // ValidExecutorTypes returns all valid executor types
@@ -57,6 +58,7 @@ func ValidExecutorTypes() []ExecutorType {
 		ExecutorTypeBuiltin,
 		ExecutorTypeHTTP,
 		ExecutorTypeFunction,
+		ExecutorTypeCode,
 	}
 }
 
@@ -105,6 +107,13 @@ type TypeSchema struct {
 	Enum       []interface{}          `json:"enum,omitempty"`       // Allowed values
 }
 
+// UIConfig represents UI metadata for block visualization
+type UIConfig struct {
+	Icon         string `json:"icon,omitempty"`          // Icon name (e.g., "brain", "play")
+	Color        string `json:"color,omitempty"`         // Hex color (e.g., "#8B5CF6")
+	ConfigSchema any    `json:"configSchema,omitempty"`  // Schema for block config in workflow editor
+}
+
 // BlockDefinition represents a block type definition
 type BlockDefinition struct {
 	ID          uuid.UUID       `json:"id"`
@@ -137,6 +146,16 @@ type BlockDefinition struct {
 	// Custom code execution (for code-based blocks)
 	// Hidden for system blocks when accessed by tenant users
 	CustomCode string `json:"custom_code,omitempty"`
+
+	// === Unified Block Model fields ===
+	// Code: JavaScript code executed in sandbox (all blocks are code-based)
+	Code string `json:"code,omitempty"`
+	// UIConfig: UI metadata for workflow editor (icon, color, configSchema)
+	UIConfig json.RawMessage `json:"ui_config,omitempty"`
+	// IsSystem: System blocks can only be edited by admins
+	IsSystem bool `json:"is_system"`
+	// Version: Version number, incremented on each update
+	Version int `json:"version"`
 
 	// Required credentials declaration
 	// Format: [{"name": "api_key", "type": "api_key", "scope": "system|tenant", "description": "...", "required": true}]
@@ -339,3 +358,47 @@ func IsBuiltinTemplate(slug string) bool {
 	}
 	return false
 }
+
+// ============================================================================
+// BlockVersion - Version history for block definitions
+// ============================================================================
+
+// BlockVersion represents a snapshot of a block definition at a specific version
+type BlockVersion struct {
+	ID           uuid.UUID       `json:"id"`
+	BlockID      uuid.UUID       `json:"block_id"`
+	Version      int             `json:"version"`
+
+	// Snapshot of block at this version
+	Code         string          `json:"code"`
+	ConfigSchema json.RawMessage `json:"config_schema"`
+	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
+	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
+	UIConfig     json.RawMessage `json:"ui_config"`
+
+	// Change tracking
+	ChangeSummary string     `json:"change_summary,omitempty"`
+	ChangedBy     *uuid.UUID `json:"changed_by,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NewBlockVersion creates a new block version from a block definition
+func NewBlockVersion(block *BlockDefinition, changeSummary string, changedBy *uuid.UUID) *BlockVersion {
+	return &BlockVersion{
+		ID:            uuid.New(),
+		BlockID:       block.ID,
+		Version:       block.Version,
+		Code:          block.Code,
+		ConfigSchema:  block.ConfigSchema,
+		InputSchema:   block.InputSchema,
+		OutputSchema:  block.OutputSchema,
+		UIConfig:      block.UIConfig,
+		ChangeSummary: changeSummary,
+		ChangedBy:     changedBy,
+		CreatedAt:     time.Now().UTC(),
+	}
+}
+
+// ErrBlockVersionNotFound is returned when a block version is not found
+var ErrBlockVersionNotFound = fmt.Errorf("block version not found")

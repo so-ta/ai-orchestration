@@ -1024,6 +1024,117 @@ Response `200`:
 
 ---
 
+## Admin - System Blocks
+
+管理者専用APIエンドポイント。システムブロックの編集・バージョン管理を行う。
+
+### List System Blocks
+```
+GET /admin/blocks
+```
+
+Response `200`:
+```json
+{
+  "blocks": [
+    {
+      "id": "uuid",
+      "slug": "llm",
+      "name": "LLM Call",
+      "description": "LLM APIを呼び出す",
+      "category": "ai",
+      "code": "const response = await ctx.llm.chat(...)",
+      "config_schema": {},
+      "input_schema": {},
+      "output_schema": {},
+      "ui_config": {"icon": "brain", "color": "#8B5CF6"},
+      "is_system": true,
+      "version": 3,
+      "enabled": true,
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601"
+    }
+  ]
+}
+```
+
+### Get System Block
+```
+GET /admin/blocks/{id}
+```
+
+Response `200`: System block details
+
+### Update System Block
+```
+PUT /admin/blocks/{id}
+```
+
+Request:
+```json
+{
+  "name": "LLM Call",
+  "description": "LLM APIを呼び出す",
+  "code": "const response = await ctx.llm.chat(...)",
+  "config_schema": {},
+  "input_schema": {},
+  "output_schema": {},
+  "ui_config": {"icon": "brain", "color": "#8B5CF6"},
+  "change_summary": "プロンプト処理ロジックを改善"
+}
+```
+
+Response `200`: Updated block (version incremented)
+
+### List Block Versions
+```
+GET /admin/blocks/{id}/versions
+```
+
+Response `200`:
+```json
+{
+  "versions": [
+    {
+      "id": "uuid",
+      "block_id": "uuid",
+      "version": 2,
+      "code": "...",
+      "config_schema": {},
+      "input_schema": {},
+      "output_schema": {},
+      "ui_config": {},
+      "change_summary": "バグ修正",
+      "changed_by": "uuid",
+      "created_at": "ISO8601"
+    }
+  ]
+}
+```
+
+### Get Block Version
+```
+GET /admin/blocks/{id}/versions/{version}
+```
+
+Response `200`: Specific version details
+
+### Rollback Block
+```
+POST /admin/blocks/{id}/rollback
+```
+
+Request:
+```json
+{
+  "version": 2
+}
+```
+
+Response `200`: Block restored to specified version (new version created)
+
+---
+
 ## Health
 
 ### Liveness
