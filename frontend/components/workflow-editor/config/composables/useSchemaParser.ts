@@ -196,6 +196,10 @@ export function evaluateConditionalVisibility(
 
 /**
  * useSchemaParser composable
+ *
+ * Performance optimization:
+ * - Only evaluates conditional visibility when there are conditional rules
+ * - Memoizes parsed schema separately from visibility evaluation
  */
 export function useSchemaParser(
   schema: Ref<ConfigSchema | null | undefined>,
@@ -204,9 +208,21 @@ export function useSchemaParser(
 ) {
   const parsedSchema = computed(() => parseSchema(schema.value, uiConfig.value));
 
-  const visibleFields = computed(() =>
-    evaluateConditionalVisibility(parsedSchema.value, values.value)
+  // Check if schema has conditional rules (for performance optimization)
+  const hasConditionalRules = computed(() =>
+    (parsedSchema.value.conditionalRules?.length ?? 0) > 0
   );
+
+  // Only re-evaluate conditional visibility when:
+  // 1. Schema changes (parsedSchema.value)
+  // 2. Values change AND there are conditional rules
+  const visibleFields = computed(() => {
+    // If no conditional rules, return fields directly without expensive evaluation
+    if (!hasConditionalRules.value) {
+      return parsedSchema.value.fields;
+    }
+    return evaluateConditionalVisibility(parsedSchema.value, values.value);
+  });
 
   const groups = computed(() => parsedSchema.value.groups);
 
@@ -235,5 +251,6 @@ export function useSchemaParser(
     visibleFields,
     groups,
     fieldsByGroup,
+    hasConditionalRules,
   };
 }

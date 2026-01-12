@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { ParsedField } from './types/config-schema';
+import { computed } from 'vue';
+import type { ParsedField, WidgetValue } from './types/config-schema';
 import TextWidget from './widgets/TextWidget.vue';
 import TextareaWidget from './widgets/TextareaWidget.vue';
 import NumberWidget from './widgets/NumberWidget.vue';
@@ -45,6 +46,15 @@ const widgetComponent = computed(() => {
   }
 });
 
+// Normalize value to WidgetValue type for type-safe passing
+// Convert null to undefined since widgets don't expect null
+const normalizedValue = computed((): WidgetValue => {
+  if (props.modelValue === null) {
+    return undefined;
+  }
+  return props.modelValue as WidgetValue;
+});
+
 function handleUpdate(value: unknown) {
   emit('update:modelValue', value);
 }
@@ -59,7 +69,7 @@ function handleBlur() {
     :is="widgetComponent"
     :name="field.name"
     :property="field.property"
-    :model-value="(modelValue as any)"
+    :model-value="normalizedValue"
     :override="field.override"
     :error="error"
     :disabled="disabled"

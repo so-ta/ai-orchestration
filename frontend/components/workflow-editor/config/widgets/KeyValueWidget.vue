@@ -4,14 +4,14 @@ import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema';
 const props = defineProps<{
   name: string;
   property: JSONSchemaProperty;
-  modelValue: Record<string, string> | undefined;
+  modelValue: Record<string, unknown> | undefined;
   override?: FieldOverride;
   error?: string;
   disabled?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: Record<string, string>): void;
+  (e: 'update:modelValue', value: Record<string, unknown>): void;
   (e: 'blur'): void;
 }>();
 
@@ -22,7 +22,7 @@ interface KeyValuePair {
 
 const pairs = computed<KeyValuePair[]>(() => {
   const obj = props.modelValue || {};
-  return Object.entries(obj).map(([key, value]) => ({ key, value }));
+  return Object.entries(obj).map(([key, value]) => ({ key, value: String(value ?? '') }));
 });
 
 function addPair() {
@@ -54,7 +54,7 @@ function updatePairKey(oldKey: string, newKey: string) {
     return; // Prevent duplicate keys
   }
 
-  const newObj: Record<string, string> = {};
+  const newObj: Record<string, unknown> = {};
 
   // Preserve order while renaming key
   for (const [key, value] of Object.entries(currentObj)) {

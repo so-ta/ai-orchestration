@@ -6,8 +6,8 @@
  * オプショナルなui_configでウィジェットの上書きやグループ化が可能。
  */
 
-import { computed, watch, toRef } from 'vue';
-import type { ConfigSchema, UIConfig } from './types/config-schema';
+import { computed, watch, toRef, onMounted } from 'vue';
+import type { ConfigSchema, UIConfig, JSONSchemaProperty } from './types/config-schema';
 import { useSchemaParser } from './composables/useSchemaParser';
 import { useValidation } from './composables/useValidation';
 import ConfigFieldRenderer from './ConfigFieldRenderer.vue';
@@ -18,9 +18,11 @@ const props = withDefaults(
     uiConfig?: UIConfig;
     modelValue: Record<string, unknown>;
     disabled?: boolean;
+    applyDefaults?: boolean; // Whether to auto-apply default values
   }>(),
   {
     disabled: false,
+    applyDefaults: true,
   }
 );
 
@@ -56,6 +58,77 @@ watch(isValid, (valid) => {
   emit('validation-change', valid);
 });
 
+/**
+ * Get default value from schema property
+ */
+function getDefaultValue(prop: JSONSchemaProperty): unknown {
+  if (prop.default !== undefined) {
+    return prop.default;
+  }
+
+  // Type-based defaults
+  switch (prop.type) {
+    case 'string':
+      return '';
+    case 'number':
+    case 'integer':
+      return undefined; // Don't set default for numbers (optional)
+    case 'boolean':
+      return false;
+    case 'array':
+      return [];
+    case 'object':
+      if (prop.properties) {
+        const obj: Record<string, unknown> = {};
+        for (const [key, subProp] of Object.entries(prop.properties)) {
+          const value = getDefaultValue(subProp);
+          if (value !== undefined) {
+            obj[key] = value;
+          }
+        }
+        return Object.keys(obj).length > 0 ? obj : undefined;
+      }
+      return {};
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Initialize values with defaults from schema
+ */
+function initializeDefaults() {
+  if (!props.schema?.properties || !props.applyDefaults) return;
+
+  const currentValues = props.modelValue;
+  const updates: Record<string, unknown> = {};
+  let hasUpdates = false;
+
+  for (const [name, prop] of Object.entries(props.schema.properties)) {
+    // Only set default if current value is undefined
+    if (currentValues[name] === undefined) {
+      const defaultValue = getDefaultValue(prop);
+      if (defaultValue !== undefined) {
+        updates[name] = defaultValue;
+        hasUpdates = true;
+      }
+    }
+  }
+
+  if (hasUpdates) {
+    emit('update:modelValue', { ...currentValues, ...updates });
+  }
+}
+
+// Initialize defaults on mount and when schema changes
+onMounted(() => {
+  initializeDefaults();
+});
+
+watch(schemaRef, () => {
+  initializeDefaults();
+}, { immediate: false });
+
 // Update field value
 function updateFieldValue(fieldName: string, value: unknown) {
   const newValues = { ...props.modelValue, [fieldName]: value };
@@ -73,11 +146,12 @@ const hasGroups = computed(() => groups.value.length > 0);
 // Get ungrouped fields
 const ungroupedFields = computed(() => fieldsByGroup.value._ungrouped || []);
 
-// Expose validation methods
+// Expose validation and initialization methods
 defineExpose({
   validate,
   touchAll,
   isValid,
+  initializeDefaults,
 });
 </script>
 

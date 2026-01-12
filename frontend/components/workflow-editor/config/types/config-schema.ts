@@ -141,6 +141,22 @@ export interface ParsedSchema {
 }
 
 // =============================================================================
+// Widget Value Types
+// =============================================================================
+
+/**
+ * ウィジェットに渡される値の型（型安全なキャスト用）
+ * Note: null is converted to undefined at ConfigFieldRenderer level
+ */
+export type WidgetValue =
+  | string
+  | number
+  | boolean
+  | unknown[]
+  | Record<string, unknown>
+  | undefined;
+
+// =============================================================================
 // Validation
 // =============================================================================
 

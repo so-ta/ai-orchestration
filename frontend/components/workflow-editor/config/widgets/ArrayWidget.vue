@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema';
+import { computed, defineAsyncComponent } from 'vue';
+import type { JSONSchemaProperty, FieldOverride, ParsedField } from '../types/config-schema';
+import { inferWidgetType } from '../composables/useSchemaParser';
+
+// Lazy load ConfigFieldRenderer to avoid circular dependency
+const ConfigFieldRenderer = defineAsyncComponent(
+  () => import('../ConfigFieldRenderer.vue')
+);
 
 const props = defineProps<{
   name: string;
@@ -50,6 +57,13 @@ function updateItem(index: number, value: unknown) {
   emit('update:modelValue', newItems);
 }
 
+// Update a specific field within an object item
+function updateObjectField(itemIndex: number, fieldName: string, value: unknown) {
+  const currentItem = items.value[itemIndex] as Record<string, unknown>;
+  const newItem = { ...currentItem, [fieldName]: value };
+  updateItem(itemIndex, newItem);
+}
+
 function getDefaultValue(schema?: JSONSchemaProperty): unknown {
   if (!schema) return '';
 
@@ -92,9 +106,39 @@ function isObjectItem(schema?: JSONSchemaProperty): boolean {
   return schema?.type === 'object' && !!schema.properties;
 }
 
-function getObjectFields(schema?: JSONSchemaProperty): [string, JSONSchemaProperty][] {
+function isSimpleItem(schema?: JSONSchemaProperty): boolean {
+  return schema?.type === 'string' || schema?.type === 'number' || schema?.type === 'integer';
+}
+
+// Convert JSON Schema property to ParsedField for ConfigFieldRenderer
+function getObjectFields(schema?: JSONSchemaProperty): ParsedField[] {
   if (!schema?.properties) return [];
-  return Object.entries(schema.properties);
+
+  const requiredFields = new Set(schema.required || []);
+
+  return Object.entries(schema.properties).map(([name, prop], index) => ({
+    name,
+    property: prop,
+    required: requiredFields.has(name),
+    widget: inferWidgetType(prop),
+    order: index,
+    visible: true,
+  }));
+}
+
+// Create ParsedField for simple item types
+function getSimpleItemField(): ParsedField | null {
+  const schema = itemSchema.value;
+  if (!schema) return null;
+
+  return {
+    name: 'value',
+    property: schema,
+    required: false,
+    widget: inferWidgetType(schema),
+    order: 0,
+    visible: true,
+  };
 }
 </script>
 
@@ -130,55 +174,45 @@ function getObjectFields(schema?: JSONSchemaProperty): [string, JSONSchemaProper
         class="item-row"
       >
         <div class="item-content">
-          <!-- Object item with nested fields -->
+          <!-- Object item with nested fields using ConfigFieldRenderer -->
           <template v-if="isObjectItem(itemSchema)">
             <div class="item-header">
               <span class="item-label">{{ getItemLabel(item, index) }}</span>
             </div>
             <div class="item-fields">
               <div
-                v-for="[fieldName, fieldSchema] in getObjectFields(itemSchema)"
-                :key="fieldName"
+                v-for="field in getObjectFields(itemSchema)"
+                :key="field.name"
                 class="item-field"
               >
-                <label class="item-field-label">{{ fieldSchema.title || fieldName }}</label>
-                <input
-                  v-if="fieldSchema.type === 'string'"
-                  type="text"
-                  :value="(item as Record<string, unknown>)[fieldName] ?? ''"
+                <ConfigFieldRenderer
+                  :field="field"
+                  :model-value="(item as Record<string, unknown>)[field.name]"
                   :disabled="disabled"
-                  class="item-input"
-                  @input="(e) => updateItem(index, { ...(item as Record<string, unknown>), [fieldName]: (e.target as HTMLInputElement).value })"
-                />
-                <input
-                  v-else-if="fieldSchema.type === 'boolean'"
-                  type="checkbox"
-                  :checked="(item as Record<string, unknown>)[fieldName] as boolean ?? false"
-                  :disabled="disabled"
-                  class="item-checkbox"
-                  @change="(e) => updateItem(index, { ...(item as Record<string, unknown>), [fieldName]: (e.target as HTMLInputElement).checked })"
+                  @update:model-value="(v: unknown) => updateObjectField(index, field.name, v)"
                 />
               </div>
             </div>
           </template>
 
-          <!-- Simple item (string, number, etc.) -->
+          <!-- Simple item using ConfigFieldRenderer -->
+          <template v-else-if="isSimpleItem(itemSchema) && getSimpleItemField()">
+            <ConfigFieldRenderer
+              :field="getSimpleItemField()!"
+              :model-value="item"
+              :disabled="disabled"
+              @update:model-value="(v: unknown) => updateItem(index, v)"
+            />
+          </template>
+
+          <!-- Fallback for unknown types -->
           <template v-else>
             <input
-              v-if="itemSchema?.type === 'string'"
               type="text"
-              :value="item as string"
+              :value="String(item ?? '')"
               :disabled="disabled"
               class="item-input full-width"
               @input="(e) => updateItem(index, (e.target as HTMLInputElement).value)"
-            />
-            <input
-              v-else-if="itemSchema?.type === 'number' || itemSchema?.type === 'integer'"
-              type="number"
-              :value="item as number"
-              :disabled="disabled"
-              class="item-input full-width"
-              @input="(e) => updateItem(index, parseFloat((e.target as HTMLInputElement).value))"
             />
           </template>
         </div>
