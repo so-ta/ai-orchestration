@@ -40,7 +40,10 @@ func (r *RunRepository) Create(ctx context.Context, run *domain.Run) error {
 		run.Input, run.TriggeredBy, run.TriggeredByUser, run.CreatedAt,
 		run.TriggerSource, run.TriggerMetadata,
 	).Scan(&run.RunNumber)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to create run: %w", err)
+	}
+	return nil
 }
 
 // GetByID retrieves a run by ID
@@ -110,7 +113,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 			&run.StartedAt, &run.CompletedAt, &run.CreatedAt,
 			&run.TriggerSource, &run.TriggerMetadata,
 		); err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("failed to scan run: %w", err)
 		}
 		runs = append(runs, &run)
 	}
@@ -130,7 +133,7 @@ func (r *RunRepository) Update(ctx context.Context, run *domain.Run) error {
 		run.ID, run.TenantID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update run: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return domain.ErrRunNotFound

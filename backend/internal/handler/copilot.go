@@ -49,9 +49,11 @@ func (h *CopilotHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	var stepID *uuid.UUID
 	if req.StepID != nil {
 		id, err := uuid.Parse(*req.StepID)
-		if err == nil {
-			stepID = &id
+		if err != nil {
+			Error(w, http.StatusBadRequest, "INVALID_STEP_ID", "Invalid step ID", nil)
+			return
 		}
+		stepID = &id
 	}
 
 	input := usecase.SuggestInput{
@@ -96,9 +98,11 @@ func (h *CopilotHandler) Diagnose(w http.ResponseWriter, r *http.Request) {
 	var stepRunID *uuid.UUID
 	if req.StepRunID != nil {
 		id, err := uuid.Parse(*req.StepRunID)
-		if err == nil {
-			stepRunID = &id
+		if err != nil {
+			Error(w, http.StatusBadRequest, "INVALID_STEP_RUN_ID", "Invalid step run ID", nil)
+			return
 		}
+		stepRunID = &id
 	}
 
 	input := usecase.DiagnoseInput{
@@ -142,9 +146,11 @@ func (h *CopilotHandler) Explain(w http.ResponseWriter, r *http.Request) {
 	var stepID *uuid.UUID
 	if req.StepID != nil {
 		id, err := uuid.Parse(*req.StepID)
-		if err == nil {
-			stepID = &id
+		if err != nil {
+			Error(w, http.StatusBadRequest, "INVALID_STEP_ID", "Invalid step ID", nil)
+			return
 		}
+		stepID = &id
 	}
 
 	input := usecase.ExplainInput{
@@ -224,9 +230,11 @@ func (h *CopilotHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	var workflowID *uuid.UUID
 	if req.WorkflowID != nil {
 		id, err := uuid.Parse(*req.WorkflowID)
-		if err == nil {
-			workflowID = &id
+		if err != nil {
+			Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+			return
 		}
+		workflowID = &id
 	}
 
 	input := usecase.ChatInput{
@@ -451,9 +459,11 @@ func (h *CopilotHandler) ChatWithSession(w http.ResponseWriter, r *http.Request)
 	var sessionID *uuid.UUID
 	if req.SessionID != nil {
 		id, err := uuid.Parse(*req.SessionID)
-		if err == nil {
-			sessionID = &id
+		if err != nil {
+			Error(w, http.StatusBadRequest, "INVALID_SESSION_ID", "Invalid session ID", nil)
+			return
 		}
+		sessionID = &id
 	}
 
 	input := usecase.ChatWithSessionInput{
