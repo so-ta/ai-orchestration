@@ -946,10 +946,51 @@ function getEdgeLabel(sourcePort?: string, condition?: string): string | undefin
   return portLabels[sourcePort] || sourcePort
 }
 
+// Get edge data flow status based on step runs
+function getEdgeFlowStatus(sourceStepId: string, targetStepId: string): { animated: boolean; status: 'idle' | 'flowing' | 'completed' | 'error' } {
+  if (!props.stepRuns || props.stepRuns.length === 0) {
+    return { animated: false, status: 'idle' }
+  }
+
+  const sourceRun = stepRunMap.value.get(sourceStepId)
+  const targetRun = stepRunMap.value.get(targetStepId)
+
+  // If source completed and target is running, data is flowing
+  if (sourceRun?.status === 'completed' && targetRun?.status === 'running') {
+    return { animated: true, status: 'flowing' }
+  }
+
+  // If both completed, data has flowed
+  if (sourceRun?.status === 'completed' && targetRun?.status === 'completed') {
+    return { animated: false, status: 'completed' }
+  }
+
+  // If target failed, mark as error
+  if (targetRun?.status === 'failed') {
+    return { animated: false, status: 'error' }
+  }
+
+  return { animated: false, status: 'idle' }
+}
+
 // Convert edges to Vue Flow edges
 const flowEdges = computed<FlowEdge[]>(() => {
   return props.edges.map(edge => {
-    const color = getEdgeColor(edge.source_port)
+    const baseColor = getEdgeColor(edge.source_port)
+    const flowStatus = getEdgeFlowStatus(edge.source_step_id, edge.target_step_id)
+
+    // Override color based on flow status
+    let color = baseColor
+    let strokeWidth = 2
+    if (flowStatus.status === 'flowing') {
+      color = '#3b82f6' // blue for active flow
+      strokeWidth = 3
+    } else if (flowStatus.status === 'completed') {
+      color = '#22c55e' // green for completed flow
+    } else if (flowStatus.status === 'error') {
+      color = '#ef4444' // red for error
+    }
+
     return {
       id: edge.id,
       source: edge.source_step_id,
@@ -957,11 +998,11 @@ const flowEdges = computed<FlowEdge[]>(() => {
       sourceHandle: edge.source_port || undefined, // Connect from specific output port
       targetHandle: edge.target_port || undefined, // Connect to specific input port
       type: 'smoothstep',
-      animated: false,
+      animated: flowStatus.animated,
       label: getEdgeLabel(edge.source_port, edge.condition),
       labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
       labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
-      style: { stroke: color, strokeWidth: 2 },
+      style: { stroke: color, strokeWidth },
       markerEnd: { type: MarkerType.ArrowClosed, color },
     }
   })
@@ -2265,7 +2306,10 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
             'dag-node',
             { 'dag-node-selected': data.isSelected },
             { 'dag-node-start': isStartNode(data.type) },
-            { 'dag-node-has-run': data.stepRun }
+            { 'dag-node-has-run': data.stepRun },
+            { 'dag-node-running': data.stepRun?.status === 'running' },
+            { 'dag-node-completed': data.stepRun?.status === 'completed' },
+            { 'dag-node-failed': data.stepRun?.status === 'failed' }
           ]"
           :style="{
             borderColor: getStepColor(data.type),
@@ -2313,6 +2357,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <Handle
             v-else-if="!isStartNode(data.type)"
             type="target"
+            id="input"
             :position="Position.Left"
             class="dag-handle dag-handle-target"
           />
@@ -2364,6 +2409,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <Handle
             v-else
             type="source"
+            id="output"
             :position="Position.Right"
             class="dag-handle dag-handle-source"
           />
@@ -2437,6 +2483,48 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 .dag-node-selected {
   border-color: #3b82f6;
   box-shadow: 0 0 0 1px #3b82f6;
+}
+
+/* Running Node - pulsing animation */
+.dag-node-running {
+  animation: node-pulse 1.5s ease-in-out infinite;
+  border-color: #3b82f6 !important;
+}
+
+.dag-node-running .dag-node-status {
+  animation: status-pulse 1s ease-in-out infinite;
+}
+
+@keyframes node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+  }
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.8;
+  }
+}
+
+/* Completed Node - green accent */
+.dag-node-completed {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 1px #22c55e;
+}
+
+/* Failed Node - red accent */
+.dag-node-failed {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px #ef4444;
 }
 
 /* Start Node - subtle enhancement */

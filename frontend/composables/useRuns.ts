@@ -1,5 +1,5 @@
 // Run API composable
-import type { Run, StepRun, ApiResponse, PaginatedResponse } from '~/types/api'
+import type { Run, StepRun, ApiResponse, PaginatedResponse, TriggerType } from '~/types/api'
 
 // Response types for step re-execution
 interface ExecuteSingleStepResponse {
@@ -50,8 +50,8 @@ export function useRuns() {
 
   // Create run (execute workflow)
   // version: 0 or omitted means latest version
-  // start_step_id: if provided, execution starts from this step
-  async function create(workflowId: string, data: { input?: object; mode?: 'test' | 'production'; version?: number; start_step_id?: string }) {
+  // triggered_by: trigger type (manual, test, etc.)
+  async function create(workflowId: string, data: { input?: object; triggered_by?: TriggerType; version?: number }) {
     return api.post<ApiResponse<Run>>(`/workflows/${workflowId}/runs`, data)
   }
 

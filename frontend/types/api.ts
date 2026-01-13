@@ -78,17 +78,19 @@ export interface Edge {
   created_at: string
 }
 
+export type TriggerType = 'manual' | 'schedule' | 'webhook' | 'test' | 'internal'
+
 export interface Run {
   id: string
   tenant_id: string
   workflow_id: string
   workflow_version: number
   status: RunStatus
-  mode: 'test' | 'production'
+  run_number: number
   input?: object
   output?: object
   error?: string
-  triggered_by: 'manual' | 'schedule' | 'webhook'
+  triggered_by: TriggerType
   triggered_by_user?: string
   started_at?: string
   completed_at?: string

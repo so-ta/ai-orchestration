@@ -315,7 +315,7 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 		trace.WithAttributes(
 			attribute.String("run_id", execCtx.Run.ID.String()),
 			attribute.String("workflow_id", execCtx.Run.WorkflowID.String()),
-			attribute.String("mode", string(execCtx.Run.Mode)),
+			attribute.String("triggered_by", string(execCtx.Run.TriggeredBy)),
 		),
 	)
 	defer span.End()
@@ -447,12 +447,12 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 		targetID := edge.TargetStepID
 
 		// Evaluate edge condition if present
-		if edge.Condition != "" {
-			condResult, err := e.evaluator.Evaluate(edge.Condition, currentOutput)
+		if edge.Condition != nil && *edge.Condition != "" {
+			condResult, err := e.evaluator.Evaluate(*edge.Condition, currentOutput)
 			if err != nil {
 				e.logger.Warn("Edge condition evaluation failed",
 					"edge_id", edge.ID,
-					"condition", edge.Condition,
+					"condition", *edge.Condition,
 					"error", err,
 				)
 				continue // Skip this edge on evaluation error
@@ -460,7 +460,7 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 			if !condResult {
 				e.logger.Debug("Edge condition not met, skipping",
 					"edge_id", edge.ID,
-					"condition", edge.Condition,
+					"condition", *edge.Condition,
 				)
 				continue // Condition not met, skip this edge
 			}
@@ -1393,7 +1393,7 @@ func (e *Executor) executeHumanInLoopStep(ctx context.Context, execCtx *Executio
 	// 5. Resume when approval is received
 
 	// For now, auto-approve in test mode
-	autoApprove := execCtx.Run.Mode == domain.RunModeTest
+	autoApprove := execCtx.Run.TriggeredBy == domain.TriggerTypeTest
 
 	output := map[string]interface{}{
 		"approval_id":     approvalID,

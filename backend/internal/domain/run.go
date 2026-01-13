@@ -18,14 +18,6 @@ const (
 	RunStatusCancelled RunStatus = "cancelled"
 )
 
-// RunMode represents the execution mode
-type RunMode string
-
-const (
-	RunModeTest       RunMode = "test"
-	RunModeProduction RunMode = "production"
-)
-
 // TriggerType represents how the run was triggered
 type TriggerType string
 
@@ -33,6 +25,7 @@ const (
 	TriggerTypeManual   TriggerType = "manual"
 	TriggerTypeSchedule TriggerType = "schedule"
 	TriggerTypeWebhook  TriggerType = "webhook"
+	TriggerTypeTest     TriggerType = "test"     // Test execution from workflow editor
 	TriggerTypeInternal TriggerType = "internal" // Internal system calls (e.g., Copilot)
 )
 
@@ -43,11 +36,11 @@ type Run struct {
 	WorkflowID      uuid.UUID       `json:"workflow_id"`
 	WorkflowVersion int             `json:"workflow_version"`
 	Status          RunStatus       `json:"status"`
-	Mode            RunMode         `json:"mode"`
 	Input           json.RawMessage `json:"input,omitempty"`
 	Output          json.RawMessage `json:"output,omitempty"`
 	Error           *string         `json:"error,omitempty"`
 	TriggeredBy     TriggerType     `json:"triggered_by"`
+	RunNumber       int             `json:"run_number"` // Sequential number per workflow + triggered_by
 	TriggeredByUser *uuid.UUID      `json:"triggered_by_user,omitempty"`
 	StartedAt       *time.Time      `json:"started_at,omitempty"`
 	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
@@ -62,17 +55,17 @@ type Run struct {
 }
 
 // NewRun creates a new run
-func NewRun(tenantID, workflowID uuid.UUID, workflowVersion int, input json.RawMessage, mode RunMode, triggerType TriggerType) *Run {
+func NewRun(tenantID, workflowID uuid.UUID, workflowVersion int, input json.RawMessage, triggerType TriggerType) *Run {
 	return &Run{
 		ID:              uuid.New(),
 		TenantID:        tenantID,
 		WorkflowID:      workflowID,
 		WorkflowVersion: workflowVersion,
 		Status:          RunStatusPending,
-		Mode:            mode,
 		Input:           input,
 		TriggeredBy:     triggerType,
 		CreatedAt:       time.Now().UTC(),
+		// RunNumber is set by DB trigger
 	}
 }
 

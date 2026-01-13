@@ -741,8 +741,8 @@ func TestExecutor_ExecuteHumanInLoopStep_TestMode(t *testing.T) {
 	}
 
 	run := &domain.Run{
-		ID:   uuid.New(),
-		Mode: domain.RunModeTest,
+		ID:          uuid.New(),
+		TriggeredBy: domain.TriggerTypeTest,
 	}
 	execCtx := NewExecutionContext(run, nil)
 
@@ -777,8 +777,8 @@ func TestExecutor_ExecuteHumanInLoopStep_ProductionMode(t *testing.T) {
 	}
 
 	run := &domain.Run{
-		ID:   uuid.New(),
-		Mode: domain.RunModeProduction,
+		ID:          uuid.New(),
+		TriggeredBy: domain.TriggerTypeManual,
 	}
 	execCtx := NewExecutionContext(run, nil)
 
@@ -925,10 +925,10 @@ func TestExecutor_FullWorkflowWithNewSteps(t *testing.T) {
 	}
 
 	run := &domain.Run{
-		ID:         uuid.New(),
-		WorkflowID: workflowID,
-		Mode:       domain.RunModeTest,
-		Input:      json.RawMessage(`{"initial": "data"}`),
+		ID:          uuid.New(),
+		WorkflowID:  workflowID,
+		TriggeredBy: domain.TriggerTypeTest,
+		Input:       json.RawMessage(`{"initial": "data"}`),
 	}
 
 	execCtx := NewExecutionContext(run, def)

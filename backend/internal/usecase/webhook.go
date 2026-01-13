@@ -253,7 +253,6 @@ func (u *WebhookUsecase) Trigger(ctx context.Context, input TriggerWebhookInput)
 		webhook.WorkflowID,
 		webhook.WorkflowVersion,
 		runInput,
-		domain.RunModeProduction,
 		domain.TriggerTypeWebhook,
 	)
 

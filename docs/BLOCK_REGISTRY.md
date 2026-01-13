@@ -167,6 +167,69 @@ CREATE INDEX idx_block_definitions_enabled ON block_definitions(enabled);
 CREATE INDEX idx_block_versions_block_id ON block_versions(block_id);
 ```
 
+## Input Schema
+
+### 概要
+
+`input_schema` は各ブロックが期待する入力データの構造を定義します。
+ワークフロー実行時に、開始ステップの `input_schema` を基に入力フォームが自動生成されます。
+
+### 用途
+
+1. **実行時の入力フォーム生成**: 開始ステップの次のブロックの `input_schema` から動的にフォームを生成
+2. **入力値のバリデーション**: 実行前に入力データの形式をチェック
+3. **ドキュメント**: ブロックが期待する入力形式を開発者に伝達
+
+### 形式（JSON Schema）
+
+```json
+{
+  "type": "object",
+  "description": "ブロックへの入力データの説明",
+  "properties": {
+    "items": {
+      "type": "array",
+      "description": "処理対象の配列"
+    },
+    "query": {
+      "type": "string",
+      "description": "検索クエリ"
+    }
+  },
+  "required": ["items"],
+  "examples": [
+    { "items": [1, 2, 3], "query": "example" }
+  ]
+}
+```
+
+### ブロック種別ごとの input_schema
+
+| カテゴリ | ブロック例 | input_schema 内容 |
+|---------|-----------|------------------|
+| **Control** | condition, switch | 条件評価対象のデータ |
+| **Data** | map, filter | `items` 配列（required） |
+| **Integration** | slack, discord | テンプレートで参照可能なデータ |
+| **AI** | llm, router | プロンプトで参照するコンテキスト |
+| **Utility** | function, code | 任意のオブジェクト |
+
+### フロントエンドでの活用
+
+```vue
+<!-- RunDialog.vue -->
+<DynamicConfigForm
+  v-model="inputValues"
+  :schema="firstStepBlock.input_schema"
+  @validation-change="handleValidation"
+/>
+```
+
+1. 実行ボタンクリック → RunDialog 表示
+2. 開始ステップの次のブロックの `input_schema` を取得
+3. `DynamicConfigForm` で入力フォームを動的生成
+4. ユーザーが入力 → バリデーション
+5. 実行開始（入力値を `runs.create()` に渡す）
+
 ## Error Code System
 
 ### Standard Error Code Format

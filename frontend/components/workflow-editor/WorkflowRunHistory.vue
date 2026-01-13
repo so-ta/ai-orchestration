@@ -16,20 +16,22 @@ const error = ref<string | null>(null)
 interface StepRunWithRunInfo extends StepRun {
   run_id: string
   workflow_version: number
-  run_mode: string
+  run_number: number
   run_status: string
 }
 
 const allStepRuns = computed<StepRunWithRunInfo[]>(() => {
   const stepRuns: StepRunWithRunInfo[] = []
-  for (const run of runs.value) {
+  // Filter out test runs - this history is for production runs only
+  const productionRuns = runs.value.filter(run => run.triggered_by !== 'test')
+  for (const run of productionRuns) {
     if (run.step_runs) {
       for (const stepRun of run.step_runs) {
         stepRuns.push({
           ...stepRun,
           run_id: run.id,
           workflow_version: run.workflow_version,
-          run_mode: run.mode,
+          run_number: run.run_number,
           run_status: run.status,
         })
       }

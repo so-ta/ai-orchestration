@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# CI専用のテスト環境設定（本番環境ではありません）
+env:
+  CI_DB_USER: aio
+  CI_DB_PASSWORD: aio_password
+  CI_DB_NAME: ai_orchestration
+
+jobs:
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ${{ env.CI_DB_USER }}
+          POSTGRES_PASSWORD: ${{ env.CI_DB_PASSWORD }}
+          POSTGRES_DB: ${{ env.CI_DB_NAME }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aio -d ai_orchestration"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - name: Download dependencies
+        working-directory: backend
+        run: go mod download
+
+      - name: Apply database schema
+        working-directory: backend
+        env:
+          PGPASSWORD: ${{ env.CI_DB_PASSWORD }}
+        run: |
+          psql -h localhost -U ${{ env.CI_DB_USER }} -d ${{ env.CI_DB_NAME }} -f schema/schema.sql
+          psql -h localhost -U ${{ env.CI_DB_USER }} -d ${{ env.CI_DB_NAME }} -f schema/seed.sql
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://${{ env.CI_DB_USER }}:${{ env.CI_DB_PASSWORD }}@localhost:5432/${{ env.CI_DB_NAME }}?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+        run: |
+          PACKAGES=$(go list ./... | grep -v /tests/e2e || true)
+          if [ -n "$PACKAGES" ]; then
+            go test -v -race -coverprofile=coverage.out $PACKAGES
+          fi
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.out
+
+  backend-build:
+    name: Backend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build API
+        working-directory: backend
+        run: go build -v ./cmd/api
+
+      - name: Build Worker
+        working-directory: backend
+        run: go build -v ./cmd/worker
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Run tests
+        working-directory: frontend
+        run: npm run test:run
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build

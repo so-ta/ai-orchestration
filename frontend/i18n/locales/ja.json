@@ -145,7 +145,15 @@
       "noRunsDesc": "このワークフローを実行すると履歴が表示されます"
     },
     "runStarted": "ワークフローを開始しました",
-    "runFailed": "ワークフローの実行に失敗しました"
+    "runFailed": "ワークフローの実行に失敗しました",
+    "runDialog": {
+      "title": "ワークフローを実行",
+      "inputTitle": "入力データ",
+      "inputDescription": "「{stepName}」ステップに渡すデータを入力してください",
+      "noInputRequired": "このワークフローは入力データなしで実行できます",
+      "schemaDetails": "入力スキーマの詳細",
+      "run": "実行"
+    }
   },
   "editor": {
     "blocks": "ブロック",
@@ -225,10 +233,17 @@
       "settings": "設定",
       "copilot": "Copilot",
       "execution": "実行"
+    },
+    "templatePreview": {
+      "title": "テンプレート変数",
+      "hint": "設定内で検出されたテンプレート変数の一覧です",
+      "runtimeValue": "（実行時に解決）",
+      "executionNote": "これらの変数は、ワークフロー実行時に前のステップの出力や入力データから値が代入されます"
     }
   },
   "execution": {
     "customInput": "入力データ",
+    "inputDescription": "「{stepName}」ステップに渡すデータを入力してください",
     "inputPlaceholder": "{'{'}\"key\": \"value\"{'}'}",
     "executeThisStepOnly": "このステップのみ実行",
     "executeFromThisStep": "このステップから実行",
@@ -273,12 +288,38 @@
       "completed": "完了",
       "failed": "失敗"
     },
+    "testExecution": "テスト実行",
+    "executeWorkflow": "ワークフローを実行",
+    "testRunHistory": "テスト実行履歴",
+    "noTestRuns": "テスト実行がありません",
+    "noTestRunsDesc": "ワークフローをテスト実行すると、ここに履歴が表示されます",
+    "justNow": "たった今",
+    "minutesAgo": "{n}分前",
+    "hoursAgo": "{n}時間前",
+    "startStepInfo": "Startステップは入力データをそのまま「{nextStep}」に渡します",
+    "workflowStartsAt": "ワークフローは「{stepName}」から開始されます",
+    "expectedFields": "入力可能なフィールド",
+    "required": "必須",
+    "jsonHint": "上記のフィールドをJSONで入力してください",
+    "clearInput": "入力をクリア",
+    "usePreviousOutput": "前回の出力を使用",
+    "usedPreviousOutput": "前回の実行結果を入力にセットしました",
+    "switchToForm": "フォーム入力に切替",
+    "switchToJson": "JSON入力に切替",
+    "suggestedFields": "前ステップの出力フィールド",
+    "fieldInserted": "「{field}」を入力に追加しました",
+    "templatePreview": "テンプレートプレビュー",
+    "validation": {
+      "required": "「{field}」は必須です",
+      "typeMismatch": "「{field}」の型が一致しません（期待: {expected}、実際: {actual}）"
+    },
     "errors": {
       "noRunAvailable": "実行可能なRunがありません。先にワークフローを実行してください。",
       "noStepSelected": "ステップが選択されていません",
       "executionFailed": "実行に失敗しました",
       "invalidJson": "無効なJSON形式です",
       "invalidJsonObject": "JSONオブジェクトを入力してください",
+      "invalidForm": "入力内容にエラーがあります",
       "needTwoVariants": "A/Bテストには2つ以上の有効なバリアントが必要です",
       "needPromptVariant": "少なくとも1つのプロンプトバリアントが必要です"
     },

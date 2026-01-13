@@ -215,6 +215,31 @@ paths:
         '204':
           description: 削除成功
 
+  /workflows/{id}/steps/{stepId}/test:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/StepId'
+    post:
+      tags: [Steps]
+      summary: ステップ単体テスト実行
+      description: 既存のランを必要とせずに、単一ステップをテスト実行します
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestStepInlineRequest'
+      responses:
+        '202':
+          description: テスト実行開始
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TestStepInlineResponse'
+
   /workflows/{id}/edges:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -588,9 +613,9 @@ components:
         status:
           type: string
           enum: [pending, running, completed, failed, cancelled]
-        mode:
-          type: string
-          enum: [test, production]
+        run_number:
+          type: integer
+          description: ワークフロー毎の連番
         input:
           type: object
         output:
@@ -599,7 +624,10 @@ components:
           type: string
         triggered_by:
           type: string
-          enum: [manual, schedule, webhook]
+          enum: [manual, schedule, webhook, test, internal]
+        triggered_by_user:
+          type: string
+          format: uuid
         started_at:
           type: string
           format: date-time
@@ -656,10 +684,35 @@ components:
       properties:
         input:
           type: object
+        triggered_by:
+          type: string
+          enum: [manual, test, webhook, schedule, internal]
+          default: manual
+          description: 実行トリガーの種類
+        version:
+          type: integer
+          default: 0
+          description: 実行するワークフローバージョン（0=最新）
         mode:
           type: string
           enum: [test, production]
-          default: production
+          deprecated: true
+          description: 非推奨。triggered_byを使用してください（mode:testはtriggered_by:testにマップ）
+
+    TestStepInlineRequest:
+      type: object
+      properties:
+        input:
+          type: object
+          description: テスト用入力データ
+
+    TestStepInlineResponse:
+      type: object
+      properties:
+        run:
+          $ref: '#/components/schemas/Run'
+        step_run:
+          $ref: '#/components/schemas/StepRun'
 
     Adapter:
       type: object

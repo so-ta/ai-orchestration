@@ -67,15 +67,14 @@ func TestNewRun(t *testing.T) {
 	workflowID := uuid.New()
 	input := json.RawMessage(`{"key": "value"}`)
 
-	run := NewRun(tenantID, workflowID, 1, input, RunModeTest, TriggerTypeManual)
+	run := NewRun(tenantID, workflowID, 1, input, TriggerTypeTest)
 
 	assert.NotEqual(t, uuid.Nil, run.ID)
 	assert.Equal(t, workflowID, run.WorkflowID)
 	assert.Equal(t, tenantID, run.TenantID)
 	assert.Equal(t, 1, run.WorkflowVersion)
-	assert.Equal(t, RunModeTest, run.Mode)
 	assert.Equal(t, RunStatusPending, run.Status)
-	assert.Equal(t, TriggerTypeManual, run.TriggeredBy)
+	assert.Equal(t, TriggerTypeTest, run.TriggeredBy)
 	assert.Equal(t, input, run.Input)
 	assert.False(t, run.CreatedAt.IsZero())
 }
@@ -117,13 +116,10 @@ func TestRunStatus_Values(t *testing.T) {
 	assert.Equal(t, RunStatus("cancelled"), RunStatusCancelled)
 }
 
-func TestRunMode_Values(t *testing.T) {
-	assert.Equal(t, RunMode("test"), RunModeTest)
-	assert.Equal(t, RunMode("production"), RunModeProduction)
-}
-
 func TestTriggerType_Values(t *testing.T) {
 	assert.Equal(t, TriggerType("manual"), TriggerTypeManual)
 	assert.Equal(t, TriggerType("schedule"), TriggerTypeSchedule)
 	assert.Equal(t, TriggerType("webhook"), TriggerTypeWebhook)
+	assert.Equal(t, TriggerType("test"), TriggerTypeTest)
+	assert.Equal(t, TriggerType("internal"), TriggerTypeInternal)
 }

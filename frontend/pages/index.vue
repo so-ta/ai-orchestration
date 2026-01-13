@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Workflow, Run } from '~/types/api'
+import type { Workflow, Run, TriggerType } from '~/types/api'
 
 const { t } = useI18n()
 const workflows = useWorkflows()
@@ -19,7 +19,7 @@ const stats = ref({
 interface RunGroup {
   workflowId: string
   workflowName: string
-  triggerType: 'manual' | 'schedule' | 'webhook'
+  triggerType: TriggerType
   runs: Run[]
 }
 

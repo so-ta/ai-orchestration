@@ -360,11 +360,11 @@ CREATE TABLE public.runs (
     workflow_id uuid NOT NULL,
     workflow_version integer NOT NULL,
     status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
-    mode character varying(50) DEFAULT 'production'::character varying NOT NULL,
     input jsonb,
     output jsonb,
     error text,
     triggered_by character varying(50) DEFAULT 'manual'::character varying NOT NULL,
+    run_number integer DEFAULT 0 NOT NULL,
     triggered_by_user uuid,
     started_at timestamp with time zone,
     completed_at timestamp with time zone,
@@ -386,6 +386,31 @@ COMMENT ON COLUMN public.runs.trigger_source IS 'Internal trigger source identif
 --
 
 COMMENT ON COLUMN public.runs.trigger_metadata IS 'Additional metadata about the trigger: feature, user_id, session_id, etc.';
+
+
+--
+-- Name: COLUMN runs.run_number; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.runs.run_number IS 'Sequential run number per workflow + triggered_by combination';
+
+
+--
+-- Name: run_number_sequences; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.run_number_sequences (
+    workflow_id uuid NOT NULL,
+    triggered_by character varying(50) NOT NULL,
+    next_number integer DEFAULT 1 NOT NULL
+);
+
+
+--
+-- Name: TABLE run_number_sequences; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.run_number_sequences IS 'Tracks next run_number for each workflow + triggered_by combination';
 
 
 --
@@ -949,6 +974,14 @@ ALTER TABLE ONLY public.runs
 
 
 --
+-- Name: run_number_sequences run_number_sequences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_number_sequences
+    ADD CONSTRAINT run_number_sequences_pkey PRIMARY KEY (workflow_id, triggered_by);
+
+
+--
 -- Name: schedules schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1486,6 +1519,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION public.assign_run_number()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Get and increment the next run number for this workflow + triggered_by combination
+    INSERT INTO public.run_number_sequences (workflow_id, triggered_by, next_number)
+    VALUES (NEW.workflow_id, NEW.triggered_by, 2)
+    ON CONFLICT (workflow_id, triggered_by)
+    DO UPDATE SET next_number = public.run_number_sequences.next_number + 1
+    RETURNING next_number - 1 INTO NEW.run_number;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 --
 -- Name: block_definitions trigger_block_definitions_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
@@ -1505,6 +1552,13 @@ CREATE TRIGGER trigger_credentials_updated_at BEFORE UPDATE ON public.credential
 --
 
 CREATE TRIGGER trigger_system_credentials_updated_at BEFORE UPDATE ON public.system_credentials FOR EACH ROW EXECUTE FUNCTION public.update_system_credentials_updated_at();
+
+
+--
+-- Name: runs trigger_assign_run_number; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_assign_run_number BEFORE INSERT ON public.runs FOR EACH ROW EXECUTE FUNCTION public.assign_run_number();
 
 
 --
@@ -1641,6 +1695,14 @@ ALTER TABLE ONLY public.runs
 
 ALTER TABLE ONLY public.runs
     ADD CONSTRAINT runs_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
+
+
+--
+-- Name: run_number_sequences run_number_sequences_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_number_sequences
+    ADD CONSTRAINT run_number_sequences_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
 
 
 --

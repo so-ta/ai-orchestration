@@ -556,7 +556,6 @@ func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Re
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-generate",
 		Input:         inputData,
-		Mode:          domain.RunModeProduction,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
 			"feature":    "generate",
@@ -610,7 +609,6 @@ func (h *CopilotHandler) AsyncSuggest(w http.ResponseWriter, r *http.Request) {
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-suggest",
 		Input:         inputData,
-		Mode:          domain.RunModeProduction,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
 			"feature":     "suggest",
@@ -662,7 +660,6 @@ func (h *CopilotHandler) AsyncDiagnose(w http.ResponseWriter, r *http.Request) {
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-diagnose",
 		Input:         inputData,
-		Mode:          domain.RunModeProduction,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
 			"feature":       "diagnose",
@@ -714,7 +711,6 @@ func (h *CopilotHandler) AsyncOptimize(w http.ResponseWriter, r *http.Request) {
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-optimize",
 		Input:         inputData,
-		Mode:          domain.RunModeProduction,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
 			"feature":     "optimize",
