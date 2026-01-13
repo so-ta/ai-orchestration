@@ -597,6 +597,50 @@ describe('useWorkflows', () => {
 
 ### E2E Test Template
 
+E2Eテストはセルフコンテインドで、クリーンなDBでも実行可能です。
+
+#### E2Eテストの前提条件
+
+E2Eテストは `TestMain` で自動的に以下を実行します：
+
+1. **テスト用テナントとユーザーの作成**
+   - テナントID: `00000000-0000-0000-0000-000000000099`
+   - ユーザーID: `00000000-0000-0000-0000-000000000098`
+
+2. **テスト終了時のクリーンアップ**
+   - テスト中に作成されたデータを削除
+   - テスト用テナント・ユーザーを削除
+
+#### 必要な環境変数
+
+| 変数 | デフォルト値 | 説明 |
+|------|-------------|------|
+| `API_BASE_URL` | `http://localhost:8080` | APIサーバーのURL |
+| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/orchestration?sslmode=disable` | DBへの直接接続URL |
+
+#### E2Eテストの実行
+
+```bash
+# 前提: APIサーバーとDBが起動済み
+cd backend
+
+# 全E2Eテスト実行
+go test ./tests/e2e/... -v
+
+# 特定のテストのみ実行
+go test ./tests/e2e/... -v -run TestWorkflowCRUD
+```
+
+#### HTTPリクエストヘッダー（開発モード）
+
+開発モード（`AUTH_ENABLED=false`）では、以下のHTTPヘッダーでテナント・ユーザーを指定できます：
+
+| ヘッダー | 説明 | 例 |
+|---------|------|-----|
+| `X-Tenant-ID` | テナントID | `00000000-0000-0000-0000-000000000099` |
+| `X-User-ID` | ユーザーID | `00000000-0000-0000-0000-000000000098` |
+| `X-Dev-Role` | ロール切り替え | `admin` or `user` |
+
 ```go
 package e2e_test
 
