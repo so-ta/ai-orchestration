@@ -180,18 +180,15 @@ jobs:
 
       - name: Run npm audit (frontend)
         working-directory: frontend
-        run: npm audit --audit-level=high || true
-        continue-on-error: true
+        run: npm audit --audit-level=high
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Run gosec (backend)
         working-directory: backend
-        run: gosec -fmt=json -out=gosec-report.json ./... || true
-        continue-on-error: true
+        run: gosec ./...
 
       - name: Check Go vulnerabilities
         working-directory: backend
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./... || true
-        continue-on-error: true
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
