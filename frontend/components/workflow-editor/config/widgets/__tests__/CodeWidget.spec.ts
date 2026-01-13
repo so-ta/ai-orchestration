@@ -168,7 +168,8 @@ describe('CodeWidget', () => {
       const wrapper = createWrapper()
 
       const textarea = wrapper.find('.code-input')
-      expect((textarea.element as HTMLTextAreaElement).rows).toBe(10)
+      // Use getAttribute for consistent string comparison in jsdom
+      expect(textarea.element.getAttribute('rows')).toBe('10')
     })
 
     it('uses rows from override', () => {
@@ -177,7 +178,8 @@ describe('CodeWidget', () => {
       })
 
       const textarea = wrapper.find('.code-input')
-      expect((textarea.element as HTMLTextAreaElement).rows).toBe(20)
+      // Use getAttribute for consistent string comparison in jsdom
+      expect(textarea.element.getAttribute('rows')).toBe('20')
     })
   })
 
