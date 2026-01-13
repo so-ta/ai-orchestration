@@ -44,10 +44,11 @@ type Step struct {
 }
 
 type Run struct {
-	ID         string `json:"id"`
-	WorkflowID string `json:"workflow_id"`
-	Status     string `json:"status"`
-	Mode       string `json:"mode"`
+	ID          string `json:"id"`
+	WorkflowID  string `json:"workflow_id"`
+	Status      string `json:"status"`
+	TriggeredBy string `json:"triggered_by"`
+	RunNumber   int    `json:"run_number"`
 }
 
 func makeRequest(t *testing.T, method, path string, body interface{}) (*http.Response, []byte) {
@@ -215,7 +216,7 @@ func TestWorkflowExecutionFlow(t *testing.T) {
 		"input": map[string]string{
 			"message": "Hello from E2E test",
 		},
-		"mode": "test",
+		"triggered_by": "test",
 	}
 	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "Run create response: %s", string(body))
@@ -308,7 +309,7 @@ func TestConditionBranching(t *testing.T) {
 	// Execute with value > 10
 	runReq := map[string]interface{}{
 		"input": map[string]int{"value": 20},
-		"mode":  "test",
+		"triggered_by": "test",
 	}
 	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)

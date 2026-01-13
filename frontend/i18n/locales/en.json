@@ -145,7 +145,15 @@
       "noRunsDesc": "Execute this workflow to see run history"
     },
     "runStarted": "Workflow started",
-    "runFailed": "Failed to start workflow"
+    "runFailed": "Failed to start workflow",
+    "runDialog": {
+      "title": "Run Workflow",
+      "inputTitle": "Input Data",
+      "inputDescription": "Enter data to pass to the \"{stepName}\" step",
+      "noInputRequired": "This workflow can be run without input data",
+      "schemaDetails": "Input Schema Details",
+      "run": "Run"
+    }
   },
   "editor": {
     "blocks": "Blocks",
@@ -225,10 +233,29 @@
       "settings": "Settings",
       "copilot": "Copilot",
       "execution": "Execution"
+    },
+    "templatePreview": {
+      "title": "Template Variables",
+      "hint": "Template variables detected in the configuration",
+      "runtimeValue": "(resolved at runtime)",
+      "executionNote": "These variables will be populated from previous step outputs or input data during workflow execution"
     }
   },
   "execution": {
     "customInput": "Input Data",
+    "clearInput": "Clear input",
+    "usePreviousOutput": "Use previous output",
+    "usedPreviousOutput": "Previous output set as input",
+    "switchToForm": "Switch to form",
+    "switchToJson": "Switch to JSON",
+    "suggestedFields": "Fields from previous step",
+    "fieldInserted": "Added \"{field}\" to input",
+    "templatePreview": "Template Preview",
+    "validation": {
+      "required": "\"{field}\" is required",
+      "typeMismatch": "Type mismatch for \"{field}\" (expected: {expected}, actual: {actual})"
+    },
+    "inputDescription": "Enter data to pass to the \"{stepName}\" step",
     "inputPlaceholder": "{'{'}\"key\": \"value\"{'}'}",
     "executeThisStepOnly": "Execute This Step Only",
     "executeFromThisStep": "Execute From This Step",
@@ -273,12 +300,26 @@
       "completed": "Completed",
       "failed": "Failed"
     },
+    "testExecution": "Test Execution",
+    "executeWorkflow": "Execute Workflow",
+    "testRunHistory": "Test Run History",
+    "noTestRuns": "No test runs yet",
+    "noTestRunsDesc": "Execute a test run to see the history here",
+    "justNow": "Just now",
+    "minutesAgo": "{n} min ago",
+    "hoursAgo": "{n}h ago",
+    "startStepInfo": "Start step passes input data directly to \"{nextStep}\"",
+    "workflowStartsAt": "Workflow starts at \"{stepName}\"",
+    "expectedFields": "Expected Input Fields",
+    "required": "Required",
+    "jsonHint": "Enter the above fields as JSON",
     "errors": {
       "noRunAvailable": "No run available. Execute the workflow first.",
       "noStepSelected": "No step selected",
       "executionFailed": "Execution failed",
       "invalidJson": "Invalid JSON format",
       "invalidJsonObject": "Please enter a JSON object",
+      "invalidForm": "Please fix the form errors",
       "needTwoVariants": "A/B test requires at least 2 enabled variants",
       "needPromptVariant": "At least one prompt variant is required"
     },

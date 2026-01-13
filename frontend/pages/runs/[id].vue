@@ -102,7 +102,7 @@ async function handleRerun() {
 
   try {
     const response = await runsApi.create(run.value.workflow_id, {
-      mode: run.value.mode,
+      triggered_by: run.value.triggered_by,
       input: run.value.input || {},
     })
     navigateTo(`/runs/${response.data.id}`)
@@ -379,7 +379,7 @@ onUnmounted(() => {
               <span class="status-dot"></span>
               {{ run.status }}
             </span>
-            <span class="mode-badge">{{ run.mode }}</span>
+            <span class="run-number-badge">#{{ run.run_number }}</span>
           </div>
         </div>
       </div>
@@ -1039,14 +1039,14 @@ onUnmounted(() => {
   color: #6b7280;
 }
 
-.mode-badge {
+.run-number-badge {
   padding: 0.5rem 1rem;
   border-radius: 20px;
   font-size: 0.875rem;
-  font-weight: 500;
-  background: #f3f4f6;
-  color: #374151;
-  text-transform: capitalize;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #4f46e5;
+  font-family: 'SF Mono', Monaco, monospace;
 }
 
 /* Stats Bar */

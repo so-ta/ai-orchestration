@@ -14,26 +14,22 @@ const props = defineProps<{
   readonlyMode?: boolean
   saving?: boolean
   latestRun?: Run | null
+  steps?: Step[]
+  edges?: Array<{ id: string; source_step_id: string; target_step_id: string }>
+  blockDefinitions?: BlockDefinition[]
 }>()
 
 // Active tab state
 const activeTab = ref<'settings' | 'copilot' | 'execution'>('settings')
 
-// Reset to settings tab when step changes, or when step is deselected while on execution tab
-watch(() => props.step, (newStep) => {
-  if (!newStep && activeTab.value === 'execution') {
-    activeTab.value = 'settings'
-  } else if (newStep) {
-    activeTab.value = 'settings'
-  }
-})
+// Keep current tab when step changes (no automatic tab switching)
 
 const emit = defineEmits<{
   (e: 'save', data: { name: string; type: StepType; config: Record<string, any> }): void
   (e: 'delete'): void
   (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
-  (e: 'execute', data: { stepId: string; input: object; mode: 'test' | 'production' }): void
-  (e: 'execute-workflow', mode: 'test' | 'production', input: object): void
+  (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
+  (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
   (e: 'update:name', name: string): void
 }>()
 
@@ -288,6 +284,60 @@ const expressionTemplates = {
   lessThan: '$.field < 0',
   exists: '$.field'
 }
+
+// =============================================================================
+// Template Preview (Prompt Template Variables)
+// =============================================================================
+
+/**
+ * Extract all template variables from config values
+ * Detects double-brace variable patterns in string values
+ */
+const templateVariables = computed<string[]>(() => {
+  const variables: Set<string> = new Set()
+  const templateRegex = /\{\{([^}]+)\}\}/g
+
+  function extractFromValue(value: unknown) {
+    if (typeof value === 'string') {
+      let match
+      while ((match = templateRegex.exec(value)) !== null) {
+        variables.add(match[1].trim())
+      }
+    } else if (Array.isArray(value)) {
+      value.forEach(extractFromValue)
+    } else if (value && typeof value === 'object') {
+      Object.values(value).forEach(extractFromValue)
+    }
+  }
+
+  extractFromValue(formConfig.value)
+  return Array.from(variables)
+})
+
+/**
+ * Check if current block type typically uses templates
+ * (LLM prompts, notifications, etc.)
+ */
+const isTemplateBlock = computed(() => {
+  const templateTypes = ['llm', 'discord', 'slack', 'email_sendgrid', 'log', 'function']
+  return templateTypes.includes(formType.value)
+})
+
+/**
+ * Show template preview section
+ */
+const showTemplatePreview = computed(() => {
+  return templateVariables.value.length > 0 && isTemplateBlock.value
+})
+
+/**
+ * Format template variable for display (avoids i18n parsing issues with curly braces)
+ */
+function formatTemplateVariable(variable: string): string {
+  const openBrace = String.fromCharCode(123, 123)
+  const closeBrace = String.fromCharCode(125, 125)
+  return openBrace + variable + closeBrace
+}
 </script>
 
 <template>
@@ -332,7 +382,6 @@ const expressionTemplates = {
         {{ t('editor.tabs.copilot') }}
       </button>
       <button
-        v-if="step"
         class="tab-button"
         :class="{ active: activeTab === 'execution' }"
         @click="activeTab = 'execution'"
@@ -443,6 +492,35 @@ const expressionTemplates = {
             v-model="formConfig"
             :disabled="readonlyMode"
           />
+        </div>
+
+        <!-- Template Preview Section -->
+        <div v-if="showTemplatePreview" class="form-section template-preview-section">
+          <h4 class="section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <path d="M12 18v-6"/>
+              <path d="m9 15 3 3 3-3"/>
+            </svg>
+            {{ t('editor.templatePreview.title') }}
+          </h4>
+          <p class="template-preview-hint">{{ t('editor.templatePreview.hint') }}</p>
+          <div class="template-variables-list">
+            <div v-for="variable in templateVariables" :key="variable" class="template-variable-item">
+              <code class="variable-name" v-text="formatTemplateVariable(variable)"></code>
+              <span class="variable-arrow">→</span>
+              <span class="variable-placeholder">{{ t('editor.templatePreview.runtimeValue') }}</span>
+            </div>
+          </div>
+          <div class="template-preview-note">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span>{{ t('editor.templatePreview.executionNote') }}</span>
+          </div>
         </div>
 
         <!-- LLM Configuration (Legacy fallback when no config_schema) -->
@@ -1162,6 +1240,10 @@ const expressionTemplates = {
         :step="step"
         :workflow-id="workflowId"
         :latest-run="latestRun || null"
+        :is-active="activeTab === 'execution'"
+        :steps="steps || []"
+        :edges="edges || []"
+        :blocks="blockDefinitions || []"
         @execute="(data) => emit('execute', data)"
         @execute-workflow="(mode, input) => emit('execute-workflow', mode, input)"
       />
@@ -1984,5 +2066,88 @@ const expressionTemplates = {
   background: #e0e7ff;
   color: #4f46e5;
   border-radius: 3px;
+}
+
+/* Template Preview Section */
+.template-preview-section {
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border: 1px solid #fde047;
+  border-radius: 8px;
+  padding: 0.875rem !important;
+  margin-top: 0.5rem;
+}
+
+.template-preview-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: #854d0e;
+  margin-bottom: 0.5rem;
+}
+
+.template-preview-section .section-title svg {
+  color: #ca8a04;
+}
+
+.template-preview-hint {
+  font-size: 0.6875rem;
+  color: #a16207;
+  margin: 0 0 0.75rem 0;
+  line-height: 1.4;
+}
+
+.template-variables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.template-variable-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.variable-name {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.6875rem;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #fcd34d;
+}
+
+.variable-arrow {
+  color: #d97706;
+  font-weight: bold;
+}
+
+.variable-placeholder {
+  font-size: 0.6875rem;
+  color: #78716c;
+  font-style: italic;
+}
+
+.template-preview-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.625rem;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  font-size: 0.625rem;
+  color: #78716c;
+}
+
+.template-preview-note svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: #a3a3a3;
 }
 </style>

@@ -46,6 +46,14 @@ export interface JSONSchemaProperty {
   properties?: Record<string, JSONSchemaProperty>;
   required?: string[];
   additionalProperties?: boolean | JSONSchemaProperty;
+
+  // UI hints (x- prefixed custom attributes)
+  'x-ui-widget'?: string;
+  'x-ui-language'?: string;
+  'x-required'?: boolean;
+
+  // Allow any additional x- properties
+  [key: `x-${string}`]: unknown;
 }
 
 // =============================================================================

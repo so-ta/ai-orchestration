@@ -489,9 +489,17 @@ Request:
 ```json
 {
   "input": {},
-  "mode": "test|production"
+  "triggered_by": "manual|test|webhook|schedule|internal",
+  "version": 0
 }
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `input` | object | `{}` | Input data for the workflow |
+| `triggered_by` | string | `manual` | Trigger type: `manual`, `test`, `webhook`, `schedule`, `internal` |
+| `version` | int | 0 | Workflow version to execute (0 = latest) |
+| `mode` | string | - | **Deprecated**: Use `triggered_by` instead (`mode: "test"` maps to `triggered_by: "test"`) |
 
 Response `201`:
 ```json
@@ -500,8 +508,8 @@ Response `201`:
   "workflow_id": "uuid",
   "workflow_version": 1,
   "status": "pending",
-  "mode": "test|production",
-  "trigger_type": "manual",
+  "triggered_by": "manual",
+  "run_number": 1,
   "created_at": "ISO8601"
 }
 ```
@@ -663,6 +671,42 @@ Response `200`:
       "duration_ms": 200
     }
   ]
+}
+```
+
+### Test Step Inline
+```
+POST /workflows/{workflow_id}/steps/{step_id}/test
+```
+
+Test a single step without requiring an existing run. Creates a temporary run and executes only the specified step.
+
+Request:
+```json
+{
+  "input": {}
+}
+```
+
+Response `202`:
+```json
+{
+  "data": {
+    "run": {
+      "id": "uuid",
+      "workflow_id": "uuid",
+      "status": "running",
+      "triggered_by": "test"
+    },
+    "step_run": {
+      "id": "uuid",
+      "run_id": "uuid",
+      "step_id": "uuid",
+      "step_name": "string",
+      "status": "pending",
+      "attempt": 1
+    }
+  }
 }
 ```
 

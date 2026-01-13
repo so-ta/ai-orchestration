@@ -20,6 +20,9 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const saving = ref(false)
 
+// Run dialog state
+const showRunDialog = ref(false)
+
 // Execution state
 const latestRun = ref<Run | null>(null)
 
@@ -752,16 +755,24 @@ async function handleDiscardDraft() {
   }
 }
 
-// Run workflow
-async function handleRun() {
+// Run workflow - show dialog
+function handleRun() {
+  if (!workflow.value) return
+  showRunDialog.value = true
+}
+
+// Execute workflow from dialog
+async function handleRunFromDialog(input: Record<string, unknown>) {
   if (!workflow.value) return
 
   try {
-    const response = await runs.create(workflowId, { mode: 'production', input: {} })
+    const response = await runs.create(workflowId, { triggered_by: 'manual', input })
+    showRunDialog.value = false
+    toast.success(t('workflows.runStarted'))
     // Open run page in a new tab
     window.open(`/runs/${response.data.id}`, '_blank')
   } catch (e) {
-    toast.error('Failed to start run', e instanceof Error ? e.message : undefined)
+    toast.error(t('workflows.runFailed'), e instanceof Error ? e.message : undefined)
   }
 }
 
@@ -990,11 +1001,11 @@ async function loadLatestRun() {
 }
 
 // Handle execute workflow from execution tab
-async function handleExecuteWorkflowFromTab(mode: 'test' | 'production', input: object) {
+async function handleExecuteWorkflowFromTab(triggered_by: 'test' | 'manual', input: object) {
   if (!workflow.value) return
 
   try {
-    const response = await runs.create(workflowId, { mode, input })
+    const response = await runs.create(workflowId, { triggered_by, input })
     latestRun.value = response.data
     // Don't open in new tab, just update latest run reference
     toast.success(t('workflows.runStarted'))
@@ -1196,6 +1207,9 @@ onMounted(() => {
             :readonly-mode="isReadonly"
             :saving="saving"
             :latest-run="latestRun"
+            :steps="workflow?.steps || []"
+            :edges="workflow?.edges || []"
+            :block-definitions="blockDefinitions"
             @save="handleSaveStep"
             @delete="handleDeleteStep"
             @apply-workflow="handleApplyWorkflow"
@@ -1211,6 +1225,19 @@ onMounted(() => {
         <WorkflowRunHistory :workflow-id="workflowId" />
       </div>
     </div>
+
+    <!-- Run Dialog -->
+    <RunDialog
+      v-if="workflow"
+      :show="showRunDialog"
+      :workflow-id="workflowId"
+      :workflow-name="workflow.name"
+      :steps="workflow.steps || []"
+      :edges="workflow.edges || []"
+      :blocks="blockDefinitions"
+      @close="showRunDialog = false"
+      @run="handleRunFromDialog"
+    />
   </div>
 </template>
 
