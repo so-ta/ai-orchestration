@@ -42,8 +42,49 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
+
+      - name: Generate PR diff
+        id: diff
+        run: |
+          # PR差分を取得してファイルに保存
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.event.pull_request.head.sha }}
+
+          echo "Base SHA: $BASE_SHA"
+          echo "Head SHA: $HEAD_SHA"
+
+          # 差分ファイル一覧を取得
+          git diff --name-only $BASE_SHA $HEAD_SHA > changed_files.txt
+          echo "Changed files:"
+          cat changed_files.txt
+
+          # 差分の統計情報
+          DIFF_STATS=$(git diff --shortstat $BASE_SHA $HEAD_SHA)
+          echo "Diff stats: $DIFF_STATS"
+
+          # 差分が空かどうかチェック
+          if [ ! -s changed_files.txt ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes detected in PR diff"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+
+            # 差分の詳細をファイルに保存（Codexが参照できるように）
+            git diff $BASE_SHA $HEAD_SHA > pr_diff.patch
+            echo "PR diff saved to pr_diff.patch"
+
+            # 差分サイズを確認
+            DIFF_SIZE=$(wc -c < pr_diff.patch)
+            echo "Diff size: $DIFF_SIZE bytes"
+          fi
 
       - name: Run Codex Review
+        if: steps.diff.outputs.has_changes == 'true'
         id: codex_review
         uses: openai/codex-action@v1
         with:
@@ -56,7 +97,38 @@ jobs:
           model: o4-mini
           effort: medium
 
+      - name: Skip if no changes
+        if: steps.diff.outputs.has_changes != 'true'
+        id: skip
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const body = `## 🤖 Codex Code Review
+
+### 概要
+このPRにはレビュー対象の変更がありません（baseブランチと差分なし）。
+
+### 判定
+**APPROVE**
+変更がないため、問題ありません。
+
+---
+*このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*`;
+
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              body: body,
+              event: 'APPROVE'
+            });
+
+            console.log('No changes detected, auto-approved');
+            core.setOutput('skipped', 'true');
+
       - name: Process Review Results
+        if: steps.diff.outputs.has_changes == 'true'
         id: process
         uses: actions/github-script@v7
         env:
@@ -97,7 +169,7 @@ jobs:
             console.log(`Verdict: ${review.verdict}`);
 
       - name: Post PR Review (Structured)
-        if: steps.process.outputs.fallback != 'true'
+        if: steps.diff.outputs.has_changes == 'true' && steps.process.outputs.fallback != 'true'
         uses: actions/github-script@v7
         env:
           VERDICT: ${{ steps.process.outputs.verdict }}
@@ -213,7 +285,7 @@ jobs:
             }
 
       - name: Post PR Review (Fallback - Markdown)
-        if: steps.process.outputs.fallback == 'true'
+        if: steps.diff.outputs.has_changes == 'true' && steps.process.outputs.fallback == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
@@ -232,7 +304,7 @@ jobs:
           *このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*"
 
       - name: Create Issues for Other Findings
-        if: steps.process.outputs.has_other_findings == 'true'
+        if: steps.diff.outputs.has_changes == 'true' && steps.process.outputs.has_other_findings == 'true'
         id: create_issues
         uses: actions/github-script@v7
         env:
@@ -349,7 +421,7 @@ jobs:
             core.setOutput('created_issues', JSON.stringify(createdIssues));
 
       - name: Report Issues in PR Comment
-        if: steps.process.outputs.has_other_findings == 'true'
+        if: steps.diff.outputs.has_changes == 'true' && steps.process.outputs.has_other_findings == 'true'
         uses: actions/github-script@v7
         env:
           CREATED_ISSUES: ${{ steps.create_issues.outputs.created_issues }}
@@ -398,6 +470,7 @@ jobs:
             console.log(`Posted issue summary comment on PR #${prNumber}`);
 
       - name: Add Labels
+        if: steps.diff.outputs.has_changes == 'true'
         uses: actions/github-script@v7
         env:
           VERDICT: ${{ steps.process.outputs.verdict }}
