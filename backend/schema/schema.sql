@@ -1913,7 +1913,8 @@ CREATE TABLE public.vector_documents (
     source_url text,
     source_type character varying(50),
     chunk_index integer,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
 );
 
 
@@ -2017,6 +2018,21 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_vector_collections_updated_at BEFORE UPDATE ON public.vector_collections FOR EACH ROW EXECUTE FUNCTION public.update_vector_collections_updated_at();
+
+
+--
+-- Name: vector_documents trigger_vector_documents_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE OR REPLACE FUNCTION public.update_vector_documents_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_vector_documents_updated_at BEFORE UPDATE ON public.vector_documents FOR EACH ROW EXECUTE FUNCTION public.update_vector_documents_updated_at();
 
 
 --

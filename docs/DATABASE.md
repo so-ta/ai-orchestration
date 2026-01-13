@@ -385,9 +385,9 @@ RAG用ベクトルドキュメント。pgvector拡張を使用。
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
 Indexes:
-- `idx_vector_documents_tenant` ON (tenant_id)
-- `idx_vector_documents_collection` ON (collection_id)
+- `idx_vector_documents_tenant_collection` ON (tenant_id, collection_id) - 複合インデックス
 - `idx_vector_documents_embedding` ON (embedding) USING ivfflat WITH (lists = 100) - 類似検索用
+- `idx_vector_documents_metadata` ON (metadata) USING gin - メタデータフィルタ用
 
 **Note**: pgvector拡張が必要です（`CREATE EXTENSION IF NOT EXISTS vector;`）
 
