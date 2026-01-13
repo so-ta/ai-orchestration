@@ -108,6 +108,7 @@ func NewVectorService(ctx context.Context, tenantID uuid.UUID, pool *pgxpool.Poo
 }
 
 // Upsert adds or updates documents in a collection
+// Uses a transaction to ensure atomicity - all documents are inserted or none
 func (s *VectorServiceImpl) Upsert(collection string, documents []VectorDocument, opts *UpsertOptions) (*UpsertResult, error) {
 	if len(documents) == 0 {
 		return &UpsertResult{UpsertedCount: 0, IDs: []string{}}, nil
@@ -124,7 +125,14 @@ func (s *VectorServiceImpl) Upsert(collection string, documents []VectorDocument
 		return nil, fmt.Errorf("failed to generate embeddings: %w", err)
 	}
 
-	// Insert documents
+	// Begin transaction for atomic upsert
+	tx, err := s.pool.Begin(s.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(s.ctx) // Rollback if not committed
+
+	// Insert documents within transaction
 	ids := make([]string, 0, len(documents))
 	for _, doc := range documents {
 		docID := doc.ID
@@ -150,7 +158,7 @@ func (s *VectorServiceImpl) Upsert(collection string, documents []VectorDocument
 				embedding = EXCLUDED.embedding
 		`
 
-		_, err = s.pool.Exec(s.ctx, query,
+		_, err = tx.Exec(s.ctx, query,
 			docID,
 			s.tenantID, // ⚠️ Forced tenant isolation
 			collectionID,
@@ -166,7 +174,12 @@ func (s *VectorServiceImpl) Upsert(collection string, documents []VectorDocument
 		ids = append(ids, docID)
 	}
 
-	// Update document count
+	// Commit transaction
+	if err := tx.Commit(s.ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Update document count (outside transaction, non-critical)
 	if err := s.updateDocumentCount(collectionID); err != nil {
 		// Log but don't fail
 		slog.Warn("failed to update document count", "error", err, "collection_id", collectionID)
