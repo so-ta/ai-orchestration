@@ -374,9 +374,16 @@ async function copyToClipboard(text: string) {
 }
 
 .step-modal-data-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .step-modal-data-section {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
 }
 
 .data-section {

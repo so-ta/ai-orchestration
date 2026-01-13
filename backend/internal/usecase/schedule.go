@@ -254,7 +254,6 @@ func (u *ScheduleUsecase) Trigger(ctx context.Context, tenantID, id uuid.UUID) (
 		schedule.WorkflowID,
 		schedule.WorkflowVersion,
 		schedule.Input,
-		domain.RunModeProduction,
 		domain.TriggerTypeSchedule,
 	)
 

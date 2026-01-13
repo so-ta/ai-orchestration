@@ -22,9 +22,10 @@ func NewRunHandler(runUsecase *usecase.RunUsecase) *RunHandler {
 
 // CreateRunRequest represents a create run request
 type CreateRunRequest struct {
-	Input   json.RawMessage `json:"input"`
-	Mode    string          `json:"mode"`
-	Version int             `json:"version,omitempty"` // 0 or omitted means latest
+	Input       json.RawMessage `json:"input"`
+	TriggeredBy string          `json:"triggered_by,omitempty"` // manual, webhook, schedule, test, internal
+	Mode        string          `json:"mode,omitempty"`         // Deprecated: use triggered_by instead (backward compat: "test" maps to triggered_by="test")
+	Version     int             `json:"version,omitempty"`      // 0 or omitted means latest
 }
 
 // Create handles POST /api/v1/workflows/{workflow_id}/runs
@@ -42,9 +43,25 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mode := domain.RunModeProduction
-	if req.Mode == "test" {
-		mode = domain.RunModeTest
+	// Determine triggered_by with backward compatibility for mode
+	triggeredBy := domain.TriggerTypeManual // default
+	if req.TriggeredBy != "" {
+		// New API: use triggered_by directly
+		switch req.TriggeredBy {
+		case "test":
+			triggeredBy = domain.TriggerTypeTest
+		case "webhook":
+			triggeredBy = domain.TriggerTypeWebhook
+		case "schedule":
+			triggeredBy = domain.TriggerTypeSchedule
+		case "internal":
+			triggeredBy = domain.TriggerTypeInternal
+		default:
+			triggeredBy = domain.TriggerTypeManual
+		}
+	} else if req.Mode == "test" {
+		// Backward compatibility: mode: "test" maps to triggered_by: "test"
+		triggeredBy = domain.TriggerTypeTest
 	}
 
 	var userIDPtr *uuid.UUID
@@ -53,12 +70,12 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	run, err := h.runUsecase.Create(r.Context(), usecase.CreateRunInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		Version:    req.Version,
-		Input:      req.Input,
-		Mode:       mode,
-		UserID:     userIDPtr,
+		TenantID:    tenantID,
+		WorkflowID:  workflowID,
+		Version:     req.Version,
+		Input:       req.Input,
+		TriggeredBy: triggeredBy,
+		UserID:      userIDPtr,
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -117,7 +134,7 @@ func (h *RunHandler) Get(w http.ResponseWriter, r *http.Request) {
 	response["workflow_id"] = output.Run.WorkflowID
 	response["workflow_version"] = output.Run.WorkflowVersion
 	response["status"] = output.Run.Status
-	response["mode"] = output.Run.Mode
+	response["run_number"] = output.Run.RunNumber
 	response["input"] = output.Run.Input
 	response["output"] = output.Run.Output
 	response["error"] = output.Run.Error

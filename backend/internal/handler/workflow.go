@@ -231,15 +231,11 @@ func (h *WorkflowHandler) Save(w http.ResponseWriter, r *http.Request) {
 			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target step ID: "+e.TargetStepID, nil)
 			return
 		}
-		condition := ""
-		if e.Condition != nil {
-			condition = *e.Condition
-		}
 		edges[i] = domain.Edge{
 			ID:           edgeID,
 			SourceStepID: sourceID,
 			TargetStepID: targetID,
-			Condition:    condition,
+			Condition:    e.Condition,
 		}
 	}
 
@@ -312,15 +308,11 @@ func (h *WorkflowHandler) SaveDraft(w http.ResponseWriter, r *http.Request) {
 			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target step ID: "+e.TargetStepID, nil)
 			return
 		}
-		condition := ""
-		if e.Condition != nil {
-			condition = *e.Condition
-		}
 		edges[i] = domain.Edge{
 			ID:           edgeID,
 			SourceStepID: sourceID,
 			TargetStepID: targetID,
-			Condition:    condition,
+			Condition:    e.Condition,
 		}
 	}
 

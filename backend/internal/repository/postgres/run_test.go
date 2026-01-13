@@ -31,18 +31,19 @@ func TestRunRepository_Create(t *testing.T) {
 				WorkflowID:      uuid.New(),
 				WorkflowVersion: 1,
 				Status:          domain.RunStatusPending,
-				Mode:            domain.RunModeTest,
+				TriggeredBy:     domain.TriggerTypeTest,
 				Input:           json.RawMessage(`{}`),
 				CreatedAt:       time.Now(),
 			},
 			mockSetup: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec("INSERT INTO runs").
+				rows := pgxmock.NewRows([]string{"run_number"}).AddRow(1)
+				mock.ExpectQuery("INSERT INTO runs").
 					WithArgs(
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
-						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 					).
-					WillReturnResult(pgxmock.NewResult("INSERT", 1))
+					WillReturnRows(rows)
 			},
 			wantErr: false,
 		},
@@ -53,11 +54,11 @@ func TestRunRepository_Create(t *testing.T) {
 				TenantID: uuid.New(),
 			},
 			mockSetup: func(mock pgxmock.PgxPoolIface) {
-				mock.ExpectExec("INSERT INTO runs").
+				mock.ExpectQuery("INSERT INTO runs").
 					WithArgs(
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
-						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
+						pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(),
 					).
 					WillReturnError(errors.New("connection error"))
 			},
@@ -106,12 +107,12 @@ func TestRunRepository_GetByID(t *testing.T) {
 			id:       runID,
 			mockSetup: func(mock pgxmock.PgxPoolIface) {
 				rows := pgxmock.NewRows([]string{
-					"id", "tenant_id", "workflow_id", "workflow_version", "status", "mode",
-					"input", "output", "error", "triggered_by", "triggered_by_user",
+					"id", "tenant_id", "workflow_id", "workflow_version", "status", "input",
+					"output", "error", "triggered_by", "run_number", "triggered_by_user",
 					"started_at", "completed_at", "created_at", "trigger_source", "trigger_metadata",
 				}).AddRow(
-					runID, tenantID, workflowID, 1, domain.RunStatusPending, domain.RunModeTest,
-					json.RawMessage(`{}`), nil, nil, "manual", nil,
+					runID, tenantID, workflowID, 1, domain.RunStatusPending, json.RawMessage(`{}`),
+					nil, nil, domain.TriggerTypeTest, 1, nil,
 					nil, nil, now, nil, nil,
 				)
 				mock.ExpectQuery("SELECT .+ FROM runs").
@@ -185,14 +186,14 @@ func TestRunRepository_ListByWorkflow(t *testing.T) {
 					WillReturnRows(countRows)
 
 				rows := pgxmock.NewRows([]string{
-					"id", "tenant_id", "workflow_id", "workflow_version", "status", "mode",
-					"input", "output", "error", "triggered_by", "triggered_by_user",
+					"id", "tenant_id", "workflow_id", "workflow_version", "status", "input",
+					"output", "error", "triggered_by", "run_number", "triggered_by_user",
 					"started_at", "completed_at", "created_at", "trigger_source", "trigger_metadata",
 				}).
-					AddRow(runID1, tenantID, workflowID, 1, domain.RunStatusCompleted, domain.RunModeTest,
-						json.RawMessage(`{}`), nil, nil, "manual", nil, nil, nil, now, nil, nil).
-					AddRow(runID2, tenantID, workflowID, 1, domain.RunStatusPending, domain.RunModeTest,
-						json.RawMessage(`{}`), nil, nil, "manual", nil, nil, nil, now, nil, nil)
+					AddRow(runID1, tenantID, workflowID, 1, domain.RunStatusCompleted, json.RawMessage(`{}`),
+						nil, nil, domain.TriggerTypeManual, 1, nil, nil, nil, now, nil, nil).
+					AddRow(runID2, tenantID, workflowID, 1, domain.RunStatusPending, json.RawMessage(`{}`),
+						nil, nil, domain.TriggerTypeManual, 2, nil, nil, nil, now, nil, nil)
 				mock.ExpectQuery("SELECT .+ FROM runs").
 					WithArgs(tenantID, workflowID, 10, 0).
 					WillReturnRows(rows)

@@ -104,25 +104,25 @@ describe('useRuns', () => {
       })
     })
 
-    it('should create run with mode', async () => {
+    it('should create run with test trigger', async () => {
       mockApi.post.mockResolvedValue({ data: { id: 'run-1' } })
 
       const { create } = useRuns()
-      await create('workflow-1', { mode: 'test' })
+      await create('workflow-1', { triggered_by: 'test' })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/workflow-1/runs', {
-        mode: 'test',
+        triggered_by: 'test',
       })
     })
 
-    it('should create run with production mode', async () => {
+    it('should create run with manual trigger', async () => {
       mockApi.post.mockResolvedValue({ data: { id: 'run-1' } })
 
       const { create } = useRuns()
-      await create('workflow-1', { mode: 'production' })
+      await create('workflow-1', { triggered_by: 'manual' })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/workflow-1/runs', {
-        mode: 'production',
+        triggered_by: 'manual',
       })
     })
 
@@ -143,13 +143,13 @@ describe('useRuns', () => {
       const { create } = useRuns()
       await create('workflow-1', {
         input: { data: 'test' },
-        mode: 'production',
+        triggered_by: 'manual',
         version: 3,
       })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/workflow-1/runs', {
         input: { data: 'test' },
-        mode: 'production',
+        triggered_by: 'manual',
         version: 3,
       })
     })

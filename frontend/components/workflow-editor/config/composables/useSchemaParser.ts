@@ -20,6 +20,28 @@ import type {
  * JSON Schemaプロパティからウィジェットタイプを推論
  */
 export function inferWidgetType(prop: JSONSchemaProperty): WidgetType {
+  // Check for explicit x-ui-widget first (from seed data)
+  const xUiWidget = prop['x-ui-widget'] as string | undefined
+  if (xUiWidget) {
+    // Map x-ui-widget values to our widget types
+    const widgetMap: Record<string, WidgetType> = {
+      'textarea': 'textarea',
+      'code': 'code',
+      'json': 'json',
+      'select': 'select',
+      'checkbox': 'checkbox',
+      'switch': 'switch',
+      'number': 'number',
+      'slider': 'slider',
+      'text': 'text',
+      'array': 'array',
+      'key-value': 'key-value',
+    }
+    if (widgetMap[xUiWidget]) {
+      return widgetMap[xUiWidget]
+    }
+  }
+
   const { type, format, enum: enumValues, maxLength, additionalProperties } = prop;
 
   if (type === 'boolean') {

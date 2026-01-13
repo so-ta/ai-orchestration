@@ -1,0 +1,288 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
+
+const props = defineProps<{
+  name: string
+  property: JSONSchemaProperty
+  modelValue: string | undefined
+  override?: FieldOverride
+  error?: string
+  disabled?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: string): void
+  (e: 'blur'): void
+}>()
+
+// Determine language from property or override
+const language = computed(() => {
+  // Check override first
+  if (props.override?.language) return props.override.language
+  // Check property x-ui-language
+  if (props.property['x-ui-language']) return String(props.property['x-ui-language'])
+  // Default to JavaScript
+  return 'javascript'
+})
+
+// Get display title
+const title = computed(() => {
+  return props.property.title || props.name
+})
+
+// Get description
+const description = computed(() => {
+  return props.property.description
+})
+
+// Is required?
+const isRequired = computed(() => {
+  return props.property['x-required'] === true
+})
+
+// Number of rows
+const rows = computed(() => {
+  return props.override?.rows || 10
+})
+
+// Handle input
+function handleInput(event: Event) {
+  const target = event.target as HTMLTextAreaElement
+  emit('update:modelValue', target.value)
+}
+
+// Handle blur
+function handleBlur() {
+  emit('blur')
+}
+
+// Simple syntax highlighting keywords for JavaScript
+const highlightedCode = computed(() => {
+  const code = props.modelValue || ''
+  if (!code) return ''
+
+  // Escape HTML
+  let html = code
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  if (language.value === 'javascript' || language.value === 'js') {
+    // Keywords
+    html = html.replace(
+      /\b(const|let|var|function|async|await|return|if|else|for|while|try|catch|throw|new|class|extends|import|export|default|from)\b/g,
+      '<span class="keyword">$1</span>'
+    )
+    // Strings
+    html = html.replace(
+      /('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)/g,
+      '<span class="string">$1</span>'
+    )
+    // Comments
+    html = html.replace(
+      /(\/\/.*$)/gm,
+      '<span class="comment">$1</span>'
+    )
+    // Numbers
+    html = html.replace(
+      /\b(\d+(?:\.\d+)?)\b/g,
+      '<span class="number">$1</span>'
+    )
+  }
+
+  return html
+})
+</script>
+
+<template>
+  <div class="code-widget">
+    <label :for="name" class="code-widget-label">
+      {{ title }}
+      <span v-if="isRequired" class="required-indicator">*</span>
+    </label>
+
+    <p v-if="description" class="code-widget-description">
+      {{ description }}
+    </p>
+
+    <div class="code-widget-container">
+      <div class="code-editor">
+        <div class="line-numbers">
+          <span v-for="i in (modelValue || '').split('\n').length" :key="i">{{ i }}</span>
+        </div>
+        <div class="code-area">
+          <!-- Highlighted code display (read-only visual layer) -->
+          <pre class="code-highlight" v-html="highlightedCode"></pre>
+          <!-- Actual textarea for input -->
+          <textarea
+            :id="name"
+            :value="modelValue || ''"
+            :rows="rows"
+            :disabled="disabled"
+            :class="{ 'has-error': !!error }"
+            class="code-input"
+            spellcheck="false"
+            @input="handleInput"
+            @blur="handleBlur"
+          ></textarea>
+        </div>
+      </div>
+      <div class="code-footer">
+        <span class="language-badge">{{ language }}</span>
+      </div>
+    </div>
+
+    <p v-if="error" class="code-widget-error">
+      {{ error }}
+    </p>
+  </div>
+</template>
+
+<style scoped>
+.code-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.code-widget-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.required-indicator {
+  color: var(--color-error);
+  margin-left: 0.125rem;
+}
+
+.code-widget-description {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.code-widget-container {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1e1e1e;
+}
+
+.code-editor {
+  display: flex;
+  min-height: 150px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.line-numbers {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.5rem;
+  background: #2d2d2d;
+  color: #6e7681;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: right;
+  user-select: none;
+  min-width: 2.5rem;
+  border-right: 1px solid #404040;
+}
+
+.code-area {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+}
+
+.code-highlight,
+.code-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0.75rem;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+}
+
+.code-highlight {
+  color: #d4d4d4;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.code-input {
+  background: transparent;
+  color: transparent;
+  caret-color: #d4d4d4;
+  border: none;
+  outline: none;
+  resize: none;
+  z-index: 2;
+}
+
+.code-input:focus {
+  outline: none;
+}
+
+.code-input.has-error {
+  border-color: var(--color-error);
+}
+
+.code-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.code-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.375rem 0.75rem;
+  background: #2d2d2d;
+  border-top: 1px solid #404040;
+}
+
+.language-badge {
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: #9ca3af;
+  background: #404040;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.code-widget-error {
+  font-size: 0.6875rem;
+  color: var(--color-error);
+  margin: 0;
+}
+
+/* Syntax highlighting */
+:deep(.keyword) {
+  color: #569cd6;
+}
+
+:deep(.string) {
+  color: #ce9178;
+}
+
+:deep(.comment) {
+  color: #6a9955;
+}
+
+:deep(.number) {
+  color: #b5cea8;
+}
+</style>

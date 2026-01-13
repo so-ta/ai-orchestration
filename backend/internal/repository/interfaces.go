@@ -56,10 +56,10 @@ type RunRepository interface {
 
 // RunFilter defines filtering options for run list
 type RunFilter struct {
-	Status *domain.RunStatus
-	Mode   *domain.RunMode
-	Page   int
-	Limit  int
+	Status      *domain.RunStatus
+	TriggeredBy *domain.TriggerType
+	Page        int
+	Limit       int
 }
 
 // StepRunRepository defines the interface for step run persistence

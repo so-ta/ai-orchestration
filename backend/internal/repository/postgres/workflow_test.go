@@ -615,7 +615,7 @@ func TestWorkflowRepository_GetWithStepsAndEdges(t *testing.T) {
 				// Edges query
 				edgesRows := pgxmock.NewRows([]string{
 					"id", "workflow_id", "source_step_id", "target_step_id", "source_port", "target_port", "condition", "created_at",
-				}).AddRow(edgeID, workflowID, stepID1, stepID2, "default", "input", "", now)
+				}).AddRow(edgeID, workflowID, stepID1, stepID2, "default", "input", nil, now)
 				mock.ExpectQuery("SELECT .+ FROM edges WHERE workflow_id").
 					WithArgs(workflowID).
 					WillReturnRows(edgesRows)

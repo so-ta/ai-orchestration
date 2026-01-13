@@ -45,12 +45,12 @@ func NewRunUsecase(
 
 // CreateRunInput represents input for creating a run
 type CreateRunInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	Version    int // 0 means latest version
-	Input      json.RawMessage
-	Mode       domain.RunMode
-	UserID     *uuid.UUID
+	TenantID    uuid.UUID
+	WorkflowID  uuid.UUID
+	Version     int // 0 means latest version
+	Input       json.RawMessage
+	TriggeredBy domain.TriggerType // e.g., TriggerTypeManual, TriggerTypeTest
+	UserID      *uuid.UUID
 }
 
 // Create creates and enqueues a new run
@@ -82,8 +82,7 @@ func (u *RunUsecase) Create(ctx context.Context, input CreateRunInput) (*domain.
 		workflow.ID,
 		version,
 		input.Input,
-		input.Mode,
-		domain.TriggerTypeManual,
+		input.TriggeredBy,
 	)
 	run.TriggeredByUser = input.UserID
 
@@ -176,12 +175,12 @@ func (u *RunUsecase) GetWithDetailsAndDefinition(ctx context.Context, tenantID, 
 
 // ListRunsInput represents input for listing runs
 type ListRunsInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	Status     *domain.RunStatus
-	Mode       *domain.RunMode
-	Page       int
-	Limit      int
+	TenantID    uuid.UUID
+	WorkflowID  uuid.UUID
+	Status      *domain.RunStatus
+	TriggeredBy *domain.TriggerType // Optional filter by trigger type
+	Page        int
+	Limit       int
 }
 
 // ListRunsOutput represents output for listing runs
@@ -202,10 +201,10 @@ func (u *RunUsecase) List(ctx context.Context, input ListRunsInput) (*ListRunsOu
 	}
 
 	filter := repository.RunFilter{
-		Status: input.Status,
-		Mode:   input.Mode,
-		Page:   input.Page,
-		Limit:  input.Limit,
+		Status:      input.Status,
+		TriggeredBy: input.TriggeredBy,
+		Page:        input.Page,
+		Limit:       input.Limit,
 	}
 
 	runs, total, err := u.runRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID, filter)
@@ -465,7 +464,6 @@ type ExecuteSystemWorkflowInput struct {
 	TenantID        uuid.UUID              // Tenant context for the run
 	SystemSlug      string                 // System workflow slug (e.g., "copilot-generate")
 	Input           json.RawMessage        // Workflow input
-	Mode            domain.RunMode         // Execution mode (test/production)
 	TriggerSource   string                 // Internal caller identifier (e.g., "copilot")
 	TriggerMetadata map[string]interface{} // Additional metadata (feature, user_id, session_id, etc.)
 	UserID          *uuid.UUID             // User who triggered the execution
@@ -499,7 +497,6 @@ func (u *RunUsecase) ExecuteSystemWorkflow(ctx context.Context, input ExecuteSys
 		workflow.ID,
 		workflow.Version,
 		input.Input,
-		input.Mode,
 		domain.TriggerTypeInternal,
 	)
 	run.TriggeredByUser = input.UserID
@@ -585,8 +582,7 @@ func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInp
 		workflow.ID,
 		0, // Version 0 indicates inline test with current draft
 		input.Input,
-		domain.RunModeTest,
-		domain.TriggerTypeManual,
+		domain.TriggerTypeTest,
 	)
 	run.TriggeredByUser = input.UserID
 

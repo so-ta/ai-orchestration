@@ -101,7 +101,7 @@ func TestRunListPagination(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		runReq := map[string]interface{}{
 			"input": map[string]int{"index": i},
-			"mode":  "test",
+			"triggered_by": "test",
 		}
 		resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 		require.Equal(t, http.StatusCreated, resp.StatusCode, "Run %d create response: %s", i, string(body))
@@ -139,7 +139,7 @@ func TestRunGetByID(t *testing.T) {
 	// Create a run
 	runReq := map[string]interface{}{
 		"input": map[string]string{"test": "value"},
-		"mode":  "test",
+		"triggered_by": "test",
 	}
 	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -177,7 +177,7 @@ func TestRunCancel(t *testing.T) {
 	// Create a run
 	runReq := map[string]interface{}{
 		"input": map[string]string{"test": "cancel"},
-		"mode":  "test",
+		"triggered_by": "test",
 	}
 	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -196,17 +196,17 @@ func TestRunCancel(t *testing.T) {
 		"Expected OK or BadRequest, got %d: %s", resp.StatusCode, string(body))
 }
 
-func TestRunWithModes(t *testing.T) {
+func TestRunWithTriggeredBy(t *testing.T) {
 	workflowID := createTestWorkflowForRuns(t)
 	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
 
-	modes := []string{"test", "production"}
+	triggeredByTypes := []string{"test", "manual"}
 
-	for _, mode := range modes {
-		t.Run(fmt.Sprintf("mode_%s", mode), func(t *testing.T) {
+	for _, triggeredBy := range triggeredByTypes {
+		t.Run(fmt.Sprintf("triggered_by_%s", triggeredBy), func(t *testing.T) {
 			runReq := map[string]interface{}{
-				"input": map[string]string{"mode_test": mode},
-				"mode":  mode,
+				"input":        map[string]string{"trigger_test": triggeredBy},
+				"triggered_by": triggeredBy,
 			}
 			resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 			require.Equal(t, http.StatusCreated, resp.StatusCode, "Create response: %s", string(body))
@@ -216,7 +216,7 @@ func TestRunWithModes(t *testing.T) {
 			}
 			err := json.Unmarshal(body, &createResp)
 			require.NoError(t, err)
-			assert.Equal(t, mode, createResp.Data.Mode)
+			assert.Equal(t, triggeredBy, createResp.Data.TriggeredBy)
 		})
 	}
 }
@@ -228,7 +228,7 @@ func TestRunWithVersion(t *testing.T) {
 	// Execute with specific version (version 1 after publish)
 	runReq := map[string]interface{}{
 		"input":   map[string]string{"version_test": "v1"},
-		"mode":    "test",
+		"triggered_by": "test",
 		"version": 1,
 	}
 	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
@@ -252,7 +252,7 @@ func TestRunWithInvalidVersion(t *testing.T) {
 	// Execute with non-existent version
 	runReq := map[string]interface{}{
 		"input":   map[string]string{"version_test": "v999"},
-		"mode":    "test",
+		"triggered_by": "test",
 		"version": 999,
 	}
 	resp, _ := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
@@ -448,7 +448,7 @@ func TestRunCompletionWithStepRuns(t *testing.T) {
 	// Create and execute a run
 	runReq := map[string]interface{}{
 		"input": map[string]string{"test": "step_runs"},
-		"mode":  "test",
+		"triggered_by": "test",
 	}
 	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)

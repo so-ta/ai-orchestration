@@ -18,7 +18,8 @@ func TestNewEdge(t *testing.T) {
 	assert.Equal(t, workflowID, edge.WorkflowID)
 	assert.Equal(t, sourceID, edge.SourceStepID)
 	assert.Equal(t, targetID, edge.TargetStepID)
-	assert.Equal(t, "condition == true", edge.Condition)
+	assert.NotNil(t, edge.Condition)
+	assert.Equal(t, "condition == true", *edge.Condition)
 	assert.False(t, edge.CreatedAt.IsZero())
 }
 
@@ -33,5 +34,5 @@ func TestNewEdge_WithoutCondition(t *testing.T) {
 	assert.Equal(t, workflowID, edge.WorkflowID)
 	assert.Equal(t, sourceID, edge.SourceStepID)
 	assert.Equal(t, targetID, edge.TargetStepID)
-	assert.Empty(t, edge.Condition)
+	assert.Nil(t, edge.Condition)
 }

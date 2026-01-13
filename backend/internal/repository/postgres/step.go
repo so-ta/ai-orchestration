@@ -47,9 +47,10 @@ func (r *StepRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) 
 		WHERE id = $1 AND workflow_id = $2
 	`
 	var s domain.Step
+	var groupRole *string
 	err := r.pool.QueryRow(ctx, query, id, workflowID).Scan(
 		&s.ID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
-		&s.BlockGroupID, &s.GroupRole,
+		&s.BlockGroupID, &groupRole,
 		&s.PositionX, &s.PositionY,
 		&s.BlockDefinitionID, &s.CredentialBindings,
 		&s.CreatedAt, &s.UpdatedAt,
@@ -59,6 +60,9 @@ func (r *StepRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) 
 	}
 	if err != nil {
 		return nil, err
+	}
+	if groupRole != nil {
+		s.GroupRole = *groupRole
 	}
 	return &s, nil
 }
@@ -81,14 +85,18 @@ func (r *StepRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUI
 	var steps []*domain.Step
 	for rows.Next() {
 		var s domain.Step
+		var groupRole *string
 		if err := rows.Scan(
 			&s.ID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
-			&s.BlockGroupID, &s.GroupRole,
+			&s.BlockGroupID, &groupRole,
 			&s.PositionX, &s.PositionY,
 			&s.BlockDefinitionID, &s.CredentialBindings,
 			&s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if groupRole != nil {
+			s.GroupRole = *groupRole
 		}
 		steps = append(steps, &s)
 	}
@@ -114,14 +122,18 @@ func (r *StepRepository) ListByBlockGroup(ctx context.Context, blockGroupID uuid
 	var steps []*domain.Step
 	for rows.Next() {
 		var s domain.Step
+		var groupRole *string
 		if err := rows.Scan(
 			&s.ID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
-			&s.BlockGroupID, &s.GroupRole,
+			&s.BlockGroupID, &groupRole,
 			&s.PositionX, &s.PositionY,
 			&s.BlockDefinitionID, &s.CredentialBindings,
 			&s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if groupRole != nil {
+			s.GroupRole = *groupRole
 		}
 		steps = append(steps, &s)
 	}

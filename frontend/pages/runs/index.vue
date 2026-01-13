@@ -57,9 +57,9 @@ const filteredRuns = computed(() => {
     result = result.filter(r => r.status === statusFilter.value)
   }
 
-  // Filter by mode
+  // Filter by trigger type
   if (modeFilter.value !== 'all') {
-    result = result.filter(r => r.mode === modeFilter.value)
+    result = result.filter(r => r.triggered_by === modeFilter.value)
   }
 
   // Filter by workflow
@@ -248,11 +248,13 @@ onUnmounted(() => {
           </select>
         </div>
         <div class="filter-group">
-          <label class="filter-label">{{ t('runs.filters.mode') }}:</label>
+          <label class="filter-label">{{ t('runs.filters.triggeredBy') }}:</label>
           <select v-model="modeFilter" class="filter-select">
             <option value="all">{{ t('common.filter') }}</option>
-            <option value="test">{{ t('runs.mode.test') }}</option>
-            <option value="production">{{ t('runs.mode.production') }}</option>
+            <option value="manual">{{ t('runs.triggeredBy.manual') }}</option>
+            <option value="test">{{ t('runs.triggeredBy.test') }}</option>
+            <option value="schedule">{{ t('runs.triggeredBy.schedule') }}</option>
+            <option value="webhook">{{ t('runs.triggeredBy.webhook') }}</option>
           </select>
         </div>
         <div class="filter-spacer"></div>
@@ -301,7 +303,7 @@ onUnmounted(() => {
               <tr>
                 <th>{{ t('runs.table.workflow') }}</th>
                 <th>{{ t('runs.table.status') }}</th>
-                <th>{{ t('runs.table.mode') }}</th>
+                <th>#</th>
                 <th>{{ t('runs.table.duration') }}</th>
                 <th>{{ t('runs.table.triggeredBy') }}</th>
                 <th>{{ t('runs.table.created') }}</th>
@@ -334,15 +336,13 @@ onUnmounted(() => {
                   </span>
                 </td>
                 <td>
-                  <span :class="['mode-tag', `mode-${run.mode}`]">
-                    {{ t(`runs.mode.${run.mode}`) }}
-                  </span>
+                  <span class="run-number-badge">#{{ run.run_number }}</span>
                 </td>
                 <td>
                   <span class="duration">{{ calculateDuration(run) }}</span>
                 </td>
                 <td class="text-secondary text-sm">
-                  {{ run.triggered_by }}
+                  {{ t(`runs.triggeredBy.${run.triggered_by}`) }}
                 </td>
                 <td class="text-secondary text-sm">
                   {{ formatDate(run.created_at) }}
@@ -688,22 +688,15 @@ onUnmounted(() => {
   margin-right: 0.375rem;
 }
 
-/* Mode Tag */
-.mode-tag {
+/* Run Number Badge */
+.run-number-badge {
   font-size: 0.75rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  font-weight: 500;
-}
-
-.mode-test {
-  background: #fef3c7;
-  color: #d97706;
-}
-
-.mode-production {
-  background: #dcfce7;
-  color: #16a34a;
+  font-weight: 600;
+  background: #e0e7ff;
+  color: #4f46e5;
+  font-family: 'SF Mono', Monaco, monospace;
 }
 
 /* Duration */
