@@ -256,5 +256,41 @@ describe('CodeWidget', () => {
       // Still escapes HTML but no keyword highlighting
       expect(highlightedHtml).toContain('const x = ')
     })
+
+    it('does not highlight keywords inside strings (placeholder isolation)', () => {
+      // This test verifies the placeholder-based highlighting correctly isolates
+      // strings before keyword matching to prevent false positives
+      const code = 'const msg = "const function return";'
+      const wrapper = createWrapper({ modelValue: code })
+
+      const highlightedHtml = wrapper.find('.code-highlight').html()
+      // The first 'const' should be highlighted as a keyword
+      expect(highlightedHtml).toContain('<span class="keyword">const</span>')
+      // The keywords inside the string should NOT be highlighted
+      expect(highlightedHtml).toContain('<span class="string">"const function return"</span>')
+      // Verify no keyword spans exist inside the string
+      expect(highlightedHtml).not.toContain('"<span class="keyword">')
+    })
+
+    it('does not highlight keywords inside comments (placeholder isolation)', () => {
+      const code = '// const and function are keywords'
+      const wrapper = createWrapper({ modelValue: code })
+
+      const highlightedHtml = wrapper.find('.code-highlight').html()
+      // The entire comment should be wrapped, not individual keywords inside
+      expect(highlightedHtml).toContain('<span class="comment">// const and function are keywords</span>')
+      // No keyword spans should exist inside the comment
+      expect(highlightedHtml).not.toContain('<span class="keyword">const</span>')
+    })
+
+    it('handles multiple token types in the same line', () => {
+      const code = 'const x = 42; // set to number'
+      const wrapper = createWrapper({ modelValue: code })
+
+      const highlightedHtml = wrapper.find('.code-highlight').html()
+      expect(highlightedHtml).toContain('<span class="keyword">const</span>')
+      expect(highlightedHtml).toContain('<span class="number">42</span>')
+      expect(highlightedHtml).toContain('<span class="comment">// set to number</span>')
+    })
   })
 })
