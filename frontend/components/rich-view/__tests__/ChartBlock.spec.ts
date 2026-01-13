@@ -43,6 +43,9 @@ vi.mock('chart.js', () => {
 import ChartBlock from '../ChartBlock.vue'
 
 describe('ChartBlock', () => {
+  // Store original getContext to restore after tests
+  const originalGetContext = HTMLCanvasElement.prototype.getContext
+
   beforeEach(() => {
     vi.clearAllMocks()
     // Mock canvas getContext
@@ -52,6 +55,8 @@ describe('ChartBlock', () => {
   })
 
   afterEach(() => {
+    // Restore original getContext to avoid side effects on other tests
+    HTMLCanvasElement.prototype.getContext = originalGetContext
     vi.restoreAllMocks()
   })
 
