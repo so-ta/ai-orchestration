@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["findings", "verdict", "summary"],
+  "required": ["findings", "verdict", "summary", "good_points", "verdict_reason"],
   "additionalProperties": false,
   "properties": {
     "summary": {
@@ -19,7 +19,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["file", "title", "body", "severity", "in_pr_diff"],
+        "required": ["file", "title", "body", "severity", "in_pr_diff", "start_line", "end_line", "category", "suggested_code"],
         "additionalProperties": false,
         "properties": {
           "file": {
@@ -27,12 +27,12 @@
             "description": "ファイルパス"
           },
           "start_line": {
-            "type": "integer",
-            "description": "開始行番号"
+            "type": ["integer", "null"],
+            "description": "開始行番号（不明な場合はnull）"
           },
           "end_line": {
-            "type": "integer",
-            "description": "終了行番号"
+            "type": ["integer", "null"],
+            "description": "終了行番号（不明な場合はnull）"
           },
           "title": {
             "type": "string",
@@ -57,8 +57,8 @@
             "description": "このPRの差分に含まれるかどうか"
           },
           "suggested_code": {
-            "type": "string",
-            "description": "修正後のコード（suggestion用）"
+            "type": ["string", "null"],
+            "description": "修正後のコード（suggestion用、なければnull）"
           }
         }
       },
