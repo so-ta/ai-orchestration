@@ -191,7 +191,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.4
 
       - name: Run gosec (backend)
         working-directory: backend
@@ -206,6 +206,6 @@ jobs:
         continue-on-error: true
         run: |
           echo "::group::govulncheck results"
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./... || echo "::warning::govulncheck found vulnerabilities"
           echo "::endgroup::"
