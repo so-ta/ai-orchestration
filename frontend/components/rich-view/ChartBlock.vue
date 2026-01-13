@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
   <div class="chart-block">
     <div
       class="chart-container"
-      :style="{ height: `${config.height || 300}px` }"
+      :style="{ height: `${props.config.height || 300}px` }"
     >
       <canvas ref="canvasRef" />
     </div>
