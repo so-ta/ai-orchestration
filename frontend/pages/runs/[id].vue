@@ -27,6 +27,23 @@ const reExecuteMode = ref<'single' | 'resume'>('single')
 const reExecuteInput = ref<string>('')
 const reExecuting = ref(false)
 
+// Rich View output state
+type OutputViewTab = 'view' | 'markdown' | 'json'
+const activeOutputViewTab = ref<OutputViewTab>('json')
+
+// Check if selected step output has markdown
+const selectedStepHasMarkdown = computed(() => {
+  if (!selectedStepRun.value?.output) return false
+  const output = selectedStepRun.value.output as Record<string, unknown>
+  return typeof output.markdown === 'string' && output.markdown.length > 0
+})
+
+const selectedStepOutputMarkdown = computed(() => {
+  if (!selectedStepHasMarkdown.value) return ''
+  const output = selectedStepRun.value?.output as Record<string, unknown>
+  return output.markdown as string
+})
+
 // Computed workflow definition from API response
 const workflowDefinition = computed<WorkflowDefinition | null>(() => {
   return run.value?.workflow_definition || null
@@ -212,6 +229,11 @@ async function handleStepShowDetails(stepRun: StepRun) {
   selectedStepRun.value = stepRun
   showStepDetails.value = true
   showReExecuteForm.value = false
+
+  // Set default tab: View if markdown available, otherwise JSON
+  const output = stepRun.output as Record<string, unknown> | null
+  const hasMarkdown = output && typeof output.markdown === 'string' && output.markdown.length > 0
+  activeOutputViewTab.value = hasMarkdown ? 'view' : 'json'
 
   // Load step history if run is completed/failed
   if (canReExecute.value) {
@@ -786,16 +808,48 @@ onUnmounted(() => {
               <div class="data-section">
                 <div class="data-section-header">
                   <h4 class="data-section-title">Output</h4>
-                  <button
-                    v-if="selectedStepRun.output"
-                    class="btn btn-outline btn-xs"
-                    @click="copyToClipboard(formatJson(selectedStepRun.output))"
-                  >
-                    Copy
-                  </button>
+                  <div class="data-section-actions">
+                    <!-- Tab switcher: View/Markdown only when markdown available -->
+                    <div class="output-tabs">
+                      <button
+                        v-if="selectedStepHasMarkdown"
+                        :class="['tab-btn', { active: activeOutputViewTab === 'view' }]"
+                        @click="activeOutputViewTab = 'view'"
+                      >
+                        View
+                      </button>
+                      <button
+                        v-if="selectedStepHasMarkdown"
+                        :class="['tab-btn', { active: activeOutputViewTab === 'markdown' }]"
+                        @click="activeOutputViewTab = 'markdown'"
+                      >
+                        Markdown
+                      </button>
+                      <button
+                        :class="['tab-btn', { active: activeOutputViewTab === 'json' }]"
+                        @click="activeOutputViewTab = 'json'"
+                      >
+                        JSON
+                      </button>
+                    </div>
+                    <button
+                      v-if="selectedStepRun.output"
+                      class="btn btn-outline btn-xs"
+                      @click="copyToClipboard(formatJson(selectedStepRun.output))"
+                    >
+                      Copy
+                    </button>
+                  </div>
                 </div>
-                <pre v-if="selectedStepRun.output && Object.keys(selectedStepRun.output).length > 0" class="data-section-content">{{ formatJson(selectedStepRun.output) }}</pre>
-                <div v-else class="data-section-empty">No output data</div>
+                <!-- View (Rich rendered markdown) -->
+                <div v-if="activeOutputViewTab === 'view' && selectedStepHasMarkdown" class="markdown-section-content">
+                  <ExtendedMarkdownRenderer :content="selectedStepOutputMarkdown" />
+                </div>
+                <!-- Markdown (raw markdown text) -->
+                <pre v-else-if="activeOutputViewTab === 'markdown' && selectedStepHasMarkdown" class="data-section-content">{{ selectedStepOutputMarkdown }}</pre>
+                <!-- JSON view -->
+                <pre v-else-if="activeOutputViewTab === 'json' && selectedStepRun.output && Object.keys(selectedStepRun.output).length > 0" class="data-section-content">{{ formatJson(selectedStepRun.output) }}</pre>
+                <div v-else-if="!selectedStepRun.output || Object.keys(selectedStepRun.output).length === 0" class="data-section-empty">No output data</div>
               </div>
             </div>
           </div>
@@ -2105,6 +2159,53 @@ onUnmounted(() => {
 .btn-xs {
   padding: 0.25rem 0.5rem;
   font-size: 0.625rem;
+}
+
+/* Data section actions */
+.data-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Output tabs */
+.output-tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.tab-btn {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tab-btn.active {
+  background: white;
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Markdown section content */
+.markdown-section-content {
+  padding: 1rem;
+  background: white;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 /* Re-execution Actions */

@@ -583,6 +583,7 @@
     "completedAt": "完了時刻",
     "table": {
       "workflow": "ワークフロー",
+      "step": "ブロック",
       "status": "ステータス",
       "mode": "モード",
       "duration": "実行時間",

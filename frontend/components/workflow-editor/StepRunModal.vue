@@ -12,6 +12,30 @@ const emit = defineEmits<{
   (e: 'close'): void
 }>()
 
+// Output tab state
+type OutputTab = 'view' | 'markdown' | 'json'
+const activeOutputTab = ref<OutputTab>('json')
+
+// Check if output has markdown
+const hasMarkdown = computed(() => {
+  if (!props.stepRun?.output) return false
+  const output = props.stepRun.output as Record<string, unknown>
+  return typeof output.markdown === 'string' && output.markdown.length > 0
+})
+
+const outputMarkdown = computed(() => {
+  if (!hasMarkdown.value) return ''
+  const output = props.stepRun?.output as Record<string, unknown>
+  return output.markdown as string
+})
+
+// Reset tab when modal opens: View if markdown available, otherwise JSON
+watch(() => props.show, (show) => {
+  if (show) {
+    activeOutputTab.value = hasMarkdown.value ? 'view' : 'json'
+  }
+})
+
 // Format JSON for display
 function formatJson(obj: object | null | undefined): string {
   if (!obj) return '{}'
@@ -145,16 +169,48 @@ async function copyToClipboard(text: string) {
             <div class="data-section">
               <div class="data-section-header">
                 <h4 class="data-section-title">{{ t('execution.output') }}</h4>
-                <button
-                  v-if="stepRun.output"
-                  class="btn btn-outline btn-xs"
-                  @click="copyToClipboard(formatJson(stepRun.output))"
-                >
-                  {{ t('common.copy') }}
-                </button>
+                <div class="data-section-actions">
+                  <!-- Tab switcher: View/Markdown only when markdown available -->
+                  <div class="output-tabs">
+                    <button
+                      v-if="hasMarkdown"
+                      :class="['tab-btn', { active: activeOutputTab === 'view' }]"
+                      @click="activeOutputTab = 'view'"
+                    >
+                      View
+                    </button>
+                    <button
+                      v-if="hasMarkdown"
+                      :class="['tab-btn', { active: activeOutputTab === 'markdown' }]"
+                      @click="activeOutputTab = 'markdown'"
+                    >
+                      Markdown
+                    </button>
+                    <button
+                      :class="['tab-btn', { active: activeOutputTab === 'json' }]"
+                      @click="activeOutputTab = 'json'"
+                    >
+                      JSON
+                    </button>
+                  </div>
+                  <button
+                    v-if="stepRun.output"
+                    class="btn btn-outline btn-xs"
+                    @click="copyToClipboard(formatJson(stepRun.output))"
+                  >
+                    {{ t('common.copy') }}
+                  </button>
+                </div>
               </div>
-              <pre v-if="stepRun.output && Object.keys(stepRun.output).length > 0" class="data-section-content">{{ formatJson(stepRun.output) }}</pre>
-              <div v-else class="data-section-empty">{{ t('execution.noOutputData') }}</div>
+              <!-- View (Rich rendered markdown) -->
+              <div v-if="activeOutputTab === 'view' && hasMarkdown" class="markdown-section-content">
+                <ExtendedMarkdownRenderer :content="outputMarkdown" />
+              </div>
+              <!-- Markdown (raw markdown text) -->
+              <pre v-else-if="activeOutputTab === 'markdown' && hasMarkdown" class="data-section-content">{{ outputMarkdown }}</pre>
+              <!-- JSON view -->
+              <pre v-else-if="activeOutputTab === 'json' && stepRun.output && Object.keys(stepRun.output).length > 0" class="data-section-content">{{ formatJson(stepRun.output) }}</pre>
+              <div v-else-if="!stepRun.output || Object.keys(stepRun.output).length === 0" class="data-section-empty">{{ t('execution.noOutputData') }}</div>
             </div>
           </div>
         </div>
@@ -367,5 +423,52 @@ async function copyToClipboard(text: string) {
 .btn-xs {
   padding: 0.25rem 0.5rem;
   font-size: 0.625rem;
+}
+
+/* Data section actions */
+.data-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Output tabs */
+.output-tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.tab-btn {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--color-text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tab-btn.active {
+  background: white;
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Markdown section content */
+.markdown-section-content {
+  padding: 1rem;
+  background: white;
+  max-height: 400px;
+  overflow-y: auto;
 }
 </style>

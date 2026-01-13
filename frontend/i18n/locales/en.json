@@ -583,6 +583,7 @@
     "completedAt": "Completed At",
     "table": {
       "workflow": "Workflow",
+      "step": "Block",
       "status": "Status",
       "mode": "Mode",
       "duration": "Duration",
