@@ -2,6 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "required": ["findings", "verdict", "summary"],
+  "additionalProperties": false,
   "properties": {
     "summary": {
       "type": "string",
@@ -19,6 +20,7 @@
       "items": {
         "type": "object",
         "required": ["file", "title", "body", "severity", "in_pr_diff"],
+        "additionalProperties": false,
         "properties": {
           "file": {
             "type": "string",
