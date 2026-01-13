@@ -1,0 +1,89 @@
+# Codex PR Review Workflow
+# PRが作成・更新された際にOpenAI Codexがコードレビューを実行
+#
+# 設定方法:
+# 1. リポジトリの Settings > Secrets and variables > Actions で OPENAI_API_KEY を設定
+# 2. PRが作成されると自動的にレビューが実行される
+#
+# 参照:
+# - https://developers.openai.com/codex/github-action/
+# - https://github.com/openai/codex-action
+# - AGENTS.md: Codex用のレビューガイドライン
+
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # 手動トリガーも可能
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: false
+        type: number
+
+# PRへのコメント書き込み権限
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  codex-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # 全履歴を取得（差分比較用）
+
+      - name: Run Codex Review
+        id: codex_review
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/review.md
+          output-file: codex-review-output.md
+          # セキュリティ: sudo権限を削除してCodexがAPIキーにアクセスできないようにする
+          safety-strategy: drop-sudo
+          # ワークスペースへの書き込みを許可（レビュー結果出力用）
+          sandbox: workspace-write
+          # コードレビューに最適化されたモデルを使用
+          model: gpt-5.2-codex
+
+      - name: Post Review Comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          if [ -f codex-review-output.md ]; then
+            # レビュー結果をPRにコメント
+            gh pr comment $PR_NUMBER --body "## 🤖 Codex Code Review
+
+          $(cat codex-review-output.md)
+
+          ---
+          *このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*
+          *レビューガイドライン: [AGENTS.md](../AGENTS.md)*"
+          else
+            echo "Review output file not found"
+            exit 1
+          fi
+
+      - name: Handle Review Failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          gh pr comment $PR_NUMBER --body "## ⚠️ Codex Review Failed
+
+          自動レビューの実行中にエラーが発生しました。
+          手動でのレビューをお願いします。
+
+          [ワークフローログを確認](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ---
+          *このコメントは Codex Review Workflow による自動生成です*"
