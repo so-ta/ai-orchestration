@@ -790,4 +790,80 @@ const llmResponse = await ctx.llm.chat(llmProvider, llmModel, {messages: [{role:
 return {answer: llmResponse.content, sources: searchResult.matches.map(m => ({id: m.id, score: m.score, content: (m.content || \'\').substring(0, 200) + \'...\', metadata: m.metadata})), usage: {embedding: embedResult.usage, llm: llmResponse.usage}};',
 '{"icon": "message-square", "color": "#8B5CF6"}', true, 1);
 
+-- ============================================================================
+-- RAG Sample Workflows
+-- ============================================================================
+
+-- RAG Sample Workflow 1: Document Indexing Pipeline
+-- Input: { "documents": [{ "content": "...", "metadata": {...} }], "collection": "my-docs" }
+INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug) VALUES
+('a0000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001',
+ 'RAG: Document Indexing Pipeline',
+ 'Index documents into vector database for RAG queries. Split documents into chunks, generate embeddings, and store in vector DB.',
+ 'published', 1,
+ '{"type": "object", "required": ["documents", "collection"], "properties": {"documents": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "metadata": {"type": "object"}}}}, "collection": {"type": "string"}}}',
+ '{"type": "object", "properties": {"indexed_count": {"type": "integer"}, "chunk_count": {"type": "integer"}}}',
+ NULL, NULL, NOW(), NOW(), NOW(), NULL, false, NULL);
+
+-- Steps for Document Indexing Pipeline
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y, created_at, updated_at, block_group_id, group_role, credential_bindings, block_definition_id) VALUES
+('d0000001-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Start', 'start', '{}', 400, 50, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000002-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Split Documents', 'text-splitter', '{"chunk_size": 1000, "chunk_overlap": 200}', 400, 200, NOW(), NOW(), NULL, NULL, '{}', 'rag00006-0000-0000-0000-000000000001'),
+('d0000003-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Generate Embeddings', 'embedding', '{"provider": "openai", "model": "text-embedding-3-small"}', 400, 350, NOW(), NOW(), NULL, NULL, '{}', 'rag00001-0000-0000-0000-000000000001'),
+('d0000004-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Store in Vector DB', 'vector-upsert', '{"collection": "{{$.collection}}"}', 400, 500, NOW(), NOW(), NULL, NULL, '{}', 'rag00002-0000-0000-0000-000000000001'),
+('d0000005-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Return Result', 'function', '{"code": "return { indexed_count: input.upserted_count, chunk_count: input.upserted_count, collection: input.collection, ids: input.ids };", "language": "javascript"}', 400, 650, NOW(), NOW(), NULL, NULL, '{}', NULL);
+
+-- Edges for Document Indexing Pipeline
+INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES
+('e0000001-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000001-0000-0000-0000-000000000101', 'd0000002-0000-0000-0000-000000000101', NULL, NOW(), 'default', ''),
+('e0000002-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000002-0000-0000-0000-000000000101', 'd0000003-0000-0000-0000-000000000101', NULL, NOW(), 'default', ''),
+('e0000003-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000003-0000-0000-0000-000000000101', 'd0000004-0000-0000-0000-000000000101', NULL, NOW(), 'default', ''),
+('e0000004-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000004-0000-0000-0000-000000000101', 'd0000005-0000-0000-0000-000000000101', NULL, NOW(), 'default', '');
+
+-- RAG Sample Workflow 2: Question Answering
+-- Input: { "query": "What is...?", "collection": "my-docs" }
+INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug) VALUES
+('a0000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-000000000001',
+ 'RAG: Question Answering',
+ 'Answer questions using RAG. Searches vector database for relevant documents and generates answer using LLM.',
+ 'published', 1,
+ '{"type": "object", "required": ["query", "collection"], "properties": {"query": {"type": "string"}, "collection": {"type": "string"}}}',
+ '{"type": "object", "properties": {"answer": {"type": "string"}, "sources": {"type": "array"}}}',
+ NULL, NULL, NOW(), NOW(), NOW(), NULL, false, NULL);
+
+-- Steps for Question Answering
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y, created_at, updated_at, block_group_id, group_role, credential_bindings, block_definition_id) VALUES
+('d0000001-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000102', 'Start', 'start', '{}', 400, 50, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000002-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000102', 'RAG Query', 'rag-query', '{"collection": "{{$.collection}}", "top_k": 5, "llm_provider": "openai", "llm_model": "gpt-4o-mini", "system_prompt": "You are a helpful assistant. Answer questions based on the provided context. If the context does not contain enough information, say so clearly."}', 400, 200, NOW(), NOW(), NULL, NULL, '{}', 'rag00007-0000-0000-0000-000000000001');
+
+-- Edges for Question Answering
+INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES
+('e0000001-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000102', 'd0000001-0000-0000-0000-000000000102', 'd0000002-0000-0000-0000-000000000102', NULL, NOW(), 'default', '');
+
+-- RAG Sample Workflow 3: Knowledge Base Chat
+-- Input: { "query": "...", "collection": "kb", "chat_history": [] }
+INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug) VALUES
+('a0000000-0000-0000-0000-000000000103', '00000000-0000-0000-0000-000000000001',
+ 'RAG: Knowledge Base Chat',
+ 'Interactive chat with knowledge base. Maintains conversation context and retrieves relevant documents for each query.',
+ 'published', 1,
+ '{"type": "object", "required": ["query", "collection"], "properties": {"query": {"type": "string"}, "collection": {"type": "string"}, "chat_history": {"type": "array", "items": {"type": "object", "properties": {"role": {"type": "string"}, "content": {"type": "string"}}}}}}',
+ '{"type": "object", "properties": {"answer": {"type": "string"}, "sources": {"type": "array"}, "chat_history": {"type": "array"}}}',
+ NULL, NULL, NOW(), NOW(), NOW(), NULL, false, NULL);
+
+-- Steps for Knowledge Base Chat
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y, created_at, updated_at, block_group_id, group_role, credential_bindings, block_definition_id) VALUES
+('d0000001-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Start', 'start', '{}', 400, 50, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000002-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Search Documents', 'vector-search', '{"collection": "{{$.collection}}", "top_k": 5, "include_content": true}', 400, 200, NOW(), NOW(), NULL, NULL, '{}', 'rag00003-0000-0000-0000-000000000001'),
+('d0000003-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Build Context', 'function', '{"code": "const context = (input.matches || []).map((m, i) => `[${i+1}] ${m.content}`).join(''\\n\\n---\\n\\n''); const history = (input.chat_history || []).map(h => `${h.role}: ${h.content}`).join(''\\n''); return { context, history, query: input.query, matches: input.matches };", "language": "javascript"}', 400, 350, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000004-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Generate Answer', 'llm', '{"provider": "openai", "model": "gpt-4o-mini", "system_prompt": "You are a helpful knowledge base assistant. Answer based on the context provided. Cite sources using [N] notation.", "user_prompt": "## Previous Conversation\\n{{$.history}}\\n\\n## Retrieved Context\\n{{$.context}}\\n\\n## User Question\\n{{$.query}}\\n\\n## Answer", "temperature": 0.3, "max_tokens": 2000}', 400, 500, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000005-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Format Response', 'function', '{"code": "const newHistory = [...(input.chat_history || []), {role: ''user'', content: input.query}, {role: ''assistant'', content: input.content}]; return { answer: input.content, sources: (input.matches || []).map(m => ({id: m.id, score: m.score, excerpt: (m.content || '''').substring(0, 150) + ''...''})), chat_history: newHistory };", "language": "javascript"}', 400, 650, NOW(), NOW(), NULL, NULL, '{}', NULL);
+
+-- Edges for Knowledge Base Chat
+INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES
+('e0000001-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000001-0000-0000-0000-000000000103', 'd0000002-0000-0000-0000-000000000103', NULL, NOW(), 'default', ''),
+('e0000002-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000002-0000-0000-0000-000000000103', 'd0000003-0000-0000-0000-000000000103', NULL, NOW(), 'default', ''),
+('e0000003-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000003-0000-0000-0000-000000000103', 'd0000004-0000-0000-0000-000000000103', NULL, NOW(), 'default', ''),
+('e0000004-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000004-0000-0000-0000-000000000103', 'd0000005-0000-0000-0000-000000000103', NULL, NOW(), 'default', '');
+
 \unrestrict U4nbNOpGbzQDaE5Nbt6A6xfSA28CJLmedtMlJHtwSRT23KSx5kSKoTOYEzhykri
