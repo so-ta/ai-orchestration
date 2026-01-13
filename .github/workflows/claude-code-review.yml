@@ -1,0 +1,119 @@
+# Claude Code PR Review Workflow
+# PRが作成・更新された際にClaude Codeがコードレビューを実行
+
+name: Claude Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # 手動トリガーも可能
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
+
+# PRへのコメント書き込み権限
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 全履歴を取得（差分比較用）
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude Code Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          # PRの差分を取得
+          PR_DIFF=$(gh pr diff $PR_NUMBER)
+
+          # PRの情報を取得
+          PR_TITLE=$(gh pr view $PR_NUMBER --json title -q '.title')
+          PR_BODY=$(gh pr view $PR_NUMBER --json body -q '.body')
+
+          echo "Reviewing PR #$PR_NUMBER: $PR_TITLE"
+
+          # Claude Codeでレビューを実行
+          REVIEW_RESULT=$(claude -p "
+          あなたはコードレビュアーです。以下のPull Requestをレビューしてください。
+
+          ## PR情報
+          - タイトル: $PR_TITLE
+          - 説明: $PR_BODY
+
+          ## 変更差分
+          \`\`\`diff
+          $PR_DIFF
+          \`\`\`
+
+          ## レビュー観点
+          1. **コード品質**: 可読性、保守性、DRY原則
+          2. **バグ・問題点**: 潜在的なバグ、エッジケース、エラーハンドリング
+          3. **セキュリティ**: SQLインジェクション、XSS、認証・認可の問題
+          4. **パフォーマンス**: N+1クエリ、不要なループ、メモリリーク
+          5. **テスト**: テストの有無、カバレッジ
+          6. **ドキュメント**: 必要なコメント、ドキュメント更新
+
+          ## 出力形式
+          以下の形式でレビュー結果を出力してください：
+
+          ### 概要
+          （変更内容の要約）
+
+          ### 良い点 ✅
+          （良い変更点があれば記載）
+
+          ### 改善提案 💡
+          （改善が望ましい点）
+
+          ### 要修正 ⚠️
+          （修正が必要な問題点）
+
+          ### 総合評価
+          （Approve / Request Changes / Comment のいずれか）
+          " --max-turns 1)
+
+          # レビュー結果をPRにコメント
+          gh pr comment $PR_NUMBER --body "## 🤖 Claude Code Review
+
+          $REVIEW_RESULT
+
+          ---
+          *このレビューはClaude Codeによる自動生成です*"
+
+      - name: Handle Review Failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          gh pr comment $PR_NUMBER --body "## ⚠️ Claude Code Review Failed
+
+          自動レビューの実行中にエラーが発生しました。
+          手動でのレビューをお願いします。
+
+          [ワークフローログを確認](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ---
+          *このコメントはClaude Code Review Workflowによる自動生成です*"
