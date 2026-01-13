@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +28,12 @@ type CreateRunRequest struct {
 	TriggeredBy string          `json:"triggered_by,omitempty"` // manual, webhook, schedule, test, internal
 	Mode        string          `json:"mode,omitempty"`         // Deprecated: use triggered_by instead (backward compat: "test" maps to triggered_by="test")
 	Version     int             `json:"version,omitempty"`      // 0 or omitted means latest
+}
+
+// RunWithDefinitionResponse represents a run response with workflow definition
+type RunWithDefinitionResponse struct {
+	*domain.Run
+	WorkflowDefinition interface{} `json:"workflow_definition,omitempty"`
 }
 
 // Create handles POST /api/v1/workflows/{workflow_id}/runs
@@ -126,27 +134,9 @@ func (h *RunHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Flatten the response to include workflow_definition at the same level as run fields
-	response := make(map[string]interface{})
-	// Include all run fields
-	response["id"] = output.Run.ID
-	response["tenant_id"] = output.Run.TenantID
-	response["workflow_id"] = output.Run.WorkflowID
-	response["workflow_version"] = output.Run.WorkflowVersion
-	response["status"] = output.Run.Status
-	response["run_number"] = output.Run.RunNumber
-	response["input"] = output.Run.Input
-	response["output"] = output.Run.Output
-	response["error"] = output.Run.Error
-	response["triggered_by"] = output.Run.TriggeredBy
-	response["triggered_by_user"] = output.Run.TriggeredByUser
-	response["started_at"] = output.Run.StartedAt
-	response["completed_at"] = output.Run.CompletedAt
-	response["created_at"] = output.Run.CreatedAt
-	response["step_runs"] = output.Run.StepRuns
-	// Include workflow definition if available
-	if output.WorkflowDefinition != nil {
-		response["workflow_definition"] = output.WorkflowDefinition
+	response := &RunWithDefinitionResponse{
+		Run:                output.Run,
+		WorkflowDefinition: output.WorkflowDefinition,
 	}
 
 	JSONData(w, http.StatusOK, response)
@@ -190,7 +180,7 @@ func (h *RunHandler) ExecuteSingleStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req ExecuteSingleStepRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
 		return
 	}
@@ -294,7 +284,7 @@ func (h *RunHandler) TestStepInline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req TestStepInlineRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
 		return
 	}
