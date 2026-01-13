@@ -156,6 +156,9 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    # Note: continue-on-error is intentionally set for scan steps
+    # because known vulnerabilities exist (e.g., happy-dom).
+    # Once vulnerabilities are fixed, remove continue-on-error to block CI.
 
     steps:
       - name: Checkout
@@ -165,6 +168,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+          cache: true
           cache-dependency-path: backend/go.sum
 
       - name: Set up Node.js
