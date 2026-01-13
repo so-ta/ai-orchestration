@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -49,7 +50,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 		       triggered_by, run_number, triggered_by_user, started_at, completed_at, created_at,
 		       trigger_source, trigger_metadata
 		FROM runs
-		WHERE id = $1 AND tenant_id = $2
+		WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
 	`
 	var run domain.Run
 	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
@@ -62,7 +63,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 		return nil, domain.ErrRunNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get run by ID: %w", err)
 	}
 	return &run, nil
 }
@@ -70,12 +71,12 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 // ListByWorkflow retrieves runs for a workflow with pagination
 func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID, filter repository.RunFilter) ([]*domain.Run, int, error) {
 	// Count query
-	countQuery := `SELECT COUNT(*) FROM runs WHERE tenant_id = $1 AND workflow_id = $2`
+	countQuery := `SELECT COUNT(*) FROM runs WHERE tenant_id = $1 AND workflow_id = $2 AND deleted_at IS NULL`
 	args := []interface{}{tenantID, workflowID}
 
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to count runs: %w", err)
 	}
 
 	// List query
@@ -84,7 +85,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 		       triggered_by, run_number, triggered_by_user, started_at, completed_at, created_at,
 		       trigger_source, trigger_metadata
 		FROM runs
-		WHERE tenant_id = $1 AND workflow_id = $2
+		WHERE tenant_id = $1 AND workflow_id = $2 AND deleted_at IS NULL
 		ORDER BY created_at DESC
 	`
 
@@ -96,7 +97,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to list runs: %w", err)
 	}
 	defer rows.Close()
 
