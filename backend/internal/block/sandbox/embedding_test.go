@@ -12,11 +12,15 @@ import (
 )
 
 func TestEmbeddingService_Embed_OpenAI(t *testing.T) {
+	// Track if the server was called
+	serverCalled := false
+
 	// Mock OpenAI API server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "/v1/embeddings", r.URL.Path)
-		assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
+		assert.Contains(t, r.Header.Get("Authorization"), "Bearer test-api-key")
 
 		// Parse request
 		var req struct {
@@ -29,17 +33,17 @@ func TestEmbeddingService_Embed_OpenAI(t *testing.T) {
 		assert.Equal(t, "text-embedding-3-small", req.Model)
 		assert.Len(t, req.Input, 2)
 
-		// Return mock response
+		// Return mock response with sample vectors
 		resp := map[string]interface{}{
 			"model": "text-embedding-3-small",
 			"data": []map[string]interface{}{
 				{
 					"index":     0,
-					"embedding": make([]float32, 1536), // 1536 dimensions
+					"embedding": []float32{0.1, 0.2, 0.3},
 				},
 				{
 					"index":     1,
-					"embedding": make([]float32, 1536),
+					"embedding": []float32{0.4, 0.5, 0.6},
 				},
 			},
 			"usage": map[string]interface{}{
@@ -55,9 +59,23 @@ func TestEmbeddingService_Embed_OpenAI(t *testing.T) {
 	// Set up test
 	t.Setenv("OPENAI_API_KEY", "test-api-key")
 
-	// Create service (would need to modify to accept custom URL for testing)
+	// Create service and set custom URL to mock server
 	service := NewEmbeddingService(context.Background())
-	assert.NotNil(t, service)
+	service.SetOpenAIBaseURL(server.URL)
+
+	// Call Embed and verify results
+	result, err := service.Embed("openai", "text-embedding-3-small", []string{"hello", "world"})
+	require.NoError(t, err)
+
+	// Verify server was called
+	assert.True(t, serverCalled, "Mock server should have been called")
+
+	// Verify result
+	assert.NotNil(t, result)
+	assert.Len(t, result.Vectors, 2)
+	assert.Equal(t, "text-embedding-3-small", result.Model)
+	assert.Equal(t, 3, result.Dimension)
+	assert.Equal(t, 10, result.Usage.TotalTokens)
 }
 
 func TestEmbeddingResult_Structure(t *testing.T) {

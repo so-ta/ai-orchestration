@@ -34,6 +34,10 @@ type EmbeddingUsage struct {
 type EmbeddingServiceImpl struct {
 	httpClient *http.Client
 	ctx        context.Context
+	// Custom base URLs for testing (optional)
+	openaiBaseURL string
+	cohereBaseURL string
+	voyageBaseURL string
 }
 
 // NewEmbeddingService creates a new EmbeddingService
@@ -42,8 +46,26 @@ func NewEmbeddingService(ctx context.Context) *EmbeddingServiceImpl {
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
-		ctx: ctx,
+		ctx:           ctx,
+		openaiBaseURL: "https://api.openai.com",
+		cohereBaseURL: "https://api.cohere.ai",
+		voyageBaseURL: "https://api.voyageai.com",
 	}
+}
+
+// SetOpenAIBaseURL sets custom OpenAI base URL (for testing)
+func (s *EmbeddingServiceImpl) SetOpenAIBaseURL(url string) {
+	s.openaiBaseURL = url
+}
+
+// SetCohereBaseURL sets custom Cohere base URL (for testing)
+func (s *EmbeddingServiceImpl) SetCohereBaseURL(url string) {
+	s.cohereBaseURL = url
+}
+
+// SetVoyageBaseURL sets custom Voyage base URL (for testing)
+func (s *EmbeddingServiceImpl) SetVoyageBaseURL(url string) {
+	s.voyageBaseURL = url
 }
 
 // Embed converts texts to vector embeddings using the specified provider
@@ -84,7 +106,7 @@ func (s *EmbeddingServiceImpl) embedOpenAI(model string, texts []string) (*Embed
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(s.ctx, "POST", "https://api.openai.com/v1/embeddings", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(s.ctx, "POST", s.openaiBaseURL+"/v1/embeddings", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -183,7 +205,7 @@ func (s *EmbeddingServiceImpl) embedCohere(model string, texts []string) (*Embed
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(s.ctx, "POST", "https://api.cohere.ai/v1/embed", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(s.ctx, "POST", s.cohereBaseURL+"/v1/embed", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -270,7 +292,7 @@ func (s *EmbeddingServiceImpl) embedVoyage(model string, texts []string) (*Embed
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(s.ctx, "POST", "https://api.voyageai.com/v1/embeddings", bytes.NewReader(jsonBody))
+	req, err := http.NewRequestWithContext(s.ctx, "POST", s.voyageBaseURL+"/v1/embeddings", bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

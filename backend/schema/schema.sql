@@ -1896,7 +1896,7 @@ COMMENT ON TABLE public.vector_collections IS 'RAG vector collections with tenan
 -- Name: COLUMN vector_collections.dimension; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.vector_collections.dimension IS 'Vector dimension (1536 for text-embedding-3-small, 3072 for text-embedding-3-large)';
+COMMENT ON COLUMN public.vector_collections.dimension IS 'Vector dimension (1536 for text-embedding-3-small, 3072 for text-embedding-3-large). Note: vector_documents.embedding is fixed at 1536d - use separate collections for different dimensions.';
 
 
 --
@@ -1921,7 +1921,7 @@ CREATE TABLE public.vector_documents (
 -- Name: TABLE vector_documents; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.vector_documents IS 'RAG vector documents with embeddings, tenant-isolated';
+COMMENT ON TABLE public.vector_documents IS 'RAG vector documents with embeddings, tenant-isolated. Note: embedding column is fixed at 1536 dimensions (OpenAI text-embedding-3-small). For other dimensions, create separate tables or use dynamic column types in future versions.';
 
 
 --

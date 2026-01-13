@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -168,7 +169,7 @@ func (s *VectorServiceImpl) Upsert(collection string, documents []VectorDocument
 	// Update document count
 	if err := s.updateDocumentCount(collectionID); err != nil {
 		// Log but don't fail
-		fmt.Printf("warning: failed to update document count: %v\n", err)
+		slog.Warn("failed to update document count", "error", err, "collection_id", collectionID)
 	}
 
 	return &UpsertResult{
