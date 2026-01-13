@@ -128,11 +128,26 @@ func (m *AuthMiddleware) validateToken(token string) (*Claims, error) {
 
 // setDevContext sets default context for development
 // Supports X-Dev-Role header for testing different roles: "admin" or "user"
+// Supports X-Tenant-ID header for multi-tenant testing
+// Supports X-User-ID header for user-specific testing
 func (m *AuthMiddleware) setDevContext(ctx context.Context, r *http.Request) context.Context {
+	// Check X-Tenant-ID header first, then fall back to config or default
 	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	if m.config.DevTenantID != "" {
+	if headerTenantID := r.Header.Get("X-Tenant-ID"); headerTenantID != "" {
+		if id, err := uuid.Parse(headerTenantID); err == nil {
+			tenantID = id
+		}
+	} else if m.config.DevTenantID != "" {
 		if id, err := uuid.Parse(m.config.DevTenantID); err == nil {
 			tenantID = id
+		}
+	}
+
+	// Check X-User-ID header for user-specific testing
+	userID := uuid.Nil
+	if headerUserID := r.Header.Get("X-User-ID"); headerUserID != "" {
+		if id, err := uuid.Parse(headerUserID); err == nil {
+			userID = id
 		}
 	}
 
@@ -155,8 +170,7 @@ func (m *AuthMiddleware) setDevContext(ctx context.Context, r *http.Request) con
 	}
 
 	ctx = context.WithValue(ctx, TenantIDKey, tenantID)
-	// Don't set UserID in dev mode - runs will be created without a user reference
-	ctx = context.WithValue(ctx, UserIDKey, uuid.Nil)
+	ctx = context.WithValue(ctx, UserIDKey, userID)
 	ctx = context.WithValue(ctx, UserEmailKey, email)
 	ctx = context.WithValue(ctx, UserRolesKey, roles)
 	return ctx

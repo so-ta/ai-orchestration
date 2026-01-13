@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	baseURL  = getEnv("API_BASE_URL", "http://localhost:8080")
-	tenantID = getEnv("TENANT_ID", "00000000-0000-0000-0000-000000000001")
+	baseURL = getEnv("API_BASE_URL", "http://localhost:8080")
 )
 
 func getEnv(key, defaultValue string) string {
@@ -63,7 +62,8 @@ func makeRequest(t *testing.T, method, path string, body interface{}) (*http.Res
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Tenant-ID", tenantID)
+	req.Header.Set("X-Tenant-ID", testTenantID)
+	req.Header.Set("X-User-ID", testUserID)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -335,9 +335,7 @@ func TestConditionBranching(t *testing.T) {
 }
 
 func TestScheduleManagement(t *testing.T) {
-	// Skip this test in environments where users table FK constraint is enforced
-	// TODO: Setup proper test user in the database
-	t.Skip("Skipping: requires valid user in users table for created_by FK constraint")
+	// Test user is now set up by SetupTestEnvironment via TestMain
 
 	// First create a workflow to schedule (auto-creates Start step)
 	createReq := map[string]string{
