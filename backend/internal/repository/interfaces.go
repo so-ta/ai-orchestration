@@ -30,19 +30,20 @@ type WorkflowFilter struct {
 // StepRepository defines the interface for step persistence
 type StepRepository interface {
 	Create(ctx context.Context, step *domain.Step) error
-	GetByID(ctx context.Context, workflowID, id uuid.UUID) (*domain.Step, error)
-	ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.Step, error)
+	GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Step, error)
+	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error)
+	ListByBlockGroup(ctx context.Context, tenantID, blockGroupID uuid.UUID) ([]*domain.Step, error)
 	Update(ctx context.Context, step *domain.Step) error
-	Delete(ctx context.Context, workflowID, id uuid.UUID) error
+	Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error
 }
 
 // EdgeRepository defines the interface for edge persistence
 type EdgeRepository interface {
 	Create(ctx context.Context, edge *domain.Edge) error
-	GetByID(ctx context.Context, workflowID, id uuid.UUID) (*domain.Edge, error)
-	ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.Edge, error)
-	Delete(ctx context.Context, workflowID, id uuid.UUID) error
-	Exists(ctx context.Context, workflowID, sourceID, targetID uuid.UUID) (bool, error)
+	GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Edge, error)
+	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error)
+	Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error
+	Exists(ctx context.Context, tenantID, workflowID, sourceID, targetID uuid.UUID) (bool, error)
 }
 
 // RunRepository defines the interface for run persistence
@@ -65,20 +66,20 @@ type RunFilter struct {
 // StepRunRepository defines the interface for step run persistence
 type StepRunRepository interface {
 	Create(ctx context.Context, stepRun *domain.StepRun) error
-	GetByID(ctx context.Context, runID, id uuid.UUID) (*domain.StepRun, error)
-	ListByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error)
+	GetByID(ctx context.Context, tenantID, runID, id uuid.UUID) (*domain.StepRun, error)
+	ListByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.StepRun, error)
 	Update(ctx context.Context, stepRun *domain.StepRun) error
 
 	// GetMaxAttempt returns the highest attempt number for a step in a run
-	GetMaxAttempt(ctx context.Context, runID, stepID uuid.UUID) (int, error)
+	GetMaxAttempt(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error)
 	// GetMaxAttemptForRun returns the highest attempt number across all steps in a run
-	GetMaxAttemptForRun(ctx context.Context, runID uuid.UUID) (int, error)
+	GetMaxAttemptForRun(ctx context.Context, tenantID, runID uuid.UUID) (int, error)
 	// GetLatestByStep returns the most recent StepRun for a step in a run
-	GetLatestByStep(ctx context.Context, runID, stepID uuid.UUID) (*domain.StepRun, error)
+	GetLatestByStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) (*domain.StepRun, error)
 	// ListCompletedByRun returns the latest completed StepRun for each step in a run
-	ListCompletedByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error)
+	ListCompletedByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.StepRun, error)
 	// ListByStep returns all StepRuns for a specific step in a run (for history)
-	ListByStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.StepRun, error)
+	ListByStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.StepRun, error)
 }
 
 // WorkflowVersionRepository defines the interface for workflow version persistence
@@ -189,18 +190,18 @@ type BlockVersionRepository interface {
 // BlockGroupRepository defines the interface for block group persistence
 type BlockGroupRepository interface {
 	Create(ctx context.Context, group *domain.BlockGroup) error
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockGroup, error)
-	ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.BlockGroup, error)
-	ListByParent(ctx context.Context, parentID uuid.UUID) ([]*domain.BlockGroup, error)
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroup, error)
+	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.BlockGroup, error)
+	ListByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*domain.BlockGroup, error)
 	Update(ctx context.Context, group *domain.BlockGroup) error
-	Delete(ctx context.Context, id uuid.UUID) error
+	Delete(ctx context.Context, tenantID, id uuid.UUID) error
 }
 
 // BlockGroupRunRepository defines the interface for block group run persistence
 type BlockGroupRunRepository interface {
 	Create(ctx context.Context, run *domain.BlockGroupRun) error
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockGroupRun, error)
-	ListByRun(ctx context.Context, runID uuid.UUID) ([]*domain.BlockGroupRun, error)
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroupRun, error)
+	ListByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.BlockGroupRun, error)
 	Update(ctx context.Context, run *domain.BlockGroupRun) error
 }
 

@@ -21,6 +21,7 @@ const (
 // StepRun represents a single step execution within a run
 type StepRun struct {
 	ID          uuid.UUID       `json:"id"`
+	TenantID    uuid.UUID       `json:"tenant_id"`
 	RunID       uuid.UUID       `json:"run_id"`
 	StepID      uuid.UUID       `json:"step_id"`
 	StepName    string          `json:"step_name"`
@@ -36,9 +37,10 @@ type StepRun struct {
 }
 
 // NewStepRun creates a new step run
-func NewStepRun(runID, stepID uuid.UUID, stepName string) *StepRun {
+func NewStepRun(tenantID, runID, stepID uuid.UUID, stepName string) *StepRun {
 	return &StepRun{
 		ID:        uuid.New(),
+		TenantID:  tenantID,
 		RunID:     runID,
 		StepID:    stepID,
 		StepName:  stepName,
@@ -49,9 +51,10 @@ func NewStepRun(runID, stepID uuid.UUID, stepName string) *StepRun {
 }
 
 // NewStepRunWithAttempt creates a new step run with a specific attempt number (for re-execution)
-func NewStepRunWithAttempt(runID, stepID uuid.UUID, stepName string, attempt int) *StepRun {
+func NewStepRunWithAttempt(tenantID, runID, stepID uuid.UUID, stepName string, attempt int) *StepRun {
 	return &StepRun{
 		ID:        uuid.New(),
+		TenantID:  tenantID,
 		RunID:     runID,
 		StepID:    stepID,
 		StepName:  stepName,

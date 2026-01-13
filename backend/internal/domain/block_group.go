@@ -84,6 +84,7 @@ func (r GroupRole) IsValid() bool {
 // BlockGroup represents a control flow construct that groups multiple steps
 type BlockGroup struct {
 	ID            uuid.UUID       `json:"id"`
+	TenantID      uuid.UUID       `json:"tenant_id"`
 	WorkflowID    uuid.UUID       `json:"workflow_id"`
 	Name          string          `json:"name"`
 	Type          BlockGroupType  `json:"type"`
@@ -98,10 +99,11 @@ type BlockGroup struct {
 }
 
 // NewBlockGroup creates a new block group
-func NewBlockGroup(workflowID uuid.UUID, name string, groupType BlockGroupType) *BlockGroup {
+func NewBlockGroup(tenantID, workflowID uuid.UUID, name string, groupType BlockGroupType) *BlockGroup {
 	now := time.Now().UTC()
 	return &BlockGroup{
 		ID:         uuid.New(),
+		TenantID:   tenantID,
 		WorkflowID: workflowID,
 		Name:       name,
 		Type:       groupType,
@@ -175,6 +177,7 @@ type WhileConfig struct {
 // BlockGroupRun represents the execution state of a block group
 type BlockGroupRun struct {
 	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenant_id"`
 	RunID        uuid.UUID       `json:"run_id"`
 	BlockGroupID uuid.UUID       `json:"block_group_id"`
 	Status       StepRunStatus   `json:"status"`
@@ -188,10 +191,11 @@ type BlockGroupRun struct {
 }
 
 // NewBlockGroupRun creates a new block group run
-func NewBlockGroupRun(runID, blockGroupID uuid.UUID) *BlockGroupRun {
+func NewBlockGroupRun(tenantID, runID, blockGroupID uuid.UUID) *BlockGroupRun {
 	now := time.Now().UTC()
 	return &BlockGroupRun{
 		ID:           uuid.New(),
+		TenantID:     tenantID,
 		RunID:        runID,
 		BlockGroupID: blockGroupID,
 		Status:       StepRunStatusPending,

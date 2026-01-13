@@ -55,12 +55,14 @@ func TestValidStepTypes(t *testing.T) {
 }
 
 func TestNewStep(t *testing.T) {
+	tenantID := uuid.New()
 	workflowID := uuid.New()
 	config := json.RawMessage(`{"adapter_id": "mock", "settings": {"timeout": 30}}`)
 
-	step := NewStep(workflowID, "Test Step", StepTypeTool, config)
+	step := NewStep(tenantID, workflowID, "Test Step", StepTypeTool, config)
 
 	assert.NotEqual(t, uuid.Nil, step.ID)
+	assert.Equal(t, tenantID, step.TenantID)
 	assert.Equal(t, workflowID, step.WorkflowID)
 	assert.Equal(t, "Test Step", step.Name)
 	assert.Equal(t, StepTypeTool, step.Type)

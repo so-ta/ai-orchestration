@@ -23,25 +23,25 @@ func NewEdgeRepository(pool *pgxpool.Pool) *EdgeRepository {
 // Create creates a new edge
 func (r *EdgeRepository) Create(ctx context.Context, e *domain.Edge) error {
 	query := `
-		INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO edges (id, tenant_id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		e.ID, e.WorkflowID, e.SourceStepID, e.TargetStepID, e.SourcePort, e.TargetPort, e.Condition, e.CreatedAt,
+		e.ID, e.TenantID, e.WorkflowID, e.SourceStepID, e.TargetStepID, e.SourcePort, e.TargetPort, e.Condition, e.CreatedAt,
 	)
 	return err
 }
 
 // GetByID retrieves an edge by ID
-func (r *EdgeRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) (*domain.Edge, error) {
+func (r *EdgeRepository) GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Edge, error) {
 	query := `
-		SELECT id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
+		SELECT id, tenant_id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
 		FROM edges
-		WHERE id = $1 AND workflow_id = $2
+		WHERE id = $1 AND workflow_id = $2 AND tenant_id = $3
 	`
 	var e domain.Edge
-	err := r.pool.QueryRow(ctx, query, id, workflowID).Scan(
-		&e.ID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
+	err := r.pool.QueryRow(ctx, query, id, workflowID, tenantID).Scan(
+		&e.ID, &e.TenantID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrEdgeNotFound
@@ -53,13 +53,13 @@ func (r *EdgeRepository) GetByID(ctx context.Context, workflowID, id uuid.UUID) 
 }
 
 // ListByWorkflow retrieves all edges for a workflow
-func (r *EdgeRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.Edge, error) {
+func (r *EdgeRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error) {
 	query := `
-		SELECT id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
+		SELECT id, tenant_id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
 		FROM edges
-		WHERE workflow_id = $1
+		WHERE workflow_id = $1 AND tenant_id = $2
 	`
-	rows, err := r.pool.Query(ctx, query, workflowID)
+	rows, err := r.pool.Query(ctx, query, workflowID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (r *EdgeRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUI
 	for rows.Next() {
 		var e domain.Edge
 		if err := rows.Scan(
-			&e.ID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
+			&e.ID, &e.TenantID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -80,9 +80,9 @@ func (r *EdgeRepository) ListByWorkflow(ctx context.Context, workflowID uuid.UUI
 }
 
 // Delete deletes an edge
-func (r *EdgeRepository) Delete(ctx context.Context, workflowID, id uuid.UUID) error {
-	query := `DELETE FROM edges WHERE id = $1 AND workflow_id = $2`
-	result, err := r.pool.Exec(ctx, query, id, workflowID)
+func (r *EdgeRepository) Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error {
+	query := `DELETE FROM edges WHERE id = $1 AND workflow_id = $2 AND tenant_id = $3`
+	result, err := r.pool.Exec(ctx, query, id, workflowID, tenantID)
 	if err != nil {
 		return err
 	}
@@ -93,14 +93,14 @@ func (r *EdgeRepository) Delete(ctx context.Context, workflowID, id uuid.UUID) e
 }
 
 // Exists checks if an edge exists between two steps
-func (r *EdgeRepository) Exists(ctx context.Context, workflowID, sourceID, targetID uuid.UUID) (bool, error) {
+func (r *EdgeRepository) Exists(ctx context.Context, tenantID, workflowID, sourceID, targetID uuid.UUID) (bool, error) {
 	query := `
 		SELECT EXISTS(
 			SELECT 1 FROM edges
-			WHERE workflow_id = $1 AND source_step_id = $2 AND target_step_id = $3
+			WHERE workflow_id = $1 AND source_step_id = $2 AND target_step_id = $3 AND tenant_id = $4
 		)
 	`
 	var exists bool
-	err := r.pool.QueryRow(ctx, query, workflowID, sourceID, targetID).Scan(&exists)
+	err := r.pool.QueryRow(ctx, query, workflowID, sourceID, targetID, tenantID).Scan(&exists)
 	return exists, err
 }

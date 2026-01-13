@@ -55,7 +55,7 @@ func (u *WorkflowUsecase) Create(ctx context.Context, input CreateWorkflowInput)
 	}
 
 	// Auto-create Start step for the new workflow
-	startStep := domain.NewStep(workflow.ID, "Start", domain.StepTypeStart, json.RawMessage(`{}`))
+	startStep := domain.NewStep(input.TenantID, workflow.ID, "Start", domain.StepTypeStart, json.RawMessage(`{}`))
 	startStep.SetPosition(400, 50) // Center-top position
 
 	if err := u.stepRepo.Create(ctx, startStep); err != nil {
@@ -195,7 +195,7 @@ func (u *WorkflowUsecase) Save(ctx context.Context, input SaveWorkflowInput) (*d
 	}
 
 	// Delete existing steps and edges, then recreate
-	if err := u.deleteAndRecreateStepsEdges(ctx, workflow.ID, input.Steps, input.Edges); err != nil {
+	if err := u.deleteAndRecreateStepsEdges(ctx, input.TenantID, workflow.ID, input.Steps, input.Edges); err != nil {
 		return nil, err
 	}
 
@@ -341,25 +341,25 @@ func (u *WorkflowUsecase) RestoreVersion(ctx context.Context, tenantID, workflow
 }
 
 // deleteAndRecreateStepsEdges deletes existing steps and edges, then recreates them
-func (u *WorkflowUsecase) deleteAndRecreateStepsEdges(ctx context.Context, workflowID uuid.UUID, steps []domain.Step, edges []domain.Edge) error {
+func (u *WorkflowUsecase) deleteAndRecreateStepsEdges(ctx context.Context, tenantID, workflowID uuid.UUID, steps []domain.Step, edges []domain.Edge) error {
 	// Delete all existing edges first (due to foreign key constraints)
-	existingEdges, err := u.edgeRepo.ListByWorkflow(ctx, workflowID)
+	existingEdges, err := u.edgeRepo.ListByWorkflow(ctx, tenantID, workflowID)
 	if err != nil {
 		return err
 	}
 	for _, edge := range existingEdges {
-		if err := u.edgeRepo.Delete(ctx, workflowID, edge.ID); err != nil {
+		if err := u.edgeRepo.Delete(ctx, tenantID, workflowID, edge.ID); err != nil {
 			return err
 		}
 	}
 
 	// Delete all existing steps
-	existingSteps, err := u.stepRepo.ListByWorkflow(ctx, workflowID)
+	existingSteps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
 	if err != nil {
 		return err
 	}
 	for _, step := range existingSteps {
-		if err := u.stepRepo.Delete(ctx, workflowID, step.ID); err != nil {
+		if err := u.stepRepo.Delete(ctx, tenantID, workflowID, step.ID); err != nil {
 			return err
 		}
 	}
@@ -391,7 +391,7 @@ func (u *WorkflowUsecase) getWorkflowWithStepsEdgesFromDB(ctx context.Context, t
 	}
 
 	// Get steps
-	steps, err := u.stepRepo.ListByWorkflow(ctx, id)
+	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func (u *WorkflowUsecase) getWorkflowWithStepsEdgesFromDB(ctx context.Context, t
 	}
 
 	// Get edges
-	edges, err := u.edgeRepo.ListByWorkflow(ctx, id)
+	edges, err := u.edgeRepo.ListByWorkflow(ctx, tenantID, id)
 	if err != nil {
 		return nil, err
 	}

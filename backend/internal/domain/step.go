@@ -70,6 +70,7 @@ func (t StepType) IsValid() bool {
 // Step represents a node in the DAG
 type Step struct {
 	ID           uuid.UUID       `json:"id"`
+	TenantID     uuid.UUID       `json:"tenant_id"`
 	WorkflowID   uuid.UUID       `json:"workflow_id"`
 	Name         string          `json:"name"`
 	Type         StepType        `json:"type"`
@@ -96,10 +97,11 @@ func (s *Step) GetCredentialBindings() (map[string]uuid.UUID, error) {
 }
 
 // NewStep creates a new step
-func NewStep(workflowID uuid.UUID, name string, stepType StepType, config json.RawMessage) *Step {
+func NewStep(tenantID, workflowID uuid.UUID, name string, stepType StepType, config json.RawMessage) *Step {
 	now := time.Now().UTC()
 	return &Step{
 		ID:                 uuid.New(),
+		TenantID:           tenantID,
 		WorkflowID:         workflowID,
 		Name:               name,
 		Type:               stepType,

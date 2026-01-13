@@ -262,7 +262,7 @@ func processJob(
 		)
 
 		// Get max attempt for the entire run (Run-level unique)
-		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, job.RunID)
+		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, run.TenantID, job.RunID)
 		if err != nil {
 			logger.Warn("Failed to get max attempt, defaulting to 0", "error", err)
 			maxAttempt = 0
@@ -303,7 +303,7 @@ func processJob(
 		)
 
 		// Get max attempt for the entire run (Run-level unique)
-		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, job.RunID)
+		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, run.TenantID, job.RunID)
 		if err != nil {
 			logger.Warn("Failed to get max attempt, defaulting to 0", "error", err)
 			maxAttempt = 0
@@ -338,7 +338,7 @@ func processJob(
 		}
 
 		// Get max attempt for the entire run (Run-level unique)
-		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, job.RunID)
+		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, run.TenantID, job.RunID)
 		if err != nil {
 			logger.Warn("Failed to get max attempt, defaulting to 0", "error", err)
 			maxAttempt = 0
