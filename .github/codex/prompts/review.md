@@ -7,6 +7,24 @@
 
 ---
 
+## レビュー対象の限定（重要）
+
+**このPRで変更された差分のみをレビューしてください。**
+
+- PRの差分に含まれるファイル・行のみを対象とする
+- PR外のファイルや、差分に含まれていないコードについては指摘しない
+- ただし、差分外でも重大な問題（セキュリティ脆弱性等）を発見した場合は、`in_pr_diff: false` として報告する
+
+### 差分内外の判定基準
+
+| 状況 | `in_pr_diff` | 対応 |
+|------|-------------|------|
+| PRで追加・変更された行 | `true` | PR Review で指摘 |
+| PRで変更されていないが、変更箇所に関連する既存コード | `true` | PR Review で指摘 |
+| PRと無関係だが重大な問題を発見 | `false` | Issue として報告 |
+
+---
+
 ## Project Context
 
 このプロジェクトは**Multi-tenant SaaS**でDAGワークフローを設計・実行・監視するプラットフォームです。
@@ -94,41 +112,59 @@
    - 問題の指摘だけでなく、改善案を提示
    - 可能であればコード例を含める
 
+5. **差分内外の分類**
+   - 各指摘に `in_pr_diff` フラグを設定
+   - PR差分外の指摘は別途Issue化される
+
 ---
 
-## Output Format
+## Output Format（構造化JSON）
 
-以下の形式で**日本語で**レビュー結果を出力してください：
+以下のJSONスキーマに従って出力してください：
 
-```markdown
-## 概要
-（変更内容を2-3文で要約）
-
-## 良い点
-- （良い変更点1）
-- （良い変更点2）
-
-## 改善提案
-### [Medium] 改善提案のタイトル
-（説明と改善案）
-
-### [Low] 別の提案
-（説明と改善案）
-
-## 要修正
-### [Critical/High] 問題のタイトル
-**ファイル**: `path/to/file.go:123`
-**問題**: （問題の説明）
-**修正案**:
-\```go
-// 修正後のコード例
-\```
-
-## 判定
-**APPROVE**（承認） / **REQUEST_CHANGES**（要修正） / **COMMENT**（コメント）
-
-（最終判定の理由を1-2文で）
+```json
+{
+  "summary": "変更内容の要約（2-3文、日本語）",
+  "good_points": [
+    "良い変更点1",
+    "良い変更点2"
+  ],
+  "findings": [
+    {
+      "file": "path/to/file.go",
+      "start_line": 42,
+      "end_line": 45,
+      "title": "問題のタイトル（日本語）",
+      "body": "詳細説明（日本語）",
+      "severity": "critical|high|medium|low",
+      "category": "security|performance|quality|test|documentation",
+      "in_pr_diff": true,
+      "suggested_code": "修正後のコード（オプション）"
+    }
+  ],
+  "verdict": "APPROVE|REQUEST_CHANGES|COMMENT",
+  "verdict_reason": "判定理由（日本語）"
+}
 ```
+
+### フィールド説明
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `summary` | Yes | 変更内容の要約 |
+| `good_points` | No | 良い変更点のリスト |
+| `findings` | Yes | 指摘事項のリスト（空配列可） |
+| `findings[].file` | Yes | ファイルパス |
+| `findings[].start_line` | No | 開始行番号 |
+| `findings[].end_line` | No | 終了行番号 |
+| `findings[].title` | Yes | 問題のタイトル |
+| `findings[].body` | Yes | 詳細説明 |
+| `findings[].severity` | Yes | 重要度 |
+| `findings[].category` | No | カテゴリ |
+| `findings[].in_pr_diff` | Yes | PR差分内かどうか |
+| `findings[].suggested_code` | No | 修正コード（Suggestion用） |
+| `verdict` | Yes | 最終判定 |
+| `verdict_reason` | No | 判定理由 |
 
 ---
 
