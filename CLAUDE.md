@@ -766,6 +766,81 @@ cd backend && go test ./tests/e2e/... -v
 | `git rebase` | 共有ブランチでは禁止 |
 | `.gitignore` の変更 | 影響範囲を確認 |
 
+### Conflict Resolution Flow (REQUIRED)
+
+**PRにpush後、mainブランチとのコンフリクトが発生した場合は、必ず以下のフローで解消すること。**
+
+#### コンフリクト解消手順
+
+```
+1. mainブランチの最新を取得
+   git fetch origin main
+
+2. 作業ブランチでマージ
+   git merge origin/main
+
+3. コンフリクトファイルを確認
+   git status
+
+4. コンフリクトを解消
+   - コンフリクトマーカー（<<<<<<, ======, >>>>>>）を削除
+   - 両方の変更を適切にマージ
+
+5. 解消したファイルをステージング
+   git add <resolved-files>
+
+6. マージコミットを作成
+   git commit -m "merge: origin/mainをマージしてコンフリクトを解消"
+
+7. リモートにプッシュ
+   git push origin <branch-name>
+
+8. PRのCIが再実行されることを確認
+```
+
+#### コンフリクト解消のポイント
+
+| ポイント | 説明 |
+|---------|------|
+| **両方の変更を保持** | 可能な限り、mainブランチとfeatureブランチ両方の変更を維持 |
+| **一貫性の確認** | 片方のブランチで変更されたフォーマット・規約に合わせる |
+| **コンフリクトマーカー確認** | `grep "<<<<<<" <file>` で残存マーカーがないか確認 |
+| **ビルド確認** | 解消後、必ずビルドとテストを実行 |
+
+#### 典型的なコンフリクトパターンと対処
+
+| パターン | 対処法 |
+|---------|--------|
+| seed.sql（データ追加） | 両方のINSERT文を保持。IDの重複に注意 |
+| schema.sql（スキーマ変更） | 両方の変更を適用。依存関係を確認 |
+| package.json | 両方の依存関係を保持。バージョン競合は最新を選択 |
+| 設定ファイル | 両方の設定を統合。重複キーは意図を確認 |
+
+#### コンフリクト解消後のチェックリスト
+
+```
+1. [ ] コンフリクトマーカーが残っていないことを確認
+2. [ ] git status でunmergedパスがないことを確認
+3. [ ] ビルドが通ることを確認
+4. [ ] テストがパスすることを確認
+5. [ ] PRのCIが成功することを確認
+```
+
+#### ワークツリー使用時の注意
+
+複数のworktreeで作業している場合：
+
+```bash
+# worktreeディレクトリに移動
+cd /path/to/worktree/<branch-name>
+
+# 通常のgitコマンドで操作
+git fetch origin main
+git merge origin/main
+# ... コンフリクト解消 ...
+git push origin <branch-name>
+```
+
 ### Codex PR Review Workflow (REQUIRED)
 
 **AIエージェントがPRをpushした後は、必ずCodexによる自動レビューを確認すること。**
