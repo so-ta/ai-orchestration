@@ -50,12 +50,24 @@ jobs:
         working-directory: backend
         run: go mod download
 
+      - name: Apply database schema
+        working-directory: backend
+        env:
+          PGPASSWORD: aio_password
+        run: |
+          psql -h localhost -U aio -d ai_orchestration -f schema/schema.sql
+          psql -h localhost -U aio -d ai_orchestration -f schema/seed.sql
+
       - name: Run tests
         working-directory: backend
         env:
           DATABASE_URL: postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable
           REDIS_URL: redis://localhost:6379
-        run: go test -v -race -coverprofile=coverage.out $(go list ./... | grep -v /tests/e2e)
+        run: |
+          PACKAGES=$(go list ./... | grep -v /tests/e2e || true)
+          if [ -n "$PACKAGES" ]; then
+            go test -v -race -coverprofile=coverage.out $PACKAGES
+          fi
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
