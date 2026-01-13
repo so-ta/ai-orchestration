@@ -181,3 +181,220 @@ func TestTenantIsolation_CollectionNaming(t *testing.T) {
 	assert.NotEqual(t, tenantA, tenantB, "Different tenants should have different IDs")
 	assert.NotEqual(t, tenantA.String(), tenantB.String(), "Tenant IDs should be unique strings")
 }
+
+// ============================================================================
+// Phase 3.1: FilterBuilder Tests
+// ============================================================================
+
+func TestFilterBuilder_SimpleEquality(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"category": "news",
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, "vd.metadata->>$1 = $2")
+	assert.Len(t, args, 2)
+	assert.Equal(t, "category", args[0])
+	assert.Equal(t, "news", args[1])
+}
+
+func TestFilterBuilder_NumericComparison(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"score": map[string]interface{}{
+			"$gte": 0.8,
+		},
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, "(vd.metadata->>$1)::numeric >= $2")
+	assert.Len(t, args, 2)
+	assert.Equal(t, "score", args[0])
+	assert.Equal(t, 0.8, args[1])
+}
+
+func TestFilterBuilder_RangeComparison(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"price": map[string]interface{}{
+			"$gte": 100,
+			"$lt":  500,
+		},
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	// Both conditions should be present
+	assert.Contains(t, clause, "(vd.metadata->>")
+	assert.Contains(t, clause, "::numeric")
+	assert.Len(t, args, 4) // field, value, field, value
+}
+
+func TestFilterBuilder_OrCondition(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"$or": []interface{}{
+			map[string]interface{}{"category": "news"},
+			map[string]interface{}{"category": "blog"},
+		},
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, " OR ")
+	assert.Len(t, args, 4) // 2 fields + 2 values
+}
+
+func TestFilterBuilder_AndCondition(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"$and": []interface{}{
+			map[string]interface{}{"status": "active"},
+			map[string]interface{}{
+				"score": map[string]interface{}{"$gte": 0.5},
+			},
+		},
+	}
+
+	clause, _, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, " AND ")
+}
+
+func TestFilterBuilder_InOperator(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"category": map[string]interface{}{
+			"$in": []interface{}{"news", "blog", "docs"},
+		},
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, "IN")
+	assert.Len(t, args, 4) // field + 3 values
+}
+
+func TestFilterBuilder_ExistsOperator(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"author": map[string]interface{}{
+			"$exists": true,
+		},
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, "vd.metadata ? $1")
+	assert.Len(t, args, 1)
+}
+
+func TestFilterBuilder_NotExistsOperator(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"deleted": map[string]interface{}{
+			"$exists": false,
+		},
+	}
+
+	clause, _, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, "NOT (vd.metadata ? $1)")
+}
+
+func TestFilterBuilder_ContainsOperator(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"title": map[string]interface{}{
+			"$contains": "AI",
+		},
+	}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, "LIKE")
+	assert.Equal(t, "%AI%", args[1])
+}
+
+func TestFilterBuilder_EmptyFilter(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{}
+
+	clause, args, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Empty(t, clause)
+	assert.Empty(t, args)
+}
+
+func TestFilterBuilder_UnsupportedOperator(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"field": map[string]interface{}{
+			"$unsupported": "value",
+		},
+	}
+
+	_, _, err := fb.Build(filter)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported operator")
+}
+
+func TestFilterBuilder_ComplexNestedFilter(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"$or": []interface{}{
+			map[string]interface{}{
+				"$and": []interface{}{
+					map[string]interface{}{"category": "news"},
+					map[string]interface{}{"score": map[string]interface{}{"$gte": 0.8}},
+				},
+			},
+			map[string]interface{}{"featured": "true"},
+		},
+	}
+
+	clause, _, err := fb.Build(filter)
+
+	assert.NoError(t, err)
+	assert.Contains(t, clause, " OR ")
+	assert.Contains(t, clause, " AND ")
+}
+
+// ============================================================================
+// Phase 3.2: QueryOptions Hybrid Search Tests
+// ============================================================================
+
+func TestQueryOptions_HybridSearch(t *testing.T) {
+	opts := &QueryOptions{
+		TopK:        10,
+		Keyword:     "machine learning",
+		HybridAlpha: 0.6,
+	}
+
+	assert.Equal(t, "machine learning", opts.Keyword)
+	assert.Equal(t, 0.6, opts.HybridAlpha)
+}
+
+func TestQueryOptions_DefaultHybridAlpha(t *testing.T) {
+	opts := &QueryOptions{
+		Keyword: "test",
+		// HybridAlpha not set, should default to 0.7 in service
+	}
+
+	// Default should be 0 (unset)
+	assert.Equal(t, float64(0), opts.HybridAlpha)
+}

@@ -1,6 +1,6 @@
 # RAG (Retrieval-Augmented Generation) 実装プラン
 
-## ステータス: 📋 プラン承認待ち
+## ステータス: ✅ Phase 1-3 完了
 
 **作成日**: 2026-01-13
 **目的**: LangChainスタイルのRAGワークフローをAI Orchestrationに実装
@@ -1045,14 +1045,14 @@ func (b *PGVectorBackend) Upsert(tenantID uuid.UUID, collection string, document
 - 完全なIndexingワークフロー
 - 1ブロックRAGクエリ
 
-### Phase 3: 高度な機能（優先度: 低）
+### Phase 3: 高度な機能（✅ 実装完了）
 
-| タスク | 詳細 |
-|--------|------|
-| 3.1 メタデータフィルタ | 検索時のメタデータフィルタリング |
-| 3.2 ハイブリッド検索 | キーワード + ベクトル検索 |
-| 3.3 追加Embeddingプロバイダー | Cohere, Voyage対応 |
-| 3.4 外部ベクトルDB | Pinecone, Weaviate, Qdrant対応 |
+| タスク | 詳細 | ステータス |
+|--------|------|----------|
+| 3.1 メタデータフィルタ | 検索時のメタデータフィルタリング ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains) | ✅ 完了 |
+| 3.2 ハイブリッド検索 | キーワード + ベクトル検索（RRF方式） | ✅ 完了 |
+| 3.3 追加Embeddingプロバイダー | Cohere, Voyage対応 | ✅ 完了 |
+| 3.4 外部ベクトルDB | Pinecone, Weaviate, Qdrant対応 | ⏭️ スキップ（PGVectorで十分） |
 
 ---
 

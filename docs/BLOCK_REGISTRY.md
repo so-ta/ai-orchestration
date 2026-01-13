@@ -260,9 +260,9 @@ func (e *BlockError) Error() string {
 
 | Slug | Name | Category | 説明 | 必要シークレット |
 |------|------|----------|------|-----------------|
-| `embedding` | Embedding | ai | テキストをベクトルに変換 | `OPENAI_API_KEY` |
+| `embedding` | Embedding | ai | テキストをベクトルに変換 | `OPENAI_API_KEY`, `COHERE_API_KEY`, `VOYAGE_API_KEY` |
 | `vector-upsert` | Vector Upsert | data | ドキュメントをベクトルDBに保存 | - |
-| `vector-search` | Vector Search | data | 類似ドキュメントを検索 | - |
+| `vector-search` | Vector Search | data | 類似ドキュメントを検索（ハイブリッド検索対応） | - |
 | `vector-delete` | Vector Delete | data | ベクトルDBからドキュメント削除 | - |
 | `doc-loader` | Document Loader | data | URL/テキストからドキュメント取得 | - |
 | `text-splitter` | Text Splitter | data | テキストをチャンクに分割 | - |
@@ -353,9 +353,10 @@ return {
 
 ```javascript
 // embedding block
+// Supported providers: openai, cohere, voyage (Phase 3.3)
 const texts = Array.isArray(input.texts) ? input.texts : [input.text || input.content];
 const result = await ctx.embedding.embed(
-    config.provider || 'openai',
+    config.provider || 'openai',  // 'openai', 'cohere', 'voyage'
     config.model || 'text-embedding-3-small',
     texts
 );
@@ -365,6 +366,11 @@ return {
     dimension: result.dimension,
     usage: result.usage
 };
+
+// Available models by provider:
+// OpenAI: text-embedding-3-small (1536d), text-embedding-3-large (3072d)
+// Cohere: embed-english-v3.0 (1024d), embed-multilingual-v3.0 (1024d)
+// Voyage: voyage-3 (1024d), voyage-3-lite, voyage-code-3
 ```
 
 ```javascript
@@ -404,6 +410,32 @@ const result = await ctx.vector.query(config.collection, queryVector, {
 });
 
 return { matches: result.matches };
+```
+
+```javascript
+// vector-search with advanced filters (Phase 3.1)
+// Supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains
+const result = await ctx.vector.query(config.collection, queryVector, {
+    top_k: 10,
+    filter: {
+        "$or": [
+            { "category": "news" },
+            { "category": "blog" }
+        ],
+        "score": { "$gte": 0.8 },
+        "author": { "$exists": true }
+    }
+});
+```
+
+```javascript
+// vector-search with hybrid search (Phase 3.2)
+// Combines vector similarity + keyword search using RRF
+const result = await ctx.vector.query(config.collection, queryVector, {
+    top_k: 10,
+    keyword: "machine learning",  // Enable hybrid search
+    hybrid_alpha: 0.7             // 70% vector, 30% keyword
+});
 ```
 
 ```javascript

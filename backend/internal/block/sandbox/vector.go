@@ -56,6 +56,9 @@ type QueryOptions struct {
 	Threshold      float64                `json:"threshold,omitempty"`
 	Filter         map[string]interface{} `json:"filter,omitempty"`
 	IncludeContent bool                   `json:"include_content,omitempty"`
+	// Hybrid search options (Phase 3.2)
+	Keyword       string  `json:"keyword,omitempty"`        // Keyword for hybrid search
+	HybridAlpha   float64 `json:"hybrid_alpha,omitempty"`   // Weight for vector score (0-1), default 0.7
 }
 
 // QueryResult contains the result of a query operation
@@ -175,6 +178,10 @@ func (s *VectorServiceImpl) Upsert(collection string, documents []VectorDocument
 }
 
 // Query performs similarity search with strict tenant isolation
+// Supports:
+// - Vector similarity search (cosine)
+// - Advanced metadata filters ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains)
+// - Hybrid search (keyword + vector with RRF)
 func (s *VectorServiceImpl) Query(collection string, vector []float32, opts *QueryOptions) (*QueryResult, error) {
 	if opts == nil {
 		opts = &QueryOptions{}
@@ -183,6 +190,16 @@ func (s *VectorServiceImpl) Query(collection string, vector []float32, opts *Que
 		opts.TopK = 5
 	}
 
+	// Use hybrid search if keyword is provided
+	if opts.Keyword != "" {
+		return s.queryHybrid(collection, vector, opts)
+	}
+
+	return s.queryVector(collection, vector, opts)
+}
+
+// queryVector performs pure vector similarity search
+func (s *VectorServiceImpl) queryVector(collection string, vector []float32, opts *QueryOptions) (*QueryResult, error) {
 	vectorStr := s.vectorToString(vector)
 
 	// Build query with mandatory tenant filter
@@ -210,12 +227,17 @@ func (s *VectorServiceImpl) Query(collection string, vector []float32, opts *Que
 		argIndex++
 	}
 
-	// Add metadata filters if specified
+	// Add metadata filters using FilterBuilder (Phase 3.1)
 	if opts.Filter != nil && len(opts.Filter) > 0 {
-		for key, value := range opts.Filter {
-			query += fmt.Sprintf(" AND vd.metadata->>$%d = $%d", argIndex, argIndex+1)
-			args = append(args, key, fmt.Sprintf("%v", value))
-			argIndex += 2
+		fb := NewFilterBuilder(argIndex, args)
+		filterClause, newArgs, err := fb.Build(opts.Filter)
+		if err != nil {
+			return nil, fmt.Errorf("invalid filter: %w", err)
+		}
+		if filterClause != "" {
+			query += " AND " + filterClause
+			args = newArgs
+			argIndex = fb.argIndex
 		}
 	}
 
@@ -228,6 +250,77 @@ func (s *VectorServiceImpl) Query(collection string, vector []float32, opts *Que
 	}
 	defer rows.Close()
 
+	return s.scanQueryResults(rows, opts.IncludeContent)
+}
+
+// queryHybrid performs hybrid search (vector + keyword) using RRF
+func (s *VectorServiceImpl) queryHybrid(collection string, vector []float32, opts *QueryOptions) (*QueryResult, error) {
+	vectorStr := s.vectorToString(vector)
+
+	// Default alpha: 0.7 (70% vector, 30% keyword)
+	alpha := opts.HybridAlpha
+	if alpha <= 0 || alpha > 1 {
+		alpha = 0.7
+	}
+
+	// RRF (Reciprocal Rank Fusion) query
+	// Combines vector similarity and full-text search scores
+	query := `
+		WITH vector_results AS (
+			SELECT
+				vd.id,
+				vd.content,
+				vd.metadata,
+				ROW_NUMBER() OVER (ORDER BY vd.embedding <=> $3::vector) as v_rank,
+				1 - (vd.embedding <=> $3::vector) as v_score
+			FROM vector_documents vd
+			JOIN vector_collections vc ON vd.collection_id = vc.id
+			WHERE vc.tenant_id = $1
+			  AND vc.name = $2
+			  AND vd.tenant_id = $1
+			LIMIT 50
+		),
+		keyword_results AS (
+			SELECT
+				vd.id,
+				ROW_NUMBER() OVER (ORDER BY ts_rank(to_tsvector('simple', vd.content), plainto_tsquery('simple', $4)) DESC) as k_rank,
+				ts_rank(to_tsvector('simple', vd.content), plainto_tsquery('simple', $4)) as k_score
+			FROM vector_documents vd
+			JOIN vector_collections vc ON vd.collection_id = vc.id
+			WHERE vc.tenant_id = $1
+			  AND vc.name = $2
+			  AND vd.tenant_id = $1
+			  AND to_tsvector('simple', vd.content) @@ plainto_tsquery('simple', $4)
+			LIMIT 50
+		)
+		SELECT
+			COALESCE(v.id, k.id) as id,
+			v.content,
+			v.metadata,
+			(
+				$5::float * (1.0 / (60 + COALESCE(v.v_rank, 100))) +
+				(1 - $5::float) * (1.0 / (60 + COALESCE(k.k_rank, 100)))
+			) as rrf_score
+		FROM vector_results v
+		FULL OUTER JOIN keyword_results k ON v.id = k.id
+		WHERE v.id IS NOT NULL OR k.id IS NOT NULL
+		ORDER BY rrf_score DESC
+		LIMIT $6
+	`
+
+	args := []interface{}{s.tenantID, collection, vectorStr, opts.Keyword, alpha, opts.TopK}
+
+	rows, err := s.pool.Query(s.ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("hybrid query failed: %w", err)
+	}
+	defer rows.Close()
+
+	return s.scanQueryResults(rows, opts.IncludeContent)
+}
+
+// scanQueryResults scans rows into QueryMatch slice
+func (s *VectorServiceImpl) scanQueryResults(rows pgx.Rows, includeContent bool) (*QueryResult, error) {
 	matches := []QueryMatch{}
 	for rows.Next() {
 		var match QueryMatch
@@ -244,7 +337,7 @@ func (s *VectorServiceImpl) Query(collection string, vector []float32, opts *Que
 		}
 
 		// Optionally exclude content
-		if !opts.IncludeContent {
+		if !includeContent {
 			match.Content = ""
 		}
 
@@ -447,4 +540,215 @@ func (s *VectorServiceImpl) vectorToString(vector []float32) string {
 		strs[i] = fmt.Sprintf("%f", v)
 	}
 	return "[" + strings.Join(strs, ",") + "]"
+}
+
+// ============================================================================
+// Phase 3.1: Advanced Metadata Filter Support
+// ============================================================================
+
+// FilterBuilder builds SQL WHERE clauses from filter expressions
+// Supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists
+type FilterBuilder struct {
+	args     []interface{}
+	argIndex int
+}
+
+// NewFilterBuilder creates a new FilterBuilder
+func NewFilterBuilder(startIndex int, initialArgs []interface{}) *FilterBuilder {
+	return &FilterBuilder{
+		args:     initialArgs,
+		argIndex: startIndex,
+	}
+}
+
+// Build converts a filter map to SQL WHERE clause
+func (fb *FilterBuilder) Build(filter map[string]interface{}) (string, []interface{}, error) {
+	if len(filter) == 0 {
+		return "", fb.args, nil
+	}
+
+	clause, err := fb.buildCondition(filter)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return clause, fb.args, nil
+}
+
+// buildCondition recursively builds conditions
+func (fb *FilterBuilder) buildCondition(filter map[string]interface{}) (string, error) {
+	var conditions []string
+
+	for key, value := range filter {
+		switch key {
+		case "$and":
+			clause, err := fb.buildLogicalOp(value, "AND")
+			if err != nil {
+				return "", err
+			}
+			conditions = append(conditions, clause)
+
+		case "$or":
+			clause, err := fb.buildLogicalOp(value, "OR")
+			if err != nil {
+				return "", err
+			}
+			conditions = append(conditions, clause)
+
+		default:
+			// Field-level condition
+			clause, err := fb.buildFieldCondition(key, value)
+			if err != nil {
+				return "", err
+			}
+			conditions = append(conditions, clause)
+		}
+	}
+
+	if len(conditions) == 1 {
+		return conditions[0], nil
+	}
+	return "(" + strings.Join(conditions, " AND ") + ")", nil
+}
+
+// buildLogicalOp builds $and / $or conditions
+func (fb *FilterBuilder) buildLogicalOp(value interface{}, op string) (string, error) {
+	arr, ok := value.([]interface{})
+	if !ok {
+		return "", fmt.Errorf("$%s requires an array", strings.ToLower(op))
+	}
+
+	var clauses []string
+	for _, item := range arr {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			return "", fmt.Errorf("$%s array items must be objects", strings.ToLower(op))
+		}
+		clause, err := fb.buildCondition(itemMap)
+		if err != nil {
+			return "", err
+		}
+		clauses = append(clauses, clause)
+	}
+
+	if len(clauses) == 0 {
+		return "TRUE", nil
+	}
+	return "(" + strings.Join(clauses, " "+op+" ") + ")", nil
+}
+
+// buildFieldCondition builds a condition for a single field
+func (fb *FilterBuilder) buildFieldCondition(field string, value interface{}) (string, error) {
+	// Check if value is an operator object
+	if opMap, ok := value.(map[string]interface{}); ok {
+		return fb.buildOperatorCondition(field, opMap)
+	}
+
+	// Simple equality
+	fb.args = append(fb.args, field, fmt.Sprintf("%v", value))
+	clause := fmt.Sprintf("vd.metadata->>$%d = $%d", fb.argIndex, fb.argIndex+1)
+	fb.argIndex += 2
+	return clause, nil
+}
+
+// buildOperatorCondition builds conditions with operators
+func (fb *FilterBuilder) buildOperatorCondition(field string, ops map[string]interface{}) (string, error) {
+	var conditions []string
+
+	for op, val := range ops {
+		var clause string
+
+		switch op {
+		case "$eq":
+			fb.args = append(fb.args, field, fmt.Sprintf("%v", val))
+			clause = fmt.Sprintf("vd.metadata->>$%d = $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		case "$ne":
+			fb.args = append(fb.args, field, fmt.Sprintf("%v", val))
+			clause = fmt.Sprintf("vd.metadata->>$%d != $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		case "$gt":
+			fb.args = append(fb.args, field, val)
+			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric > $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		case "$gte":
+			fb.args = append(fb.args, field, val)
+			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric >= $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		case "$lt":
+			fb.args = append(fb.args, field, val)
+			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric < $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		case "$lte":
+			fb.args = append(fb.args, field, val)
+			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric <= $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		case "$in":
+			arr, ok := val.([]interface{})
+			if !ok {
+				return "", fmt.Errorf("$in requires an array")
+			}
+			placeholders := make([]string, len(arr))
+			fb.args = append(fb.args, field)
+			fieldIdx := fb.argIndex
+			fb.argIndex++
+			for i, item := range arr {
+				fb.args = append(fb.args, fmt.Sprintf("%v", item))
+				placeholders[i] = fmt.Sprintf("$%d", fb.argIndex)
+				fb.argIndex++
+			}
+			clause = fmt.Sprintf("vd.metadata->>$%d IN (%s)", fieldIdx, strings.Join(placeholders, ","))
+
+		case "$nin":
+			arr, ok := val.([]interface{})
+			if !ok {
+				return "", fmt.Errorf("$nin requires an array")
+			}
+			placeholders := make([]string, len(arr))
+			fb.args = append(fb.args, field)
+			fieldIdx := fb.argIndex
+			fb.argIndex++
+			for i, item := range arr {
+				fb.args = append(fb.args, fmt.Sprintf("%v", item))
+				placeholders[i] = fmt.Sprintf("$%d", fb.argIndex)
+				fb.argIndex++
+			}
+			clause = fmt.Sprintf("vd.metadata->>$%d NOT IN (%s)", fieldIdx, strings.Join(placeholders, ","))
+
+		case "$exists":
+			exists, ok := val.(bool)
+			if !ok {
+				return "", fmt.Errorf("$exists requires a boolean")
+			}
+			fb.args = append(fb.args, field)
+			if exists {
+				clause = fmt.Sprintf("vd.metadata ? $%d", fb.argIndex)
+			} else {
+				clause = fmt.Sprintf("NOT (vd.metadata ? $%d)", fb.argIndex)
+			}
+			fb.argIndex++
+
+		case "$contains":
+			// String contains (LIKE)
+			fb.args = append(fb.args, field, fmt.Sprintf("%%%v%%", val))
+			clause = fmt.Sprintf("vd.metadata->>$%d LIKE $%d", fb.argIndex, fb.argIndex+1)
+			fb.argIndex += 2
+
+		default:
+			return "", fmt.Errorf("unsupported operator: %s", op)
+		}
+
+		conditions = append(conditions, clause)
+	}
+
+	if len(conditions) == 1 {
+		return conditions[0], nil
+	}
+	return "(" + strings.Join(conditions, " AND ") + ")", nil
 }
