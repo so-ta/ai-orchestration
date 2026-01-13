@@ -56,15 +56,15 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 	}
 
 	// Verify both steps exist
-	if _, err := u.stepRepo.GetByID(ctx, input.WorkflowID, input.SourceStepID); err != nil {
+	if _, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.SourceStepID); err != nil {
 		return nil, err
 	}
-	if _, err := u.stepRepo.GetByID(ctx, input.WorkflowID, input.TargetStepID); err != nil {
+	if _, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.TargetStepID); err != nil {
 		return nil, err
 	}
 
 	// Check for duplicate
-	exists, err := u.edgeRepo.Exists(ctx, input.WorkflowID, input.SourceStepID, input.TargetStepID)
+	exists, err := u.edgeRepo.Exists(ctx, input.TenantID, input.WorkflowID, input.SourceStepID, input.TargetStepID)
 	if err != nil {
 		return nil, err
 	}
@@ -73,16 +73,16 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 	}
 
 	// Check if adding this edge would create a cycle
-	edges, err := u.edgeRepo.ListByWorkflow(ctx, input.WorkflowID)
+	edges, err := u.edgeRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Temporarily add the new edge and check for cycle
-	newEdge := domain.NewEdgeWithPort(input.WorkflowID, input.SourceStepID, input.TargetStepID, input.SourcePort, input.TargetPort, input.Condition)
+	newEdge := domain.NewEdgeWithPort(input.TenantID, input.WorkflowID, input.SourceStepID, input.TargetStepID, input.SourcePort, input.TargetPort, input.Condition)
 	allEdges := append(edges, newEdge)
 
-	steps, err := u.stepRepo.ListByWorkflow(ctx, input.WorkflowID)
+	steps, err := u.stepRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (u *EdgeUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) 
 	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
-	return u.edgeRepo.ListByWorkflow(ctx, workflowID)
+	return u.edgeRepo.ListByWorkflow(ctx, tenantID, workflowID)
 }
 
 // Delete deletes an edge
@@ -157,5 +157,5 @@ func (u *EdgeUsecase) Delete(ctx context.Context, tenantID, workflowID, edgeID u
 		return domain.ErrWorkflowNotEditable
 	}
 
-	return u.edgeRepo.Delete(ctx, workflowID, edgeID)
+	return u.edgeRepo.Delete(ctx, tenantID, workflowID, edgeID)
 }

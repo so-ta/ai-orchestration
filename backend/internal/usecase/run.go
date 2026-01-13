@@ -148,8 +148,8 @@ func (u *RunUsecase) GetWithDetailsAndDefinition(ctx context.Context, tenantID, 
 	// This handles runs created before version snapshots were implemented
 	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, run.WorkflowID)
 	if err == nil && workflow != nil {
-		stepPtrs, _ := u.stepRepo.ListByWorkflow(ctx, run.WorkflowID)
-		edgePtrs, _ := u.edgeRepo.ListByWorkflow(ctx, run.WorkflowID)
+		stepPtrs, _ := u.stepRepo.ListByWorkflow(ctx, tenantID, run.WorkflowID)
+		edgePtrs, _ := u.edgeRepo.ListByWorkflow(ctx, tenantID, run.WorkflowID)
 
 		// Convert pointer slices to value slices
 		steps := make([]domain.Step, len(stepPtrs))
@@ -281,7 +281,7 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 
 	// 4. If step not found in version snapshot, try current workflow (for steps not in flow)
 	if targetStep == nil {
-		currentSteps, err := u.stepRepo.ListByWorkflow(ctx, run.WorkflowID)
+		currentSteps, err := u.stepRepo.ListByWorkflow(ctx, input.TenantID, run.WorkflowID)
 		if err != nil {
 			return nil, err
 		}
@@ -302,7 +302,7 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 	// 4. Determine input (custom or from previous StepRun)
 	stepInput := input.Input
 	if stepInput == nil {
-		lastRun, err := u.stepRunRepo.GetLatestByStep(ctx, input.RunID, input.StepID)
+		lastRun, err := u.stepRunRepo.GetLatestByStep(ctx, input.TenantID, input.RunID, input.StepID)
 		if err != nil {
 			return nil, err
 		}
@@ -310,14 +310,14 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 	}
 
 	// 5. Get max attempt number for the entire run and increment
-	maxAttempt, err := u.stepRunRepo.GetMaxAttemptForRun(ctx, input.RunID)
+	maxAttempt, err := u.stepRunRepo.GetMaxAttemptForRun(ctx, input.TenantID, input.RunID)
 	if err != nil {
 		return nil, err
 	}
 	newAttempt := maxAttempt + 1
 
 	// 6. Collect previous step outputs for injection
-	completedRuns, err := u.stepRunRepo.ListCompletedByRun(ctx, input.RunID)
+	completedRuns, err := u.stepRunRepo.ListCompletedByRun(ctx, input.TenantID, input.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 	}
 
 	// 8. Return new StepRun (note: actual execution happens async in worker)
-	return domain.NewStepRunWithAttempt(input.RunID, input.StepID, targetStep.Name, newAttempt), nil
+	return domain.NewStepRunWithAttempt(input.TenantID, input.RunID, input.StepID, targetStep.Name, newAttempt), nil
 }
 
 // ResumeFromStepInput represents input for resuming execution from a step
@@ -398,7 +398,7 @@ func (u *RunUsecase) ResumeFromStep(ctx context.Context, input ResumeFromStepInp
 	stepsToExecute := collectDownstreamSteps(&definition, input.FromStepID)
 
 	// 5. Collect previous step outputs for injection (steps NOT in stepsToExecute)
-	completedRuns, err := u.stepRunRepo.ListCompletedByRun(ctx, input.RunID)
+	completedRuns, err := u.stepRunRepo.ListCompletedByRun(ctx, input.TenantID, input.RunID)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +420,7 @@ func (u *RunUsecase) ResumeFromStep(ctx context.Context, input ResumeFromStepInp
 	// 6. Determine input for the starting step
 	stepInput := input.InputOverride
 	if stepInput == nil {
-		lastRun, err := u.stepRunRepo.GetLatestByStep(ctx, input.RunID, input.FromStepID)
+		lastRun, err := u.stepRunRepo.GetLatestByStep(ctx, input.TenantID, input.RunID, input.FromStepID)
 		if err == nil && lastRun != nil {
 			stepInput = lastRun.Input
 		}
@@ -456,7 +456,7 @@ func (u *RunUsecase) GetStepHistory(ctx context.Context, tenantID, runID, stepID
 		return nil, err
 	}
 
-	return u.stepRunRepo.ListByStep(ctx, runID, stepID)
+	return u.stepRunRepo.ListByStep(ctx, tenantID, runID, stepID)
 }
 
 // ExecuteSystemWorkflowInput represents input for executing a system workflow
@@ -557,7 +557,7 @@ func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInp
 	}
 
 	// 2. Get current steps from the workflow
-	steps, err := u.stepRepo.ListByWorkflow(ctx, input.WorkflowID)
+	steps, err := u.stepRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
 	if err != nil {
 		return nil, err
 	}

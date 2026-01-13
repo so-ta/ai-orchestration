@@ -144,7 +144,7 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 	)
 
 	// Create step run
-	stepRun := domain.NewStepRun(execCtx.Run.ID, targetStep.ID, targetStep.Name)
+	stepRun := domain.NewStepRun(execCtx.Run.TenantID, execCtx.Run.ID, targetStep.ID, targetStep.Name)
 
 	execCtx.mu.Lock()
 	execCtx.StepRuns[targetStep.ID] = stepRun
@@ -508,7 +508,7 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	)
 
 	// Create step run
-	stepRun := domain.NewStepRun(execCtx.Run.ID, step.ID, step.Name)
+	stepRun := domain.NewStepRun(execCtx.Run.TenantID, execCtx.Run.ID, step.ID, step.Name)
 
 	execCtx.mu.Lock()
 	execCtx.StepRuns[step.ID] = stepRun

@@ -71,7 +71,7 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 		}
 	}
 
-	step := domain.NewStep(input.WorkflowID, input.Name, input.Type, input.Config)
+	step := domain.NewStep(input.TenantID, input.WorkflowID, input.Name, input.Type, input.Config)
 	if blockDef != nil {
 		step.BlockDefinitionID = &blockDef.ID
 	}
@@ -90,7 +90,7 @@ func (u *StepUsecase) GetByID(ctx context.Context, tenantID, workflowID, stepID 
 	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
-	return u.stepRepo.GetByID(ctx, workflowID, stepID)
+	return u.stepRepo.GetByID(ctx, tenantID, workflowID, stepID)
 }
 
 // List lists steps for a workflow
@@ -99,7 +99,7 @@ func (u *StepUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) 
 	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
-	return u.stepRepo.ListByWorkflow(ctx, workflowID)
+	return u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
 }
 
 // UpdateStepInput represents input for updating a step
@@ -125,7 +125,7 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 		return nil, domain.ErrWorkflowNotEditable
 	}
 
-	step, err := u.stepRepo.GetByID(ctx, input.WorkflowID, input.StepID)
+	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.StepID)
 	if err != nil {
 		return nil, err
 	}
@@ -164,5 +164,5 @@ func (u *StepUsecase) Delete(ctx context.Context, tenantID, workflowID, stepID u
 		return domain.ErrWorkflowNotEditable
 	}
 
-	return u.stepRepo.Delete(ctx, workflowID, stepID)
+	return u.stepRepo.Delete(ctx, tenantID, workflowID, stepID)
 }

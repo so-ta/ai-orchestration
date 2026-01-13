@@ -148,6 +148,7 @@ COMMENT ON COLUMN public.block_definitions.version IS 'Version number, increment
 
 CREATE TABLE public.block_group_runs (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
     run_id uuid NOT NULL,
     block_group_id uuid NOT NULL,
     status character varying(50) DEFAULT 'pending'::character varying,
@@ -168,6 +169,7 @@ CREATE TABLE public.block_group_runs (
 
 CREATE TABLE public.block_groups (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
     workflow_id uuid NOT NULL,
     name character varying(255) NOT NULL,
     type character varying(50) NOT NULL,
@@ -340,6 +342,7 @@ COMMENT ON COLUMN public.credentials.metadata IS 'Non-sensitive metadata (e.g., 
 
 CREATE TABLE public.edges (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
     workflow_id uuid NOT NULL,
     source_step_id uuid NOT NULL,
     target_step_id uuid NOT NULL,
@@ -459,6 +462,7 @@ CREATE TABLE public.secrets (
 
 CREATE TABLE public.step_runs (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
     run_id uuid NOT NULL,
     step_id uuid NOT NULL,
     step_name character varying(255) NOT NULL,
@@ -480,6 +484,7 @@ CREATE TABLE public.step_runs (
 
 CREATE TABLE public.steps (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
     workflow_id uuid NOT NULL,
     name character varying(255) NOT NULL,
     type character varying(50) NOT NULL,
@@ -1212,6 +1217,20 @@ CREATE INDEX idx_block_groups_workflow ON public.block_groups USING btree (workf
 
 
 --
+-- Name: idx_block_groups_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_block_groups_tenant ON public.block_groups USING btree (tenant_id);
+
+
+--
+-- Name: idx_block_group_runs_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_block_group_runs_tenant ON public.block_group_runs USING btree (tenant_id);
+
+
+--
 -- Name: idx_block_versions_block_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1289,6 +1308,13 @@ CREATE INDEX idx_credentials_type ON public.credentials USING btree (credential_
 
 
 --
+-- Name: idx_edges_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_edges_tenant ON public.edges USING btree (tenant_id);
+
+
+--
 -- Name: idx_edges_source_port; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1352,10 +1378,24 @@ CREATE INDEX idx_step_runs_run ON public.step_runs USING btree (run_id);
 
 
 --
+-- Name: idx_step_runs_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_step_runs_tenant ON public.step_runs USING btree (tenant_id);
+
+
+--
 -- Name: idx_steps_block_group; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_steps_block_group ON public.steps USING btree (block_group_id);
+
+
+--
+-- Name: idx_steps_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_steps_tenant ON public.steps USING btree (tenant_id);
 
 
 --
@@ -1602,6 +1642,14 @@ ALTER TABLE ONLY public.block_group_runs
 
 
 --
+-- Name: block_group_runs block_group_runs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.block_group_runs
+    ADD CONSTRAINT block_group_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
 -- Name: block_groups block_groups_parent_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1615,6 +1663,14 @@ ALTER TABLE ONLY public.block_groups
 
 ALTER TABLE ONLY public.block_groups
     ADD CONSTRAINT block_groups_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
+
+
+--
+-- Name: block_groups block_groups_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.block_groups
+    ADD CONSTRAINT block_groups_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -1671,6 +1727,14 @@ ALTER TABLE ONLY public.edges
 
 ALTER TABLE ONLY public.edges
     ADD CONSTRAINT edges_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
+
+
+--
+-- Name: edges edges_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.edges
+    ADD CONSTRAINT edges_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --
@@ -1762,6 +1826,14 @@ ALTER TABLE ONLY public.step_runs
 
 
 --
+-- Name: step_runs step_runs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.step_runs
+    ADD CONSTRAINT step_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
 -- Name: steps steps_block_definition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1783,6 +1855,14 @@ ALTER TABLE ONLY public.steps
 
 ALTER TABLE ONLY public.steps
     ADD CONSTRAINT steps_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
+
+
+--
+-- Name: steps steps_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.steps
+    ADD CONSTRAINT steps_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 
 --

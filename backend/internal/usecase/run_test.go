@@ -101,80 +101,87 @@ func (m *mockVersionRepo) ListByWorkflow(ctx context.Context, workflowID uuid.UU
 }
 
 type mockStepRepo struct {
-	listByWorkflowFn func(ctx context.Context, workflowID uuid.UUID) ([]*domain.Step, error)
+	listByWorkflowFn func(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error)
 }
 
-func (m *mockStepRepo) Create(ctx context.Context, step *domain.Step) error       { return nil }
-func (m *mockStepRepo) GetByID(ctx context.Context, workflowID, id uuid.UUID) (*domain.Step, error) {
+func (m *mockStepRepo) Create(ctx context.Context, step *domain.Step) error { return nil }
+func (m *mockStepRepo) GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Step, error) {
 	return nil, nil
 }
-func (m *mockStepRepo) ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.Step, error) {
+func (m *mockStepRepo) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error) {
 	if m.listByWorkflowFn != nil {
-		return m.listByWorkflowFn(ctx, workflowID)
+		return m.listByWorkflowFn(ctx, tenantID, workflowID)
 	}
 	return nil, nil
 }
-func (m *mockStepRepo) Update(ctx context.Context, step *domain.Step) error              { return nil }
-func (m *mockStepRepo) Delete(ctx context.Context, workflowID, id uuid.UUID) error       { return nil }
+func (m *mockStepRepo) ListByBlockGroup(ctx context.Context, tenantID, blockGroupID uuid.UUID) ([]*domain.Step, error) {
+	return nil, nil
+}
+func (m *mockStepRepo) Update(ctx context.Context, step *domain.Step) error { return nil }
+func (m *mockStepRepo) Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error {
+	return nil
+}
 
 type mockEdgeRepo struct {
-	listByWorkflowFn func(ctx context.Context, workflowID uuid.UUID) ([]*domain.Edge, error)
+	listByWorkflowFn func(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error)
 }
 
-func (m *mockEdgeRepo) Create(ctx context.Context, edge *domain.Edge) error        { return nil }
-func (m *mockEdgeRepo) GetByID(ctx context.Context, workflowID, id uuid.UUID) (*domain.Edge, error) {
+func (m *mockEdgeRepo) Create(ctx context.Context, edge *domain.Edge) error { return nil }
+func (m *mockEdgeRepo) GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Edge, error) {
 	return nil, nil
 }
-func (m *mockEdgeRepo) ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.Edge, error) {
+func (m *mockEdgeRepo) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error) {
 	if m.listByWorkflowFn != nil {
-		return m.listByWorkflowFn(ctx, workflowID)
+		return m.listByWorkflowFn(ctx, tenantID, workflowID)
 	}
 	return nil, nil
 }
-func (m *mockEdgeRepo) Delete(ctx context.Context, workflowID, id uuid.UUID) error                 { return nil }
-func (m *mockEdgeRepo) Exists(ctx context.Context, workflowID, sourceID, targetID uuid.UUID) (bool, error) {
+func (m *mockEdgeRepo) Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error {
+	return nil
+}
+func (m *mockEdgeRepo) Exists(ctx context.Context, tenantID, workflowID, sourceID, targetID uuid.UUID) (bool, error) {
 	return false, nil
 }
 
 type mockStepRunRepo struct {
-	getLatestByStepFn     func(ctx context.Context, runID, stepID uuid.UUID) (*domain.StepRun, error)
-	getMaxAttemptForRunFn func(ctx context.Context, runID uuid.UUID) (int, error)
-	listCompletedByRunFn  func(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error)
-	listByStepFn          func(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.StepRun, error)
+	getLatestByStepFn     func(ctx context.Context, tenantID, runID, stepID uuid.UUID) (*domain.StepRun, error)
+	getMaxAttemptForRunFn func(ctx context.Context, tenantID, runID uuid.UUID) (int, error)
+	listCompletedByRunFn  func(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.StepRun, error)
+	listByStepFn          func(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.StepRun, error)
 }
 
 func (m *mockStepRunRepo) Create(ctx context.Context, stepRun *domain.StepRun) error { return nil }
-func (m *mockStepRunRepo) GetByID(ctx context.Context, runID, id uuid.UUID) (*domain.StepRun, error) {
+func (m *mockStepRunRepo) GetByID(ctx context.Context, tenantID, runID, id uuid.UUID) (*domain.StepRun, error) {
 	return nil, nil
 }
-func (m *mockStepRunRepo) ListByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error) {
+func (m *mockStepRunRepo) ListByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.StepRun, error) {
 	return nil, nil
 }
 func (m *mockStepRunRepo) Update(ctx context.Context, stepRun *domain.StepRun) error { return nil }
-func (m *mockStepRunRepo) GetMaxAttempt(ctx context.Context, runID, stepID uuid.UUID) (int, error) {
+func (m *mockStepRunRepo) GetMaxAttempt(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error) {
 	return 0, nil
 }
-func (m *mockStepRunRepo) GetMaxAttemptForRun(ctx context.Context, runID uuid.UUID) (int, error) {
+func (m *mockStepRunRepo) GetMaxAttemptForRun(ctx context.Context, tenantID, runID uuid.UUID) (int, error) {
 	if m.getMaxAttemptForRunFn != nil {
-		return m.getMaxAttemptForRunFn(ctx, runID)
+		return m.getMaxAttemptForRunFn(ctx, tenantID, runID)
 	}
 	return 0, nil
 }
-func (m *mockStepRunRepo) GetLatestByStep(ctx context.Context, runID, stepID uuid.UUID) (*domain.StepRun, error) {
+func (m *mockStepRunRepo) GetLatestByStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) (*domain.StepRun, error) {
 	if m.getLatestByStepFn != nil {
-		return m.getLatestByStepFn(ctx, runID, stepID)
+		return m.getLatestByStepFn(ctx, tenantID, runID, stepID)
 	}
 	return nil, nil
 }
-func (m *mockStepRunRepo) ListCompletedByRun(ctx context.Context, runID uuid.UUID) ([]*domain.StepRun, error) {
+func (m *mockStepRunRepo) ListCompletedByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.StepRun, error) {
 	if m.listCompletedByRunFn != nil {
-		return m.listCompletedByRunFn(ctx, runID)
+		return m.listCompletedByRunFn(ctx, tenantID, runID)
 	}
 	return nil, nil
 }
-func (m *mockStepRunRepo) ListByStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.StepRun, error) {
+func (m *mockStepRunRepo) ListByStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.StepRun, error) {
 	if m.listByStepFn != nil {
-		return m.listByStepFn(ctx, runID, stepID)
+		return m.listByStepFn(ctx, tenantID, runID, stepID)
 	}
 	return nil, nil
 }
@@ -419,7 +426,7 @@ func TestRunUsecase_GetStepHistory(t *testing.T) {
 	}
 
 	stepRunRepo := &mockStepRunRepo{
-		listByStepFn: func(ctx context.Context, rid, sid uuid.UUID) ([]*domain.StepRun, error) {
+		listByStepFn: func(ctx context.Context, tid, rid, sid uuid.UUID) ([]*domain.StepRun, error) {
 			if rid == runID && sid == stepID {
 				return stepRuns, nil
 			}
@@ -549,13 +556,13 @@ func TestRunUsecase_GetWithDetailsAndDefinition_FallbackToWorkflow(t *testing.T)
 	}
 
 	stepRepo := &mockStepRepo{
-		listByWorkflowFn: func(ctx context.Context, wid uuid.UUID) ([]*domain.Step, error) {
+		listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
 			return steps, nil
 		},
 	}
 
 	edgeRepo := &mockEdgeRepo{
-		listByWorkflowFn: func(ctx context.Context, wid uuid.UUID) ([]*domain.Edge, error) {
+		listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Edge, error) {
 			return []*domain.Edge{}, nil
 		},
 	}

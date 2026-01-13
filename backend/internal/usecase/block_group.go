@@ -64,7 +64,7 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 
 	// Verify parent group if specified
 	if input.ParentGroupID != nil {
-		parent, err := u.blockGroupRepo.GetByID(ctx, *input.ParentGroupID)
+		parent, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.ParentGroupID)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 		}
 	}
 
-	group := domain.NewBlockGroup(input.WorkflowID, input.Name, input.Type)
+	group := domain.NewBlockGroup(input.TenantID, input.WorkflowID, input.Name, input.Type)
 	if input.Config != nil {
 		group.Config = input.Config
 	}
@@ -100,7 +100,7 @@ func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, workflowID, g
 		return nil, err
 	}
 
-	group, err := u.blockGroupRepo.GetByID(ctx, groupID)
+	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (u *BlockGroupUsecase) List(ctx context.Context, tenantID, workflowID uuid.
 	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
-	return u.blockGroupRepo.ListByWorkflow(ctx, workflowID)
+	return u.blockGroupRepo.ListByWorkflow(ctx, tenantID, workflowID)
 }
 
 // UpdateBlockGroupInput represents input for updating a block group
@@ -147,7 +147,7 @@ func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupIn
 		return nil, domain.ErrWorkflowNotEditable
 	}
 
-	group, err := u.blockGroupRepo.GetByID(ctx, input.GroupID)
+	group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.GroupID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, workflowID, gr
 		return domain.ErrWorkflowNotEditable
 	}
 
-	group, err := u.blockGroupRepo.GetByID(ctx, groupID)
+	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, workflowID, gr
 		return domain.ErrBlockGroupNotFound
 	}
 
-	return u.blockGroupRepo.Delete(ctx, groupID)
+	return u.blockGroupRepo.Delete(ctx, tenantID, groupID)
 }
 
 // AddStepToGroupInput represents input for adding a step to a block group
@@ -235,7 +235,7 @@ func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToG
 	}
 
 	// Verify group exists
-	group, err := u.blockGroupRepo.GetByID(ctx, input.GroupID)
+	group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.GroupID)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToG
 	}
 
 	// Get step
-	step, err := u.stepRepo.GetByID(ctx, input.WorkflowID, input.StepID)
+	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.StepID)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (u *BlockGroupUsecase) RemoveStepFromGroup(ctx context.Context, tenantID, w
 	}
 
 	// Get step
-	step, err := u.stepRepo.GetByID(ctx, workflowID, stepID)
+	step, err := u.stepRepo.GetByID(ctx, tenantID, workflowID, stepID)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, workf
 	}
 
 	// Verify group exists
-	group, err := u.blockGroupRepo.GetByID(ctx, groupID)
+	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +315,7 @@ func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, workf
 	}
 
 	// Get steps in group
-	steps, err := u.stepRepo.ListByWorkflow(ctx, workflowID)
+	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
 	if err != nil {
 		return nil, err
 	}

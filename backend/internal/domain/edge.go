@@ -9,6 +9,7 @@ import (
 // Edge represents a connection between two steps in the DAG
 type Edge struct {
 	ID           uuid.UUID `json:"id"`
+	TenantID     uuid.UUID `json:"tenant_id"`
 	WorkflowID   uuid.UUID `json:"workflow_id"`
 	SourceStepID uuid.UUID `json:"source_step_id"`
 	TargetStepID uuid.UUID `json:"target_step_id"`
@@ -19,13 +20,14 @@ type Edge struct {
 }
 
 // NewEdge creates a new edge
-func NewEdge(workflowID, sourceStepID, targetStepID uuid.UUID, condition string) *Edge {
+func NewEdge(tenantID, workflowID, sourceStepID, targetStepID uuid.UUID, condition string) *Edge {
 	var cond *string
 	if condition != "" {
 		cond = &condition
 	}
 	return &Edge{
 		ID:           uuid.New(),
+		TenantID:     tenantID,
 		WorkflowID:   workflowID,
 		SourceStepID: sourceStepID,
 		TargetStepID: targetStepID,
@@ -37,13 +39,14 @@ func NewEdge(workflowID, sourceStepID, targetStepID uuid.UUID, condition string)
 }
 
 // NewEdgeWithPort creates a new edge with specific source and target ports
-func NewEdgeWithPort(workflowID, sourceStepID, targetStepID uuid.UUID, sourcePort, targetPort, condition string) *Edge {
+func NewEdgeWithPort(tenantID, workflowID, sourceStepID, targetStepID uuid.UUID, sourcePort, targetPort, condition string) *Edge {
 	var cond *string
 	if condition != "" {
 		cond = &condition
 	}
 	return &Edge{
 		ID:           uuid.New(),
+		TenantID:     tenantID,
 		WorkflowID:   workflowID,
 		SourceStepID: sourceStepID,
 		TargetStepID: targetStepID,
