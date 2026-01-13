@@ -638,7 +638,7 @@ INSERT INTO block_definitions (id, tenant_id, slug, name, description, category,
 true,
 '[{"name": "output", "label": "Output", "is_default": true, "description": "Documents with vectors"}]',
 '[{"name": "input", "label": "Input", "schema": {"type": "object"}, "required": true, "description": "Documents or text to embed"}]',
-'[]', false,
+'[{"name": "OPENAI_API_KEY", "description": "OpenAI API key for embeddings", "required_when": "config.provider == ''openai''"}, {"name": "COHERE_API_KEY", "description": "Cohere API key for embeddings", "required_when": "config.provider == ''cohere''"}, {"name": "VOYAGE_API_KEY", "description": "Voyage API key for embeddings", "required_when": "config.provider == ''voyage''"}]', false,
 'const documents = input.documents || (input.texts ? input.texts.map(t => ({content: t})) : (input.text ? [{content: input.text}] : []));
 if (documents.length === 0) throw new Error(''[EMB_002] No text provided for embedding'');
 const provider = config.provider || ''openai'';

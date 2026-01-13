@@ -24,7 +24,11 @@ var (
 // Config holds sandbox configuration
 type Config struct {
 	Timeout     time.Duration
-	MemoryLimit int64 // in bytes (not strictly enforced by goja, but used for monitoring)
+	MemoryLimit int64 // in bytes - NOTE: Goja does not support native memory limits.
+	// This value is used for documentation and future monitoring integration.
+	// Memory safety is achieved through: timeout limits, blocked dangerous APIs,
+	// and Go's garbage collector. For strict memory enforcement, consider
+	// running sandboxed code in separate processes or containers.
 }
 
 // DefaultConfig returns default sandbox configuration
@@ -194,6 +198,10 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		panic(vm.ToValue("Security Error: Dynamic code execution is not allowed"))
 	}
 	if err := vm.Set("eval", blockedFunc); err != nil {
+		return err
+	}
+	// SECURITY: Block Function constructor
+	if err := vm.Set("Function", blockedFunc); err != nil {
 		return err
 	}
 
