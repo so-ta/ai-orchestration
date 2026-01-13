@@ -3,8 +3,8 @@
 #
 # 機能:
 # - 構造化JSON出力によるレビュー結果の解析
-# - PR差分内の指摘 → 正式なPR Reviewとして投稿
-# - PR差分外の指摘 → Issueとして作成/統合
+# - pr_findings（PR差分内の指摘）→ 正式なPR Reviewとして投稿
+# - other_findings（PR差分外の指摘）→ Issueとして作成/統合、PRにも報告
 # - レビュー結果に応じたラベル自動付与
 #
 # 設定方法:
@@ -77,11 +77,10 @@ jobs:
             }
 
             const prNumber = process.env.PR_NUMBER;
-            const findings = review.findings || [];
 
-            // PR差分内/外で分類
-            const prFindings = findings.filter(f => f.in_pr_diff === true);
-            const issueFindings = findings.filter(f => f.in_pr_diff === false);
+            // 新しいスキーマに対応（pr_findings と other_findings）
+            const prFindings = review.pr_findings || [];
+            const otherFindings = review.other_findings || [];
 
             // 結果を出力
             core.setOutput('verdict', review.verdict || 'COMMENT');
@@ -89,12 +88,12 @@ jobs:
             core.setOutput('verdict_reason', review.verdict_reason || '');
             core.setOutput('good_points', JSON.stringify(review.good_points || []));
             core.setOutput('pr_findings', JSON.stringify(prFindings));
-            core.setOutput('issue_findings', JSON.stringify(issueFindings));
-            core.setOutput('has_issue_findings', issueFindings.length > 0 ? 'true' : 'false');
+            core.setOutput('other_findings', JSON.stringify(otherFindings));
+            core.setOutput('has_other_findings', otherFindings.length > 0 ? 'true' : 'false');
             core.setOutput('fallback', 'false');
 
             console.log(`PR Findings: ${prFindings.length}`);
-            console.log(`Issue Findings: ${issueFindings.length}`);
+            console.log(`Other Findings: ${otherFindings.length}`);
             console.log(`Verdict: ${review.verdict}`);
 
       - name: Post PR Review (Structured)
@@ -132,7 +131,7 @@ jobs:
             const low = prFindings.filter(f => f.severity === 'low');
 
             if (critical.length > 0 || high.length > 0) {
-              body += `### 要修正\n`;
+              body += `### 🚨 要修正（PR差分に関する指摘）\n`;
               [...critical, ...high].forEach(f => {
                 const severity = f.severity === 'critical' ? '🔴 Critical' : '🟠 High';
                 body += `#### ${severity}: ${f.title}\n`;
@@ -146,7 +145,7 @@ jobs:
             }
 
             if (medium.length > 0 || low.length > 0) {
-              body += `### 改善提案\n`;
+              body += `### 💡 改善提案（PR差分に関する指摘）\n`;
               [...medium, ...low].forEach(f => {
                 const severity = f.severity === 'medium' ? '🟡 Medium' : '🟢 Low';
                 body += `#### ${severity}: ${f.title}\n`;
@@ -155,8 +154,13 @@ jobs:
               });
             }
 
+            if (prFindings.length === 0) {
+              body += `### ✅ PR差分に関する指摘\nなし\n\n`;
+            }
+
             body += `### 判定\n**${verdict}**\n${verdictReason}\n\n`;
-            body += `---\n*このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*`;
+            body += `---\n*このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*\n`;
+            body += `*レビューガイドライン: [AGENTS.md](../AGENTS.md)*`;
 
             // PR Reviewを投稿
             const event = verdict === 'APPROVE' ? 'APPROVE' :
@@ -191,22 +195,24 @@ jobs:
           ---
           *このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*"
 
-      - name: Manage Issues for Non-PR Findings
-        if: steps.process.outputs.has_issue_findings == 'true'
+      - name: Create Issues for Other Findings
+        if: steps.process.outputs.has_other_findings == 'true'
+        id: create_issues
         uses: actions/github-script@v7
         env:
-          ISSUE_FINDINGS: ${{ steps.process.outputs.issue_findings }}
+          OTHER_FINDINGS: ${{ steps.process.outputs.other_findings }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
         with:
           script: |
-            const issueFindings = JSON.parse(process.env.ISSUE_FINDINGS || '[]');
+            const otherFindings = JSON.parse(process.env.OTHER_FINDINGS || '[]');
             const prNumber = process.env.PR_NUMBER;
+            const createdIssues = [];
 
-            if (issueFindings.length === 0) return;
+            if (otherFindings.length === 0) return;
 
             // カテゴリ別にグループ化
             const byCategory = {};
-            issueFindings.forEach(f => {
+            otherFindings.forEach(f => {
               const cat = f.category || 'quality';
               if (!byCategory[cat]) byCategory[cat] = [];
               byCategory[cat].push(f);
@@ -258,6 +264,9 @@ jobs:
 
               const prRef = `\n\n---\n*PR #${prNumber} のCodexレビューで検出*`;
 
+              let issueNumber;
+              let issueAction;
+
               if (existingIssues.length > 0) {
                 // 既存Issueに追記
                 const existingIssue = existingIssues[0];
@@ -270,6 +279,8 @@ jobs:
                   body: newBody
                 });
 
+                issueNumber = existingIssue.number;
+                issueAction = 'updated';
                 console.log(`Updated existing issue #${existingIssue.number} with ${findings.length} findings`);
               } else {
                 // 新規Issue作成
@@ -284,9 +295,71 @@ jobs:
                   labels: [label, 'codex:auto-generated']
                 });
 
+                issueNumber = newIssue.number;
+                issueAction = 'created';
                 console.log(`Created new issue #${newIssue.number} for ${category} findings`);
               }
+
+              createdIssues.push({
+                number: issueNumber,
+                action: issueAction,
+                category: category,
+                title: titlePrefix,
+                findingsCount: findings.length
+              });
             }
+
+            // 作成/更新したIssue情報を出力
+            core.setOutput('created_issues', JSON.stringify(createdIssues));
+
+      - name: Report Issues in PR Comment
+        if: steps.process.outputs.has_other_findings == 'true'
+        uses: actions/github-script@v7
+        env:
+          CREATED_ISSUES: ${{ steps.create_issues.outputs.created_issues }}
+          OTHER_FINDINGS: ${{ steps.process.outputs.other_findings }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        with:
+          script: |
+            const createdIssues = JSON.parse(process.env.CREATED_ISSUES || '[]');
+            const otherFindings = JSON.parse(process.env.OTHER_FINDINGS || '[]');
+            const prNumber = context.issue.number;
+
+            if (createdIssues.length === 0) return;
+
+            let body = `## 📋 PR差分外で発見した課題\n\n`;
+            body += `このレビュー中に、PRの差分外で以下の改善点が検出されました。\n`;
+            body += `これらは **Issue** として登録されています。\n\n`;
+
+            // カテゴリ別にまとめて表示
+            for (const issue of createdIssues) {
+              const actionText = issue.action === 'created' ? '新規作成' : '既存に追加';
+              body += `### ${issue.title}\n`;
+              body += `- **Issue**: #${issue.number} (${actionText})\n`;
+              body += `- **指摘数**: ${issue.findingsCount}件\n\n`;
+            }
+
+            // 詳細サマリー
+            body += `### 検出された課題の詳細\n`;
+            otherFindings.forEach(f => {
+              const severity = f.severity === 'critical' ? '🔴' :
+                               f.severity === 'high' ? '🟠' :
+                               f.severity === 'medium' ? '🟡' : '🟢';
+              body += `- ${severity} **${f.title}** (\`${f.file}\`)\n`;
+            });
+
+            body += `\n---\n`;
+            body += `*これらの課題はPRの判定（APPROVE/REQUEST_CHANGES）には影響しません。*\n`;
+            body += `*対応が必要な場合は、別途PRを作成してください。*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: body
+            });
+
+            console.log(`Posted issue summary comment on PR #${prNumber}`);
 
       - name: Add Labels
         uses: actions/github-script@v7
@@ -297,7 +370,7 @@ jobs:
             const verdict = process.env.VERDICT || 'COMMENT';
             const prNumber = context.issue.number;
 
-            // 既存のcodex:ラベルを削除
+            // 既存のcodex:review-ラベルを削除
             const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
               owner: context.repo.owner,
               repo: context.repo.repo,

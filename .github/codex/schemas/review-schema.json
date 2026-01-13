@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["findings", "verdict", "summary", "good_points", "verdict_reason"],
+  "required": ["summary", "good_points", "pr_findings", "other_findings", "verdict", "verdict_reason"],
   "additionalProperties": false,
   "properties": {
     "summary": {
@@ -15,11 +15,11 @@
       },
       "description": "良い変更点のリスト"
     },
-    "findings": {
+    "pr_findings": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["file", "title", "body", "severity", "in_pr_diff", "start_line", "end_line", "category", "suggested_code"],
+        "required": ["file", "title", "body", "severity", "start_line", "end_line", "category", "suggested_code"],
         "additionalProperties": false,
         "properties": {
           "file": {
@@ -52,9 +52,50 @@
             "enum": ["security", "performance", "quality", "test", "documentation"],
             "description": "カテゴリ"
           },
-          "in_pr_diff": {
-            "type": "boolean",
-            "description": "このPRの差分に含まれるかどうか"
+          "suggested_code": {
+            "type": ["string", "null"],
+            "description": "修正後のコード（suggestion用、なければnull）"
+          }
+        }
+      },
+      "description": "PR差分に関する指摘事項のリスト"
+    },
+    "other_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "title", "body", "severity", "start_line", "end_line", "category", "suggested_code"],
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "ファイルパス"
+          },
+          "start_line": {
+            "type": ["integer", "null"],
+            "description": "開始行番号（不明な場合はnull）"
+          },
+          "end_line": {
+            "type": ["integer", "null"],
+            "description": "終了行番号（不明な場合はnull）"
+          },
+          "title": {
+            "type": "string",
+            "description": "問題のタイトル（日本語）"
+          },
+          "body": {
+            "type": "string",
+            "description": "詳細説明（日本語）"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"],
+            "description": "重要度"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["security", "performance", "quality", "test", "documentation"],
+            "description": "カテゴリ"
           },
           "suggested_code": {
             "type": ["string", "null"],
@@ -62,12 +103,12 @@
           }
         }
       },
-      "description": "指摘事項のリスト"
+      "description": "PR差分外で発見した課題のリスト（Issue化される）"
     },
     "verdict": {
       "type": "string",
       "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
-      "description": "最終判定"
+      "description": "最終判定（pr_findingsのみに基づく）"
     },
     "verdict_reason": {
       "type": "string",

@@ -7,21 +7,36 @@
 
 ---
 
-## レビュー対象の限定（重要）
+## レビュー対象の明確な分類（最重要）
 
-**このPRで変更された差分のみをレビューしてください。**
+**レビュー結果を2つのカテゴリに明確に分けて出力してください：**
 
-- PRの差分に含まれるファイル・行のみを対象とする
-- PR外のファイルや、差分に含まれていないコードについては指摘しない
-- ただし、差分外でも重大な問題（セキュリティ脆弱性等）を発見した場合は、`in_pr_diff: false` として報告する
+### 1. `pr_findings` - PRの差分に関する課題（PRレビューとして報告）
 
-### 差分内外の判定基準
+**このPRで変更された差分に直接関連する課題のみ**を含めてください：
+- PRで追加・変更・削除されたコード
+- 変更されたコードに直接影響を受ける周辺コード
 
-| 状況 | `in_pr_diff` | 対応 |
-|------|-------------|------|
-| PRで追加・変更された行 | `true` | PR Review で指摘 |
-| PRで変更されていないが、変更箇所に関連する既存コード | `true` | PR Review で指摘 |
-| PRと無関係だが重大な問題を発見 | `false` | Issue として報告 |
+これらは **PR Review** として投稿され、`APPROVE`/`REQUEST_CHANGES`/`COMMENT` の判定に影響します。
+
+### 2. `other_findings` - PRの差分外で発見した課題（Issue化して報告）
+
+**レビュー中に発見したが、このPRの差分とは無関係な課題**を含めてください：
+- PR外のファイルで発見したセキュリティ脆弱性
+- 既存コードの品質問題
+- プロジェクト全体の改善提案
+- ドキュメントの不備
+
+これらは **GitHub Issue** として自動作成されます。PRの判定には影響しません。
+
+### 分類の判断基準
+
+| 状況 | 分類先 | 理由 |
+|------|--------|------|
+| PRで追加された新しいコードにバグがある | `pr_findings` | 今回の変更で導入された問題 |
+| PRで変更されたファイル内の、変更行に関連する問題 | `pr_findings` | 変更の影響範囲内 |
+| PRで触れていないファイルの既存バグを発見 | `other_findings` | 既存の問題、今回のPRとは無関係 |
+| プロジェクト全体のアーキテクチャ改善提案 | `other_findings` | 今回のPRの範囲外 |
 
 ---
 
@@ -112,9 +127,10 @@
    - 問題の指摘だけでなく、改善案を提示
    - 可能であればコード例を含める
 
-5. **差分内外の分類**
-   - 各指摘に `in_pr_diff` フラグを設定
-   - PR差分外の指摘は別途Issue化される
+5. **課題の分類（最重要）**
+   - PR差分に関する課題 → `pr_findings`
+   - その他の課題 → `other_findings`
+   - **判定（verdict）は `pr_findings` のみに基づいて決定**
 
 ---
 
@@ -129,7 +145,7 @@
     "良い変更点1",
     "良い変更点2"
   ],
-  "findings": [
+  "pr_findings": [
     {
       "file": "path/to/file.go",
       "start_line": 42,
@@ -138,12 +154,23 @@
       "body": "詳細説明（日本語）",
       "severity": "critical|high|medium|low",
       "category": "security|performance|quality|test|documentation",
-      "in_pr_diff": true,
-      "suggested_code": "修正後のコード（オプション）"
+      "suggested_code": "修正後のコード（オプション、nullも可）"
+    }
+  ],
+  "other_findings": [
+    {
+      "file": "path/to/other-file.go",
+      "start_line": 100,
+      "end_line": 105,
+      "title": "既存コードの問題（日本語）",
+      "body": "詳細説明（日本語）",
+      "severity": "critical|high|medium|low",
+      "category": "security|performance|quality|test|documentation",
+      "suggested_code": "修正後のコード（オプション、nullも可）"
     }
   ],
   "verdict": "APPROVE|REQUEST_CHANGES|COMMENT",
-  "verdict_reason": "判定理由（日本語）"
+  "verdict_reason": "判定理由（日本語）- pr_findingsのみに基づいて判定"
 }
 ```
 
@@ -152,19 +179,36 @@
 | フィールド | 必須 | 説明 |
 |-----------|------|------|
 | `summary` | Yes | 変更内容の要約 |
-| `good_points` | No | 良い変更点のリスト |
-| `findings` | Yes | 指摘事項のリスト（空配列可） |
-| `findings[].file` | Yes | ファイルパス |
-| `findings[].start_line` | No | 開始行番号 |
-| `findings[].end_line` | No | 終了行番号 |
-| `findings[].title` | Yes | 問題のタイトル |
-| `findings[].body` | Yes | 詳細説明 |
-| `findings[].severity` | Yes | 重要度 |
-| `findings[].category` | No | カテゴリ |
-| `findings[].in_pr_diff` | Yes | PR差分内かどうか |
-| `findings[].suggested_code` | No | 修正コード（Suggestion用） |
-| `verdict` | Yes | 最終判定 |
-| `verdict_reason` | No | 判定理由 |
+| `good_points` | Yes | 良い変更点のリスト（空配列可） |
+| `pr_findings` | Yes | **PR差分に関する**指摘事項のリスト（空配列可） |
+| `other_findings` | Yes | **PR差分外**で発見した課題のリスト（空配列可） |
+| `verdict` | Yes | 最終判定（**pr_findingsのみに基づく**） |
+| `verdict_reason` | Yes | 判定理由 |
+
+### Finding オブジェクトのフィールド
+
+| フィールド | 必須 | 説明 |
+|-----------|------|------|
+| `file` | Yes | ファイルパス |
+| `start_line` | Yes | 開始行番号（不明な場合はnull） |
+| `end_line` | Yes | 終了行番号（不明な場合はnull） |
+| `title` | Yes | 問題のタイトル |
+| `body` | Yes | 詳細説明 |
+| `severity` | Yes | 重要度: critical, high, medium, low |
+| `category` | Yes | カテゴリ: security, performance, quality, test, documentation |
+| `suggested_code` | Yes | 修正コード（なければnull） |
+
+---
+
+## Verdict（判定）の基準
+
+**重要: `verdict` は `pr_findings` のみに基づいて決定してください。`other_findings` は判定に影響しません。**
+
+| 判定 | 条件 |
+|------|------|
+| `APPROVE` | `pr_findings` に critical/high がなく、重大な問題がない |
+| `REQUEST_CHANGES` | `pr_findings` に critical または high がある |
+| `COMMENT` | `pr_findings` に medium/low のみ、または情報提供のみ |
 
 ---
 
