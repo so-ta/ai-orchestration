@@ -4,6 +4,7 @@ import type { Schedule, ScheduleStatus, CreateScheduleRequest, UpdateScheduleReq
 const { t } = useI18n()
 const schedulesApi = useSchedules()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 // State
 const schedules = ref<Schedule[]>([])
@@ -180,7 +181,14 @@ const handleSubmit = async () => {
 }
 
 const handleDelete = async (schedule: Schedule) => {
-  if (!confirm(t('schedules.confirmDelete'))) return
+  const confirmed = await confirm({
+    title: t('schedules.deleteTitle'),
+    message: t('schedules.confirmDelete'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     await schedulesApi.remove(schedule.id)

@@ -7,6 +7,7 @@ import DynamicConfigForm from './config/DynamicConfigForm.vue'
 const { t } = useI18n()
 const blocks = useBlocks()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const props = defineProps<{
   step: Step | null
@@ -115,8 +116,15 @@ function handleSave() {
   })
 }
 
-function handleDelete() {
-  if (confirm(t('editor.confirmDeleteStep'))) {
+async function handleDelete() {
+  const confirmed = await confirm({
+    title: t('editor.deleteStepTitle'),
+    message: t('editor.confirmDeleteStep'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (confirmed) {
     emit('delete')
   }
 }

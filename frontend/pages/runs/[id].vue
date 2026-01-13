@@ -7,6 +7,7 @@ const { t } = useI18n()
 
 const runsApi = useRuns()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const run = ref<Run | null>(null)
 const loading = ref(true)
@@ -87,7 +88,14 @@ function stopAutoRefresh() {
 async function handleCancel() {
   if (!run.value) return
 
-  if (!confirm('Are you sure you want to cancel this run?')) return
+  const confirmed = await confirm({
+    title: t('runs.cancelRunTitle'),
+    message: t('runs.confirmCancel'),
+    confirmText: t('common.cancel'),
+    cancelText: t('common.close'),
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     await runsApi.cancel(runId)

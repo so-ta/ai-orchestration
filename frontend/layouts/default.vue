@@ -180,6 +180,8 @@ async function handleLogout() {
 
     <!-- Toast notifications -->
     <ToastContainer />
+    <!-- Global confirmation dialog -->
+    <UiConfirmDialog />
   </div>
 </template>
 
