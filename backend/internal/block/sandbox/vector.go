@@ -549,9 +549,25 @@ func (s *VectorServiceImpl) vectorToString(vector []float32) string {
 
 // FilterBuilder builds SQL WHERE clauses from filter expressions
 // Supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists
+// Note: Field names are sanitized and embedded as literals (not placeholders)
+// to comply with PostgreSQL JSONB operator requirements
 type FilterBuilder struct {
 	args     []interface{}
 	argIndex int
+}
+
+// sanitizeFieldName validates and sanitizes a field name to prevent SQL injection
+// Only allows alphanumeric characters, underscores, and hyphens
+func sanitizeFieldName(field string) (string, error) {
+	if field == "" {
+		return "", fmt.Errorf("field name cannot be empty")
+	}
+	for _, r := range field {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-') {
+			return "", fmt.Errorf("invalid character in field name: %q", field)
+		}
+	}
+	return field, nil
 }
 
 // NewFilterBuilder creates a new FilterBuilder
@@ -640,19 +656,26 @@ func (fb *FilterBuilder) buildLogicalOp(value interface{}, op string) (string, e
 
 // buildFieldCondition builds a condition for a single field
 func (fb *FilterBuilder) buildFieldCondition(field string, value interface{}) (string, error) {
-	// Check if value is an operator object
-	if opMap, ok := value.(map[string]interface{}); ok {
-		return fb.buildOperatorCondition(field, opMap)
+	// Sanitize field name to prevent SQL injection
+	sanitizedField, err := sanitizeFieldName(field)
+	if err != nil {
+		return "", err
 	}
 
-	// Simple equality
-	fb.args = append(fb.args, field, fmt.Sprintf("%v", value))
-	clause := fmt.Sprintf("vd.metadata->>$%d = $%d", fb.argIndex, fb.argIndex+1)
-	fb.argIndex += 2
+	// Check if value is an operator object
+	if opMap, ok := value.(map[string]interface{}); ok {
+		return fb.buildOperatorCondition(sanitizedField, opMap)
+	}
+
+	// Simple equality - field name as literal, value as placeholder
+	fb.args = append(fb.args, fmt.Sprintf("%v", value))
+	clause := fmt.Sprintf("vd.metadata->>'%s' = $%d", sanitizedField, fb.argIndex)
+	fb.argIndex++
 	return clause, nil
 }
 
 // buildOperatorCondition builds conditions with operators
+// Note: field is already sanitized by buildFieldCondition
 func (fb *FilterBuilder) buildOperatorCondition(field string, ops map[string]interface{}) (string, error) {
 	var conditions []string
 
@@ -661,34 +684,34 @@ func (fb *FilterBuilder) buildOperatorCondition(field string, ops map[string]int
 
 		switch op {
 		case "$eq":
-			fb.args = append(fb.args, field, fmt.Sprintf("%v", val))
-			clause = fmt.Sprintf("vd.metadata->>$%d = $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, fmt.Sprintf("%v", val))
+			clause = fmt.Sprintf("vd.metadata->>'%s' = $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		case "$ne":
-			fb.args = append(fb.args, field, fmt.Sprintf("%v", val))
-			clause = fmt.Sprintf("vd.metadata->>$%d != $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, fmt.Sprintf("%v", val))
+			clause = fmt.Sprintf("vd.metadata->>'%s' != $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		case "$gt":
-			fb.args = append(fb.args, field, val)
-			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric > $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, val)
+			clause = fmt.Sprintf("(vd.metadata->>'%s')::numeric > $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		case "$gte":
-			fb.args = append(fb.args, field, val)
-			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric >= $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, val)
+			clause = fmt.Sprintf("(vd.metadata->>'%s')::numeric >= $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		case "$lt":
-			fb.args = append(fb.args, field, val)
-			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric < $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, val)
+			clause = fmt.Sprintf("(vd.metadata->>'%s')::numeric < $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		case "$lte":
-			fb.args = append(fb.args, field, val)
-			clause = fmt.Sprintf("(vd.metadata->>$%d)::numeric <= $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, val)
+			clause = fmt.Sprintf("(vd.metadata->>'%s')::numeric <= $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		case "$in":
 			arr, ok := val.([]interface{})
@@ -696,15 +719,12 @@ func (fb *FilterBuilder) buildOperatorCondition(field string, ops map[string]int
 				return "", fmt.Errorf("$in requires an array")
 			}
 			placeholders := make([]string, len(arr))
-			fb.args = append(fb.args, field)
-			fieldIdx := fb.argIndex
-			fb.argIndex++
 			for i, item := range arr {
 				fb.args = append(fb.args, fmt.Sprintf("%v", item))
 				placeholders[i] = fmt.Sprintf("$%d", fb.argIndex)
 				fb.argIndex++
 			}
-			clause = fmt.Sprintf("vd.metadata->>$%d IN (%s)", fieldIdx, strings.Join(placeholders, ","))
+			clause = fmt.Sprintf("vd.metadata->>'%s' IN (%s)", field, strings.Join(placeholders, ","))
 
 		case "$nin":
 			arr, ok := val.([]interface{})
@@ -712,34 +732,29 @@ func (fb *FilterBuilder) buildOperatorCondition(field string, ops map[string]int
 				return "", fmt.Errorf("$nin requires an array")
 			}
 			placeholders := make([]string, len(arr))
-			fb.args = append(fb.args, field)
-			fieldIdx := fb.argIndex
-			fb.argIndex++
 			for i, item := range arr {
 				fb.args = append(fb.args, fmt.Sprintf("%v", item))
 				placeholders[i] = fmt.Sprintf("$%d", fb.argIndex)
 				fb.argIndex++
 			}
-			clause = fmt.Sprintf("vd.metadata->>$%d NOT IN (%s)", fieldIdx, strings.Join(placeholders, ","))
+			clause = fmt.Sprintf("vd.metadata->>'%s' NOT IN (%s)", field, strings.Join(placeholders, ","))
 
 		case "$exists":
 			exists, ok := val.(bool)
 			if !ok {
 				return "", fmt.Errorf("$exists requires a boolean")
 			}
-			fb.args = append(fb.args, field)
 			if exists {
-				clause = fmt.Sprintf("vd.metadata ? $%d", fb.argIndex)
+				clause = fmt.Sprintf("vd.metadata ? '%s'", field)
 			} else {
-				clause = fmt.Sprintf("NOT (vd.metadata ? $%d)", fb.argIndex)
+				clause = fmt.Sprintf("NOT (vd.metadata ? '%s')", field)
 			}
-			fb.argIndex++
 
 		case "$contains":
 			// String contains (LIKE)
-			fb.args = append(fb.args, field, fmt.Sprintf("%%%v%%", val))
-			clause = fmt.Sprintf("vd.metadata->>$%d LIKE $%d", fb.argIndex, fb.argIndex+1)
-			fb.argIndex += 2
+			fb.args = append(fb.args, fmt.Sprintf("%%%v%%", val))
+			clause = fmt.Sprintf("vd.metadata->>'%s' LIKE $%d", field, fb.argIndex)
+			fb.argIndex++
 
 		default:
 			return "", fmt.Errorf("unsupported operator: %s", op)

@@ -195,10 +195,10 @@ func TestFilterBuilder_SimpleEquality(t *testing.T) {
 	clause, args, err := fb.Build(filter)
 
 	assert.NoError(t, err)
-	assert.Contains(t, clause, "vd.metadata->>$1 = $2")
-	assert.Len(t, args, 2)
-	assert.Equal(t, "category", args[0])
-	assert.Equal(t, "news", args[1])
+	// Field name is embedded as literal, value is placeholder
+	assert.Contains(t, clause, "vd.metadata->>'category' = $1")
+	assert.Len(t, args, 1)
+	assert.Equal(t, "news", args[0])
 }
 
 func TestFilterBuilder_NumericComparison(t *testing.T) {
@@ -212,10 +212,10 @@ func TestFilterBuilder_NumericComparison(t *testing.T) {
 	clause, args, err := fb.Build(filter)
 
 	assert.NoError(t, err)
-	assert.Contains(t, clause, "(vd.metadata->>$1)::numeric >= $2")
-	assert.Len(t, args, 2)
-	assert.Equal(t, "score", args[0])
-	assert.Equal(t, 0.8, args[1])
+	// Field name is embedded as literal
+	assert.Contains(t, clause, "(vd.metadata->>'score')::numeric >= $1")
+	assert.Len(t, args, 1)
+	assert.Equal(t, 0.8, args[0])
 }
 
 func TestFilterBuilder_RangeComparison(t *testing.T) {
@@ -231,9 +231,8 @@ func TestFilterBuilder_RangeComparison(t *testing.T) {
 
 	assert.NoError(t, err)
 	// Both conditions should be present
-	assert.Contains(t, clause, "(vd.metadata->>")
-	assert.Contains(t, clause, "::numeric")
-	assert.Len(t, args, 4) // field, value, field, value
+	assert.Contains(t, clause, "(vd.metadata->>'price')::numeric")
+	assert.Len(t, args, 2) // only values, no field names
 }
 
 func TestFilterBuilder_OrCondition(t *testing.T) {
@@ -249,7 +248,7 @@ func TestFilterBuilder_OrCondition(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Contains(t, clause, " OR ")
-	assert.Len(t, args, 4) // 2 fields + 2 values
+	assert.Len(t, args, 2) // only values, no field names
 }
 
 func TestFilterBuilder_AndCondition(t *testing.T) {
@@ -281,7 +280,8 @@ func TestFilterBuilder_InOperator(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Contains(t, clause, "IN")
-	assert.Len(t, args, 4) // field + 3 values
+	assert.Contains(t, clause, "vd.metadata->>'category'")
+	assert.Len(t, args, 3) // only 3 values
 }
 
 func TestFilterBuilder_ExistsOperator(t *testing.T) {
@@ -295,8 +295,9 @@ func TestFilterBuilder_ExistsOperator(t *testing.T) {
 	clause, args, err := fb.Build(filter)
 
 	assert.NoError(t, err)
-	assert.Contains(t, clause, "vd.metadata ? $1")
-	assert.Len(t, args, 1)
+	// Field name is literal in ? operator
+	assert.Contains(t, clause, "vd.metadata ? 'author'")
+	assert.Len(t, args, 0) // no placeholders for $exists
 }
 
 func TestFilterBuilder_NotExistsOperator(t *testing.T) {
@@ -307,10 +308,11 @@ func TestFilterBuilder_NotExistsOperator(t *testing.T) {
 		},
 	}
 
-	clause, _, err := fb.Build(filter)
+	clause, args, err := fb.Build(filter)
 
 	assert.NoError(t, err)
-	assert.Contains(t, clause, "NOT (vd.metadata ? $1)")
+	assert.Contains(t, clause, "NOT (vd.metadata ? 'deleted')")
+	assert.Len(t, args, 0)
 }
 
 func TestFilterBuilder_ContainsOperator(t *testing.T) {
@@ -325,7 +327,9 @@ func TestFilterBuilder_ContainsOperator(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Contains(t, clause, "LIKE")
-	assert.Equal(t, "%AI%", args[1])
+	assert.Contains(t, clause, "vd.metadata->>'title'")
+	assert.Len(t, args, 1)
+	assert.Equal(t, "%AI%", args[0])
 }
 
 func TestFilterBuilder_EmptyFilter(t *testing.T) {
@@ -397,4 +401,56 @@ func TestQueryOptions_DefaultHybridAlpha(t *testing.T) {
 
 	// Default should be 0 (unset)
 	assert.Equal(t, float64(0), opts.HybridAlpha)
+}
+
+// ============================================================================
+// Phase 3.1: Field Name Sanitization Tests
+// ============================================================================
+
+func TestSanitizeFieldName_Valid(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"category", "category"},
+		{"source_type", "source_type"},
+		{"field123", "field123"},
+		{"my-field", "my-field"},
+		{"CamelCase", "CamelCase"},
+	}
+
+	for _, tt := range tests {
+		result, err := sanitizeFieldName(tt.input)
+		assert.NoError(t, err)
+		assert.Equal(t, tt.expected, result)
+	}
+}
+
+func TestSanitizeFieldName_Invalid(t *testing.T) {
+	invalidNames := []string{
+		"",                  // empty
+		"field.name",        // contains dot
+		"field name",        // contains space
+		"field'injection",   // contains quote (SQL injection attempt)
+		"field;drop table",  // SQL injection attempt
+		"field$special",     // contains special char
+		"field@email",       // contains @
+		"field=value",       // contains =
+	}
+
+	for _, name := range invalidNames {
+		_, err := sanitizeFieldName(name)
+		assert.Error(t, err, "Expected error for field name: %q", name)
+	}
+}
+
+func TestFilterBuilder_InvalidFieldName(t *testing.T) {
+	fb := NewFilterBuilder(1, []interface{}{})
+	filter := map[string]interface{}{
+		"field'; DROP TABLE users; --": "value", // SQL injection attempt
+	}
+
+	_, _, err := fb.Build(filter)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid character")
 }
