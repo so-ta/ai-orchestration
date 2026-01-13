@@ -79,6 +79,8 @@ describe('DagEditor', () => {
       config: {},
       position_x: 100,
       position_y: 100,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
     },
     {
       id: 'step-2',
@@ -88,6 +90,8 @@ describe('DagEditor', () => {
       config: { provider: 'openai', model: 'gpt-4' },
       position_x: 100,
       position_y: 250,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
     },
   ]
 
@@ -97,6 +101,7 @@ describe('DagEditor', () => {
       workflow_id: 'workflow-1',
       source_step_id: 'step-1',
       target_step_id: 'step-2',
+      created_at: '2024-01-01T00:00:00Z',
     },
   ]
 
@@ -212,11 +217,14 @@ describe('DagEditor', () => {
           id: 'group-1',
           workflow_id: 'workflow-1',
           name: 'Loop Group',
-          type: 'loop',
+          type: 'foreach',
+          config: {},
           position_x: 50,
           position_y: 50,
           width: 300,
           height: 200,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
         },
       ]
 
@@ -243,8 +251,9 @@ describe('DagEditor', () => {
           run_id: 'run-main',
           step_id: 'step-1',
           step_name: 'Start Step',
-          status: 'completed',
+          status: 'completed' as const,
           attempt: 1,
+          created_at: '2024-01-01T00:00:00Z',
         },
       ]
 
@@ -333,6 +342,8 @@ describe('DagEditor', () => {
             config: {},
             position_x: 100,
             position_y: 100,
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
           },
         ]
 
@@ -354,7 +365,7 @@ describe('DagEditor', () => {
   })
 
   describe('block groups', () => {
-    const groupTypes = ['loop', 'try-catch', 'parallel', 'conditional'] as const
+    const groupTypes = ['foreach', 'try_catch', 'parallel', 'if_else'] as const
 
     groupTypes.forEach(type => {
       it(`should handle ${type} block group type`, () => {
@@ -364,10 +375,13 @@ describe('DagEditor', () => {
             workflow_id: 'workflow-1',
             name: `${type} Group`,
             type: type,
+            config: {},
             position_x: 50,
             position_y: 50,
             width: 300,
             height: 200,
+            created_at: '2024-01-01T00:00:00Z',
+            updated_at: '2024-01-01T00:00:00Z',
           },
         ]
 
@@ -391,7 +405,7 @@ describe('DagEditor', () => {
   })
 
   describe('execution status', () => {
-    const statuses = ['pending', 'running', 'completed', 'failed', 'skipped']
+    const statuses = ['pending', 'running', 'completed', 'failed', 'skipped'] as const
 
     statuses.forEach(status => {
       it(`should handle ${status} step run status`, () => {
@@ -403,6 +417,7 @@ describe('DagEditor', () => {
             step_name: 'Start Step',
             status: status,
             attempt: 1,
+            created_at: '2024-01-01T00:00:00Z',
           },
         ]
 

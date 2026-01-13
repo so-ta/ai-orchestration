@@ -1,23 +1,67 @@
 <script setup lang="ts">
-import type { Run } from '~/types/api'
+import type { Run, StepRun } from '~/types/api'
 
 const props = defineProps<{
   workflowId: string
 }>()
 
 const { t } = useI18n()
-const { list: listRuns } = useRuns()
+const { list: listRuns, get: getRun } = useRuns()
 
 const runs = ref<Run[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+
+// Flattened step runs from all runs
+interface StepRunWithRunInfo extends StepRun {
+  run_id: string
+  workflow_version: number
+  run_mode: string
+  run_status: string
+}
+
+const allStepRuns = computed<StepRunWithRunInfo[]>(() => {
+  const stepRuns: StepRunWithRunInfo[] = []
+  for (const run of runs.value) {
+    if (run.step_runs) {
+      for (const stepRun of run.step_runs) {
+        stepRuns.push({
+          ...stepRun,
+          run_id: run.id,
+          workflow_version: run.workflow_version,
+          run_mode: run.mode,
+          run_status: run.status,
+        })
+      }
+    }
+  }
+  // Sort by created_at descending (newest first)
+  return stepRuns.sort((a, b) => {
+    const dateA = new Date(a.completed_at || a.started_at || a.created_at).getTime()
+    const dateB = new Date(b.completed_at || b.started_at || b.created_at).getTime()
+    return dateB - dateA
+  })
+})
 
 async function fetchRuns() {
   loading.value = true
   error.value = null
   try {
     const response = await listRuns(props.workflowId, { limit: 50 })
-    runs.value = response.data || []
+    const runList = response.data || []
+
+    // Fetch detailed run data with step_runs for each run
+    const detailedRuns: Run[] = []
+    for (const run of runList) {
+      try {
+        const detailedResponse = await getRun(run.id)
+        detailedRuns.push(detailedResponse.data)
+      } catch {
+        // If detail fetch fails, use the basic run info
+        detailedRuns.push(run)
+      }
+    }
+    runs.value = detailedRuns
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to fetch runs'
   } finally {
@@ -62,6 +106,17 @@ function calculateDuration(run: Run): string {
   if (!run.started_at) return '-'
   const start = new Date(run.started_at).getTime()
   const end = run.completed_at ? new Date(run.completed_at).getTime() : Date.now()
+  const ms = end - start
+
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${(ms / 60000).toFixed(1)}m`
+}
+
+function calculateStepDuration(stepRun: StepRunWithRunInfo): string {
+  if (!stepRun.started_at) return '-'
+  const start = new Date(stepRun.started_at).getTime()
+  const end = stepRun.completed_at ? new Date(stepRun.completed_at).getTime() : Date.now()
   const ms = end - start
 
   if (ms < 1000) return `${ms}ms`
@@ -135,7 +190,7 @@ watch(() => props.workflowId, () => {
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="runs.length === 0" class="empty-state">
+    <div v-else-if="allStepRuns.length === 0" class="empty-state">
       <div class="empty-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
@@ -145,44 +200,42 @@ watch(() => props.workflowId, () => {
       <p class="empty-subtitle">{{ t('workflows.runHistory.noRunsDesc') }}</p>
     </div>
 
-    <!-- Runs Table -->
+    <!-- Step Runs Table -->
     <div v-else class="table-container">
       <table class="history-table">
         <thead>
           <tr>
+            <th>{{ t('runs.table.step') }}</th>
             <th>{{ t('runs.table.status') }}</th>
             <th>{{ t('workflows.runHistory.version') }}</th>
-            <th>{{ t('runs.table.mode') }}</th>
             <th>{{ t('runs.table.duration') }}</th>
             <th>{{ t('runs.table.created') }}</th>
             <th class="text-right">{{ t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="run in runs" :key="run.id">
+          <tr v-for="stepRun in allStepRuns" :key="stepRun.id">
             <td>
-              <span :class="['badge', getStatusBadge(run.status)]">
-                <span class="status-dot" :class="getStatusDot(run.status)"></span>
-                {{ t(`runs.status.${run.status}`) }}
+              <span class="step-name">{{ stepRun.step_name }}</span>
+            </td>
+            <td>
+              <span :class="['badge', getStatusBadge(stepRun.status)]">
+                <span class="status-dot" :class="getStatusDot(stepRun.status)"></span>
+                {{ t(`runs.status.${stepRun.status}`) }}
               </span>
             </td>
             <td>
-              <span class="version-badge">v{{ run.workflow_version }}</span>
+              <span class="version-badge">v{{ stepRun.workflow_version }}</span>
             </td>
             <td>
-              <span :class="['mode-tag', `mode-${run.mode}`]">
-                {{ t(`runs.mode.${run.mode}`) }}
-              </span>
-            </td>
-            <td>
-              <span class="duration">{{ calculateDuration(run) }}</span>
+              <span class="duration">{{ calculateStepDuration(stepRun) }}</span>
             </td>
             <td class="text-secondary text-sm">
-              {{ formatDate(run.created_at) }}
+              {{ formatDate(stepRun.created_at) }}
             </td>
             <td>
               <div class="action-buttons">
-                <NuxtLink :to="`/runs/${run.id}`" class="btn btn-outline btn-sm">
+                <NuxtLink :to="`/runs/${stepRun.run_id}`" class="btn btn-outline btn-sm">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
@@ -386,6 +439,18 @@ watch(() => props.workflowId, () => {
 .mode-production {
   background: #dcfce7;
   color: #16a34a;
+}
+
+/* Step Name */
+.step-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 /* Duration */
