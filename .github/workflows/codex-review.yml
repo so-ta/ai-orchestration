@@ -50,8 +50,9 @@ jobs:
           safety-strategy: drop-sudo
           # ワークスペースへの書き込みを許可（レビュー結果出力用）
           sandbox: workspace-write
-          # コードレビューに最適化されたモデルを使用
-          model: gpt-5.2-codex
+          # モデルを指定（デフォルト: o4-mini）
+          # 利用可能なモデル: o4-mini, gpt-4o, gpt-4-turbo など
+          model: o4-mini
 
       - name: Post Review Comment
         env:
