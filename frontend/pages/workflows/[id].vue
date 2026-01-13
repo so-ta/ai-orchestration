@@ -12,6 +12,7 @@ const runs = useRuns()
 const blocksApi = useBlocks()
 const blockGroupsApi = useBlockGroups()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 const workflow = ref<Workflow | null>(null)
 const blockDefinitions = ref<BlockDefinition[]>([])
@@ -705,9 +706,13 @@ async function handleSave() {
   if (!data) return
 
   const newVersion = workflow.value!.version + 1
-  if (!confirm(t('workflows.confirmSave', { version: newVersion }))) {
-    return
-  }
+  const confirmed = await confirm({
+    title: t('workflows.saveVersionTitle'),
+    message: t('workflows.confirmSave', { version: newVersion }),
+    confirmText: t('common.save'),
+    cancelText: t('common.cancel'),
+  })
+  if (!confirmed) return
 
   try {
     saving.value = true
@@ -740,9 +745,14 @@ async function handleSaveDraft() {
 async function handleDiscardDraft() {
   if (!workflow.value?.has_draft) return
 
-  if (!confirm(t('workflows.confirmDiscardDraft'))) {
-    return
-  }
+  const confirmed = await confirm({
+    title: t('workflows.discardDraftTitle'),
+    message: t('workflows.confirmDiscardDraft'),
+    confirmText: t('workflows.discardDraft'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     saving.value = true

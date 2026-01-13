@@ -3,6 +3,7 @@ import type { BlockDefinition, BlockCategory } from '~/types/api'
 import { useAdminBlocks, type BlockVersion, categoryConfig } from '~/composables/useBlocks'
 
 const { t } = useI18n()
+const { confirm } = useConfirm()
 
 definePageMeta({
   layout: 'default',
@@ -213,9 +214,14 @@ async function confirmDelete() {
 async function rollbackToVersion(version: BlockVersion) {
   if (!selectedBlock.value) return
 
-  if (!confirm(t('admin.blocks.confirmRollback', { version: version.version }))) {
-    return
-  }
+  const confirmed = await confirm({
+    title: t('admin.blocks.rollbackTitle'),
+    message: t('admin.blocks.confirmRollback', { version: version.version }),
+    confirmText: t('admin.blocks.rollback'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     await adminBlocks.rollback(selectedBlock.value.id, version.version)

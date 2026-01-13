@@ -4,6 +4,7 @@ import type { Webhook, CreateWebhookRequest, UpdateWebhookRequest, Workflow } fr
 const { t } = useI18n()
 const webhooksApi = useWebhooks()
 const toast = useToast()
+const { confirm } = useConfirm()
 
 // State
 const webhooks = ref<Webhook[]>([])
@@ -163,7 +164,14 @@ const handleSubmit = async () => {
 }
 
 const handleDelete = async (webhook: Webhook) => {
-  if (!confirm(t('webhooks.confirmDelete'))) return
+  const confirmed = await confirm({
+    title: t('webhooks.deleteTitle'),
+    message: t('webhooks.confirmDelete'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     await webhooksApi.remove(webhook.id)
@@ -195,7 +203,14 @@ const handleDisable = async (webhook: Webhook) => {
 }
 
 const handleRegenerateSecret = async (webhook: Webhook) => {
-  if (!confirm(t('webhooks.confirmRegenerate'))) return
+  const confirmed = await confirm({
+    title: t('webhooks.regenerateTitle'),
+    message: t('webhooks.confirmRegenerate'),
+    confirmText: t('webhooks.regenerate'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (!confirmed) return
 
   try {
     await webhooksApi.regenerateSecret(webhook.id)
