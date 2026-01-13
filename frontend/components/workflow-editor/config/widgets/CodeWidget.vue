@@ -58,37 +58,54 @@ function handleBlur() {
 }
 
 // Simple syntax highlighting keywords for JavaScript
+// Uses placeholders to avoid replacement conflicts
 const highlightedCode = computed(() => {
   const code = props.modelValue || ''
   if (!code) return ''
 
-  // Escape HTML
+  // Escape HTML first
   let html = code
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 
   if (language.value === 'javascript' || language.value === 'js') {
-    // Keywords
-    html = html.replace(
-      /\b(const|let|var|function|async|await|return|if|else|for|while|try|catch|throw|new|class|extends|import|export|default|from)\b/g,
-      '<span class="keyword">$1</span>'
-    )
-    // Strings
+    // Use placeholder tokens to avoid nested replacements
+    const tokens: { placeholder: string; replacement: string }[] = []
+    let tokenIndex = 0
+
+    const createToken = (className: string, content: string): string => {
+      const placeholder = `\x00TOKEN${tokenIndex++}\x00`
+      tokens.push({
+        placeholder,
+        replacement: `<span class="${className}">${content}</span>`,
+      })
+      return placeholder
+    }
+
+    // Order matters: strings and comments first (they can contain keywords)
+    // Comments
+    html = html.replace(/(\/\/.*$)/gm, (match) => createToken('comment', match))
+
+    // Strings (single, double quotes, and template literals)
     html = html.replace(
       /('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)/g,
-      '<span class="string">$1</span>'
+      (match) => createToken('string', match)
     )
-    // Comments
+
+    // Keywords (only match outside of already tokenized areas)
     html = html.replace(
-      /(\/\/.*$)/gm,
-      '<span class="comment">$1</span>'
+      /\b(const|let|var|function|async|await|return|if|else|for|while|try|catch|throw|new|class|extends|import|export|default|from)\b/g,
+      (match) => createToken('keyword', match)
     )
+
     // Numbers
-    html = html.replace(
-      /\b(\d+(?:\.\d+)?)\b/g,
-      '<span class="number">$1</span>'
-    )
+    html = html.replace(/\b(\d+(?:\.\d+)?)\b/g, (match) => createToken('number', match))
+
+    // Replace all placeholders with actual HTML
+    for (const token of tokens) {
+      html = html.replace(token.placeholder, token.replacement)
+    }
   }
 
   return html

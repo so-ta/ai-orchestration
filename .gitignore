@@ -51,3 +51,10 @@ secrets/
 # Go
 *.test
 __debug_bin
+
+# Go build outputs (backend binaries)
+/backend/api
+/backend/worker
+
+# Database exports
+*_exported.sql
