@@ -624,8 +624,297 @@ INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, c
 INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES ('c0000003-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'b0000003-0000-0000-0000-000000000004', 'b0000004-0000-0000-0000-000000000004', NULL, '2026-01-12 09:23:30.446+00', 'output', '');
 INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES ('c0000004-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'b0000004-0000-0000-0000-000000000004', 'b0000005-0000-0000-0000-000000000004', NULL, '2026-01-12 09:23:30.446+00', 'output', '');
 
+-- ============================================================================
+-- RAG (Retrieval-Augmented Generation) Block Definitions
+-- ============================================================================
 
---
---
+-- embedding: Convert text to vector embeddings
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00001-0000-0000-0000-000000000001', NULL, 'embedding', 'Embedding', 'Convert text to vector embeddings', 'ai', 'hash',
+'{"type": "object", "properties": {"provider": {"type": "string", "enum": ["openai", "cohere", "voyage"], "default": "openai", "title": "Provider"}, "model": {"type": "string", "default": "text-embedding-3-small", "title": "Model"}}}',
+'{"type": "object", "properties": {"documents": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}}}}, "text": {"type": "string"}, "texts": {"type": "array", "items": {"type": "string"}}}}',
+'{"type": "object", "properties": {"documents": {"type": "array"}, "vectors": {"type": "array"}, "model": {"type": "string"}, "dimension": {"type": "integer"}, "usage": {"type": "object"}}}',
+'[{"code": "EMB_001", "name": "PROVIDER_ERROR", "retryable": true, "description": "Embedding provider API error"}, {"code": "EMB_002", "name": "EMPTY_INPUT", "retryable": false, "description": "No text provided for embedding"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Documents with vectors"}]',
+'[{"name": "input", "label": "Input", "schema": {"type": "object"}, "required": true, "description": "Documents or text to embed"}]',
+'[{"name": "OPENAI_API_KEY", "description": "OpenAI API key for embeddings", "required_when": "config.provider == ''openai''"}, {"name": "COHERE_API_KEY", "description": "Cohere API key for embeddings", "required_when": "config.provider == ''cohere''"}, {"name": "VOYAGE_API_KEY", "description": "Voyage API key for embeddings", "required_when": "config.provider == ''voyage''"}]', false,
+'const documents = input.documents || (input.texts ? input.texts.map(t => ({content: t})) : (input.text ? [{content: input.text}] : []));
+if (documents.length === 0) throw new Error(''[EMB_002] No text provided for embedding'');
+const provider = config.provider || ''openai'';
+const model = config.model || ''text-embedding-3-small'';
+const texts = documents.map(d => d.content);
+const result = await ctx.embedding.embed(provider, model, texts);
+const docsWithVectors = documents.map((doc, i) => ({...doc, vector: result.vectors[i]}));
+return {documents: docsWithVectors, vectors: result.vectors, model: result.model, dimension: result.dimension, usage: result.usage};',
+'{"icon": "hash", "color": "#8B5CF6"}', true, 1);
 
+-- vector-upsert: Store documents in vector database
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00002-0000-0000-0000-000000000001', NULL, 'vector-upsert', 'Vector Upsert', 'Store documents in vector database', 'data', 'database',
+'{"type": "object", "required": ["collection"], "properties": {"collection": {"type": "string", "title": "Collection Name"}, "embedding_provider": {"type": "string", "default": "openai", "title": "Embedding Provider"}, "embedding_model": {"type": "string", "default": "text-embedding-3-small", "title": "Embedding Model"}}}',
+'{"type": "object", "required": ["documents"], "properties": {"documents": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "metadata": {"type": "object"}, "vector": {"type": "array"}}}}}}',
+'{"type": "object", "properties": {"collection": {"type": "string"}, "upserted_count": {"type": "integer"}, "ids": {"type": "array", "items": {"type": "string"}}}}',
+'[{"code": "VEC_001", "name": "COLLECTION_REQUIRED", "retryable": false, "description": "Collection name is required"}, {"code": "VEC_002", "name": "DOCUMENTS_REQUIRED", "retryable": false, "description": "Documents array is required"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Upsert result"}]',
+'[{"name": "documents", "label": "Documents", "schema": {"type": "array"}, "required": true, "description": "Documents to store"}]',
+'[]', false,
+'const collection = config.collection || input.collection;
+if (!collection) throw new Error(''[VEC_001] Collection name is required'');
+const documents = input.documents;
+if (!documents || documents.length === 0) throw new Error(''[VEC_002] Documents array is required'');
+const result = await ctx.vector.upsert(collection, documents, {embedding_provider: config.embedding_provider, embedding_model: config.embedding_model});
+return {collection, upserted_count: result.upserted_count, ids: result.ids};',
+'{"icon": "database", "color": "#10B981"}', true, 1);
 
+-- vector-search: Search for similar documents
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00003-0000-0000-0000-000000000001', NULL, 'vector-search', 'Vector Search', 'Search for similar documents in vector database', 'data', 'search',
+'{"type": "object", "required": ["collection"], "properties": {"collection": {"type": "string", "title": "Collection Name"}, "top_k": {"type": "integer", "default": 5, "minimum": 1, "maximum": 100, "title": "Number of Results"}, "threshold": {"type": "number", "minimum": 0, "maximum": 1, "title": "Similarity Threshold"}, "include_content": {"type": "boolean", "default": true, "title": "Include Content"}, "embedding_provider": {"type": "string", "default": "openai"}, "embedding_model": {"type": "string", "default": "text-embedding-3-small"}}}',
+'{"type": "object", "properties": {"vector": {"type": "array", "items": {"type": "number"}}, "query": {"type": "string"}}}',
+'{"type": "object", "properties": {"matches": {"type": "array"}, "count": {"type": "integer"}, "collection": {"type": "string"}}}',
+'[{"code": "VEC_001", "name": "COLLECTION_REQUIRED", "retryable": false, "description": "Collection name is required"}, {"code": "VEC_003", "name": "VECTOR_OR_QUERY_REQUIRED", "retryable": false, "description": "Either vector or query text is required"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Search results"}]',
+'[{"name": "input", "label": "Input", "schema": {"type": "object"}, "required": true, "description": "Vector or query text"}]',
+'[]', false,
+'const collection = config.collection || input.collection;
+if (!collection) throw new Error(''[VEC_001] Collection name is required'');
+let searchVector = input.vector || (input.vectors ? input.vectors[0] : null);
+if (!searchVector && input.query) {
+  const provider = config.embedding_provider || ''openai'';
+  const model = config.embedding_model || ''text-embedding-3-small'';
+  const embedResult = await ctx.embedding.embed(provider, model, [input.query]);
+  searchVector = embedResult.vectors[0];
+}
+if (!searchVector) throw new Error(''[VEC_003] Either vector or query text is required'');
+const result = await ctx.vector.query(collection, searchVector, {top_k: config.top_k || 5, threshold: config.threshold, include_content: config.include_content !== false});
+return {matches: result.matches, count: result.matches.length, collection};',
+'{"icon": "search", "color": "#3B82F6"}', true, 1);
+
+-- vector-delete: Delete documents from vector database
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00004-0000-0000-0000-000000000001', NULL, 'vector-delete', 'Vector Delete', 'Delete documents from vector database', 'data', 'trash-2',
+'{"type": "object", "required": ["collection"], "properties": {"collection": {"type": "string", "title": "Collection Name"}}}',
+'{"type": "object", "required": ["ids"], "properties": {"ids": {"type": "array", "items": {"type": "string"}}}}',
+'{"type": "object", "properties": {"collection": {"type": "string"}, "deleted_count": {"type": "integer"}, "requested_ids": {"type": "array", "items": {"type": "string"}}}}',
+'[{"code": "VEC_001", "name": "COLLECTION_REQUIRED", "retryable": false, "description": "Collection name is required"}, {"code": "VEC_004", "name": "IDS_REQUIRED", "retryable": false, "description": "IDs array is required"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Delete result"}]',
+'[{"name": "input", "label": "Input", "schema": {"type": "object"}, "required": true, "description": "IDs to delete"}]',
+'[]', false,
+'const collection = config.collection || input.collection;
+if (!collection) throw new Error(''[VEC_001] Collection name is required'');
+const ids = input.ids || (input.id ? [input.id] : null);
+if (!ids || ids.length === 0) throw new Error(''[VEC_004] IDs array is required'');
+const result = await ctx.vector.delete(collection, ids);
+return {collection, deleted_count: result.deleted_count, requested_ids: ids};',
+'{"icon": "trash-2", "color": "#EF4444"}', true, 1);
+
+-- doc-loader: Load documents from various sources
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00005-0000-0000-0000-000000000001', NULL, 'doc-loader', 'Document Loader', 'Load documents from URL, text, or JSON', 'data', 'file-text',
+'{"type": "object", "properties": {"source_type": {"type": "string", "enum": ["url", "text", "json"], "default": "url", "title": "Source Type"}, "url": {"type": "string", "title": "URL"}, "content": {"type": "string", "title": "Text Content"}, "strip_html": {"type": "boolean", "default": true, "title": "Strip HTML Tags"}}}',
+'{"type": "object", "properties": {"url": {"type": "string"}, "content": {"type": "string"}, "text": {"type": "string"}}}',
+'{"type": "object", "properties": {"documents": {"type": "array"}}}',
+'[{"code": "DOC_001", "name": "FETCH_ERROR", "retryable": true, "description": "Failed to fetch URL"}, {"code": "DOC_002", "name": "EMPTY_CONTENT", "retryable": false, "description": "No content provided"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Loaded documents"}]',
+'[{"name": "input", "label": "Input", "schema": {"type": "object"}, "required": false, "description": "Optional source data"}]',
+'[]', false,
+E'function isPrivateIp(hostname) {
+  const parts = hostname.split(\'.\').map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return false;
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+function validateExternalUrl(rawUrl) {
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { throw new Error(\'[DOC_001] Invalid URL format\'); }
+  if (parsed.protocol !== \'http:\' && parsed.protocol !== \'https:\') throw new Error(\'[DOC_001] Only HTTP(S) URLs are allowed\');
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === \'localhost\' || hostname === \'127.0.0.1\' || hostname === \'::1\' || hostname === \'0.0.0.0\') throw new Error(\'[DOC_001] Access to local addresses is not allowed\');
+  if (/^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(hostname) && isPrivateIp(hostname)) throw new Error(\'[DOC_001] Access to private network addresses is not allowed\');
+  if (hostname.endsWith(\'.local\') || hostname.endsWith(\'.internal\')) throw new Error(\'[DOC_001] Access to internal hostnames is not allowed\');
+  return parsed.toString();
+}
+const sourceType = config.source_type || \'url\';
+let content, metadata;
+if (sourceType === \'url\') {
+  const rawUrl = config.url || input.url;
+  if (!rawUrl) throw new Error(\'[DOC_002] URL is required for url source type\');
+  const url = validateExternalUrl(rawUrl);
+  const response = await ctx.http.get(url);
+  content = typeof response.data === \'string\' ? response.data : JSON.stringify(response.data);
+  metadata = {source: url, source_type: \'url\', content_type: response.headers[\'Content-Type\'], fetched_at: new Date().toISOString()};
+} else if (sourceType === \'text\') {
+  content = config.content || input.content || input.text;
+  if (!content) throw new Error(\'[DOC_002] No content provided\');
+  metadata = {source_type: \'text\'};
+} else if (sourceType === \'json\') {
+  const data = input.data || input;
+  content = config.content_path ? getPath(data, config.content_path) : JSON.stringify(data);
+  metadata = {source_type: \'json\'};
+}
+if (config.strip_html && content && content.includes(\'<\')) {
+  content = content.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, \'\').replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, \'\').replace(/<[^>]+>/g, \' \').replace(/\\s+/g, \' \').trim();
+}
+return {documents: [{content, metadata, char_count: content.length}]};',
+'{"icon": "file-text", "color": "#F59E0B"}', true, 1);
+
+-- text-splitter: Split documents into chunks
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00006-0000-0000-0000-000000000001', NULL, 'text-splitter', 'Text Splitter', 'Split documents into smaller chunks', 'data', 'scissors',
+'{"type": "object", "properties": {"chunk_size": {"type": "integer", "default": 1000, "minimum": 100, "maximum": 8000, "title": "Chunk Size (chars)"}, "chunk_overlap": {"type": "integer", "default": 200, "minimum": 0, "title": "Overlap (chars)"}, "separator": {"type": "string", "default": "\\n\\n", "title": "Separator"}}}',
+'{"type": "object", "properties": {"documents": {"type": "array"}, "content": {"type": "string"}, "text": {"type": "string"}}}',
+'{"type": "object", "properties": {"documents": {"type": "array"}, "chunk_count": {"type": "integer"}}}',
+'[{"code": "SPLIT_001", "name": "NO_CONTENT", "retryable": false, "description": "No content to split"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Split documents"}]',
+'[{"name": "documents", "label": "Documents", "schema": {"type": "array"}, "required": true, "description": "Documents to split"}]',
+'[]', false,
+E'const documents = input.documents || [{content: input.content || input.text}];
+if (!documents || documents.length === 0) throw new Error(\'[SPLIT_001] No content to split\');
+const chunkSize = config.chunk_size || 1000;
+const chunkOverlap = config.chunk_overlap || 200;
+const separator = config.separator || \'\\n\\n\';
+function splitText(text, size, overlap, sep) {
+  const chunks = [];
+  const segments = text.split(sep);
+  let current = \'\';
+  for (const segment of segments) {
+    const combined = current ? current + sep + segment : segment;
+    if (combined.length > size && current) {
+      chunks.push(current.trim());
+      const words = current.split(/\\s+/);
+      const overlapWords = Math.ceil(overlap / 6);
+      current = words.slice(-overlapWords).join(\' \') + sep + segment;
+    } else {
+      current = combined;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+const result = [];
+for (const doc of documents) {
+  const chunks = splitText(doc.content || \'\', chunkSize, chunkOverlap, separator);
+  for (let i = 0; i < chunks.length; i++) {
+    result.push({content: chunks[i], metadata: {...(doc.metadata || {}), chunk_index: i, chunk_total: chunks.length}, char_count: chunks[i].length});
+  }
+}
+return {documents: result, chunk_count: result.length, original_count: documents.length};',
+'{"icon": "scissors", "color": "#06B6D4"}', true, 1);
+
+-- rag-query: Combined RAG query (search + augment + LLM)
+INSERT INTO block_definitions (id, tenant_id, slug, name, description, category, icon, config_schema, input_schema, output_schema, error_codes, enabled, output_ports, input_ports, required_credentials, is_public, code, ui_config, is_system, version) VALUES
+('rag00007-0000-0000-0000-000000000001', NULL, 'rag-query', 'RAG Query', 'Search documents and generate answer with LLM', 'ai', 'message-square',
+'{"type": "object", "required": ["collection"], "properties": {"collection": {"type": "string", "title": "Collection Name"}, "top_k": {"type": "integer", "default": 5, "title": "Search Results"}, "embedding_provider": {"type": "string", "default": "openai"}, "embedding_model": {"type": "string", "default": "text-embedding-3-small"}, "llm_provider": {"type": "string", "enum": ["openai", "anthropic"], "default": "openai", "title": "LLM Provider"}, "llm_model": {"type": "string", "default": "gpt-4", "title": "LLM Model"}, "system_prompt": {"type": "string", "title": "System Prompt"}, "temperature": {"type": "number", "default": 0.3, "minimum": 0, "maximum": 2}, "max_tokens": {"type": "integer", "default": 2000}}}',
+'{"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}, "question": {"type": "string"}}}',
+'{"type": "object", "properties": {"answer": {"type": "string"}, "sources": {"type": "array"}}}',
+'[{"code": "RAG_001", "name": "QUERY_REQUIRED", "retryable": false, "description": "Query is required"}, {"code": "RAG_002", "name": "COLLECTION_REQUIRED", "retryable": false, "description": "Collection is required"}]',
+true,
+'[{"name": "output", "label": "Output", "is_default": true, "description": "Answer with sources"}]',
+'[{"name": "query", "label": "Query", "schema": {"type": "string"}, "required": true, "description": "Question to answer"}]',
+'[]', false,
+E'const query = input.query || input.question;
+if (!query) throw new Error(\'[RAG_001] Query is required\');
+const collection = config.collection || input.collection;
+if (!collection) throw new Error(\'[RAG_002] Collection is required\');
+const embeddingProvider = config.embedding_provider || \'openai\';
+const embeddingModel = config.embedding_model || \'text-embedding-3-small\';
+const llmProvider = config.llm_provider || \'openai\';
+const llmModel = config.llm_model || \'gpt-4\';
+const topK = config.top_k || 5;
+const embedResult = await ctx.embedding.embed(embeddingProvider, embeddingModel, [query]);
+const queryVector = embedResult.vectors[0];
+const searchResult = await ctx.vector.query(collection, queryVector, {top_k: topK, include_content: true});
+const context = searchResult.matches.map((m, i) => \'[\' + (i + 1) + \'] \' + m.content).join(\'\\n\\n---\\n\\n\');
+const systemPrompt = config.system_prompt || \'You are a helpful assistant. Answer based on the provided context. Cite sources using [N]. If context lacks relevant info, say so.\';
+const userPrompt = \'## Context\\n\\n\' + context + \'\\n\\n## Question\\n\\n\' + query + \'\\n\\n## Answer\';
+const llmResponse = await ctx.llm.chat(llmProvider, llmModel, {messages: [{role: \'system\', content: systemPrompt}, {role: \'user\', content: userPrompt}], temperature: config.temperature || 0.3, max_tokens: config.max_tokens || 2000});
+return {answer: llmResponse.content, sources: searchResult.matches.map(m => ({id: m.id, score: m.score, content: (m.content || \'\').substring(0, 200) + \'...\', metadata: m.metadata})), usage: {embedding: embedResult.usage, llm: llmResponse.usage}};',
+'{"icon": "message-square", "color": "#8B5CF6"}', true, 1);
+
+-- ============================================================================
+-- RAG Sample Workflows
+-- ============================================================================
+
+-- RAG Sample Workflow 1: Document Indexing Pipeline
+-- Input: { "documents": [{ "content": "...", "metadata": {...} }], "collection": "my-docs" }
+INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug) VALUES
+('a0000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001',
+ 'RAG: Document Indexing Pipeline',
+ 'Index documents into vector database for RAG queries. Split documents into chunks, generate embeddings, and store in vector DB.',
+ 'published', 1,
+ '{"type": "object", "required": ["documents", "collection"], "properties": {"documents": {"type": "array", "items": {"type": "object", "properties": {"content": {"type": "string"}, "metadata": {"type": "object"}}}}, "collection": {"type": "string"}}}',
+ '{"type": "object", "properties": {"indexed_count": {"type": "integer"}, "chunk_count": {"type": "integer"}}}',
+ NULL, NULL, NOW(), NOW(), NOW(), NULL, false, NULL);
+
+-- Steps for Document Indexing Pipeline
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y, created_at, updated_at, block_group_id, group_role, credential_bindings, block_definition_id) VALUES
+('d0000001-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Start', 'start', '{}', 400, 50, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000002-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Split Documents', 'text-splitter', '{"chunk_size": 1000, "chunk_overlap": 200}', 400, 200, NOW(), NOW(), NULL, NULL, '{}', 'rag00006-0000-0000-0000-000000000001'),
+('d0000003-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Generate Embeddings', 'embedding', '{"provider": "openai", "model": "text-embedding-3-small"}', 400, 350, NOW(), NOW(), NULL, NULL, '{}', 'rag00001-0000-0000-0000-000000000001'),
+('d0000004-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Store in Vector DB', 'vector-upsert', '{"collection": "{{$.collection}}"}', 400, 500, NOW(), NOW(), NULL, NULL, '{}', 'rag00002-0000-0000-0000-000000000001'),
+('d0000005-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'Return Result', 'function', '{"code": "return { indexed_count: input.upserted_count, chunk_count: input.upserted_count, collection: input.collection, ids: input.ids };", "language": "javascript"}', 400, 650, NOW(), NOW(), NULL, NULL, '{}', NULL);
+
+-- Edges for Document Indexing Pipeline
+INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES
+('e0000001-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000001-0000-0000-0000-000000000101', 'd0000002-0000-0000-0000-000000000101', NULL, NOW(), 'output', ''),
+('e0000002-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000002-0000-0000-0000-000000000101', 'd0000003-0000-0000-0000-000000000101', NULL, NOW(), 'output', ''),
+('e0000003-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000003-0000-0000-0000-000000000101', 'd0000004-0000-0000-0000-000000000101', NULL, NOW(), 'output', ''),
+('e0000004-0000-0000-0000-000000000101', 'a0000000-0000-0000-0000-000000000101', 'd0000004-0000-0000-0000-000000000101', 'd0000005-0000-0000-0000-000000000101', NULL, NOW(), 'output', '');
+
+-- RAG Sample Workflow 2: Question Answering
+-- Input: { "query": "What is...?", "collection": "my-docs" }
+INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug) VALUES
+('a0000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-000000000001',
+ 'RAG: Question Answering',
+ 'Answer questions using RAG. Searches vector database for relevant documents and generates answer using LLM.',
+ 'published', 1,
+ '{"type": "object", "required": ["query", "collection"], "properties": {"query": {"type": "string"}, "collection": {"type": "string"}}}',
+ '{"type": "object", "properties": {"answer": {"type": "string"}, "sources": {"type": "array"}}}',
+ NULL, NULL, NOW(), NOW(), NOW(), NULL, false, NULL);
+
+-- Steps for Question Answering
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y, created_at, updated_at, block_group_id, group_role, credential_bindings, block_definition_id) VALUES
+('d0000001-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000102', 'Start', 'start', '{}', 400, 50, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000002-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000102', 'RAG Query', 'rag-query', '{"collection": "{{$.collection}}", "top_k": 5, "llm_provider": "openai", "llm_model": "gpt-4o-mini", "system_prompt": "You are a helpful assistant. Answer questions based on the provided context. If the context does not contain enough information, say so clearly."}', 400, 200, NOW(), NOW(), NULL, NULL, '{}', 'rag00007-0000-0000-0000-000000000001');
+
+-- Edges for Question Answering
+INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES
+('e0000001-0000-0000-0000-000000000102', 'a0000000-0000-0000-0000-000000000102', 'd0000001-0000-0000-0000-000000000102', 'd0000002-0000-0000-0000-000000000102', NULL, NOW(), 'output', '');
+
+-- RAG Sample Workflow 3: Knowledge Base Chat
+-- Input: { "query": "...", "collection": "kb", "chat_history": [] }
+INSERT INTO workflows (id, tenant_id, name, description, status, version, input_schema, output_schema, draft, created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug) VALUES
+('a0000000-0000-0000-0000-000000000103', '00000000-0000-0000-0000-000000000001',
+ 'RAG: Knowledge Base Chat',
+ 'Interactive chat with knowledge base. Maintains conversation context and retrieves relevant documents for each query.',
+ 'published', 1,
+ '{"type": "object", "required": ["query", "collection"], "properties": {"query": {"type": "string"}, "collection": {"type": "string"}, "chat_history": {"type": "array", "items": {"type": "object", "properties": {"role": {"type": "string"}, "content": {"type": "string"}}}}}}',
+ '{"type": "object", "properties": {"answer": {"type": "string"}, "sources": {"type": "array"}, "chat_history": {"type": "array"}}}',
+ NULL, NULL, NOW(), NOW(), NOW(), NULL, false, NULL);
+
+-- Steps for Knowledge Base Chat
+INSERT INTO steps (id, workflow_id, name, type, config, position_x, position_y, created_at, updated_at, block_group_id, group_role, credential_bindings, block_definition_id) VALUES
+('d0000001-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Start', 'start', '{}', 400, 50, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000002-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Search Documents', 'vector-search', '{"collection": "{{$.collection}}", "top_k": 5, "include_content": true}', 400, 200, NOW(), NOW(), NULL, NULL, '{}', 'rag00003-0000-0000-0000-000000000001'),
+('d0000003-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Build Context', 'function', '{"code": "const context = (input.matches || []).map((m, i) => `[${i+1}] ${m.content}`).join(''\\n\\n---\\n\\n''); const history = (input.chat_history || []).map(h => `${h.role}: ${h.content}`).join(''\\n''); return { context, history, query: input.query, matches: input.matches };", "language": "javascript"}', 400, 350, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000004-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Generate Answer', 'llm', '{"provider": "openai", "model": "gpt-4o-mini", "system_prompt": "You are a helpful knowledge base assistant. Answer based on the context provided. Cite sources using [N] notation.", "user_prompt": "## Previous Conversation\\n{{$.history}}\\n\\n## Retrieved Context\\n{{$.context}}\\n\\n## User Question\\n{{$.query}}\\n\\n## Answer", "temperature": 0.3, "max_tokens": 2000}', 400, 500, NOW(), NOW(), NULL, NULL, '{}', NULL),
+('d0000005-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'Format Response', 'function', '{"code": "const newHistory = [...(input.chat_history || []), {role: ''user'', content: input.query}, {role: ''assistant'', content: input.content}]; return { answer: input.content, sources: (input.matches || []).map(m => ({id: m.id, score: m.score, excerpt: (m.content || '''').substring(0, 150) + ''...''})), chat_history: newHistory };", "language": "javascript"}', 400, 650, NOW(), NOW(), NULL, NULL, '{}', NULL);
+
+-- Edges for Knowledge Base Chat
+INSERT INTO edges (id, workflow_id, source_step_id, target_step_id, condition, created_at, source_port, target_port) VALUES
+('e0000001-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000001-0000-0000-0000-000000000103', 'd0000002-0000-0000-0000-000000000103', NULL, NOW(), 'output', ''),
+('e0000002-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000002-0000-0000-0000-000000000103', 'd0000003-0000-0000-0000-000000000103', NULL, NOW(), 'output', ''),
+('e0000003-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000003-0000-0000-0000-000000000103', 'd0000004-0000-0000-0000-000000000103', NULL, NOW(), 'output', ''),
+('e0000004-0000-0000-0000-000000000103', 'a0000000-0000-0000-0000-000000000103', 'd0000004-0000-0000-0000-000000000103', 'd0000005-0000-0000-0000-000000000103', NULL, NOW(), 'output', '');

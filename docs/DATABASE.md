@@ -6,7 +6,7 @@ PostgreSQL schema, migrations, and query patterns.
 
 | Item | Value |
 |------|-------|
-| Driver | PostgreSQL 16 |
+| Driver | PostgreSQL 16 + pgvector |
 | Connection URL | `postgres://user:pass@localhost:5432/ai_orchestration?sslmode=disable` |
 | Pool | pgx connection pool |
 | Migrations | `backend/migrations/` |
@@ -36,6 +36,8 @@ tenants
   └── adapters
   └── block_definitions (※ tenant_id NULL = system)
         └── block_versions
+  └── vector_collections (RAG)
+        └── vector_documents (RAG)
 ```
 
 ## Tables
@@ -341,6 +343,54 @@ Indexes:
 - `idx_block_versions_block_id` ON (block_id)
 - `idx_block_versions_created_at` ON (created_at)
 
+### vector_collections
+
+RAG用ベクトルコレクション。テナントごとに分離されたベクトルデータを管理。
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| tenant_id | UUID | FK tenants(id), NOT NULL | ⚠️ テナント分離必須 |
+| name | VARCHAR(100) | NOT NULL | コレクション名（テナント内でユニーク） |
+| description | TEXT | | |
+| embedding_provider | VARCHAR(50) | DEFAULT 'openai' | 使用するEmbeddingプロバイダー |
+| embedding_model | VARCHAR(100) | DEFAULT 'text-embedding-3-small' | 使用するモデル |
+| dimension | INT | NOT NULL DEFAULT 1536 | ベクトル次元数 |
+| document_count | INT | DEFAULT 0 | ドキュメント数（キャッシュ） |
+| metadata | JSONB | DEFAULT '{}' | カスタムメタデータ |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+Unique: (tenant_id, name)
+
+Indexes:
+- `idx_vector_collections_tenant` ON (tenant_id)
+
+### vector_documents
+
+RAG用ベクトルドキュメント。pgvector拡張を使用。
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| tenant_id | UUID | FK tenants(id), NOT NULL | ⚠️ テナント分離必須 |
+| collection_id | UUID | FK vector_collections(id) ON DELETE CASCADE, NOT NULL | 所属コレクション |
+| content | TEXT | NOT NULL | ドキュメント本文 |
+| metadata | JSONB | DEFAULT '{}' | カスタムメタデータ |
+| embedding | vector(1536) | | pgvectorベクトル型 |
+| source_url | TEXT | | 元URLなど |
+| source_type | VARCHAR(50) | | api, file, web |
+| chunk_index | INT | | チャンク分割時のインデックス |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+Indexes:
+- `idx_vector_documents_tenant_collection` ON (tenant_id, collection_id) - 複合インデックス
+- `idx_vector_documents_embedding` ON (embedding) USING ivfflat WITH (lists = 100) - 類似検索用
+- `idx_vector_documents_metadata` ON (metadata) USING gin - メタデータフィルタ用
+
+**Note**: pgvector拡張が必要です（`CREATE EXTENSION IF NOT EXISTS vector;`）
+
 ### usage_records
 
 Individual LLM API call records for cost tracking.
@@ -541,6 +591,44 @@ GROUP BY provider, model
 ORDER BY total_cost_usd DESC;
 ```
 
+### Vector Similarity Search (RAG)
+
+⚠️ **重要**: すべてのベクトルクエリは`tenant_id`フィルタを必須とする。
+
+```sql
+-- コレクション取得/作成
+SELECT id FROM vector_collections
+WHERE tenant_id = $1 AND name = $2;
+
+-- ベクトル類似検索（コサイン類似度）
+SELECT
+    vd.id,
+    vd.content,
+    vd.metadata,
+    1 - (vd.embedding <=> $3::vector) as score
+FROM vector_documents vd
+JOIN vector_collections vc ON vd.collection_id = vc.id
+WHERE vc.tenant_id = $1
+  AND vc.name = $2
+  AND vd.tenant_id = $1
+ORDER BY vd.embedding <=> $3::vector
+LIMIT $4;
+
+-- メタデータフィルタ付き検索
+SELECT
+    vd.id,
+    vd.content,
+    1 - (vd.embedding <=> $3::vector) as score
+FROM vector_documents vd
+JOIN vector_collections vc ON vd.collection_id = vc.id
+WHERE vc.tenant_id = $1
+  AND vc.name = $2
+  AND vd.tenant_id = $1
+  AND vd.metadata->>'source_type' = $4
+ORDER BY vd.embedding <=> $3::vector
+LIMIT $5;
+```
+
 ## Migration Commands
 
 ```bash
@@ -622,4 +710,5 @@ psql -h localhost -U postgres ai_orchestration < backup.sql
 - [BACKEND.md](./BACKEND.md) - Repository interfaces and data access patterns
 - [API.md](./API.md) - API endpoints that interact with database
 - [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - Block definitions schema
-- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definition tables
+- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definition tables (RAGブロック含む)
+- [RAG_IMPLEMENTATION_PLAN.md](./plans/RAG_IMPLEMENTATION_PLAN.md) - RAG機能の設計書

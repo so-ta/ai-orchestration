@@ -3,16 +3,17 @@
 Block definitions, error codes, and system block management.
 
 > **Status**: ✅ Implemented (Unified Block Model)
-> **Updated**: 2025-01-12
+> **Updated**: 2026-01-13
 > **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
 > **Migration**: `013_add_integration_blocks.sql` - 外部連携ブロック追加
+> **RAG Support**: `seed.sql` - RAGブロック7種追加
 
 ## Quick Reference
 
 | Item | Value |
 |------|-------|
 | Table | `block_definitions` |
-| System Blocks | `tenant_id = NULL` (18 blocks) |
+| System Blocks | `tenant_id = NULL` (25 blocks: 18 core + 7 RAG) |
 | Tenant Blocks | `tenant_id = UUID` |
 | Executor | Goja JavaScript VM |
 | Version History | `block_versions` table |
@@ -55,6 +56,8 @@ Block Registryはワークフローのステップタイプを管理するシス
 │  │    secrets:  Record<string, string>                               │ │
 │  │    env:      Record<string, string>                               │ │
 │  │    log:      (level, message, data) => void                       │ │
+│  │    embedding: { embed }                    // RAG                 │ │
+│  │    vector:   { upsert, query, delete, listCollections } // RAG   │ │
 │  │  }                                                                │ │
 │  └─────────────────────────────────────────────────────────────────┘ │
 │                                                                       │
@@ -316,6 +319,18 @@ func (e *BlockError) Error() string {
 | `email_sendgrid` | Email (SendGrid) | integration | SendGridでメール送信 | `SENDGRID_API_KEY` |
 | `linear_create_issue` | Linear: Issue作成 | integration | LinearにIssueを作成 | `LINEAR_API_KEY` |
 
+### RAGブロック一覧
+
+| Slug | Name | Category | 説明 | 必要シークレット |
+|------|------|----------|------|-----------------|
+| `embedding` | Embedding | ai | テキストをベクトルに変換 | `OPENAI_API_KEY`, `COHERE_API_KEY`, `VOYAGE_API_KEY` |
+| `vector-upsert` | Vector Upsert | data | ドキュメントをベクトルDBに保存 | - |
+| `vector-search` | Vector Search | data | 類似ドキュメントを検索（ハイブリッド検索対応） | - |
+| `vector-delete` | Vector Delete | data | ベクトルDBからドキュメント削除 | - |
+| `doc-loader` | Document Loader | data | URL/テキストからドキュメント取得 | - |
+| `text-splitter` | Text Splitter | data | テキストをチャンクに分割 | - |
+| `rag-query` | RAG Query | ai | RAG検索+LLM生成（一括処理） | `OPENAI_API_KEY` |
+
 ### システムブロックのコード例
 
 ```javascript
@@ -394,6 +409,137 @@ const response = await ctx.http.post(url, {
 return {
     number: response.body.number,
     html_url: response.body.html_url
+};
+```
+
+### RAGブロックのコード例
+
+```javascript
+// embedding block
+// Supported providers: openai, cohere, voyage (Phase 3.3)
+const texts = Array.isArray(input.texts) ? input.texts : [input.text || input.content];
+const result = await ctx.embedding.embed(
+    config.provider || 'openai',  // 'openai', 'cohere', 'voyage'
+    config.model || 'text-embedding-3-small',
+    texts
+);
+return {
+    vectors: result.vectors,
+    model: result.model,
+    dimension: result.dimension,
+    usage: result.usage
+};
+
+// Available models by provider:
+// OpenAI: text-embedding-3-small (1536d), text-embedding-3-large (3072d)
+// Cohere: embed-english-v3.0 (1024d), embed-multilingual-v3.0 (1024d)
+// Voyage: voyage-3 (1024d), voyage-3-lite, voyage-code-3
+```
+
+```javascript
+// vector-upsert block
+const documents = (input.documents || [input]).map(doc => ({
+    id: doc.id,
+    content: doc.content || doc.text,
+    metadata: doc.metadata || {},
+    vector: doc.vector
+}));
+
+const result = await ctx.vector.upsert(config.collection, documents, {
+    embedding_provider: config.embedding_provider,
+    embedding_model: config.embedding_model
+});
+
+return { upserted_count: result.upserted_count, ids: result.ids };
+```
+
+```javascript
+// vector-search block
+let queryVector = input.vector;
+if (!queryVector && input.query) {
+    const embResult = await ctx.embedding.embed(
+        config.embedding_provider || 'openai',
+        config.embedding_model || 'text-embedding-3-small',
+        [input.query]
+    );
+    queryVector = embResult.vectors[0];
+}
+
+const result = await ctx.vector.query(config.collection, queryVector, {
+    top_k: config.top_k || 5,
+    threshold: config.threshold,
+    filter: config.filter,
+    include_content: config.include_content !== false
+});
+
+return { matches: result.matches };
+```
+
+```javascript
+// vector-search with advanced filters (Phase 3.1)
+// Supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains
+const result = await ctx.vector.query(config.collection, queryVector, {
+    top_k: 10,
+    filter: {
+        "$or": [
+            { "category": "news" },
+            { "category": "blog" }
+        ],
+        "score": { "$gte": 0.8 },
+        "author": { "$exists": true }
+    }
+});
+```
+
+```javascript
+// vector-search with hybrid search (Phase 3.2)
+// Combines vector similarity + keyword search using RRF
+const result = await ctx.vector.query(config.collection, queryVector, {
+    top_k: 10,
+    keyword: "machine learning",  // Enable hybrid search
+    hybrid_alpha: 0.7             // 70% vector, 30% keyword
+});
+```
+
+```javascript
+// rag-query block (RAG検索+LLM生成)
+// 1. Embedding query
+const embResult = await ctx.embedding.embed(
+    config.embedding_provider || 'openai',
+    config.embedding_model || 'text-embedding-3-small',
+    [input.query]
+);
+
+// 2. Vector search
+const searchResult = await ctx.vector.query(config.collection, embResult.vectors[0], {
+    top_k: config.top_k || 5,
+    include_content: true
+});
+
+// 3. Build context from retrieved documents
+const context = searchResult.matches.map(m => m.content).join('\n\n---\n\n');
+
+// 4. Generate response with LLM
+const systemPrompt = config.system_prompt ||
+    'Answer the question based on the following context. If the answer is not in the context, say so.';
+const userPrompt = 'Context:\n' + context + '\n\nQuestion: ' + input.query;
+
+const response = await ctx.llm.chat(
+    config.llm_provider || 'openai',
+    config.llm_model || 'gpt-4o-mini',
+    {
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ],
+        temperature: config.temperature ?? 0.7
+    }
+);
+
+return {
+    answer: response.content,
+    sources: searchResult.matches.map(m => ({ id: m.id, score: m.score, content: m.content })),
+    usage: response.usage
 };
 ```
 
@@ -563,7 +709,8 @@ Block config formはJSON Schemaから動的に生成:
 | DB Schema | ✅ 完了 | `block_definitions`, `block_versions` テーブル |
 | System Blocks | ✅ 完了 | 18個のシステムブロック登録済み |
 | Integration Blocks | ✅ 完了 | 11個の外部連携ブロック（013_add_integration_blocks.sql） |
-| Sandbox (ctx) | ✅ 完了 | http, llm, workflow, human, adapter |
+| RAG Blocks | ✅ 完了 | 7個のRAGブロック（seed.sql） |
+| Sandbox (ctx) | ✅ 完了 | http, llm, workflow, human, adapter, embedding, vector |
 | Admin API | ✅ 完了 | バージョン管理、ロールバック |
 | Frontend | ✅ 完了 | StepPalette, PropertiesPanel |
 
