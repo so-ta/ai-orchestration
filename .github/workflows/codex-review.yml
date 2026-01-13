@@ -1,0 +1,459 @@
+# Codex PR Review Workflow (Enhanced)
+# PRが作成・更新された際にOpenAI Codexがコードレビューを実行
+#
+# 機能:
+# - 構造化JSON出力によるレビュー結果の解析
+# - pr_findings（PR差分内の指摘）→ 正式なPR Reviewとして投稿
+# - other_findings（PR差分外の指摘）→ Issueとして作成/統合、PRにも報告
+# - レビュー結果に応じたラベル自動付与
+#
+# 設定方法:
+# 1. リポジトリの Settings > Secrets and variables > Actions で OPENAI_API_KEY を設定
+# 2. PRが作成されると自動的にレビューが実行される
+#
+# 参照:
+# - https://developers.openai.com/codex/github-action/
+# - AGENTS.md: Codex用のレビューガイドライン
+
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: false
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  codex-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run Codex Review
+        id: codex_review
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/codex/prompts/review.md
+          output-file: codex-review-output.json
+          output-schema-file: .github/codex/schemas/review-schema.json
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+          model: o4-mini
+          effort: medium
+
+      - name: Process Review Results
+        id: process
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            // レビュー結果を読み込み
+            let review;
+            try {
+              const content = fs.readFileSync('codex-review-output.json', 'utf8');
+              review = JSON.parse(content);
+            } catch (e) {
+              console.log('Failed to parse JSON, falling back to markdown output');
+              core.setOutput('fallback', 'true');
+              return;
+            }
+
+            const prNumber = process.env.PR_NUMBER;
+
+            // 新しいスキーマに対応（pr_findings と other_findings）
+            const prFindings = review.pr_findings || [];
+            const otherFindings = review.other_findings || [];
+
+            // 結果を出力
+            core.setOutput('verdict', review.verdict || 'COMMENT');
+            core.setOutput('summary', review.summary || '');
+            core.setOutput('verdict_reason', review.verdict_reason || '');
+            core.setOutput('good_points', JSON.stringify(review.good_points || []));
+            core.setOutput('pr_findings', JSON.stringify(prFindings));
+            core.setOutput('other_findings', JSON.stringify(otherFindings));
+            core.setOutput('has_other_findings', otherFindings.length > 0 ? 'true' : 'false');
+            core.setOutput('fallback', 'false');
+
+            console.log(`PR Findings: ${prFindings.length}`);
+            console.log(`Other Findings: ${otherFindings.length}`);
+            console.log(`Verdict: ${review.verdict}`);
+
+      - name: Post PR Review (Structured)
+        if: steps.process.outputs.fallback != 'true'
+        uses: actions/github-script@v7
+        env:
+          VERDICT: ${{ steps.process.outputs.verdict }}
+          SUMMARY: ${{ steps.process.outputs.summary }}
+          VERDICT_REASON: ${{ steps.process.outputs.verdict_reason }}
+          GOOD_POINTS: ${{ steps.process.outputs.good_points }}
+          PR_FINDINGS: ${{ steps.process.outputs.pr_findings }}
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const verdict = process.env.VERDICT;
+            const summary = process.env.SUMMARY;
+            const verdictReason = process.env.VERDICT_REASON;
+            const goodPoints = JSON.parse(process.env.GOOD_POINTS || '[]');
+            const prFindings = JSON.parse(process.env.PR_FINDINGS || '[]');
+
+            // レビューコメント本文を構築
+            let body = `## 🤖 Codex Code Review\n\n`;
+            body += `### 概要\n${summary}\n\n`;
+
+            if (goodPoints.length > 0) {
+              body += `### 良い点\n`;
+              goodPoints.forEach(p => body += `- ${p}\n`);
+              body += '\n';
+            }
+
+            // 重要度別に分類
+            const critical = prFindings.filter(f => f.severity === 'critical');
+            const high = prFindings.filter(f => f.severity === 'high');
+            const medium = prFindings.filter(f => f.severity === 'medium');
+            const low = prFindings.filter(f => f.severity === 'low');
+
+            if (critical.length > 0 || high.length > 0) {
+              body += `### 🚨 要修正（PR差分に関する指摘）\n`;
+              [...critical, ...high].forEach(f => {
+                const severity = f.severity === 'critical' ? '🔴 Critical' : '🟠 High';
+                body += `#### ${severity}: ${f.title}\n`;
+                body += `**ファイル**: \`${f.file}${f.start_line ? ':' + f.start_line : ''}\`\n`;
+                body += `${f.body}\n`;
+                if (f.suggested_code) {
+                  body += `\n\`\`\`suggestion\n${f.suggested_code}\n\`\`\`\n`;
+                }
+                body += '\n';
+              });
+            }
+
+            if (medium.length > 0 || low.length > 0) {
+              body += `### 💡 改善提案（PR差分に関する指摘）\n`;
+              [...medium, ...low].forEach(f => {
+                const severity = f.severity === 'medium' ? '🟡 Medium' : '🟢 Low';
+                body += `#### ${severity}: ${f.title}\n`;
+                body += `**ファイル**: \`${f.file}${f.start_line ? ':' + f.start_line : ''}\`\n`;
+                body += `${f.body}\n\n`;
+              });
+            }
+
+            if (prFindings.length === 0) {
+              body += `### ✅ PR差分に関する指摘\nなし\n\n`;
+            }
+
+            body += `### 判定\n**${verdict}**\n${verdictReason}\n\n`;
+            body += `---\n*このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*\n`;
+            body += `*レビューガイドライン: [AGENTS.md](../AGENTS.md)*`;
+
+            // PR Reviewを投稿
+            const event = verdict === 'APPROVE' ? 'APPROVE' :
+                          verdict === 'REQUEST_CHANGES' ? 'REQUEST_CHANGES' : 'COMMENT';
+
+            try {
+              // 既存のbotレビューをdismiss（APPROVEの重複を防ぐ）
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+
+              for (const review of reviews) {
+                if (review.user.login === 'github-actions[bot]' &&
+                    (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED')) {
+                  try {
+                    await github.rest.pulls.dismissReview({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: prNumber,
+                      review_id: review.id,
+                      message: '新しいCodexレビューに置き換えられました'
+                    });
+                    console.log(`Dismissed previous review #${review.id}`);
+                  } catch (e) {
+                    console.log(`Could not dismiss review #${review.id}: ${e.message}`);
+                  }
+                }
+              }
+
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                body: body,
+                event: event
+              });
+
+              console.log(`Posted PR Review with verdict: ${event}`);
+            } catch (e) {
+              // レビュー投稿に失敗した場合はコメントとしてフォールバック
+              console.log(`Failed to post review: ${e.message}, falling back to comment`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body + `\n\n*Note: PR Reviewとして投稿できなかったため、コメントとして投稿しました*`
+              });
+            }
+
+      - name: Post PR Review (Fallback - Markdown)
+        if: steps.process.outputs.fallback == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          if [ -f codex-review-output.json ]; then
+            CONTENT=$(cat codex-review-output.json)
+          else
+            CONTENT="レビュー結果の取得に失敗しました。"
+          fi
+
+          gh pr comment $PR_NUMBER --body "## 🤖 Codex Code Review
+
+          $CONTENT
+
+          ---
+          *このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*"
+
+      - name: Create Issues for Other Findings
+        if: steps.process.outputs.has_other_findings == 'true'
+        id: create_issues
+        uses: actions/github-script@v7
+        env:
+          OTHER_FINDINGS: ${{ steps.process.outputs.other_findings }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        with:
+          script: |
+            const otherFindings = JSON.parse(process.env.OTHER_FINDINGS || '[]');
+            const prNumber = process.env.PR_NUMBER;
+            const createdIssues = [];
+
+            if (otherFindings.length === 0) return;
+
+            // カテゴリ別にグループ化
+            const byCategory = {};
+            otherFindings.forEach(f => {
+              const cat = f.category || 'quality';
+              if (!byCategory[cat]) byCategory[cat] = [];
+              byCategory[cat].push(f);
+            });
+
+            const categoryLabels = {
+              'security': 'codex:security',
+              'performance': 'codex:performance',
+              'quality': 'codex:quality',
+              'test': 'codex:test',
+              'documentation': 'codex:documentation'
+            };
+
+            const categoryTitles = {
+              'security': 'セキュリティ改善',
+              'performance': 'パフォーマンス改善',
+              'quality': 'コード品質改善',
+              'test': 'テスト改善',
+              'documentation': 'ドキュメント改善'
+            };
+
+            for (const [category, findings] of Object.entries(byCategory)) {
+              const label = categoryLabels[category] || 'codex:quality';
+              const titlePrefix = categoryTitles[category] || 'コード改善';
+
+              // 既存のIssueを検索
+              const { data: existingIssues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: label,
+                state: 'open',
+                per_page: 10
+              });
+
+              // 指摘内容をMarkdown形式に変換
+              let findingsBody = findings.map(f => {
+                const severity = f.severity === 'critical' ? '🔴' :
+                                 f.severity === 'high' ? '🟠' :
+                                 f.severity === 'medium' ? '🟡' : '🟢';
+                let content = `### ${severity} ${f.title}\n`;
+                content += `**ファイル**: \`${f.file}${f.start_line ? ':' + f.start_line : ''}\`\n`;
+                content += `**重要度**: ${f.severity}\n\n`;
+                content += `${f.body}\n`;
+                if (f.suggested_code) {
+                  content += `\n**修正案**:\n\`\`\`\n${f.suggested_code}\n\`\`\`\n`;
+                }
+                return content;
+              }).join('\n---\n\n');
+
+              const prRef = `\n\n---\n*PR #${prNumber} のCodexレビューで検出*`;
+
+              let issueNumber;
+              let issueAction;
+
+              if (existingIssues.length > 0) {
+                // 既存Issueに追記
+                const existingIssue = existingIssues[0];
+                const newBody = existingIssue.body + `\n\n---\n\n## PR #${prNumber} からの追加指摘\n\n${findingsBody}${prRef}`;
+
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssue.number,
+                  body: newBody
+                });
+
+                issueNumber = existingIssue.number;
+                issueAction = 'updated';
+                console.log(`Updated existing issue #${existingIssue.number} with ${findings.length} findings`);
+              } else {
+                // 新規Issue作成
+                const title = `[Codex] ${titlePrefix}の指摘事項`;
+                const body = `## 概要\n\nCodexによるコードレビューで、PRの差分外で以下の改善点が検出されました。\n\n${findingsBody}${prRef}`;
+
+                const { data: newIssue } = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: title,
+                  body: body,
+                  labels: [label, 'codex:auto-generated']
+                });
+
+                issueNumber = newIssue.number;
+                issueAction = 'created';
+                console.log(`Created new issue #${newIssue.number} for ${category} findings`);
+              }
+
+              createdIssues.push({
+                number: issueNumber,
+                action: issueAction,
+                category: category,
+                title: titlePrefix,
+                findingsCount: findings.length
+              });
+            }
+
+            // 作成/更新したIssue情報を出力
+            core.setOutput('created_issues', JSON.stringify(createdIssues));
+
+      - name: Report Issues in PR Comment
+        if: steps.process.outputs.has_other_findings == 'true'
+        uses: actions/github-script@v7
+        env:
+          CREATED_ISSUES: ${{ steps.create_issues.outputs.created_issues }}
+          OTHER_FINDINGS: ${{ steps.process.outputs.other_findings }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        with:
+          script: |
+            const createdIssues = JSON.parse(process.env.CREATED_ISSUES || '[]');
+            const otherFindings = JSON.parse(process.env.OTHER_FINDINGS || '[]');
+            const prNumber = context.issue.number;
+
+            if (createdIssues.length === 0) return;
+
+            let body = `## 📋 PR差分外で発見した課題\n\n`;
+            body += `このレビュー中に、PRの差分外で以下の改善点が検出されました。\n`;
+            body += `これらは **Issue** として登録されています。\n\n`;
+
+            // カテゴリ別にまとめて表示
+            for (const issue of createdIssues) {
+              const actionText = issue.action === 'created' ? '新規作成' : '既存に追加';
+              body += `### ${issue.title}\n`;
+              body += `- **Issue**: #${issue.number} (${actionText})\n`;
+              body += `- **指摘数**: ${issue.findingsCount}件\n\n`;
+            }
+
+            // 詳細サマリー
+            body += `### 検出された課題の詳細\n`;
+            otherFindings.forEach(f => {
+              const severity = f.severity === 'critical' ? '🔴' :
+                               f.severity === 'high' ? '🟠' :
+                               f.severity === 'medium' ? '🟡' : '🟢';
+              body += `- ${severity} **${f.title}** (\`${f.file}\`)\n`;
+            });
+
+            body += `\n---\n`;
+            body += `*これらの課題はPRの判定（APPROVE/REQUEST_CHANGES）には影響しません。*\n`;
+            body += `*対応が必要な場合は、別途PRを作成してください。*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: body
+            });
+
+            console.log(`Posted issue summary comment on PR #${prNumber}`);
+
+      - name: Add Labels
+        uses: actions/github-script@v7
+        env:
+          VERDICT: ${{ steps.process.outputs.verdict }}
+        with:
+          script: |
+            const verdict = process.env.VERDICT || 'COMMENT';
+            const prNumber = context.issue.number;
+
+            // 既存のcodex:review-ラベルを削除
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+
+            for (const label of currentLabels) {
+              if (label.name.startsWith('codex:review-')) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  name: label.name
+                }).catch(() => {});
+              }
+            }
+
+            // 新しいラベルを追加
+            const labelMap = {
+              'APPROVE': 'codex:review-approved',
+              'REQUEST_CHANGES': 'codex:review-changes-requested',
+              'COMMENT': 'codex:review-commented'
+            };
+
+            const newLabel = labelMap[verdict] || 'codex:review-commented';
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              labels: [newLabel]
+            });
+
+            console.log(`Added label: ${newLabel}`);
+
+      - name: Handle Review Failure
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          gh pr comment $PR_NUMBER --body "## ⚠️ Codex Review Failed
+
+          自動レビューの実行中にエラーが発生しました。
+          手動でのレビューをお願いします。
+
+          [ワークフローログを確認](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ---
+          *このコメントは Codex Review Workflow による自動生成です*"
