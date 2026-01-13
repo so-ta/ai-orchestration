@@ -723,11 +723,34 @@ true,
 '[{"name": "output", "label": "Output", "is_default": true, "description": "Loaded documents"}]',
 '[{"name": "input", "label": "Input", "schema": {"type": "object"}, "required": false, "description": "Optional source data"}]',
 '[]', false,
-E'const sourceType = config.source_type || \'url\';
+E'function isPrivateIp(hostname) {
+  const parts = hostname.split(\'.\').map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return false;
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+function validateExternalUrl(rawUrl) {
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { throw new Error(\'[DOC_001] Invalid URL format\'); }
+  if (parsed.protocol !== \'http:\' && parsed.protocol !== \'https:\') throw new Error(\'[DOC_001] Only HTTP(S) URLs are allowed\');
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === \'localhost\' || hostname === \'127.0.0.1\' || hostname === \'::1\' || hostname === \'0.0.0.0\') throw new Error(\'[DOC_001] Access to local addresses is not allowed\');
+  if (/^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(hostname) && isPrivateIp(hostname)) throw new Error(\'[DOC_001] Access to private network addresses is not allowed\');
+  if (hostname.endsWith(\'.local\') || hostname.endsWith(\'.internal\')) throw new Error(\'[DOC_001] Access to internal hostnames is not allowed\');
+  return parsed.toString();
+}
+const sourceType = config.source_type || \'url\';
 let content, metadata;
 if (sourceType === \'url\') {
-  const url = config.url || input.url;
-  if (!url) throw new Error(\'[DOC_002] URL is required for url source type\');
+  const rawUrl = config.url || input.url;
+  if (!rawUrl) throw new Error(\'[DOC_002] URL is required for url source type\');
+  const url = validateExternalUrl(rawUrl);
   const response = await ctx.http.get(url);
   content = typeof response.data === \'string\' ? response.data : JSON.stringify(response.data);
   metadata = {source: url, source_type: \'url\', content_type: response.headers[\'Content-Type\'], fetched_at: new Date().toISOString()};
