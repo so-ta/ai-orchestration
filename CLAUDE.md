@@ -766,6 +766,81 @@ cd backend && go test ./tests/e2e/... -v
 | `git rebase` | 共有ブランチでは禁止 |
 | `.gitignore` の変更 | 影響範囲を確認 |
 
+### Codex PR Review Workflow (REQUIRED)
+
+**AIエージェントがPRをpushした後は、必ずCodexによる自動レビューを確認すること。**
+
+#### ワークフロー
+
+```
+1. AIエージェントがコードを変更
+   ↓
+2. git push でリモートにプッシュ
+   ↓
+3. PRを作成（または既存PRに追加コミット）
+   ↓
+4. GitHub Actions で Codex Review が自動実行
+   ↓
+5. PRコメントにレビュー結果が投稿される
+   ↓
+6. レビュー結果を確認
+   ↓
+7a. APPROVE（承認）の場合 → 完了
+7b. REQUEST_CHANGES（要修正）の場合 → 修正して再push
+   ↓
+8. 7b の場合、手順 4-7 を繰り返す（承認されるまで）
+```
+
+#### 確認すべきレビュー結果
+
+| 判定 | 意味 | 対応 |
+|------|------|------|
+| **APPROVE** | 問題なし | 作業完了 |
+| **REQUEST_CHANGES** | 修正が必要 | 指摘事項を修正して再push |
+| **COMMENT** | コメントのみ | 内容を確認し、必要に応じて対応 |
+
+#### 修正→再レビューのループ
+
+```
+while (レビュー結果 != APPROVE) {
+  1. レビューコメントの「要修正」セクションを確認
+  2. 指摘された問題を修正
+  3. git add && git commit && git push
+  4. Codex Review の再実行を待つ
+  5. 新しいレビュー結果を確認
+}
+```
+
+#### 重要な注意事項
+
+| ルール | 説明 |
+|--------|------|
+| **レビュー待ち必須** | pushしたら必ずCodexレビュー完了を待つ |
+| **全指摘対応** | REQUEST_CHANGESの指摘は全て対応する |
+| **再レビュー確認** | 修正後は必ず新しいレビュー結果を確認 |
+| **日本語コメント** | Codexは日本語でレビューコメントを出力する |
+
+#### レビュー結果の確認方法
+
+```bash
+# PRのコメントを確認
+gh pr view <PR番号> --comments
+
+# 最新のワークフロー実行状況を確認
+gh run list --limit 5
+
+# ワークフローのログを確認
+gh run view <run_id> --log
+```
+
+#### 関連ファイル
+
+| ファイル | 説明 |
+|---------|------|
+| `.github/workflows/codex-review.yml` | Codexレビューワークフロー定義 |
+| `.github/codex/prompts/review.md` | レビュープロンプト（チェック項目） |
+| `AGENTS.md` | Codex用レビューガイドライン |
+
 ### Multi-tenancy
 
 All queries MUST include `tenant_id` filter.
