@@ -92,6 +92,9 @@ type ExecutionContext struct {
 	Workflow WorkflowService
 	Human    HumanService
 	Adapter  AdapterService
+	// RAG services (with tenant isolation)
+	Embedding EmbeddingService
+	Vector    VectorService
 	// Copilot/meta-workflow services (read-only data access)
 	Blocks    BlocksService
 	Workflows WorkflowsService
@@ -294,6 +297,47 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 			return err
 		}
 		if err := contextObj.Set("adapter", adapterObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Embedding service if available (RAG)
+	if execCtx != nil && execCtx.Embedding != nil {
+		embeddingObj := vm.NewObject()
+		if err := embeddingObj.Set("embed", func(call goja.FunctionCall) goja.Value {
+			return s.embeddingEmbed(vm, execCtx.Embedding, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("embedding", embeddingObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Vector service if available (RAG with tenant isolation)
+	if execCtx != nil && execCtx.Vector != nil {
+		vectorObj := vm.NewObject()
+		if err := vectorObj.Set("upsert", func(call goja.FunctionCall) goja.Value {
+			return s.vectorUpsert(vm, execCtx.Vector, call)
+		}); err != nil {
+			return err
+		}
+		if err := vectorObj.Set("query", func(call goja.FunctionCall) goja.Value {
+			return s.vectorQuery(vm, execCtx.Vector, call)
+		}); err != nil {
+			return err
+		}
+		if err := vectorObj.Set("delete", func(call goja.FunctionCall) goja.Value {
+			return s.vectorDelete(vm, execCtx.Vector, call)
+		}); err != nil {
+			return err
+		}
+		if err := vectorObj.Set("listCollections", func(call goja.FunctionCall) goja.Value {
+			return s.vectorListCollections(vm, execCtx.Vector, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("vector", vectorObj); err != nil {
 			return err
 		}
 	}
@@ -758,4 +802,245 @@ func (s *Sandbox) runsGetStepRuns(vm *goja.Runtime, service RunsService, call go
 	}
 
 	return vm.ToValue(result)
+}
+
+// ============================================================================
+// RAG Service Methods (Embedding & Vector with Tenant Isolation)
+// ============================================================================
+
+// embeddingEmbed handles ctx.embedding.embed(provider, model, texts) calls
+func (s *Sandbox) embeddingEmbed(vm *goja.Runtime, service EmbeddingService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 3 {
+		panic(vm.ToValue("ctx.embedding.embed requires provider, model, and texts arguments"))
+	}
+
+	provider := call.Arguments[0].String()
+	model := call.Arguments[1].String()
+
+	// Handle both single string and array of strings
+	textsArg := call.Arguments[2].Export()
+	var texts []string
+
+	switch v := textsArg.(type) {
+	case string:
+		texts = []string{v}
+	case []interface{}:
+		texts = make([]string, len(v))
+		for i, t := range v {
+			texts[i] = fmt.Sprintf("%v", t)
+		}
+	default:
+		panic(vm.ToValue("ctx.embedding.embed texts must be a string or array of strings"))
+	}
+
+	result, err := service.Embed(provider, model, texts)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Embedding failed: %v", err)))
+	}
+
+	// Convert to JS-compatible format
+	vectors := make([]interface{}, len(result.Vectors))
+	for i, v := range result.Vectors {
+		floats := make([]interface{}, len(v))
+		for j, f := range v {
+			floats[j] = float64(f)
+		}
+		vectors[i] = floats
+	}
+
+	return vm.ToValue(map[string]interface{}{
+		"vectors":   vectors,
+		"model":     result.Model,
+		"dimension": result.Dimension,
+		"usage": map[string]interface{}{
+			"total_tokens": result.Usage.TotalTokens,
+		},
+	})
+}
+
+// vectorUpsert handles ctx.vector.upsert(collection, documents, options) calls
+func (s *Sandbox) vectorUpsert(vm *goja.Runtime, service VectorService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.vector.upsert requires collection and documents arguments"))
+	}
+
+	collection := call.Arguments[0].String()
+
+	docsArg := call.Arguments[1].Export()
+	docsArray, ok := docsArg.([]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.vector.upsert documents must be an array"))
+	}
+
+	documents := make([]VectorDocument, len(docsArray))
+	for i, d := range docsArray {
+		docMap, ok := d.(map[string]interface{})
+		if !ok {
+			panic(vm.ToValue(fmt.Sprintf("document at index %d must be an object", i)))
+		}
+
+		doc := VectorDocument{}
+		if id, ok := docMap["id"].(string); ok {
+			doc.ID = id
+		}
+		if content, ok := docMap["content"].(string); ok {
+			doc.Content = content
+		}
+		if metadata, ok := docMap["metadata"].(map[string]interface{}); ok {
+			doc.Metadata = metadata
+		}
+		if vector, ok := docMap["vector"].([]interface{}); ok {
+			doc.Vector = make([]float32, len(vector))
+			for j, v := range vector {
+				if f, ok := v.(float64); ok {
+					doc.Vector[j] = float32(f)
+				}
+			}
+		}
+
+		documents[i] = doc
+	}
+
+	// Parse options
+	var opts *UpsertOptions
+	if len(call.Arguments) > 2 {
+		if optsArg, ok := call.Arguments[2].Export().(map[string]interface{}); ok {
+			opts = &UpsertOptions{}
+			if p, ok := optsArg["embedding_provider"].(string); ok {
+				opts.EmbeddingProvider = p
+			}
+			if m, ok := optsArg["embedding_model"].(string); ok {
+				opts.EmbeddingModel = m
+			}
+		}
+	}
+
+	result, err := service.Upsert(collection, documents, opts)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Vector upsert failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{
+		"upserted_count": result.UpsertedCount,
+		"ids":            result.IDs,
+	})
+}
+
+// vectorQuery handles ctx.vector.query(collection, vector, options) calls
+func (s *Sandbox) vectorQuery(vm *goja.Runtime, service VectorService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.vector.query requires collection and vector arguments"))
+	}
+
+	collection := call.Arguments[0].String()
+
+	vectorArg := call.Arguments[1].Export()
+	vectorArray, ok := vectorArg.([]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.vector.query vector must be an array of numbers"))
+	}
+
+	vector := make([]float32, len(vectorArray))
+	for i, v := range vectorArray {
+		if f, ok := v.(float64); ok {
+			vector[i] = float32(f)
+		}
+	}
+
+	// Parse options
+	opts := &QueryOptions{
+		TopK:           5,
+		IncludeContent: true,
+	}
+	if len(call.Arguments) > 2 {
+		if optsArg, ok := call.Arguments[2].Export().(map[string]interface{}); ok {
+			if topK, ok := optsArg["top_k"].(float64); ok {
+				opts.TopK = int(topK)
+			}
+			if threshold, ok := optsArg["threshold"].(float64); ok {
+				opts.Threshold = threshold
+			}
+			if filter, ok := optsArg["filter"].(map[string]interface{}); ok {
+				opts.Filter = filter
+			}
+			if includeContent, ok := optsArg["include_content"].(bool); ok {
+				opts.IncludeContent = includeContent
+			}
+		}
+	}
+
+	result, err := service.Query(collection, vector, opts)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Vector query failed: %v", err)))
+	}
+
+	// Convert to JS-compatible format
+	matches := make([]interface{}, len(result.Matches))
+	for i, m := range result.Matches {
+		match := map[string]interface{}{
+			"id":    m.ID,
+			"score": m.Score,
+		}
+		if m.Content != "" {
+			match["content"] = m.Content
+		}
+		if m.Metadata != nil {
+			match["metadata"] = m.Metadata
+		}
+		matches[i] = match
+	}
+
+	return vm.ToValue(map[string]interface{}{
+		"matches": matches,
+	})
+}
+
+// vectorDelete handles ctx.vector.delete(collection, ids) calls
+func (s *Sandbox) vectorDelete(vm *goja.Runtime, service VectorService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.vector.delete requires collection and ids arguments"))
+	}
+
+	collection := call.Arguments[0].String()
+
+	idsArg := call.Arguments[1].Export()
+	idsArray, ok := idsArg.([]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.vector.delete ids must be an array of strings"))
+	}
+
+	ids := make([]string, len(idsArray))
+	for i, id := range idsArray {
+		ids[i] = fmt.Sprintf("%v", id)
+	}
+
+	result, err := service.Delete(collection, ids)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Vector delete failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{
+		"deleted_count": result.DeletedCount,
+	})
+}
+
+// vectorListCollections handles ctx.vector.listCollections() calls
+func (s *Sandbox) vectorListCollections(vm *goja.Runtime, service VectorService, call goja.FunctionCall) goja.Value {
+	result, err := service.ListCollections()
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("List collections failed: %v", err)))
+	}
+
+	// Convert to JS-compatible format
+	collections := make([]interface{}, len(result))
+	for i, c := range result {
+		collections[i] = map[string]interface{}{
+			"name":           c.Name,
+			"document_count": c.DocumentCount,
+			"dimension":      c.Dimension,
+			"created_at":     c.CreatedAt,
+		}
+	}
+
+	return vm.ToValue(collections)
 }

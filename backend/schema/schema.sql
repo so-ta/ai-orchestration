@@ -1855,5 +1855,193 @@ ALTER TABLE ONLY public.workflows
 -- PostgreSQL database dump complete
 --
 
+-- ============================================================================
+-- RAG (Retrieval-Augmented Generation) Tables
+-- ============================================================================
+
+--
+-- Name: vector; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+
+--
+-- Name: vector_collections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vector_collections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    name character varying(100) NOT NULL,
+    description text,
+    embedding_provider character varying(50) DEFAULT 'openai'::character varying NOT NULL,
+    embedding_model character varying(100) DEFAULT 'text-embedding-3-small'::character varying NOT NULL,
+    dimension integer DEFAULT 1536 NOT NULL,
+    document_count integer DEFAULT 0,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE vector_collections; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.vector_collections IS 'RAG vector collections with tenant isolation';
+
+
+--
+-- Name: COLUMN vector_collections.dimension; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.vector_collections.dimension IS 'Vector dimension (1536 for text-embedding-3-small, 3072 for text-embedding-3-large)';
+
+
+--
+-- Name: vector_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vector_documents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    collection_id uuid NOT NULL,
+    content text NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    embedding public.vector(1536),
+    source_url text,
+    source_type character varying(50),
+    chunk_index integer,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: TABLE vector_documents; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.vector_documents IS 'RAG vector documents with embeddings, tenant-isolated';
+
+
+--
+-- Name: COLUMN vector_documents.content; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.vector_documents.content IS 'Document content (LangChain Document.page_content equivalent)';
+
+
+--
+-- Name: COLUMN vector_documents.metadata; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.vector_documents.metadata IS 'Document metadata (LangChain Document.metadata equivalent)';
+
+
+--
+-- Name: COLUMN vector_documents.embedding; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.vector_documents.embedding IS 'Vector embedding from embedding model';
+
+
+--
+-- Name: COLUMN vector_documents.source_type; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.vector_documents.source_type IS 'Source type: url, file, text, api';
+
+
+--
+-- Name: vector_collections vector_collections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vector_collections
+    ADD CONSTRAINT vector_collections_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: vector_collections unique_collection_per_tenant; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vector_collections
+    ADD CONSTRAINT unique_collection_per_tenant UNIQUE (tenant_id, name);
+
+
+--
+-- Name: vector_documents vector_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vector_documents
+    ADD CONSTRAINT vector_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_vector_collections_tenant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vector_collections_tenant ON public.vector_collections USING btree (tenant_id);
+
+
+--
+-- Name: idx_vector_documents_tenant_collection; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vector_documents_tenant_collection ON public.vector_documents USING btree (tenant_id, collection_id);
+
+
+--
+-- Name: idx_vector_documents_embedding; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vector_documents_embedding ON public.vector_documents USING ivfflat (embedding public.vector_cosine_ops) WITH (lists = 100);
+
+
+--
+-- Name: idx_vector_documents_metadata; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vector_documents_metadata ON public.vector_documents USING gin (metadata);
+
+
+--
+-- Name: vector_collections trigger_vector_collections_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE OR REPLACE FUNCTION public.update_vector_collections_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_vector_collections_updated_at BEFORE UPDATE ON public.vector_collections FOR EACH ROW EXECUTE FUNCTION public.update_vector_collections_updated_at();
+
+
+--
+-- Name: vector_collections vector_collections_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vector_collections
+    ADD CONSTRAINT vector_collections_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: vector_documents vector_documents_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vector_documents
+    ADD CONSTRAINT vector_documents_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: vector_documents vector_documents_collection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vector_documents
+    ADD CONSTRAINT vector_documents_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES public.vector_collections(id) ON DELETE CASCADE;
+
+
 \unrestrict qS68oUh7R0Ylf9hxaFCN1NsqAxjwYu48PFRRQDDRLom2r3jbe88asrCBhclQEWj
 
