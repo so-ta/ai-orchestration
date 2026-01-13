@@ -166,15 +166,51 @@ jobs:
             const event = verdict === 'APPROVE' ? 'APPROVE' :
                           verdict === 'REQUEST_CHANGES' ? 'REQUEST_CHANGES' : 'COMMENT';
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              body: body,
-              event: event
-            });
+            try {
+              // 既存のbotレビューをdismiss（APPROVEの重複を防ぐ）
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
 
-            console.log(`Posted PR Review with verdict: ${event}`);
+              for (const review of reviews) {
+                if (review.user.login === 'github-actions[bot]' &&
+                    (review.state === 'APPROVED' || review.state === 'CHANGES_REQUESTED')) {
+                  try {
+                    await github.rest.pulls.dismissReview({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      pull_number: prNumber,
+                      review_id: review.id,
+                      message: '新しいCodexレビューに置き換えられました'
+                    });
+                    console.log(`Dismissed previous review #${review.id}`);
+                  } catch (e) {
+                    console.log(`Could not dismiss review #${review.id}: ${e.message}`);
+                  }
+                }
+              }
+
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                body: body,
+                event: event
+              });
+
+              console.log(`Posted PR Review with verdict: ${event}`);
+            } catch (e) {
+              // レビュー投稿に失敗した場合はコメントとしてフォールバック
+              console.log(`Failed to post review: ${e.message}, falling back to comment`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body + `\n\n*Note: PR Reviewとして投稿できなかったため、コメントとして投稿しました*`
+              });
+            }
 
       - name: Post PR Review (Fallback - Markdown)
         if: steps.process.outputs.fallback == 'true'
