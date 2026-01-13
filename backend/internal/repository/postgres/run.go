@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -62,7 +63,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 		return nil, domain.ErrRunNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get run by ID: %w", err)
 	}
 	return &run, nil
 }
@@ -75,7 +76,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to count runs: %w", err)
 	}
 
 	// List query
@@ -96,7 +97,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to list runs: %w", err)
 	}
 	defer rows.Close()
 
