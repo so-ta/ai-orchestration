@@ -122,152 +122,27 @@ Content-Type: application/json
 
 ## ブロック実装詳細
 
-### Slack
+各ブロックの技術仕様は以下を参照：
 
-```javascript
-// config: { webhook_url?, channel?, message, username?, icon_emoji?, blocks? }
-const webhookUrl = config.webhook_url || ctx.secrets.SLACK_WEBHOOK_URL;
+- **ブロック定義・設定スキーマ**: [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md#external-integration-blocks)
+- **実装コード**: `backend/schema/seed.sql` (Single Source of Truth)
+- **アーキテクチャ**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
 
-const payload = {
-    text: renderTemplate(config.message, input),
-    channel: config.channel,
-    username: config.username,
-    icon_emoji: config.icon_emoji,
-    blocks: config.blocks  // Block Kit対応
-};
+### 設定オプション概要
 
-const response = await ctx.http.post(webhookUrl, payload);
-return { success: true, status: response.status };
-```
-
-**設定オプション:**
-| パラメータ | 型 | 必須 | 説明 |
-|-----------|-----|------|------|
-| `webhook_url` | string | - | Incoming Webhook URL |
-| `channel` | string | - | 投稿先チャンネル |
-| `message` | string | ✅ | メッセージ（テンプレート可） |
-| `username` | string | - | ボット表示名 |
-| `icon_emoji` | string | - | アイコン絵文字 |
-| `blocks` | array | - | Block Kit形式 |
-
-### Discord
-
-```javascript
-// config: { webhook_url?, content, username?, avatar_url?, embeds? }
-const webhookUrl = config.webhook_url || ctx.secrets.DISCORD_WEBHOOK_URL;
-
-const payload = {
-    content: renderTemplate(config.content, input),
-    username: config.username,
-    avatar_url: config.avatar_url,
-    embeds: config.embeds  // リッチ埋め込み対応
-};
-
-const response = await ctx.http.post(webhookUrl, payload);
-return { success: true, status: response.status };
-```
-
-### Notion: ページ作成
-
-```javascript
-// config: { api_key?, parent_type, parent_id, title?, properties?, content? }
-const apiKey = config.api_key || ctx.secrets.NOTION_API_KEY;
-
-const payload = {
-    parent: { [config.parent_type]: config.parent_id },
-    properties: config.properties || {
-        title: { title: [{ text: { content: renderTemplate(config.title, input) } }] }
-    },
-    children: config.content ? [
-        { type: 'paragraph', paragraph: { rich_text: [{ text: { content: renderTemplate(config.content, input) } }] } }
-    ] : undefined
-};
-
-const response = await ctx.http.post('https://api.notion.com/v1/pages', payload, {
-    headers: { 'Authorization': 'Bearer ' + apiKey, 'Notion-Version': '2022-06-28' }
-});
-
-return { id: response.body.id, url: response.body.url };
-```
-
-### GitHub: Issue作成
-
-```javascript
-// config: { token?, owner, repo, title, body?, labels?, assignees? }
-const token = config.token || ctx.secrets.GITHUB_TOKEN;
-const url = `https://api.github.com/repos/${config.owner}/${config.repo}/issues`;
-
-const response = await ctx.http.post(url, {
-    title: renderTemplate(config.title, input),
-    body: renderTemplate(config.body, input),
-    labels: config.labels,
-    assignees: config.assignees
-}, {
-    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' }
-});
-
-return { number: response.body.number, html_url: response.body.html_url };
-```
-
-### Web検索 (Tavily)
-
-```javascript
-// config: { api_key?, query, search_depth?, max_results?, include_answer? }
-const apiKey = config.api_key || ctx.secrets.TAVILY_API_KEY;
-
-const response = await ctx.http.post('https://api.tavily.com/search', {
-    api_key: apiKey,
-    query: renderTemplate(config.query, input),
-    search_depth: config.search_depth || 'basic',
-    max_results: config.max_results || 5,
-    include_answer: config.include_answer !== false
-});
-
-return { answer: response.body.answer, results: response.body.results };
-```
-
-### Email (SendGrid)
-
-```javascript
-// config: { api_key?, from_email, from_name?, to_email, to_name?, subject, content_type?, content }
-const apiKey = config.api_key || ctx.secrets.SENDGRID_API_KEY;
-
-const response = await ctx.http.post('https://api.sendgrid.com/v3/mail/send', {
-    personalizations: [{ to: [{ email: renderTemplate(config.to_email, input) }] }],
-    from: { email: config.from_email, name: config.from_name },
-    subject: renderTemplate(config.subject, input),
-    content: [{ type: config.content_type || 'text/plain', value: renderTemplate(config.content, input) }]
-}, {
-    headers: { 'Authorization': 'Bearer ' + apiKey }
-});
-
-return { success: true };
-```
-
-### Linear: Issue作成
-
-```javascript
-// config: { api_key?, team_id, title, description?, priority?, label_ids?, assignee_id? }
-const apiKey = config.api_key || ctx.secrets.LINEAR_API_KEY;
-
-const mutation = `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { id identifier url } } }`;
-
-const response = await ctx.http.post('https://api.linear.app/graphql', {
-    query: mutation,
-    variables: {
-        input: {
-            teamId: config.team_id,
-            title: renderTemplate(config.title, input),
-            description: renderTemplate(config.description, input),
-            priority: config.priority
-        }
-    }
-}, {
-    headers: { 'Authorization': apiKey }
-});
-
-return response.body.data.issueCreate.issue;
-```
+| ブロック | 主要パラメータ | 必須 |
+|---------|--------------|------|
+| `slack` | `message`, `webhook_url`/secret | message |
+| `discord` | `content`, `webhook_url`/secret | content |
+| `email_sendgrid` | `to_email`, `subject`, `content`, `from_email` | all |
+| `notion_create_page` | `parent_type`, `parent_id`, `title` | all |
+| `notion_query_db` | `database_id` | database_id |
+| `gsheets_append` | `spreadsheet_id`, `range`, `values` | all |
+| `gsheets_read` | `spreadsheet_id`, `range` | all |
+| `github_create_issue` | `owner`, `repo`, `title` | all |
+| `github_add_comment` | `owner`, `repo`, `issue_number`, `body` | all |
+| `linear_create_issue` | `team_id`, `title` | all |
+| `web_search` | `query` | query |
 
 ---
 

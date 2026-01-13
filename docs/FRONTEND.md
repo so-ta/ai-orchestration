@@ -229,6 +229,55 @@ const {
 
 ## Components
 
+### Dynamic Config Form (components/workflow-editor/config/)
+
+Schema-driven form generation for block configuration. JSON Schema から自動的にフォームを生成。
+
+```
+components/workflow-editor/config/
+├── DynamicConfigForm.vue       # メインコンポーネント
+├── ConfigFieldRenderer.vue     # フィールドレンダラー
+├── widgets/
+│   ├── TextWidget.vue          # テキスト入力
+│   ├── TextareaWidget.vue      # 複数行テキスト
+│   ├── NumberWidget.vue        # 数値入力
+│   ├── SelectWidget.vue        # セレクトボックス
+│   ├── CheckboxWidget.vue      # チェックボックス
+│   ├── ArrayWidget.vue         # 配列エディタ
+│   └── KeyValueWidget.vue      # キー・バリュー入力
+├── composables/
+│   ├── useSchemaParser.ts      # スキーマ解析
+│   └── useValidation.ts        # ajvバリデーション
+└── types/
+    └── config-schema.ts        # 型定義
+```
+
+**型推論ルール**
+
+| JSON Schema | 推論されるウィジェット |
+|-------------|----------------------|
+| `type: "string"` | TextWidget |
+| `type: "string"` + `enum` | SelectWidget |
+| `type: "string"` + `maxLength > 100` | TextareaWidget |
+| `type: "string"` + `format: "uri"` | URL入力 |
+| `type: "number"` / `type: "integer"` | NumberWidget |
+| `type: "boolean"` | CheckboxWidget |
+| `type: "array"` | ArrayWidget |
+| `type: "object"` + `additionalProperties` | KeyValueWidget |
+
+**使用例**
+
+```vue
+<DynamicConfigForm
+  :schema="configSchema"
+  :value="nodeConfig"
+  @update:value="handleConfigUpdate"
+  @validation-error="handleValidationError"
+/>
+```
+
+**設計詳細**: [designs/BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md)
+
 ### DAG Editor (components/dag-editor/)
 
 Built with [@vue-flow/core](https://vueflow.dev/)

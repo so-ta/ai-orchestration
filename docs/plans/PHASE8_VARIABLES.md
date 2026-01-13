@@ -1,5 +1,14 @@
 # Phase 8: Variables System 実装計画
 
+> **Status: ✅ 実装済み**
+>
+> このフェーズは `credentials`, `secrets`, `system_credentials` テーブルとして実装済みです。
+> 実装の詳細は以下を参照:
+> - `backend/internal/domain/credential.go`
+> - `backend/internal/handler/credential.go`
+> - `backend/internal/usecase/credential.go`
+> - `backend/pkg/crypto/encryption.go`
+
 ## 概要
 
 **目的**: ワークフロー全体で使用可能な変数システムを提供し、設定値・シークレット・実行時データを一元管理する。
