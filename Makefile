@@ -229,10 +229,10 @@ test: test-backend test-frontend
 # ============================================================================
 # Database管理
 # ============================================================================
-DB_USER := aio
-DB_PASSWORD := aio_password
-DB_NAME := ai_orchestration
-DB_CONTAINER := aio-postgres
+DB_USER ?= aio
+DB_PASSWORD ?= aio_password
+DB_NAME ?= ai_orchestration
+DB_CONTAINER ?= aio-postgres
 
 # Apply schema
 db-apply:

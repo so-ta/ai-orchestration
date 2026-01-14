@@ -627,7 +627,11 @@ func TestWorkflowE2E(t *testing.T) {
 
 ## Build Commands
 
+以下のコマンドは`backend/`ディレクトリ内で実行します：
+
 ```bash
+cd backend
+
 # Build API
 go build -o bin/api ./cmd/api
 
