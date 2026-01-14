@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -456,7 +457,9 @@ func healthHandler(pool *pgxpool.Pool, redisClient redisPinger) http.HandlerFunc
 		// Liveness probe - basic check that the service is running
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
+		if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+			slog.Debug("failed to write health response", "error", err)
+		}
 	}
 }
 
@@ -493,7 +496,9 @@ func readinessHandler(pool *pgxpool.Pool, redisClient redisPinger) http.HandlerF
 		w.WriteHeader(httpStatus)
 		response := fmt.Sprintf(`{"status":"%s","components":{"database":"%s","redis":"%s"}}`,
 			status, dbStatus, redisStatus)
-		w.Write([]byte(response))
+		if _, err := w.Write([]byte(response)); err != nil {
+			slog.Debug("failed to write readiness response", "error", err)
+		}
 	}
 }
 
