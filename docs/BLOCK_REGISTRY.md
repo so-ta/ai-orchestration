@@ -91,10 +91,29 @@ type BlockDefinition struct {
     // Error handling
     ErrorCodes     []ErrorCodeDef  // Defined error codes for this block
 
+    // === Block Inheritance/Extension fields ===
+    ParentBlockID  *uuid.UUID      // Reference to parent block for inheritance
+    ConfigDefaults json.RawMessage // Default values for parent's config_schema
+    PreProcess     string          // JavaScript code for input transformation
+    PostProcess    string          // JavaScript code for output transformation
+    InternalSteps  []InternalStep  // Composite block internal steps
+
+    // === Resolved fields (populated by backend) ===
+    PreProcessChain        []string        // Chain of preProcess code (child→root)
+    PostProcessChain       []string        // Chain of postProcess code (root→child)
+    ResolvedCode           string          // Code from root ancestor
+    ResolvedConfigDefaults json.RawMessage // Merged config defaults from chain
+
     // Metadata
     Enabled        bool
     CreatedAt      time.Time
     UpdatedAt      time.Time
+}
+
+type InternalStep struct {
+    Type      string          `json:"type"`       // Block slug to execute
+    Config    json.RawMessage `json:"config"`     // Step configuration
+    OutputKey string          `json:"output_key"` // Key for storing output
 }
 
 type ErrorCodeDef struct {
@@ -103,6 +122,112 @@ type ErrorCodeDef struct {
     Description string `json:"description"` // Human-readable description
     Retryable   bool   `json:"retryable"`   // Can this error be retried?
 }
+```
+
+### Block Inheritance/Extension
+
+ブロック継承により、既存ブロックを拡張して再利用可能なブロックを作成できます。
+
+#### 継承の仕組み
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                  Block Inheritance Chain                          │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  discord-notify (child)                                           │
+│    ├── parent_block_id: http (root)                              │
+│    ├── config_defaults: { webhook_url: "...", method: "POST" }   │
+│    ├── pre_process: "formats message for Discord"                │
+│    └── post_process: null                                        │
+│                                                                    │
+│  Execution Flow:                                                   │
+│  1. preProcess (discord-notify) - Format input                   │
+│  2. Resolve config: merge config_defaults with step config       │
+│  3. Execute http block code                                       │
+│  4. postProcess (discord-notify) - Transform output              │
+│                                                                    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### 継承ルール
+
+| ルール | 説明 |
+|--------|------|
+| コードを持つブロックのみ継承可能 | `Code != ""` |
+| 最大継承深度 | 10レベル |
+| 循環継承禁止 | A→B→C→A のような循環は不可 |
+| テナント分離 | 同一テナント内またはシステムブロックからのみ継承可能 |
+
+#### ConfigDefaults のマージ順序
+
+```
+root ancestor defaults
+    ↓ (override)
+middle ancestor defaults
+    ↓ (override)
+child defaults
+    ↓ (override)
+step config (execution time)
+```
+
+#### 継承ブロックの例
+
+```javascript
+// discord-error-notify (inherits from http block)
+// parent_block_id: http ブロックのUUID
+// config_defaults:
+{
+    "method": "POST",
+    "headers": { "Content-Type": "application/json" }
+}
+
+// pre_process (入力変換):
+const webhookUrl = ctx.secrets.DISCORD_ERROR_WEBHOOK || config.webhook_url;
+return {
+    url: webhookUrl,
+    body: {
+        content: "🚨 Error Alert",
+        embeds: [{
+            title: input.error_type || "Error",
+            description: input.message,
+            color: 15158332  // Red
+        }]
+    }
+};
+
+// post_process (出力変換):
+return {
+    success: input.status < 400,
+    notified_at: new Date().toISOString()
+};
+```
+
+#### InternalSteps（複合ブロック）
+
+複数のブロックを順次実行する複合ブロックを作成できます：
+
+```javascript
+// enriched-http block
+// internal_steps:
+[
+    {
+        "type": "function",
+        "config": { "code": "return { timestamp: Date.now(), ...input }" },
+        "output_key": "enriched"
+    },
+    {
+        "type": "http",
+        "config": {},  // Uses merged config
+        "output_key": "response"
+    },
+    {
+        "type": "function",
+        "config": { "code": "return { ...input.response, enriched: input.enriched }" },
+        "output_key": "final"
+    }
+]
+// 出力は internal_steps の結果がマージされた状態
 ```
 
 ### Database Schema

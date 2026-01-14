@@ -26,6 +26,13 @@ func NewBlockHandler(blockRepo repository.BlockDefinitionRepository, blockUsecas
 	}
 }
 
+// InternalStepRequest represents an internal step in a composite block
+type InternalStepRequest struct {
+	Type      string          `json:"type"`       // Block slug to execute
+	Config    json.RawMessage `json:"config"`     // Configuration for the step
+	OutputKey string          `json:"output_key"` // Key to store this step's output
+}
+
 // CreateBlockRequest represents a create block definition request
 type CreateBlockRequest struct {
 	Slug         string          `json:"slug"`
@@ -38,6 +45,13 @@ type CreateBlockRequest struct {
 	OutputSchema json.RawMessage `json:"output_schema"`
 	Code         string          `json:"code"`
 	UIConfig     json.RawMessage `json:"ui_config"`
+
+	// Block Inheritance/Extension fields
+	ParentBlockID  *string               `json:"parent_block_id,omitempty"`
+	ConfigDefaults json.RawMessage       `json:"config_defaults,omitempty"`
+	PreProcess     string                `json:"pre_process,omitempty"`
+	PostProcess    string                `json:"post_process,omitempty"`
+	InternalSteps  []InternalStepRequest `json:"internal_steps,omitempty"`
 }
 
 // List handles GET /api/v1/blocks
@@ -147,6 +161,76 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 		block.UIConfig = req.UIConfig
 	}
 
+	// Handle inheritance fields
+	if req.ParentBlockID != nil && *req.ParentBlockID != "" {
+		parentID, err := uuid.Parse(*req.ParentBlockID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid parent_block_id format", nil)
+			return
+		}
+
+		// Validate parent block exists and can be inherited
+		parentBlock, err := h.blockRepo.GetByID(r.Context(), parentID)
+		if err != nil {
+			HandleError(w, err)
+			return
+		}
+		if parentBlock == nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "parent block not found", nil)
+			return
+		}
+		if !parentBlock.CanBeInherited() {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "parent block cannot be inherited (no code)", nil)
+			return
+		}
+
+		block.ParentBlockID = &parentID
+
+		// Validate inheritance (circular reference and depth)
+		if err := h.blockRepo.ValidateInheritance(r.Context(), block.ID, parentID); err != nil {
+			switch err {
+			case domain.ErrCircularInheritance:
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "circular inheritance detected", nil)
+				return
+			case domain.ErrInheritanceDepthExceeded:
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "inheritance depth exceeded maximum limit", nil)
+				return
+			default:
+				HandleError(w, err)
+				return
+			}
+		}
+	}
+
+	if req.ConfigDefaults != nil {
+		block.ConfigDefaults = req.ConfigDefaults
+	}
+	block.PreProcess = req.PreProcess
+	block.PostProcess = req.PostProcess
+
+	// Convert internal steps
+	if len(req.InternalSteps) > 0 {
+		block.InternalSteps = make([]domain.InternalStep, len(req.InternalSteps))
+		for i, step := range req.InternalSteps {
+			// Validate each internal step's block type exists
+			stepBlock, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, step.Type)
+			if err != nil {
+				HandleError(w, err)
+				return
+			}
+			if stepBlock == nil {
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "internal step block type not found: "+step.Type, nil)
+				return
+			}
+
+			block.InternalSteps[i] = domain.InternalStep{
+				Type:      step.Type,
+				Config:    step.Config,
+				OutputKey: step.OutputKey,
+			}
+		}
+	}
+
 	if err := h.blockRepo.Create(r.Context(), block); err != nil {
 		HandleError(w, err)
 		return
@@ -166,6 +250,13 @@ type UpdateBlockRequest struct {
 	Code         *string         `json:"code"`
 	UIConfig     json.RawMessage `json:"ui_config"`
 	Enabled      *bool           `json:"enabled"`
+
+	// Block Inheritance/Extension fields
+	ParentBlockID  *string               `json:"parent_block_id,omitempty"`
+	ConfigDefaults json.RawMessage       `json:"config_defaults,omitempty"`
+	PreProcess     *string               `json:"pre_process,omitempty"`
+	PostProcess    *string               `json:"post_process,omitempty"`
+	InternalSteps  []InternalStepRequest `json:"internal_steps,omitempty"`
 }
 
 // Update handles PUT /api/v1/blocks/{slug}
@@ -223,6 +314,85 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Enabled != nil {
 		block.Enabled = *req.Enabled
+	}
+
+	// Handle inheritance fields
+	if req.ParentBlockID != nil {
+		if *req.ParentBlockID == "" {
+			// Clear parent
+			block.ParentBlockID = nil
+		} else {
+			parentID, err := uuid.Parse(*req.ParentBlockID)
+			if err != nil {
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid parent_block_id format", nil)
+				return
+			}
+
+			// Validate parent block exists and can be inherited
+			parentBlock, err := h.blockRepo.GetByID(r.Context(), parentID)
+			if err != nil {
+				HandleError(w, err)
+				return
+			}
+			if parentBlock == nil {
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "parent block not found", nil)
+				return
+			}
+			if !parentBlock.CanBeInherited() {
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "parent block cannot be inherited (no code)", nil)
+				return
+			}
+
+			// Validate inheritance (circular reference and depth)
+			if err := h.blockRepo.ValidateInheritance(r.Context(), block.ID, parentID); err != nil {
+				switch err {
+				case domain.ErrCircularInheritance:
+					Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "circular inheritance detected", nil)
+					return
+				case domain.ErrInheritanceDepthExceeded:
+					Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "inheritance depth exceeded maximum limit", nil)
+					return
+				default:
+					HandleError(w, err)
+					return
+				}
+			}
+
+			block.ParentBlockID = &parentID
+		}
+	}
+
+	if req.ConfigDefaults != nil {
+		block.ConfigDefaults = req.ConfigDefaults
+	}
+	if req.PreProcess != nil {
+		block.PreProcess = *req.PreProcess
+	}
+	if req.PostProcess != nil {
+		block.PostProcess = *req.PostProcess
+	}
+
+	// Update internal steps if provided
+	if req.InternalSteps != nil {
+		block.InternalSteps = make([]domain.InternalStep, len(req.InternalSteps))
+		for i, step := range req.InternalSteps {
+			// Validate each internal step's block type exists
+			stepBlock, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, step.Type)
+			if err != nil {
+				HandleError(w, err)
+				return
+			}
+			if stepBlock == nil {
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "internal step block type not found: "+step.Type, nil)
+				return
+			}
+
+			block.InternalSteps[i] = domain.InternalStep{
+				Type:      step.Type,
+				Config:    step.Config,
+				OutputKey: step.OutputKey,
+			}
+		}
 	}
 
 	if err := h.blockRepo.Update(r.Context(), block); err != nil {

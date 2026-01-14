@@ -876,6 +876,165 @@ Response `200`:
 
 ---
 
+## Blocks
+
+Block definitions for workflow steps. Blocks can be system blocks (built-in) or tenant-specific custom blocks. Blocks support inheritance for reusable configurations.
+
+### List
+```
+GET /blocks
+```
+
+Query:
+| Param | Type | Description |
+|-------|------|-------------|
+| `category` | string | Filter by category: `ai`, `logic`, `integration`, `data`, `control`, `utility` |
+| `enabled` | bool | Filter enabled blocks only |
+
+Response `200`:
+```json
+{
+  "blocks": [
+    {
+      "id": "uuid",
+      "tenant_id": "uuid",
+      "slug": "llm",
+      "name": "LLM Call",
+      "description": "Call an LLM provider",
+      "category": "ai",
+      "icon": "brain",
+      "config_schema": {},
+      "input_schema": {},
+      "output_schema": {},
+      "input_ports": [],
+      "output_ports": [],
+      "error_codes": [],
+      "code": "...",
+      "ui_config": {},
+      "is_system": true,
+      "version": 1,
+      "parent_block_id": null,
+      "config_defaults": {},
+      "pre_process": "",
+      "post_process": "",
+      "internal_steps": [],
+      "pre_process_chain": [],
+      "post_process_chain": [],
+      "resolved_code": "",
+      "resolved_config_defaults": {},
+      "enabled": true,
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601"
+    }
+  ]
+}
+```
+
+### Get
+```
+GET /blocks/{slug}
+```
+
+Response `200`: Single block definition
+
+### Create
+```
+POST /blocks
+```
+
+Request:
+```json
+{
+  "slug": "string (required)",
+  "name": "string (required)",
+  "description": "string",
+  "category": "ai|logic|integration|data|control|utility (required)",
+  "icon": "string",
+  "config_schema": {},
+  "input_schema": {},
+  "output_schema": {},
+  "code": "string",
+  "ui_config": {},
+  "parent_block_id": "uuid (optional)",
+  "config_defaults": {},
+  "pre_process": "string",
+  "post_process": "string",
+  "internal_steps": [
+    {
+      "type": "block-slug",
+      "config": {},
+      "output_key": "step1"
+    }
+  ]
+}
+```
+
+**Block Inheritance/Extension Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `parent_block_id` | uuid | Reference to parent block for inheritance (only blocks with code can be inherited) |
+| `config_defaults` | object | Default values for parent's config_schema (overrides parent defaults) |
+| `pre_process` | string | JavaScript code executed before main code (for input transformation) |
+| `post_process` | string | JavaScript code executed after main code (for output transformation) |
+| `internal_steps` | array | Array of steps to execute sequentially inside the block |
+
+**Resolved Fields (populated by backend for inherited blocks):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pre_process_chain` | string[] | Chain of preProcess code (child → root) |
+| `post_process_chain` | string[] | Chain of postProcess code (root → child) |
+| `resolved_code` | string | Code from root ancestor |
+| `resolved_config_defaults` | object | Merged config defaults from inheritance chain |
+
+Response `201`: Created block
+
+**Validation Errors:**
+
+| Code | Message | Description |
+|------|---------|-------------|
+| VALIDATION_ERROR | circular inheritance detected | Block would create a circular inheritance |
+| VALIDATION_ERROR | inheritance depth exceeded maximum limit | Inheritance chain exceeds 10 levels |
+| VALIDATION_ERROR | parent block cannot be inherited (no code) | Parent block has no code to inherit |
+| CONFLICT | block with this slug already exists | Slug is already used |
+
+### Update
+```
+PUT /blocks/{slug}
+```
+
+Request:
+```json
+{
+  "name": "string",
+  "description": "string",
+  "icon": "string",
+  "config_schema": {},
+  "input_schema": {},
+  "output_schema": {},
+  "code": "string",
+  "ui_config": {},
+  "enabled": true,
+  "parent_block_id": "uuid (null to clear)",
+  "config_defaults": {},
+  "pre_process": "string",
+  "post_process": "string",
+  "internal_steps": []
+}
+```
+
+Response `200`: Updated block
+
+### Delete
+```
+DELETE /blocks/{slug}
+```
+
+Response `204`: No content
+
+---
+
 ## Adapters
 
 ### List

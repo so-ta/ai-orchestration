@@ -68,6 +68,13 @@ var (
 	ErrBlockDefinitionSlugExists = errors.New("block definition slug already exists")
 	ErrBlockCodeHidden           = errors.New("block code is hidden for system blocks")
 
+	// Block Inheritance errors
+	ErrCircularInheritance     = errors.New("circular inheritance detected")
+	ErrBlockNotInheritable     = errors.New("block cannot be inherited (no code)")
+	ErrInheritanceDepthExceeded = errors.New("inheritance depth exceeded maximum limit")
+	ErrParentBlockNotFound     = errors.New("parent block not found")
+	ErrInternalStepNotFound    = errors.New("internal step block not found")
+
 	// Tenant errors
 	ErrTenantNotFound = errors.New("tenant not found")
 	ErrUnauthorized   = errors.New("unauthorized")

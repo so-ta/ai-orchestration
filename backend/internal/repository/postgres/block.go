@@ -24,6 +24,9 @@ func NewBlockDefinitionRepository(pool *pgxpool.Pool) *BlockDefinitionRepository
 	return &BlockDefinitionRepository{pool: pool}
 }
 
+// MaxInheritanceDepth is the maximum allowed inheritance depth
+const MaxInheritanceDepth = 10
+
 func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.BlockDefinition) error {
 	errorCodesJSON, err := json.Marshal(block.ErrorCodes)
 	if err != nil {
@@ -40,14 +43,20 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal output ports: %w", err)
 	}
 
+	internalStepsJSON, err := json.Marshal(block.InternalSteps)
+	if err != nil {
+		return fmt.Errorf("failed to marshal internal steps: %w", err)
+	}
+
 	query := `
 		INSERT INTO block_definitions (
 			id, tenant_id, slug, name, description, category, icon,
 			config_schema, input_schema, output_schema, input_ports, output_ports,
 			error_codes, required_credentials, is_public,
 			code, ui_config, is_system, version,
+			parent_block_id, config_defaults, pre_process, post_process, internal_steps,
 			enabled, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
 	`
 
 	_, err = r.pool.Exec(ctx, query,
@@ -70,6 +79,11 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		block.UIConfig,
 		block.IsSystem,
 		block.Version,
+		block.ParentBlockID,
+		block.ConfigDefaults,
+		block.PreProcess,
+		block.PostProcess,
+		internalStepsJSON,
 		block.Enabled,
 		block.CreatedAt,
 		block.UpdatedAt,
@@ -82,11 +96,35 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 }
 
 func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error) {
+	block, err := r.getByIDRaw(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if block == nil {
+		return nil, nil
+	}
+
+	// Resolve inheritance if this block has a parent
+	if block.ParentBlockID != nil {
+		return r.resolveInheritance(ctx, block)
+	}
+
+	return block, nil
+}
+
+// GetByIDRaw returns a block without resolving inheritance (for internal use)
+func (r *BlockDefinitionRepository) GetByIDRaw(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error) {
+	return r.getByIDRaw(ctx, id)
+}
+
+// getByIDRaw is the internal method that reads raw block data without inheritance resolution
+func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error) {
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
+			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		WHERE id = $1
@@ -96,6 +134,7 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 	var errorCodesJSON []byte
 	var inputPortsJSON []byte
 	var outputPortsJSON []byte
+	var internalStepsJSON []byte
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&block.ID,
@@ -117,6 +156,11 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 		&block.UIConfig,
 		&block.IsSystem,
 		&block.Version,
+		&block.ParentBlockID,
+		&block.ConfigDefaults,
+		&block.PreProcess,
+		&block.PostProcess,
+		&internalStepsJSON,
 		&block.Enabled,
 		&block.CreatedAt,
 		&block.UpdatedAt,
@@ -146,10 +190,34 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 		}
 	}
 
+	if len(internalStepsJSON) > 0 {
+		if err := json.Unmarshal(internalStepsJSON, &block.InternalSteps); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal internal steps: %w", err)
+		}
+	}
+
 	return block, nil
 }
 
 func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uuid.UUID, slug string) (*domain.BlockDefinition, error) {
+	block, err := r.getBySlugRaw(ctx, tenantID, slug)
+	if err != nil {
+		return nil, err
+	}
+	if block == nil {
+		return nil, nil
+	}
+
+	// Resolve inheritance if this block has a parent
+	if block.ParentBlockID != nil {
+		return r.resolveInheritance(ctx, block)
+	}
+
+	return block, nil
+}
+
+// getBySlugRaw is the internal method that reads raw block data without inheritance resolution
+func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *uuid.UUID, slug string) (*domain.BlockDefinition, error) {
 	// First try to find tenant-specific block, then fall back to system block
 	// Use proper NULL comparison: (tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL)
 	query := `
@@ -157,6 +225,7 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
+			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		WHERE slug = $1 AND ((tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL) OR tenant_id IS NULL)
@@ -168,6 +237,7 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 	var errorCodesJSON []byte
 	var inputPortsJSON []byte
 	var outputPortsJSON []byte
+	var internalStepsJSON []byte
 
 	err := r.pool.QueryRow(ctx, query, slug, tenantID).Scan(
 		&block.ID,
@@ -189,6 +259,11 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 		&block.UIConfig,
 		&block.IsSystem,
 		&block.Version,
+		&block.ParentBlockID,
+		&block.ConfigDefaults,
+		&block.PreProcess,
+		&block.PostProcess,
+		&internalStepsJSON,
 		&block.Enabled,
 		&block.CreatedAt,
 		&block.UpdatedAt,
@@ -215,6 +290,12 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 	if len(outputPortsJSON) > 0 {
 		if err := json.Unmarshal(outputPortsJSON, &block.OutputPorts); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal output ports: %w", err)
+		}
+	}
+
+	if len(internalStepsJSON) > 0 {
+		if err := json.Unmarshal(internalStepsJSON, &block.InternalSteps); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal internal steps: %w", err)
 		}
 	}
 
@@ -263,6 +344,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
+			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		%s
@@ -281,6 +363,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		var errorCodesJSON []byte
 		var inputPortsJSON []byte
 		var outputPortsJSON []byte
+		var internalStepsJSON []byte
 
 		err := rows.Scan(
 			&block.ID,
@@ -302,6 +385,11 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			&block.UIConfig,
 			&block.IsSystem,
 			&block.Version,
+			&block.ParentBlockID,
+			&block.ConfigDefaults,
+			&block.PreProcess,
+			&block.PostProcess,
+			&internalStepsJSON,
 			&block.Enabled,
 			&block.CreatedAt,
 			&block.UpdatedAt,
@@ -325,6 +413,12 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		if len(outputPortsJSON) > 0 {
 			if err := json.Unmarshal(outputPortsJSON, &block.OutputPorts); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal output ports: %w", err)
+			}
+		}
+
+		if len(internalStepsJSON) > 0 {
+			if err := json.Unmarshal(internalStepsJSON, &block.InternalSteps); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal internal steps: %w", err)
 			}
 		}
 
@@ -354,13 +448,19 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal output ports: %w", err)
 	}
 
+	internalStepsJSON, err := json.Marshal(block.InternalSteps)
+	if err != nil {
+		return fmt.Errorf("failed to marshal internal steps: %w", err)
+	}
+
 	query := `
 		UPDATE block_definitions
 		SET name = $2, description = $3, category = $4, icon = $5,
 			config_schema = $6, input_schema = $7, output_schema = $8, input_ports = $9, output_ports = $10,
 			error_codes = $11, required_credentials = $12, is_public = $13,
 			code = $14, ui_config = $15, is_system = $16, version = $17,
-			enabled = $18, updated_at = NOW()
+			parent_block_id = $18, config_defaults = $19, pre_process = $20, post_process = $21, internal_steps = $22,
+			enabled = $23, updated_at = NOW()
 		WHERE id = $1
 	`
 
@@ -382,6 +482,11 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		block.UIConfig,
 		block.IsSystem,
 		block.Version,
+		block.ParentBlockID,
+		block.ConfigDefaults,
+		block.PreProcess,
+		block.PostProcess,
+		internalStepsJSON,
 		block.Enabled,
 	)
 	if err != nil {
@@ -409,6 +514,214 @@ func (r *BlockDefinitionRepository) Delete(ctx context.Context, id uuid.UUID) er
 
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("block definition not found or is a system block")
+	}
+
+	return nil
+}
+
+// resolveInheritance resolves the inheritance chain for a block and populates resolved fields
+func (r *BlockDefinitionRepository) resolveInheritance(ctx context.Context, block *domain.BlockDefinition) (*domain.BlockDefinition, error) {
+	if block.ParentBlockID == nil {
+		return block, nil // No inheritance
+	}
+
+	// Build inheritance chain: child -> parent -> ... -> root
+	chain := []*domain.BlockDefinition{block}
+	visited := map[uuid.UUID]bool{block.ID: true}
+	current := block
+
+	for i := 0; i < MaxInheritanceDepth && current.ParentBlockID != nil; i++ {
+		parent, err := r.getByIDRaw(ctx, *current.ParentBlockID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get parent block: %w", err)
+		}
+		if parent == nil {
+			return nil, domain.ErrParentBlockNotFound
+		}
+
+		// Check for circular inheritance
+		if visited[parent.ID] {
+			return nil, domain.ErrCircularInheritance
+		}
+		visited[parent.ID] = true
+
+		chain = append(chain, parent)
+		current = parent
+	}
+
+	// Check if we exceeded max depth
+	if current.ParentBlockID != nil {
+		return nil, domain.ErrInheritanceDepthExceeded
+	}
+
+	// Get the root block (last in chain)
+	root := chain[len(chain)-1]
+
+	// Verify root block can be inherited (has code)
+	if !root.CanBeInherited() {
+		return nil, domain.ErrBlockNotInheritable
+	}
+
+	// Build resolved block (copy child's basic info)
+	resolved := &domain.BlockDefinition{
+		// Basic info from child
+		ID:          block.ID,
+		TenantID:    block.TenantID,
+		Slug:        block.Slug,
+		Name:        block.Name,
+		Description: block.Description,
+		Category:    block.Category,
+		Icon:        block.Icon,
+		IsPublic:    block.IsPublic,
+		IsSystem:    block.IsSystem,
+		Version:     block.Version,
+		Enabled:     block.Enabled,
+		CreatedAt:   block.CreatedAt,
+		UpdatedAt:   block.UpdatedAt,
+
+		// Inheritance fields from child
+		ParentBlockID:  block.ParentBlockID,
+		ConfigDefaults: block.ConfigDefaults,
+		PreProcess:     block.PreProcess,
+		PostProcess:    block.PostProcess,
+		InternalSteps:  block.InternalSteps,
+
+		// Schemas - use child's if set, otherwise inherit from parent chain
+		ConfigSchema: block.ConfigSchema,
+		InputSchema:  block.InputSchema,
+		OutputSchema: block.OutputSchema,
+		InputPorts:   block.InputPorts,
+		OutputPorts:  block.OutputPorts,
+		ErrorCodes:   block.ErrorCodes,
+		UIConfig:     block.UIConfig,
+
+		// Code from root
+		Code:         root.Code,
+		ResolvedCode: root.Code,
+
+		// RequiredCredentials - merge from chain
+		RequiredCredentials: root.RequiredCredentials,
+	}
+
+	// Build PreProcessChain: child -> ... -> root (child's preProcess runs first)
+	preProcessChain := make([]string, 0)
+	for _, b := range chain {
+		if b.PreProcess != "" {
+			preProcessChain = append(preProcessChain, b.PreProcess)
+		}
+	}
+	resolved.PreProcessChain = preProcessChain
+
+	// Build PostProcessChain: root -> ... -> child (root's postProcess runs first)
+	postProcessChain := make([]string, 0)
+	for i := len(chain) - 1; i >= 0; i-- {
+		if chain[i].PostProcess != "" {
+			postProcessChain = append(postProcessChain, chain[i].PostProcess)
+		}
+	}
+	resolved.PostProcessChain = postProcessChain
+
+	// Merge config defaults (root -> ... -> child, child overrides)
+	mergedDefaults := mergeConfigDefaults(chain)
+	resolved.ResolvedConfigDefaults = mergedDefaults
+
+	// Inherit schemas from parent if not set
+	if len(resolved.InputSchema) == 0 || string(resolved.InputSchema) == "{}" || string(resolved.InputSchema) == "null" {
+		for i := 1; i < len(chain); i++ {
+			if len(chain[i].InputSchema) > 0 && string(chain[i].InputSchema) != "{}" && string(chain[i].InputSchema) != "null" {
+				resolved.InputSchema = chain[i].InputSchema
+				break
+			}
+		}
+	}
+	if len(resolved.OutputSchema) == 0 || string(resolved.OutputSchema) == "{}" || string(resolved.OutputSchema) == "null" {
+		for i := 1; i < len(chain); i++ {
+			if len(chain[i].OutputSchema) > 0 && string(chain[i].OutputSchema) != "{}" && string(chain[i].OutputSchema) != "null" {
+				resolved.OutputSchema = chain[i].OutputSchema
+				break
+			}
+		}
+	}
+	if len(resolved.ConfigSchema) == 0 || string(resolved.ConfigSchema) == "{}" {
+		for i := 1; i < len(chain); i++ {
+			if len(chain[i].ConfigSchema) > 0 && string(chain[i].ConfigSchema) != "{}" {
+				resolved.ConfigSchema = chain[i].ConfigSchema
+				break
+			}
+		}
+	}
+
+	return resolved, nil
+}
+
+// mergeConfigDefaults merges config defaults from inheritance chain
+// Order: root -> ... -> child (child's values override parent's)
+func mergeConfigDefaults(chain []*domain.BlockDefinition) json.RawMessage {
+	merged := make(map[string]interface{})
+
+	// Process from root to child (child overrides parent)
+	for i := len(chain) - 1; i >= 0; i-- {
+		block := chain[i]
+		if len(block.ConfigDefaults) > 0 && string(block.ConfigDefaults) != "{}" {
+			var defaults map[string]interface{}
+			if err := json.Unmarshal(block.ConfigDefaults, &defaults); err == nil {
+				for k, v := range defaults {
+					merged[k] = v
+				}
+			}
+		}
+	}
+
+	if len(merged) == 0 {
+		return json.RawMessage("{}")
+	}
+
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return result
+}
+
+// ValidateInheritance validates that a block can inherit from the specified parent
+func (r *BlockDefinitionRepository) ValidateInheritance(ctx context.Context, blockID uuid.UUID, parentBlockID uuid.UUID) error {
+	// Check parent exists
+	parent, err := r.getByIDRaw(ctx, parentBlockID)
+	if err != nil {
+		return err
+	}
+	if parent == nil {
+		return domain.ErrParentBlockNotFound
+	}
+
+	// Check parent can be inherited
+	if !parent.CanBeInherited() {
+		return domain.ErrBlockNotInheritable
+	}
+
+	// Check for circular reference
+	visited := map[uuid.UUID]bool{blockID: true}
+	current := parent
+
+	for i := 0; i < MaxInheritanceDepth && current.ParentBlockID != nil; i++ {
+		if visited[*current.ParentBlockID] || *current.ParentBlockID == blockID {
+			return domain.ErrCircularInheritance
+		}
+		visited[*current.ParentBlockID] = true
+
+		nextParent, err := r.getByIDRaw(ctx, *current.ParentBlockID)
+		if err != nil {
+			return err
+		}
+		if nextParent == nil {
+			return domain.ErrParentBlockNotFound
+		}
+		current = nextParent
+	}
+
+	// Check inheritance depth
+	if current.ParentBlockID != nil {
+		return domain.ErrInheritanceDepthExceeded
 	}
 
 	return nil

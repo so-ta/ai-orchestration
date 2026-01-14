@@ -165,6 +165,13 @@ export interface OutputPort {
   schema?: object     // Output type schema (JSON Schema)
 }
 
+// Internal step for composite blocks
+export interface InternalStep {
+  type: string       // Block slug to execute
+  config: object     // Configuration for the step
+  output_key: string // Key to store this step's output
+}
+
 export interface BlockDefinition {
   id: string
   tenant_id?: string
@@ -184,6 +191,20 @@ export interface BlockDefinition {
   ui_config?: object         // UI metadata (icon, color, configSchema)
   is_system?: boolean        // System blocks can only be edited by admins
   version?: number           // Version number, incremented on each update
+
+  // Block Inheritance/Extension fields
+  parent_block_id?: string         // Reference to parent block for inheritance
+  config_defaults?: object         // Default values for parent's config_schema
+  pre_process?: string             // JavaScript code executed before main code
+  post_process?: string            // JavaScript code executed after main code
+  internal_steps?: InternalStep[]  // Array of steps to execute sequentially inside the block
+
+  // Resolved fields (populated by backend for inherited blocks)
+  pre_process_chain?: string[]         // Chain of preProcess code (child -> root)
+  post_process_chain?: string[]        // Chain of postProcess code (root -> child)
+  resolved_code?: string               // Code from root ancestor
+  resolved_config_defaults?: object    // Merged config defaults from inheritance chain
+
   enabled: boolean
   created_at: string
   updated_at: string
