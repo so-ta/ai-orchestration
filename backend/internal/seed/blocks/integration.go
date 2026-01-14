@@ -58,7 +58,7 @@ func HTTPBlock() *SystemBlockDefinition {
 		OutputPorts: []domain.OutputPort{},
 		Code: `
 const url = renderTemplate(config.url, input);
-const response = await ctx.http.request(url, {
+const response = ctx.http.request(url, {
     method: config.method || 'GET',
     headers: config.headers || {},
     body: config.body ? renderTemplate(JSON.stringify(config.body), input) : null
@@ -102,7 +102,7 @@ func SubflowBlock() *SystemBlockDefinition {
 		OutputPorts: []domain.OutputPort{
 			{Name: "output", Label: "Output", IsDefault: true, Description: "Subflow result"},
 		},
-		Code:     `return await ctx.workflow.run(config.workflow_id, input);`,
+		Code:     `return ctx.workflow.run(config.workflow_id, input);`,
 		UIConfig: json.RawMessage(`{"icon": "workflow", "color": "#10B981"}`),
 		ErrorCodes: []domain.ErrorCodeDef{
 			{Code: "SUBFLOW_001", Name: "NOT_FOUND", Description: "Subflow workflow not found", Retryable: false},
@@ -139,7 +139,7 @@ func ToolBlock() *SystemBlockDefinition {
 		OutputPorts: []domain.OutputPort{
 			{Name: "output", Label: "Output", IsDefault: true, Description: "Tool execution result"},
 		},
-		Code:     `return await ctx.adapter.call(config.adapter_id, input);`,
+		Code:     `return ctx.adapter.call(config.adapter_id, input);`,
 		UIConfig: json.RawMessage(`{"icon": "wrench", "color": "#10B981"}`),
 		ErrorCodes: []domain.ErrorCodeDef{
 			{Code: "TOOL_001", Name: "ADAPTER_NOT_FOUND", Description: "Adapter not found", Retryable: false},
@@ -190,7 +190,7 @@ if (config.channel) payload.channel = config.channel;
 if (config.username) payload.username = config.username;
 if (config.icon_emoji) payload.icon_emoji = config.icon_emoji;
 if (config.blocks && config.blocks.length > 0) payload.blocks = config.blocks;
-const response = await ctx.http.post(webhookUrl, payload, {
+const response = ctx.http.post(webhookUrl, payload, {
     headers: { 'Content-Type': 'application/json' }
 });
 if (response.status >= 400) {
@@ -247,7 +247,7 @@ const payload = {
 if (config.username) payload.username = config.username;
 if (config.avatar_url) payload.avatar_url = config.avatar_url;
 if (config.embeds && config.embeds.length > 0) payload.embeds = config.embeds;
-const response = await ctx.http.post(webhookUrl, payload, {
+const response = ctx.http.post(webhookUrl, payload, {
     headers: { 'Content-Type': 'application/json' }
 });
 if (response.status === 429) {
@@ -306,7 +306,7 @@ const payload = {};
 if (config.filter) payload.filter = config.filter;
 if (config.sorts) payload.sorts = config.sorts;
 if (config.page_size) payload.page_size = config.page_size;
-const response = await ctx.http.post(
+const response = ctx.http.post(
     'https://api.notion.com/v1/databases/' + config.database_id + '/query',
     payload,
     {
@@ -395,7 +395,7 @@ if (config.content) {
         }
     ];
 }
-const response = await ctx.http.post('https://api.notion.com/v1/pages', payload, {
+const response = ctx.http.post('https://api.notion.com/v1/pages', payload, {
     headers: {
         'Authorization': 'Bearer ' + apiKey,
         'Content-Type': 'application/json',
@@ -458,7 +458,7 @@ let values = config.values;
 if (typeof values === 'string') {
     values = JSON.parse(renderTemplate(values, input));
 }
-const response = await ctx.http.post(url, { values: values }, {
+const response = ctx.http.post(url, { values: values }, {
     headers: { 'Content-Type': 'application/json' }
 });
 if (response.status === 404) {
@@ -515,7 +515,7 @@ const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + config.spreadshee
     '/values/' + range +
     '?majorDimension=' + majorDimension +
     '&key=' + apiKey;
-const response = await ctx.http.get(url);
+const response = ctx.http.get(url);
 if (response.status === 404) {
     throw new Error('[GSHEETS_003] スプレッドシートが見つかりません');
 }
@@ -573,7 +573,7 @@ const payload = {
     assignees: config.assignees
 };
 const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/issues';
-const response = await ctx.http.post(url, payload, {
+const response = ctx.http.post(url, payload, {
     headers: {
         'Authorization': 'Bearer ' + token,
         'Accept': 'application/vnd.github+json',
@@ -632,7 +632,7 @@ if (!token) {
 }
 const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo +
     '/issues/' + config.issue_number + '/comments';
-const response = await ctx.http.post(url, {
+const response = ctx.http.post(url, {
     body: renderTemplate(config.body, input)
 }, {
     headers: {
@@ -701,7 +701,7 @@ if (config.include_domains && config.include_domains.length > 0) {
 if (config.exclude_domains && config.exclude_domains.length > 0) {
     payload.exclude_domains = config.exclude_domains;
 }
-const response = await ctx.http.post('https://api.tavily.com/search', payload, {
+const response = ctx.http.post('https://api.tavily.com/search', payload, {
     headers: { 'Content-Type': 'application/json' }
 });
 if (response.status >= 400) {
@@ -760,7 +760,7 @@ const variables = {
         assigneeId: config.assignee_id
     }
 };
-const response = await ctx.http.post('https://api.linear.app/graphql', {
+const response = ctx.http.post('https://api.linear.app/graphql', {
     query: mutation,
     variables: variables
 }, {
@@ -835,7 +835,7 @@ const payload = {
         value: renderTemplate(config.content, input)
     }]
 };
-const response = await ctx.http.post('https://api.sendgrid.com/v3/mail/send', payload, {
+const response = ctx.http.post('https://api.sendgrid.com/v3/mail/send', payload, {
     headers: {
         'Authorization': 'Bearer ' + apiKey,
         'Content-Type': 'application/json'
@@ -949,7 +949,7 @@ if (documents.length === 0) throw new Error('[EMB_002] No text provided for embe
 const provider = config.provider || 'openai';
 const model = config.model || 'text-embedding-3-small';
 const texts = documents.map(d => d.content);
-const result = await ctx.embedding.embed(provider, model, texts);
+const result = ctx.embedding.embed(provider, model, texts);
 const docsWithVectors = documents.map((doc, i) => ({...doc, vector: result.vectors[i]}));
 return {documents: docsWithVectors, vectors: result.vectors, model: result.model, dimension: result.dimension, usage: result.usage};
 `,
@@ -990,7 +990,7 @@ const collection = config.collection || input.collection;
 if (!collection) throw new Error('[VEC_001] Collection name is required');
 const documents = input.documents;
 if (!documents || documents.length === 0) throw new Error('[VEC_002] Documents array is required');
-const result = await ctx.vector.upsert(collection, documents, {embedding_provider: config.embedding_provider, embedding_model: config.embedding_model});
+const result = ctx.vector.upsert(collection, documents, {embedding_provider: config.embedding_provider, embedding_model: config.embedding_model});
 return {collection, upserted_count: result.upserted_count, ids: result.ids};
 `,
 		UIConfig: json.RawMessage(`{"icon": "database", "color": "#10B981"}`),
@@ -1035,11 +1035,11 @@ let searchVector = input.vector || (input.vectors ? input.vectors[0] : null);
 if (!searchVector && input.query) {
   const provider = config.embedding_provider || 'openai';
   const model = config.embedding_model || 'text-embedding-3-small';
-  const embedResult = await ctx.embedding.embed(provider, model, [input.query]);
+  const embedResult = ctx.embedding.embed(provider, model, [input.query]);
   searchVector = embedResult.vectors[0];
 }
 if (!searchVector) throw new Error('[VEC_003] Either vector or query text is required');
-const result = await ctx.vector.query(collection, searchVector, {top_k: config.top_k || 5, threshold: config.threshold, include_content: config.include_content !== false});
+const result = ctx.vector.query(collection, searchVector, {top_k: config.top_k || 5, threshold: config.threshold, include_content: config.include_content !== false});
 return {matches: result.matches, count: result.matches.length, collection};
 `,
 		UIConfig: json.RawMessage(`{"icon": "search", "color": "#3B82F6"}`),
@@ -1077,7 +1077,7 @@ const collection = config.collection || input.collection;
 if (!collection) throw new Error('[VEC_001] Collection name is required');
 const ids = input.ids || (input.id ? [input.id] : null);
 if (!ids || ids.length === 0) throw new Error('[VEC_004] IDs array is required');
-const result = await ctx.vector.delete(collection, ids);
+const result = ctx.vector.delete(collection, ids);
 return {collection, deleted_count: result.deleted_count, requested_ids: ids};
 `,
 		UIConfig: json.RawMessage(`{"icon": "trash-2", "color": "#EF4444"}`),

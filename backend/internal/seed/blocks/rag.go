@@ -77,7 +77,7 @@ if (sourceType === 'url') {
   const rawUrl = config.url || input.url;
   if (!rawUrl) throw new Error('[DOC_002] URL is required for url source type');
   const url = validateExternalUrl(rawUrl);
-  const response = await ctx.http.get(url);
+  const response = ctx.http.get(url);
   content = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
   metadata = {source: url, source_type: 'url', content_type: response.headers['Content-Type'], fetched_at: new Date().toISOString()};
 } else if (sourceType === 'text') {
@@ -231,13 +231,13 @@ const embeddingModel = config.embedding_model || 'text-embedding-3-small';
 const llmProvider = config.llm_provider || 'openai';
 const llmModel = config.llm_model || 'gpt-4';
 const topK = config.top_k || 5;
-const embedResult = await ctx.embedding.embed(embeddingProvider, embeddingModel, [query]);
+const embedResult = ctx.embedding.embed(embeddingProvider, embeddingModel, [query]);
 const queryVector = embedResult.vectors[0];
-const searchResult = await ctx.vector.query(collection, queryVector, {top_k: topK, include_content: true});
+const searchResult = ctx.vector.query(collection, queryVector, {top_k: topK, include_content: true});
 const context = searchResult.matches.map((m, i) => '[' + (i + 1) + '] ' + m.content).join('\n\n---\n\n');
 const systemPrompt = config.system_prompt || 'You are a helpful assistant. Answer based on the provided context. Cite sources using [N]. If context lacks relevant info, say so.';
 const userPrompt = '## Context\n\n' + context + '\n\n## Question\n\n' + query + '\n\n## Answer';
-const llmResponse = await ctx.llm.chat(llmProvider, llmModel, {messages: [{role: 'system', content: systemPrompt}, {role: 'user', content: userPrompt}], temperature: config.temperature || 0.3, max_tokens: config.max_tokens || 2000});
+const llmResponse = ctx.llm.chat(llmProvider, llmModel, {messages: [{role: 'system', content: systemPrompt}, {role: 'user', content: userPrompt}], temperature: config.temperature || 0.3, max_tokens: config.max_tokens || 2000});
 return {answer: llmResponse.content, sources: searchResult.matches.map(m => ({id: m.id, score: m.score, content: (m.content || '').substring(0, 200) + '...', metadata: m.metadata})), usage: {embedding: embedResult.usage, llm: llmResponse.usage}};`,
 		UIConfig: json.RawMessage(`{"icon": "message-square", "color": "#8B5CF6"}`),
 		ErrorCodes: []domain.ErrorCodeDef{

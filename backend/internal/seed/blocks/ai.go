@@ -59,7 +59,7 @@ func LLMBlock() *SystemBlockDefinition {
 		Code: `
 const prompt = renderTemplate(config.user_prompt || '', input);
 const systemPrompt = config.system_prompt || '';
-const response = await ctx.llm.chat(config.provider, config.model, {
+const response = ctx.llm.chat(config.provider, config.model, {
     messages: [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         { role: 'user', content: prompt }
@@ -152,7 +152,7 @@ const routeDescriptions = (config.routes || []).map(r =>
     r.name + ': ' + r.description
 ).join('\n');
 const prompt = 'Given the following input, select the most appropriate route.\nRoutes:\n' + routeDescriptions + '\nInput: ' + JSON.stringify(input) + '\nRespond with only the route name.';
-const response = await ctx.llm.chat(config.provider || 'openai', config.model || 'gpt-4', {
+const response = ctx.llm.chat(config.provider || 'openai', config.model || 'gpt-4', {
     messages: [{ role: 'user', content: prompt }]
 });
 const selectedRoute = response.content.trim();
