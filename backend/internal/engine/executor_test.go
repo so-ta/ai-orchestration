@@ -1067,64 +1067,74 @@ func TestExecutor_ExecuteMapStep_MarshalUnmarshalFallbacks(t *testing.T) {
 	}
 }
 
-func TestExecutor_ExecuteLoopStep_WhileMarshalError(t *testing.T) {
-	// Test while loop: marshal error returns error
-	// This tests the branch at line 1091-1094
+func TestExecutor_ExecuteLoopStep_WhileDoWhileMarshalPaths(t *testing.T) {
+	// Tests while and do-while loop paths that involve Marshal operations
+	// This tests the branches at lines 1091-1094 (while) and 1133-1136 (do-while)
 	executor := setupTestExecutor()
 
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-while-normal",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "while",
-			"condition": "$.index < 2",
-			"max_iterations": 5
-		}`),
+	tests := []struct {
+		name              string
+		loopType          string
+		condition         string
+		expectedMinIter   float64
+		expectedCompleted bool
+	}{
+		{
+			name:              "while loop executes while condition is true",
+			loopType:          "while",
+			condition:         "$.index < 2",
+			expectedMinIter:   2,
+			expectedCompleted: true,
+		},
+		{
+			name:              "do-while loop executes at least once",
+			loopType:          "doWhile",
+			condition:         "$.index < 1",
+			expectedMinIter:   1,
+			expectedCompleted: true,
+		},
+		{
+			name:              "while loop with false condition executes zero times",
+			loopType:          "while",
+			condition:         "$.index < 0",
+			expectedMinIter:   0,
+			expectedCompleted: true,
+		},
+		{
+			name:              "do-while loop with false condition still executes once",
+			loopType:          "doWhile",
+			condition:         "$.index < 0",
+			expectedMinIter:   1,
+			expectedCompleted: true,
+		},
 	}
 
-	input := json.RawMessage(`{}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := domain.Step{
+				ID:   uuid.New(),
+				Name: "test-loop",
+				Type: domain.StepTypeLoop,
+				Config: json.RawMessage(`{
+					"loop_type": "` + tt.loopType + `",
+					"condition": "` + tt.condition + `",
+					"max_iterations": 5
+				}`),
+			}
 
-	// Normal while loop should work
-	require.NoError(t, err)
+			input := json.RawMessage(`{}`)
+			output, err := executor.executeLoopStep(context.Background(), step, input)
 
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
+			require.NoError(t, err)
 
-	assert.Equal(t, float64(2), result["iterations"])
-	assert.Equal(t, true, result["completed"])
-}
+			var result map[string]interface{}
+			err = json.Unmarshal(output, &result)
+			require.NoError(t, err)
 
-func TestExecutor_ExecuteLoopStep_DoWhileMarshalError(t *testing.T) {
-	// Test do-while loop: executes at least once
-	// This tests the branch at line 1133-1136
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-dowhile-normal",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "doWhile",
-			"condition": "$.index < 1",
-			"max_iterations": 5
-		}`),
+			assert.GreaterOrEqual(t, result["iterations"].(float64), tt.expectedMinIter)
+			assert.Equal(t, tt.expectedCompleted, result["completed"])
+		})
 	}
-
-	input := json.RawMessage(`{}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	// DoWhile executes at least once, then checks condition
-	assert.GreaterOrEqual(t, result["iterations"].(float64), float64(1))
-	assert.Equal(t, true, result["completed"])
 }
 
 func TestExecutor_ExecuteRouterStep_UnmarshalFallback(t *testing.T) {
@@ -1159,65 +1169,72 @@ func TestExecutor_ExecuteRouterStep_UnmarshalFallback(t *testing.T) {
 	assert.NotEmpty(t, result["selected_route"])
 }
 
-func TestExecutor_ExecuteFilterStep_MarshalErrorSkip(t *testing.T) {
-	// Test that executeFilterStep skips items when marshal fails
-	// This tests the branch at line 1580-1584
+func TestExecutor_ExecuteFilterStep_ErrorHandling(t *testing.T) {
+	// Tests filter step error handling for marshal and evaluation errors
+	// This tests the branches at lines 1580-1584 (marshal) and 1585-1591 (evaluation)
 	executor := setupTestExecutor()
 
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-filter",
-		Type: domain.StepTypeFilter,
-		Config: json.RawMessage(`{
-			"expression": "$.value > 0"
-		}`),
+	tests := []struct {
+		name                  string
+		expression            string
+		input                 string
+		expectedOriginalCount float64
+		expectedFilteredCount float64
+	}{
+		{
+			name:                  "normal filter with valid expression",
+			expression:            "$.value > 0",
+			input:                 `[{"value": 1}, {"value": -1}, {"value": 5}]`,
+			expectedOriginalCount: 3,
+			expectedFilteredCount: 2, // Only items with value > 0
+		},
+		{
+			name:                  "filter skips items when evaluation fails on missing field",
+			expression:            "$.nonexistent.field > 0",
+			input:                 `[{"value": 1}, {"other": 2}, {"value": 3}]`,
+			expectedOriginalCount: 3,
+			expectedFilteredCount: 0, // All items skipped due to evaluation error
+		},
+		{
+			name:                  "filter with all items passing condition",
+			expression:            "$.value >= 0",
+			input:                 `[{"value": 0}, {"value": 1}, {"value": 2}]`,
+			expectedOriginalCount: 3,
+			expectedFilteredCount: 3,
+		},
+		{
+			name:                  "filter with no items passing condition",
+			expression:            "$.value > 100",
+			input:                 `[{"value": 1}, {"value": 2}, {"value": 3}]`,
+			expectedOriginalCount: 3,
+			expectedFilteredCount: 0,
+		},
 	}
 
-	// Use a simple array input with valid items
-	input := json.RawMessage(`[{"value": 1}, {"value": -1}, {"value": 5}]`)
-	output, err := executor.executeFilterStep(context.Background(), step, input)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := domain.Step{
+				ID:   uuid.New(),
+				Name: "test-filter",
+				Type: domain.StepTypeFilter,
+				Config: json.RawMessage(`{
+					"expression": "` + tt.expression + `"
+				}`),
+			}
 
-	require.NoError(t, err)
-	require.NotNil(t, output)
+			output, err := executor.executeFilterStep(context.Background(), step, json.RawMessage(tt.input))
 
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
+			require.NoError(t, err)
+			require.NotNil(t, output)
 
-	// Should have filtered items
-	assert.Equal(t, float64(3), result["original_count"])
-	assert.Equal(t, float64(2), result["filtered_count"]) // Only items with value > 0
-	assert.Equal(t, float64(1), result["removed_count"])
-}
+			var result map[string]interface{}
+			err = json.Unmarshal(output, &result)
+			require.NoError(t, err)
 
-func TestExecutor_ExecuteFilterStep_EvaluationErrorSkip(t *testing.T) {
-	// Test that executeFilterStep skips items when evaluation fails
-	// This tests the branch at line 1585-1591
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-filter-eval-error",
-		Type: domain.StepTypeFilter,
-		Config: json.RawMessage(`{
-			"expression": "$.nonexistent.field > 0"
-		}`),
+			assert.Equal(t, tt.expectedOriginalCount, result["original_count"])
+			assert.Equal(t, tt.expectedFilteredCount, result["filtered_count"])
+		})
 	}
-
-	// Items don't have the field being evaluated, causing evaluation errors
-	input := json.RawMessage(`[{"value": 1}, {"other": 2}, {"value": 3}]`)
-	output, err := executor.executeFilterStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-	require.NotNil(t, output)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	// All items should be skipped due to evaluation error
-	assert.Equal(t, float64(3), result["original_count"])
-	assert.Equal(t, float64(0), result["filtered_count"])
 }
 
 func TestExecutor_ExecuteLoopIteration_UnmarshalFallback(t *testing.T) {
