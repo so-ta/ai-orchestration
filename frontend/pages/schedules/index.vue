@@ -491,15 +491,6 @@ const applyCronExample = (cron: string) => {
   margin-top: 0.25rem;
 }
 
-.workflow-link {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-.workflow-link:hover {
-  text-decoration: underline;
-}
-
 .cron-code {
   background: var(--color-background);
   padding: 0.25rem 0.5rem;

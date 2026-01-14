@@ -645,15 +645,6 @@ onMounted(() => {
   font-size: 0.875rem;
 }
 
-.breadcrumb-link {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-.breadcrumb-link:hover {
-  text-decoration: underline;
-}
-
 .breadcrumb-separator {
   color: var(--color-text-secondary);
 }

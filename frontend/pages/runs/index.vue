@@ -663,16 +663,7 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.workflow-link {
-  font-weight: 500;
-  color: var(--color-text);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.workflow-link:hover {
-  color: var(--color-primary);
-}
+/* workflow-link class is defined in main.css */
 
 .run-id {
   font-size: 0.75rem;

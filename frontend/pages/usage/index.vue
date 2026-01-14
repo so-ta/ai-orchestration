@@ -333,7 +333,7 @@ const dailyChartData = computed(() => {
             <h3 class="text-lg font-medium text-gray-900 dark:text-white">Budget Settings</h3>
             <NuxtLink
               to="/usage/budgets"
-              class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              class="text-sm link-primary"
             >
               Manage
             </NuxtLink>
@@ -374,7 +374,7 @@ const dailyChartData = computed(() => {
               <p>No budgets configured</p>
               <NuxtLink
                 to="/usage/budgets"
-                class="mt-2 inline-block text-blue-600 dark:text-blue-400 hover:underline"
+                class="mt-2 inline-block link-primary"
               >
                 Set up a budget
               </NuxtLink>
