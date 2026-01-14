@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -524,7 +525,11 @@ func buildExplainPrompt(workflow *domain.Workflow, stepID *uuid.UUID) string {
 
 	sb.WriteString("## Steps\n")
 	for _, step := range workflow.Steps {
-		configJSON, _ := json.Marshal(step.Config)
+		configJSON, err := json.Marshal(step.Config)
+		if err != nil {
+			slog.Warn("failed to marshal step config", "step_id", step.ID, "error", err)
+			configJSON = []byte("{}")
+		}
 		sb.WriteString(fmt.Sprintf("- %s (%s): %s\n", step.Name, step.Type, string(configJSON)))
 	}
 
@@ -549,7 +554,11 @@ func buildOptimizePrompt(workflow *domain.Workflow) string {
 	sb.WriteString(fmt.Sprintf("Steps: %d\n\n", len(workflow.Steps)))
 
 	for _, step := range workflow.Steps {
-		configJSON, _ := json.Marshal(step.Config)
+		configJSON, err := json.Marshal(step.Config)
+		if err != nil {
+			slog.Warn("failed to marshal step config", "step_id", step.ID, "error", err)
+			configJSON = []byte("{}")
+		}
 		sb.WriteString(fmt.Sprintf("- %s (%s): %s\n", step.Name, step.Type, string(configJSON)))
 	}
 
