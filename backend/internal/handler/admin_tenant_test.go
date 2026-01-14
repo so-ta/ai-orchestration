@@ -225,6 +225,140 @@ func TestAdminTenantHandler_Get_GetStatsError(t *testing.T) {
 	assert.Equal(t, tenantID.String(), resp["id"])
 }
 
+// TestAdminTenantHandler_Create tests Create handler with various scenarios
+func TestAdminTenantHandler_Create(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		mockRepo       *mockTenantRepository
+		expectedStatus int
+		expectedCode   string
+	}{
+		{
+			name: "success - creates tenant with minimal fields",
+			body: `{"name": "Test Tenant", "slug": "test-tenant"}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return nil
+				},
+			},
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name: "success - creates tenant with all fields",
+			body: `{
+				"name": "Full Tenant",
+				"slug": "full-tenant",
+				"plan": "professional",
+				"owner_email": "owner@example.com",
+				"owner_name": "Test Owner",
+				"billing_email": "billing@example.com"
+			}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return nil
+				},
+			},
+			expectedStatus: http.StatusCreated,
+		},
+		{
+			name:           "error - invalid JSON body",
+			body:           `{invalid json`,
+			mockRepo:       &mockTenantRepository{},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "INVALID_JSON",
+		},
+		{
+			name:           "error - missing name",
+			body:           `{"slug": "test-tenant"}`,
+			mockRepo:       &mockTenantRepository{},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "MISSING_NAME",
+		},
+		{
+			name:           "error - missing slug",
+			body:           `{"name": "Test Tenant"}`,
+			mockRepo:       &mockTenantRepository{},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "MISSING_SLUG",
+		},
+		{
+			name:           "error - invalid plan",
+			body:           `{"name": "Test Tenant", "slug": "test-tenant", "plan": "invalid-plan"}`,
+			mockRepo:       &mockTenantRepository{},
+			expectedStatus: http.StatusBadRequest,
+			expectedCode:   "INVALID_PLAN",
+		},
+		{
+			name: "error - slug already exists",
+			body: `{"name": "Test Tenant", "slug": "existing-slug"}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return &domain.Tenant{
+						ID:   uuid.New(),
+						Name: "Existing Tenant",
+						Slug: "existing-slug",
+					}, nil
+				},
+			},
+			expectedStatus: http.StatusConflict,
+			expectedCode:   "SLUG_EXISTS",
+		},
+		{
+			name: "error - GetBySlug database error",
+			body: `{"name": "Test Tenant", "slug": "test-tenant"}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, errors.New("database connection failed")
+				},
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedCode:   "INTERNAL_ERROR",
+		},
+		{
+			name: "error - Create repository error",
+			body: `{"name": "Test Tenant", "slug": "test-tenant"}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return errors.New("insert failed")
+				},
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedCode:   "INTERNAL_ERROR",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewAdminTenantHandler(tt.mockRepo)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			rec := httptest.NewRecorder()
+			handler.Create(rec, req)
+
+			assert.Equal(t, tt.expectedStatus, rec.Code)
+
+			if tt.expectedCode != "" {
+				var resp ErrorResponse
+				err := json.Unmarshal(rec.Body.Bytes(), &resp)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedCode, resp.Error.Code)
+			}
+		})
+	}
+}
+
 // TestAdminTenantHandler_Update_GetStatsError tests Update handler when GetStats returns an error
 func TestAdminTenantHandler_Update_GetStatsError(t *testing.T) {
 	tenantID := uuid.New()
