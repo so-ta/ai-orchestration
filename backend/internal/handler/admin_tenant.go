@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -208,6 +209,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.FeatureFlags != nil {
 		flagsJSON, err := json.Marshal(req.FeatureFlags)
 		if err != nil {
+			slog.Error("failed to marshal feature flags", "error", err)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize feature flags", nil)
 			return
 		}
@@ -218,6 +220,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Limits != nil {
 		limitsJSON, err := json.Marshal(req.Limits)
 		if err != nil {
+			slog.Error("failed to marshal limits", "error", err)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize limits", nil)
 			return
 		}
@@ -228,6 +231,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Metadata != nil {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
+			slog.Error("failed to marshal metadata", "error", err)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize metadata", nil)
 			return
 		}
@@ -318,6 +322,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.FeatureFlags != nil {
 		flagsJSON, err := json.Marshal(req.FeatureFlags)
 		if err != nil {
+			slog.Error("failed to marshal feature flags", "error", err, "tenant_id", id)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize feature flags", nil)
 			return
 		}
@@ -326,6 +331,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Limits != nil {
 		limitsJSON, err := json.Marshal(req.Limits)
 		if err != nil {
+			slog.Error("failed to marshal limits", "error", err, "tenant_id", id)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize limits", nil)
 			return
 		}
@@ -334,6 +340,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Metadata != nil {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
+			slog.Error("failed to marshal metadata", "error", err, "tenant_id", id)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize metadata", nil)
 			return
 		}
