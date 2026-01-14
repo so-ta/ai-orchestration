@@ -6,43 +6,57 @@
 ## Session Start Checklist
 
 ```
-1. [ ] ../CLAUDE.md を読む（プロジェクト概要・ルール）
+1. [ ] ../CLAUDE.md を読む（プロジェクト概要）
 2. [ ] このファイルで関連ドキュメントを特定
 3. [ ] 作業対象のドキュメントを読む
 4. [ ] 既存コードパターンを確認
-5. [ ] テスト手順を確認（frontend/docs/TESTING.md, docs/TEST_PLAN.md）
 ```
 
-## Quick Reference
+---
+
+## Technical Documentation
 
 | Document | Purpose | When to Read |
 |----------|---------|--------------|
 | [BACKEND.md](./BACKEND.md) | Go backend structure, interfaces, patterns | Modifying backend code |
 | [FRONTEND.md](./FRONTEND.md) | Nuxt/Vue structure, composables, components | Modifying frontend code |
-| [FRONTEND.md#dag-editor](./FRONTEND.md#dag-editor-componentdag-editor) | DAG editor collision detection, resize logic | **Modifying DAG editor** |
 | [API.md](./API.md) | REST endpoints, request/response schemas | API integration, adding endpoints |
-| [DATABASE.md](./DATABASE.md) | Schema, migrations, query patterns | Database operations |
+| [DATABASE.md](./DATABASE.md) | Schema, queries | Database operations |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, Kubernetes, environment config | DevOps, deployment |
-| [DOCUMENTATION_RULES.md](./DOCUMENTATION_RULES.md) | Doc format, MECE, templates | Creating/updating documentation |
-| [TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules, Vitest | Frontend code changes |
-| **[TEST_PLAN.md](./TEST_PLAN.md)** | **Test plan, coverage rules, templates** | **Adding tests, coverage review** |
+| [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) | Block definitions, error codes | **新規ブロック追加時** |
+| [INTEGRATIONS.md](./INTEGRATIONS.md) | 外部サービス連携一覧 | 連携ブロック追加・利用時 |
+
+## Development Rules
+
+作業種類に応じて必要なルールを参照:
+
+| Rule Document | Purpose | When to Read |
+|---------------|---------|--------------|
+| [WORKFLOW_RULES](./rules/WORKFLOW_RULES.md) | 開発ワークフロー全般 | すべての開発作業 |
+| [GIT_RULES](./rules/GIT_RULES.md) | コミット、PR、コンフリクト解消 | コミット・PR作成時 |
+| [TESTING_RULES](./rules/TESTING_RULES.md) | テスト作成・実行 | テスト作成・実行時 |
+| [DOCUMENTATION_SYNC](./rules/DOCUMENTATION_SYNC.md) | ドキュメント同期 | ドキュメント更新時 |
+| [CODEX_REVIEW](./rules/CODEX_REVIEW.md) | PRレビューフロー | PR push後 |
+| [DOCUMENTATION_RULES.md](./DOCUMENTATION_RULES.md) | ドキュメント作成ルール | 新規ドキュメント作成時 |
+
+## Testing Documentation
+
+| Document | Purpose | When to Read |
+|----------|---------|--------------|
+| [TEST_PLAN.md](./TEST_PLAN.md) | Test plan, coverage rules | Adding tests, coverage review |
 | [BACKEND_TESTING.md](./BACKEND_TESTING.md) | Go backend testing patterns | Backend test implementation |
-| [SIM_FEATURES.md](./SIM_FEATURES.md) | Sim.ai互換機能の実装状況 | 新機能追加時 |
-| **[BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md)** | **Block definitions, error codes** | **新規ブロック追加時（必読）** |
-| **[INTEGRATIONS.md](./INTEGRATIONS.md)** | **外部サービス連携一覧** | **連携ブロック追加・利用時** |
+| [frontend/docs/TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules | Frontend code changes |
+
+---
 
 ## Architecture Designs
-
-アーキテクチャ設計書：
 
 | Design | Description | Status | Document |
 |--------|-------------|--------|----------|
 | Unified Block Model | ブロック実行の統一モデル | ✅ 実装済み | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) |
-| Block Config Improvement | ブロック設定UI改善（スキーマ駆動フォーム） | 📋 設計中 | [BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md) |
+| Block Config Improvement | ブロック設定UI改善 | 📋 設計中 | [BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md) |
 
 ## Feature Implementation Plans
-
-未実装機能の詳細設計書：
 
 | Phase | Feature | Status | Plan Document |
 |-------|---------|--------|---------------|
@@ -54,6 +68,8 @@
 
 **推奨実装順序**: Phase 8 → 9 → 6 → 7 → 10
 
+---
+
 ## System Overview
 
 ```
@@ -64,135 +80,91 @@ Queue: Redis-based job queue
 Tracing: OpenTelemetry -> Jaeger
 ```
 
-## Core Concepts
+## Core Concepts (Quick Reference)
 
-### Workflow
-- DAG-based execution graph
-- States: `draft` -> `published` (immutable)
-- Version tracked for audit
+### Workflow States
 
-### Step Types
-| Type | Description | Config Key Fields |
-|------|-------------|-------------------|
-| `start` | Entry point | - |
-| `llm` | LLM API call | `provider`, `model`, `prompt` |
-| `tool` | Adapter execution | `adapter_id`, adapter-specific |
-| `condition` | Branch routing (2-way) | `expression` |
-| `switch` | Multi-branch routing | `cases`, `default` |
-| `map` | Array parallel/sequential | `input_path`, `parallel` |
-| `join` | Merge branches | - |
-| `subflow` | Nested workflow | `workflow_id` |
-| `loop` | Iteration | `loop_type`, `count`, `condition` |
-| `filter` | Filter items | `expression` |
-| `log` | Debug logging | `message`, `level` |
+```
+draft -> published (immutable)
+```
 
 ### Run States
+
 ```
-pending -> running -> completed
-                  -> failed
-                  -> cancelled
+pending -> running -> completed | failed | cancelled
 ```
+
+### Step Types
+
+詳細は [BACKEND.md](./BACKEND.md#domain-models) を参照。
+
+| Type | Purpose |
+|------|---------|
+| `start` | Entry point |
+| `llm` | LLM API call |
+| `tool` | Adapter execution |
+| `condition` | Branch routing (2-way) |
+| `switch` | Multi-branch routing |
+| `map` | Array parallel/sequential |
+| `join` | Merge branches |
+| `subflow` | Nested workflow |
+| `loop` | Iteration |
+| `filter` | Filter items |
+| `log` | Debug logging |
 
 ### Adapters
-| ID | File | Purpose |
-|----|------|---------|
-| `mock` | `adapter/mock.go` | Testing |
-| `openai` | `adapter/openai.go` | GPT API |
-| `anthropic` | `adapter/anthropic.go` | Claude API |
-| `http` | `adapter/http.go` | Generic HTTP |
 
-## File Path Conventions
+詳細は [BACKEND.md](./BACKEND.md#adapter-implementations) を参照。
 
-```
-backend/
-  cmd/api/main.go          # API entrypoint
-  cmd/worker/main.go       # Worker entrypoint
-  internal/
-    domain/                # Entities (Workflow, Step, Run, Edge)
-    usecase/               # Business logic
-    handler/               # HTTP handlers
-    repository/postgres/   # DB operations
-    adapter/               # External integrations
-    engine/                # DAG executor
-    middleware/            # Auth middleware
-  pkg/
-    database/              # DB connection
-    redis/                 # Redis client
-    telemetry/             # OpenTelemetry
+| ID | Purpose |
+|----|---------|
+| `mock` | Testing |
+| `openai` | GPT API |
+| `anthropic` | Claude API |
+| `http` | Generic HTTP |
 
-frontend/
-  pages/                   # Nuxt pages
-  components/dag-editor/   # DAG visual editor
-  composables/             # Vue composables (useAuth, useApi)
-  plugins/auth.client.ts   # Keycloak init
-```
+---
 
 ## Common Operations
 
-### Add New Block / Integration (⚠️ REQUIRED READING)
+### Add New Block / Integration
 
-**新規ブロック（Discord, Slack等）を追加する場合、必ず以下を読むこと：**
+**Use slash command**: `/add-block`
 
-```
-1. [ ] docs/designs/UNIFIED_BLOCK_MODEL.md を読む
-2. [ ] docs/BLOCK_REGISTRY.md を読む
-3. [ ] migrations/011_unified_block_model.sql で既存パターンを確認
-```
-
-**標準手順（Migration追加）：**
-1. Create `backend/migrations/XXX_{name}_block.sql`
-2. INSERT into `block_definitions` with `tenant_id = NULL` for system blocks
-3. Run migration
-4. Update `docs/BLOCK_REGISTRY.md`
-
-**Go Adapterが必要なケース（例外）のみ：**
-1. Create `backend/internal/adapter/{name}.go`
-2. Implement `Adapter` interface
-3. Register in `adapter/registry.go`
-4. Add test in `adapter/{name}_test.go`
+または [.claude/commands/add-block.md](../.claude/commands/add-block.md) を参照。
 
 ### Add New API Endpoint
+
 1. Add handler in `backend/internal/handler/`
 2. Add route in `cmd/api/main.go`
 3. Add usecase if new business logic needed
 4. Update `docs/API.md` and `docs/openapi.yaml`
 
 ### Add New Step Type
+
 1. Define in `backend/internal/domain/step.go`
 2. Add execution logic in `backend/internal/engine/executor.go`
 3. Update frontend step config UI
-4. **Update `docs/BACKEND.md` Step Types section**
+4. Update `docs/BACKEND.md`
 
-### Add Database Migration
-1. Create SQL in `backend/migrations/`
-2. Run: `docker compose exec api migrate -path /migrations -database "$DB_URL" up`
-3. **Update `docs/DATABASE.md`**
+### Fix a Bug
+
+**Use slash command**: `/fix-bug`
+
+---
 
 ## Test Commands
 
 ```bash
-# Backend tests
-docker compose exec api go test ./...
-docker compose exec api go test ./internal/adapter/... -v
-docker compose exec api go test ./tests/e2e/... -v
+# Backend
+cd backend && go test ./...
+cd backend && go test ./tests/e2e/... -v
 
-# Frontend tests (REQUIRED before commit)
-cd frontend && npm run check       # All checks
-cd frontend && npm run typecheck   # TypeScript only
-cd frontend && npm run test:run    # Unit tests only
+# Frontend (REQUIRED before commit)
+cd frontend && npm run check
 ```
 
-## Environment Variables
-
-| Variable | Service | Default | Description |
-|----------|---------|---------|-------------|
-| `DATABASE_URL` | api, worker | - | PostgreSQL connection |
-| `REDIS_URL` | api, worker | - | Redis connection |
-| `AUTH_ENABLED` | api | `false` | Enable JWT validation |
-| `KEYCLOAK_URL` | api | - | Keycloak base URL |
-| `TELEMETRY_ENABLED` | api, worker | `false` | Enable OpenTelemetry |
-| `OPENAI_API_KEY` | worker | - | OpenAI API key |
-| `ANTHROPIC_API_KEY` | worker | - | Anthropic API key |
+---
 
 ## URLs (Development)
 
