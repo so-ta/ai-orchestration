@@ -85,7 +85,7 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
-			   error_codes, required_credentials, COALESCE(is_public, false),
+			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   enabled, created_at, updated_at
 		FROM block_definitions
@@ -128,8 +128,10 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 		return nil, fmt.Errorf("failed to get block definition: %w", err)
 	}
 
-	if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
+	if len(errorCodesJSON) > 0 {
+		if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
+		}
 	}
 
 	if len(inputPortsJSON) > 0 {
@@ -149,14 +151,15 @@ func (r *BlockDefinitionRepository) GetByID(ctx context.Context, id uuid.UUID) (
 
 func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uuid.UUID, slug string) (*domain.BlockDefinition, error) {
 	// First try to find tenant-specific block, then fall back to system block
+	// Use proper NULL comparison: (tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL)
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
-			   error_codes, required_credentials, COALESCE(is_public, false),
+			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   enabled, created_at, updated_at
 		FROM block_definitions
-		WHERE slug = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		WHERE slug = $1 AND ((tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL) OR tenant_id IS NULL)
 		ORDER BY tenant_id NULLS LAST
 		LIMIT 1
 	`
@@ -197,8 +200,10 @@ func (r *BlockDefinitionRepository) GetBySlug(ctx context.Context, tenantID *uui
 		return nil, fmt.Errorf("failed to get block definition by slug: %w", err)
 	}
 
-	if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
+	if len(errorCodesJSON) > 0 {
+		if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
+		}
 	}
 
 	if len(inputPortsJSON) > 0 {
@@ -256,7 +261,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 	query := fmt.Sprintf(`
 		SELECT id, tenant_id, slug, name, description, category, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
-			   error_codes, required_credentials, COALESCE(is_public, false),
+			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   enabled, created_at, updated_at
 		FROM block_definitions
@@ -305,8 +310,10 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			return nil, fmt.Errorf("failed to scan block definition: %w", err)
 		}
 
-		if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
+		if len(errorCodesJSON) > 0 {
+			if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
+			}
 		}
 
 		if len(inputPortsJSON) > 0 {
