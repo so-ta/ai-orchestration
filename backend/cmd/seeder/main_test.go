@@ -55,28 +55,32 @@ func TestSeeder_GetBySlugExists(t *testing.T) {
 }
 
 func TestGetEnv(t *testing.T) {
-	tests := []struct {
-		name         string
-		key          string
-		defaultValue string
-		envValue     string
-		expected     string
-	}{
-		{
-			name:         "returns default when env not set",
-			key:          "TEST_SEEDER_NONEXISTENT_KEY",
-			defaultValue: "default_value",
-			envValue:     "",
-			expected:     "default_value",
-		},
-	}
+	t.Run("returns default when env not set", func(t *testing.T) {
+		result := getEnv("TEST_SEEDER_NONEXISTENT_KEY_12345", "default_value")
+		if result != "default_value" {
+			t.Errorf("getEnv() = %s, expected default_value", result)
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getEnv(tt.key, tt.defaultValue)
-			if result != tt.expected {
-				t.Errorf("getEnv(%s, %s) = %s, expected %s", tt.key, tt.defaultValue, result, tt.expected)
-			}
-		})
-	}
+	t.Run("returns env value when set", func(t *testing.T) {
+		key := "TEST_SEEDER_ENV_VALUE"
+		expected := "custom_value"
+
+		t.Setenv(key, expected)
+
+		result := getEnv(key, "default_value")
+		if result != expected {
+			t.Errorf("getEnv() = %s, expected %s", result, expected)
+		}
+	})
+
+	t.Run("returns empty string when env is empty string", func(t *testing.T) {
+		key := "TEST_SEEDER_EMPTY_VALUE"
+
+		// When env var is not set (empty), returns default
+		result := getEnv(key, "default")
+		if result != "default" {
+			t.Errorf("getEnv() = %s, expected default", result)
+		}
+	})
 }

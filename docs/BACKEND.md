@@ -634,6 +634,9 @@ go build -o bin/api ./cmd/api
 # Build Worker
 go build -o bin/worker ./cmd/worker
 
+# Build Seeder
+go build -o bin/seeder ./cmd/seeder
+
 # Run tests
 go test ./...
 
@@ -642,6 +645,36 @@ go test -race ./...
 
 # Generate mocks (if using mockgen)
 go generate ./...
+```
+
+## Block Seeding Commands
+
+プログラム的なブロック定義のマイグレーションコマンドです。
+
+```bash
+# ブロック定義をデータベースにマイグレート（UPSERT）
+make seed-blocks
+
+# バリデーションのみ実行（DBに書き込まない）
+make seed-blocks-validate
+
+# ドライラン（変更内容をプレビュー）
+make seed-blocks-dry-run
+```
+
+CLIを直接実行する場合：
+
+```bash
+cd backend
+
+# マイグレーション実行
+go run ./cmd/seeder
+
+# バリデーションのみ
+go run ./cmd/seeder -validate
+
+# ドライラン（詳細出力）
+go run ./cmd/seeder -dry-run -verbose
 ```
 
 ## Related Documents
