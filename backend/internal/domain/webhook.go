@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +34,12 @@ func NewWebhook(
 	workflowVersion int,
 	name string,
 	inputMapping json.RawMessage,
-) *Webhook {
+) (*Webhook, error) {
+	secret, err := generateSecret()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate webhook secret: %w", err)
+	}
+
 	now := time.Now().UTC()
 	return &Webhook{
 		ID:              uuid.New(),
@@ -41,26 +47,33 @@ func NewWebhook(
 		WorkflowID:      workflowID,
 		WorkflowVersion: workflowVersion,
 		Name:            name,
-		Secret:          generateSecret(),
+		Secret:          secret,
 		InputMapping:    inputMapping,
 		Enabled:         true,
 		TriggerCount:    0,
 		CreatedAt:       now,
 		UpdatedAt:       now,
-	}
+	}, nil
 }
 
 // generateSecret generates a random secret for webhook verification
-func generateSecret() string {
+func generateSecret() (string, error) {
 	bytes := make([]byte, 32)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("failed to read random bytes: %w", err)
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 // RegenerateSecret generates a new secret
-func (w *Webhook) RegenerateSecret() {
-	w.Secret = generateSecret()
+func (w *Webhook) RegenerateSecret() error {
+	secret, err := generateSecret()
+	if err != nil {
+		return fmt.Errorf("failed to regenerate webhook secret: %w", err)
+	}
+	w.Secret = secret
 	w.UpdatedAt = time.Now().UTC()
+	return nil
 }
 
 // Enable enables the webhook

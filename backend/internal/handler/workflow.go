@@ -13,11 +13,15 @@ import (
 // WorkflowHandler handles workflow HTTP requests
 type WorkflowHandler struct {
 	workflowUsecase *usecase.WorkflowUsecase
+	auditService    *usecase.AuditService
 }
 
 // NewWorkflowHandler creates a new WorkflowHandler
-func NewWorkflowHandler(workflowUsecase *usecase.WorkflowUsecase) *WorkflowHandler {
-	return &WorkflowHandler{workflowUsecase: workflowUsecase}
+func NewWorkflowHandler(workflowUsecase *usecase.WorkflowUsecase, auditService *usecase.AuditService) *WorkflowHandler {
+	return &WorkflowHandler{
+		workflowUsecase: workflowUsecase,
+		auditService:    auditService,
+	}
 }
 
 // CreateRequest represents a create workflow request
@@ -47,6 +51,11 @@ func (h *WorkflowHandler) Create(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWorkflowCreate, domain.AuditResourceWorkflow, &workflow.ID, map[string]interface{}{
+		"name": workflow.Name,
+	})
 
 	JSONData(w, http.StatusCreated, workflow)
 }
@@ -132,6 +141,11 @@ func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWorkflowUpdate, domain.AuditResourceWorkflow, &workflow.ID, map[string]interface{}{
+		"name": workflow.Name,
+	})
+
 	JSONData(w, http.StatusOK, workflow)
 }
 
@@ -148,6 +162,9 @@ func (h *WorkflowHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWorkflowDelete, domain.AuditResourceWorkflow, &id, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -252,6 +269,12 @@ func (h *WorkflowHandler) Save(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event (publish)
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWorkflowPublish, domain.AuditResourceWorkflow, &workflow.ID, map[string]interface{}{
+		"name":    workflow.Name,
+		"version": workflow.Version,
+	})
 
 	JSONData(w, http.StatusOK, workflow)
 }
@@ -402,6 +425,12 @@ func (h *WorkflowHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWorkflowPublish, domain.AuditResourceWorkflow, &workflow.ID, map[string]interface{}{
+		"name":    workflow.Name,
+		"version": workflow.Version,
+	})
 
 	JSONData(w, http.StatusOK, workflow)
 }

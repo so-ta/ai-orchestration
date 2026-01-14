@@ -14,7 +14,7 @@ import (
 )
 
 func TestRunHandler_Create_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -85,7 +85,7 @@ func TestRunHandler_Create_Validation(t *testing.T) {
 }
 
 func TestRunHandler_List_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -136,7 +136,7 @@ func TestRunHandler_List_Validation(t *testing.T) {
 }
 
 func TestRunHandler_Get_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -187,7 +187,7 @@ func TestRunHandler_Get_Validation(t *testing.T) {
 }
 
 func TestRunHandler_Cancel_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -238,7 +238,7 @@ func TestRunHandler_Cancel_Validation(t *testing.T) {
 }
 
 func TestRunHandler_ExecuteSingleStep_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -306,7 +306,7 @@ func TestRunHandler_ExecuteSingleStep_Validation(t *testing.T) {
 }
 
 func TestRunHandler_ResumeFromStep_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -377,7 +377,7 @@ func TestRunHandler_ResumeFromStep_Validation(t *testing.T) {
 }
 
 func TestRunHandler_GetStepHistory_Validation(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -432,6 +432,6 @@ func TestRunHandler_GetStepHistory_Validation(t *testing.T) {
 }
 
 func TestNewRunHandler(t *testing.T) {
-	handler := NewRunHandler(nil)
+	handler := NewRunHandler(nil, nil)
 	assert.NotNil(t, handler)
 }

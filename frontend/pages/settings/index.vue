@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import type { BlockDefinition, BlockCategory, Credential, CredentialType, CredentialStatus, CreateCredentialRequest, CredentialData } from '~/types/api'
+import { useAuditLogs } from '~/composables/useAuditLogs'
+import type { BlockDefinition, BlockCategory, Credential, CredentialType, CredentialStatus, CreateCredentialRequest, CredentialData, AuditLog, AuditAction } from '~/types/api'
+import type { AuditLogFilter } from '~/composables/useAuditLogs'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -355,12 +357,129 @@ function formatDate(date: string | undefined): string {
   return new Date(date).toLocaleDateString()
 }
 
+// ============================================================================
+// Audit Logs Tab
+// ============================================================================
+const auditLogsApi = useAuditLogs()
+const auditLogsLoading = ref(false)
+const auditLogsList = ref<AuditLog[]>([])
+const auditLogsTotal = ref(0)
+const auditLogsPage = ref(1)
+const auditLogsLimit = ref(50)
+
+// Audit log filters
+const filterResourceType = ref('')
+const filterAction = ref<AuditAction | ''>('')
+const filterFromDate = ref('')
+const filterToDate = ref('')
+
+// Resource types available
+const resourceTypes = [
+  'workflow',
+  'step',
+  'edge',
+  'run',
+  'schedule',
+  'webhook',
+  'credential',
+  'block',
+  'tenant',
+]
+
+const auditActions: AuditAction[] = ['create', 'update', 'delete', 'publish', 'execute', 'cancel', 'approve', 'reject']
+
+async function fetchAuditLogs() {
+  auditLogsLoading.value = true
+  try {
+    const filter: AuditLogFilter = {
+      page: auditLogsPage.value,
+      limit: auditLogsLimit.value,
+    }
+    if (filterResourceType.value) {
+      filter.resource_type = filterResourceType.value
+    }
+    if (filterAction.value) {
+      filter.action = filterAction.value
+    }
+    if (filterFromDate.value) {
+      filter.from_date = filterFromDate.value
+    }
+    if (filterToDate.value) {
+      filter.to_date = filterToDate.value
+    }
+
+    const result = await auditLogsApi.list(filter)
+    auditLogsList.value = result.data
+    auditLogsTotal.value = result.total
+  } catch {
+    toast.error(t('errors.loadFailed'))
+  } finally {
+    auditLogsLoading.value = false
+  }
+}
+
+const auditLogsTotalPages = computed(() => Math.ceil(auditLogsTotal.value / auditLogsLimit.value))
+
+function formatDateTime(date: string): string {
+  return new Date(date).toLocaleString()
+}
+
+function getActionBadgeClass(action: AuditAction): string {
+  switch (action) {
+    case 'create':
+    case 'approve':
+      return 'badge-success'
+    case 'update':
+    case 'publish':
+      return 'badge-info'
+    case 'delete':
+    case 'reject':
+      return 'badge-danger'
+    case 'execute':
+      return 'badge-warning'
+    case 'cancel':
+      return 'badge-secondary'
+    default:
+      return 'badge-secondary'
+  }
+}
+
+function formatChanges(changes: object | undefined): string {
+  if (!changes || Object.keys(changes).length === 0) {
+    return t('auditLogs.details.noChanges')
+  }
+  return JSON.stringify(changes, null, 2)
+}
+
+function clearAuditFilters() {
+  filterResourceType.value = ''
+  filterAction.value = ''
+  filterFromDate.value = ''
+  filterToDate.value = ''
+}
+
+function refreshAuditLogs() {
+  fetchAuditLogs()
+}
+
+// Watch audit log filters
+watch([filterResourceType, filterAction, filterFromDate, filterToDate], () => {
+  auditLogsPage.value = 1
+  fetchAuditLogs()
+})
+
+watch(auditLogsPage, () => {
+  fetchAuditLogs()
+})
+
 // Load data when tab changes
 watch(activeTab, (newTab) => {
   if (newTab === 'blocks') {
     fetchBlocks()
   } else if (newTab === 'credentials') {
     fetchCredentials()
+  } else if (newTab === 'audit-logs') {
+    fetchAuditLogs()
   }
 })
 
@@ -369,6 +488,7 @@ const tabs = computed(() => [
   { id: 'notifications', label: t('settings.notifications') },
   { id: 'blocks', label: t('tenantBlocks.title') },
   { id: 'credentials', label: t('credentials.title') },
+  { id: 'audit-logs', label: t('auditLogs.title') },
   { id: 'team', label: t('settings.team') },
 ])
 
@@ -633,6 +753,111 @@ function getStatusClass(status: CredentialStatus): string {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Audit Logs Tab -->
+        <div v-if="activeTab === 'audit-logs'">
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h2 style="font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem;">
+                {{ $t('auditLogs.title') }}
+              </h2>
+              <p class="text-secondary">{{ $t('auditLogs.subtitle') }}</p>
+            </div>
+            <button class="btn btn-secondary" @click="refreshAuditLogs">
+              {{ $t('auditLogs.refresh') }}
+            </button>
+          </div>
+
+          <!-- Filters -->
+          <div class="filters-bar">
+            <select v-model="filterResourceType" class="filter-select">
+              <option value="">{{ $t('auditLogs.allResources') }}</option>
+              <option v-for="type in resourceTypes" :key="type" :value="type">
+                {{ $t(`auditLogs.resourceType.${type}`) }}
+              </option>
+            </select>
+            <select v-model="filterAction" class="filter-select">
+              <option value="">{{ $t('auditLogs.allActions') }}</option>
+              <option v-for="action in auditActions" :key="action" :value="action">
+                {{ $t(`auditLogs.action.${action}`) }}
+              </option>
+            </select>
+            <div class="date-filter">
+              <label>{{ $t('auditLogs.from') }}:</label>
+              <input v-model="filterFromDate" type="date" class="filter-input" />
+            </div>
+            <div class="date-filter">
+              <label>{{ $t('auditLogs.to') }}:</label>
+              <input v-model="filterToDate" type="date" class="filter-input" />
+            </div>
+            <button v-if="filterResourceType || filterAction || filterFromDate || filterToDate" class="btn btn-secondary btn-sm" @click="clearAuditFilters">
+              {{ $t('workflows.clearFilters') }}
+            </button>
+          </div>
+
+          <!-- Loading -->
+          <div v-if="auditLogsLoading && auditLogsList.length === 0" class="empty-state">
+            <p class="text-secondary">{{ $t('common.loading') }}</p>
+          </div>
+
+          <!-- Empty State -->
+          <div v-else-if="auditLogsList.length === 0" class="empty-state">
+            <p class="text-secondary">{{ $t('auditLogs.noLogs') }}</p>
+            <p class="text-secondary" style="font-size: 0.875rem;">{{ $t('auditLogs.noLogsDesc') }}</p>
+          </div>
+
+          <!-- Audit Logs Table -->
+          <div v-else>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('auditLogs.table.timestamp') }}</th>
+                  <th>{{ $t('auditLogs.table.action') }}</th>
+                  <th>{{ $t('auditLogs.table.resource') }}</th>
+                  <th>{{ $t('auditLogs.table.user') }}</th>
+                  <th>{{ $t('auditLogs.table.ipAddress') }}</th>
+                  <th>{{ $t('auditLogs.table.changes') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="log in auditLogsList" :key="log.id">
+                  <td>{{ formatDateTime(log.created_at) }}</td>
+                  <td>
+                    <span :class="['action-badge', getActionBadgeClass(log.action)]">
+                      {{ $t(`auditLogs.action.${log.action}`) }}
+                    </span>
+                  </td>
+                  <td>
+                    <div class="resource-info">
+                      <span class="resource-type">{{ $t(`auditLogs.resourceType.${log.resource_type}`) }}</span>
+                      <code class="resource-id">{{ log.resource_id.substring(0, 8) }}...</code>
+                    </div>
+                  </td>
+                  <td>{{ log.user_id || '-' }}</td>
+                  <td>{{ log.ip_address || '-' }}</td>
+                  <td>
+                    <details v-if="log.changes && Object.keys(log.changes).length > 0" class="changes-details">
+                      <summary>{{ $t('auditLogs.details.title') }}</summary>
+                      <pre class="changes-content">{{ formatChanges(log.changes) }}</pre>
+                    </details>
+                    <span v-else class="no-changes">{{ $t('auditLogs.details.noChanges') }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- Pagination -->
+            <div v-if="auditLogsTotalPages > 1" class="pagination">
+              <button class="btn btn-sm btn-secondary" :disabled="auditLogsPage === 1" @click="auditLogsPage--">
+                &lt;
+              </button>
+              <span class="page-info">{{ auditLogsPage }} / {{ auditLogsTotalPages }}</span>
+              <button class="btn btn-sm btn-secondary" :disabled="auditLogsPage >= auditLogsTotalPages" @click="auditLogsPage++">
+                &gt;
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Team Settings -->
@@ -1105,5 +1330,128 @@ function getStatusClass(status: CredentialStatus): string {
 
 .btn-success:hover {
   background: #16a34a;
+}
+
+/* Audit Logs styles */
+.filters-bar {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-select {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  min-width: 140px;
+}
+
+.date-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-filter label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.filter-input {
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.action-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm, 0.25rem);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-info {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.resource-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.resource-type {
+  font-weight: 500;
+}
+
+.resource-id {
+  background: var(--color-background);
+  padding: 0.125rem 0.25rem;
+  border-radius: var(--radius-sm, 0.25rem);
+  font-size: 0.75rem;
+}
+
+.changes-details {
+  cursor: pointer;
+}
+
+.changes-details summary {
+  color: var(--color-primary);
+  font-size: 0.875rem;
+}
+
+.changes-content {
+  background: var(--color-background);
+  padding: 0.5rem;
+  border-radius: var(--radius-sm, 0.25rem);
+  font-size: 0.75rem;
+  max-width: 300px;
+  overflow-x: auto;
+  margin: 0.5rem 0 0;
+}
+
+.no-changes {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.page-info {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
 }
 </style>

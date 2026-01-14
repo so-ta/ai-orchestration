@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -185,16 +186,22 @@ type Tenant struct {
 }
 
 // NewTenant creates a new tenant with defaults
-func NewTenant(name, slug string, plan TenantPlan) *Tenant {
+func NewTenant(name, slug string, plan TenantPlan) (*Tenant, error) {
 	if plan == "" {
 		plan = TenantPlanFree
 	}
 
 	featureFlags := DefaultFeatureFlags(plan)
-	flagsJSON, _ := json.Marshal(featureFlags)
+	flagsJSON, err := json.Marshal(featureFlags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal feature flags: %w", err)
+	}
 
 	limits := DefaultLimits(plan)
-	limitsJSON, _ := json.Marshal(limits)
+	limitsJSON, err := json.Marshal(limits)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal limits: %w", err)
+	}
 
 	now := time.Now().UTC()
 	return &Tenant{
@@ -209,7 +216,7 @@ func NewTenant(name, slug string, plan TenantPlan) *Tenant {
 		Limits:       limitsJSON,
 		CreatedAt:    now,
 		UpdatedAt:    now,
-	}
+	}, nil
 }
 
 // GetFeatureFlags parses and returns feature flags

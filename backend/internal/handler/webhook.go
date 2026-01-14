@@ -13,12 +13,16 @@ import (
 
 // WebhookHandler handles HTTP requests for webhooks
 type WebhookHandler struct {
-	usecase *usecase.WebhookUsecase
+	usecase      *usecase.WebhookUsecase
+	auditService *usecase.AuditService
 }
 
 // NewWebhookHandler creates a new WebhookHandler
-func NewWebhookHandler(usecase *usecase.WebhookUsecase) *WebhookHandler {
-	return &WebhookHandler{usecase: usecase}
+func NewWebhookHandler(uc *usecase.WebhookUsecase, auditService *usecase.AuditService) *WebhookHandler {
+	return &WebhookHandler{
+		usecase:      uc,
+		auditService: auditService,
+	}
 }
 
 // CreateWebhookRequest represents the request body for creating a webhook
@@ -58,6 +62,12 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookCreate, domain.AuditResourceWebhook, &webhook.ID, map[string]interface{}{
+		"name":        webhook.Name,
+		"workflow_id": workflowID,
+	})
 
 	JSON(w, http.StatusCreated, webhook)
 }
@@ -150,6 +160,11 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookUpdate, domain.AuditResourceWebhook, &webhook.ID, map[string]interface{}{
+		"name": webhook.Name,
+	})
+
 	JSON(w, http.StatusOK, webhook)
 }
 
@@ -168,6 +183,9 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookDelete, domain.AuditResourceWebhook, &id, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -189,6 +207,9 @@ func (h *WebhookHandler) Enable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookEnable, domain.AuditResourceWebhook, &webhook.ID, nil)
+
 	JSON(w, http.StatusOK, webhook)
 }
 
@@ -209,6 +230,9 @@ func (h *WebhookHandler) Disable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookDisable, domain.AuditResourceWebhook, &webhook.ID, nil)
+
 	JSON(w, http.StatusOK, webhook)
 }
 
@@ -228,6 +252,9 @@ func (h *WebhookHandler) RegenerateSecret(w http.ResponseWriter, r *http.Request
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookRegenerateSecret, domain.AuditResourceWebhook, &webhook.ID, nil)
 
 	JSON(w, http.StatusOK, webhook)
 }
@@ -269,6 +296,11 @@ func (h *WebhookHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionWebhookTrigger, domain.AuditResourceWebhook, &id, map[string]interface{}{
+		"run_id": run.ID,
+	})
 
 	JSON(w, http.StatusOK, map[string]interface{}{
 		"run_id": run.ID,
