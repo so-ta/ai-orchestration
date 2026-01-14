@@ -331,6 +331,22 @@ func (e *BlockError) Error() string {
 | `text-splitter` | Text Splitter | data | テキストをチャンクに分割 | - |
 | `rag-query` | RAG Query | ai | RAG検索+LLM生成（一括処理） | `OPENAI_API_KEY` |
 
+### RAGブロック エラーコード一覧
+
+| Code | Name | Block | Retryable | Description |
+|------|------|-------|-----------|-------------|
+| `EMB_001` | PROVIDER_ERROR | embedding | ✅ | Embedding provider API error |
+| `EMB_002` | EMPTY_INPUT | embedding | ❌ | No text provided for embedding |
+| `VEC_001` | COLLECTION_REQUIRED | vector-* | ❌ | Collection name is required |
+| `VEC_002` | DOCUMENTS_REQUIRED | vector-upsert | ❌ | Documents array is required |
+| `VEC_003` | VECTOR_OR_QUERY_REQUIRED | vector-search | ❌ | Either vector or query text is required |
+| `VEC_004` | IDS_REQUIRED | vector-delete | ❌ | IDs array is required |
+| `DOC_001` | FETCH_ERROR | doc-loader | ✅ | Failed to fetch URL (includes SSRF protection) |
+| `DOC_002` | EMPTY_CONTENT | doc-loader | ❌ | No content provided |
+| `TXT_001` | EMPTY_TEXT | text-splitter | ❌ | No text provided for splitting |
+| `RAG_001` | QUERY_REQUIRED | rag-query | ❌ | Query text is required |
+| `RAG_002` | COLLECTION_REQUIRED | rag-query | ❌ | Collection name is required |
+
 ### システムブロックのコード例
 
 ```javascript
