@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -162,7 +163,7 @@ func writeRateLimitError(w http.ResponseWriter, result *RateLimitResult, scope R
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", strconv.FormatInt(int64(time.Until(result.ResetAt).Seconds()), 10))
 	w.WriteHeader(http.StatusTooManyRequests)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": map[string]interface{}{
 			"code":       "RATE_LIMIT_EXCEEDED",
 			"message":    fmt.Sprintf("Rate limit exceeded for %s scope", scope),
@@ -170,7 +171,9 @@ func writeRateLimitError(w http.ResponseWriter, result *RateLimitResult, scope R
 			"limit":      result.Limit,
 			"scope":      scope,
 		},
-	})
+	}); err != nil {
+		slog.Error("failed to encode rate limit error response", "error", err, "scope", scope)
+	}
 }
 
 // TenantRateLimitMiddleware creates a middleware that rate limits by tenant
@@ -191,7 +194,11 @@ func (rl *RateLimiter) TenantRateLimitMiddleware() func(http.Handler) http.Handl
 
 			result, err := rl.CheckTenant(r.Context(), tenantID)
 			if err != nil {
-				// On error, allow the request but log
+				// On error, allow the request but log for debugging
+				slog.Error("rate limit check failed for tenant",
+					"tenant_id", tenantID.String(),
+					"error", err,
+				)
 				next.ServeHTTP(w, r)
 				return
 			}

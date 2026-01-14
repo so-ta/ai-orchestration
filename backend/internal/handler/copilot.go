@@ -2,6 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -273,7 +276,10 @@ func (h *CopilotHandler) SuggestForStep(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Context string `json:"context,omitempty"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		Error(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
+		return
+	}
 
 	input := usecase.SuggestInput{
 		TenantID:   tenantID,
@@ -557,10 +563,15 @@ func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Re
 	}
 
 	// Build input for system workflow
-	inputData, _ := json.Marshal(map[string]interface{}{
+	inputData, err := json.Marshal(map[string]interface{}{
 		"prompt":    req.Prompt,
 		"tenant_id": tenantID.String(),
 	})
+	if err != nil {
+		slog.Error("failed to marshal input data", "error", err)
+		Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to marshal input data", nil)
+		return
+	}
 
 	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
 		TenantID:      tenantID,
@@ -609,11 +620,16 @@ func (h *CopilotHandler) AsyncSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inputData, _ := json.Marshal(map[string]interface{}{
+	inputData, err := json.Marshal(map[string]interface{}{
 		"workflow_id": req.WorkflowID,
 		"context":     req.Context,
 		"tenant_id":   tenantID.String(),
 	})
+	if err != nil {
+		slog.Error("failed to marshal input data", "error", err)
+		Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to marshal input data", nil)
+		return
+	}
 
 	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
 		TenantID:      tenantID,
@@ -661,10 +677,15 @@ func (h *CopilotHandler) AsyncDiagnose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inputData, _ := json.Marshal(map[string]interface{}{
+	inputData, err := json.Marshal(map[string]interface{}{
 		"run_id":    req.RunID,
 		"tenant_id": tenantID.String(),
 	})
+	if err != nil {
+		slog.Error("failed to marshal input data", "error", err)
+		Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to marshal input data", nil)
+		return
+	}
 
 	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
 		TenantID:      tenantID,
@@ -712,10 +733,15 @@ func (h *CopilotHandler) AsyncOptimize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inputData, _ := json.Marshal(map[string]interface{}{
+	inputData, err := json.Marshal(map[string]interface{}{
 		"workflow_id": req.WorkflowID,
 		"tenant_id":   tenantID.String(),
 	})
+	if err != nil {
+		slog.Error("failed to marshal input data", "error", err)
+		Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to marshal input data", nil)
+		return
+	}
 
 	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
 		TenantID:      tenantID,

@@ -12,35 +12,12 @@ export interface AuditLogFilter {
 }
 
 export function useAuditLogs() {
-  const config = useRuntimeConfig()
-  const baseUrl = config.public.apiBase || 'http://localhost:8080'
+  const api = useApi()
 
   const auditLogs = ref<AuditLog[]>([])
   const total = ref(0)
   const loading = ref(false)
   const error = ref<string | null>(null)
-
-  const getHeaders = () => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-
-    // Add tenant ID header for development (client-side only)
-    if (import.meta.client) {
-      const tenantId = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000001'
-      headers['X-Tenant-ID'] = tenantId
-
-      // Add auth token if available
-      const token = localStorage.getItem('auth_token')
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-      }
-    } else {
-      headers['X-Tenant-ID'] = '00000000-0000-0000-0000-000000000001'
-    }
-
-    return headers
-  }
 
   const list = async (filter?: AuditLogFilter): Promise<{ data: AuditLog[]; total: number }> => {
     loading.value = true
@@ -58,15 +35,9 @@ export function useAuditLogs() {
         if (filter.limit) params.append('limit', String(filter.limit))
       }
       const queryString = params.toString()
-      const url = `${baseUrl}/audit-logs${queryString ? `?${queryString}` : ''}`
+      const endpoint = `/audit-logs${queryString ? `?${queryString}` : ''}`
 
-      const response = await fetch(url, {
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to fetch audit logs: ${response.statusText}`)
-      }
-      const result: PaginatedResponse<AuditLog> = await response.json()
+      const result = await api.get<PaginatedResponse<AuditLog>>(endpoint)
       auditLogs.value = result.data || []
       total.value = result.meta?.total || 0
       return { data: result.data || [], total: result.meta?.total || 0 }

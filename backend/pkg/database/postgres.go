@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -55,7 +56,13 @@ func NewPool(ctx context.Context, cfg *Config) (*pgxpool.Pool, error) {
 }
 
 // SetTenantContext sets the tenant ID in the database session
+// The tenantID must be a valid UUID to prevent SQL injection
 func SetTenantContext(ctx context.Context, pool *pgxpool.Pool, tenantID string) error {
-	_, err := pool.Exec(ctx, fmt.Sprintf("SET app.current_tenant = '%s'", tenantID))
+	// Validate that tenantID is a valid UUID to prevent SQL injection
+	parsedID, err := uuid.Parse(tenantID)
+	if err != nil {
+		return fmt.Errorf("invalid tenant ID format: %w", err)
+	}
+	_, err = pool.Exec(ctx, fmt.Sprintf("SET app.current_tenant = '%s'", parsedID.String()))
 	return err
 }

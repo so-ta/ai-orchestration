@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -558,7 +559,7 @@ func (c *HTTPClient) Request(method, url string, body interface{}, options map[s
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
 		}
-		bodyReader = strings.NewReader(string(bodyJSON))
+		bodyReader = bytes.NewReader(bodyJSON)
 	}
 
 	req, err := http.NewRequest(method, url, bodyReader)
