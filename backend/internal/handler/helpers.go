@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -118,7 +118,7 @@ func logAudit(
 	// 3. Audit logs are fire-and-forget operations for the request flow
 	go func() {
 		if err := auditService.Log(context.Background(), input); err != nil {
-			log.Printf("Failed to log audit event: %v", err)
+			slog.Error("Failed to log audit event", "error", err)
 		}
 	}()
 }
