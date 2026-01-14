@@ -195,7 +195,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Check if slug already exists
 	existing, err := h.repo.GetBySlug(r.Context(), req.Slug)
-	if err != nil && !errors.Is(err, repository.ErrTenantNotFound) {
+	if err != nil && !errors.Is(err, domain.ErrTenantNotFound) {
 		// Unexpected DB error - return 500
 		HandleError(w, err)
 		return
@@ -308,7 +308,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Slug != "" {
 		// Check if new slug already exists
 		existing, err := h.repo.GetBySlug(r.Context(), req.Slug)
-		if err != nil && !errors.Is(err, repository.ErrTenantNotFound) {
+		if err != nil && !errors.Is(err, domain.ErrTenantNotFound) {
 			// Unexpected DB error - return 500
 			HandleError(w, err)
 			return
