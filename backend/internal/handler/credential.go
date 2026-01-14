@@ -13,12 +13,16 @@ import (
 
 // CredentialHandler handles HTTP requests for credentials
 type CredentialHandler struct {
-	usecase *usecase.CredentialUsecase
+	usecase      *usecase.CredentialUsecase
+	auditService *usecase.AuditService
 }
 
 // NewCredentialHandler creates a new CredentialHandler
-func NewCredentialHandler(usecase *usecase.CredentialUsecase) *CredentialHandler {
-	return &CredentialHandler{usecase: usecase}
+func NewCredentialHandler(uc *usecase.CredentialUsecase, auditService *usecase.AuditService) *CredentialHandler {
+	return &CredentialHandler{
+		usecase:      uc,
+		auditService: auditService,
+	}
 }
 
 // CreateCredentialRequest represents the request body for creating a credential
@@ -64,6 +68,12 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionCredentialCreate, domain.AuditResourceCredential, &credential.ID, map[string]interface{}{
+		"name":            credential.Name,
+		"credential_type": string(credential.CredentialType),
+	})
 
 	// Return safe response (no encrypted data)
 	JSON(w, http.StatusCreated, h.usecase.ToResponse(credential))
@@ -175,6 +185,11 @@ func (h *CredentialHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionCredentialUpdate, domain.AuditResourceCredential, &credential.ID, map[string]interface{}{
+		"name": credential.Name,
+	})
+
 	JSON(w, http.StatusOK, h.usecase.ToResponse(credential))
 }
 
@@ -193,6 +208,9 @@ func (h *CredentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionCredentialDelete, domain.AuditResourceCredential, &id, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -214,6 +232,9 @@ func (h *CredentialHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionCredentialRevoke, domain.AuditResourceCredential, &credential.ID, nil)
+
 	JSON(w, http.StatusOK, h.usecase.ToResponse(credential))
 }
 
@@ -233,6 +254,9 @@ func (h *CredentialHandler) Activate(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionCredentialActivate, domain.AuditResourceCredential, &credential.ID, nil)
 
 	JSON(w, http.StatusOK, h.usecase.ToResponse(credential))
 }
