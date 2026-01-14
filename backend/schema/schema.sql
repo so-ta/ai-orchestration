@@ -373,7 +373,8 @@ CREATE TABLE public.runs (
     completed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now(),
     trigger_source character varying(100),
-    trigger_metadata jsonb DEFAULT '{}'::jsonb
+    trigger_metadata jsonb DEFAULT '{}'::jsonb,
+    deleted_at timestamp with time zone
 );
 
 
