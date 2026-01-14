@@ -84,6 +84,13 @@ type UIConfig struct {
 	ConfigSchema any    `json:"configSchema,omitempty"`  // Schema for block config in workflow editor
 }
 
+// InternalStep represents a step inside a composite block
+type InternalStep struct {
+	Type      string          `json:"type"`       // Block slug to execute
+	Config    json.RawMessage `json:"config"`     // Configuration for the step
+	OutputKey string          `json:"output_key"` // Key to store this step's output
+}
+
 // BlockDefinition represents a block type definition
 type BlockDefinition struct {
 	ID          uuid.UUID       `json:"id"`
@@ -125,6 +132,28 @@ type BlockDefinition struct {
 	// Error handling
 	ErrorCodes []ErrorCodeDef `json:"error_codes"`
 
+	// === Block Inheritance/Extension fields ===
+	// ParentBlockID: Reference to parent block for inheritance (only blocks with code can be inherited)
+	ParentBlockID *uuid.UUID `json:"parent_block_id,omitempty"`
+	// ConfigDefaults: Default values for parent's config_schema
+	ConfigDefaults json.RawMessage `json:"config_defaults,omitempty"`
+	// PreProcess: JavaScript code executed before main code (input transformation)
+	PreProcess string `json:"pre_process,omitempty"`
+	// PostProcess: JavaScript code executed after main code (output transformation)
+	PostProcess string `json:"post_process,omitempty"`
+	// InternalSteps: Array of steps to execute sequentially inside the block
+	InternalSteps []InternalStep `json:"internal_steps,omitempty"`
+
+	// Resolved fields (populated by resolveInheritance, not stored in DB)
+	// PreProcessChain: Chain of preProcess code from child to root (child -> ... -> root)
+	PreProcessChain []string `json:"pre_process_chain,omitempty"`
+	// PostProcessChain: Chain of postProcess code from root to child (root -> ... -> child)
+	PostProcessChain []string `json:"post_process_chain,omitempty"`
+	// ResolvedCode: Code from the root ancestor (for inherited blocks)
+	ResolvedCode string `json:"resolved_code,omitempty"`
+	// ResolvedConfigDefaults: Merged config defaults from entire inheritance chain
+	ResolvedConfigDefaults json.RawMessage `json:"resolved_config_defaults,omitempty"`
+
 	// Metadata
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
@@ -158,6 +187,38 @@ func NewBlockDefinition(tenantID *uuid.UUID, slug, name string, category BlockCa
 // IsSystemBlock returns true if this is a system-defined block (not tenant-specific)
 func (b *BlockDefinition) IsSystemBlock() bool {
 	return b.TenantID == nil
+}
+
+// CanBeInherited checks if this block can be inherited
+// Only blocks with code can be inherited (system control blocks like if, foreach cannot be inherited)
+func (b *BlockDefinition) CanBeInherited() bool {
+	return b.Code != ""
+}
+
+// HasInheritance returns true if this block inherits from another block
+func (b *BlockDefinition) HasInheritance() bool {
+	return b.ParentBlockID != nil
+}
+
+// HasInternalSteps returns true if this block has internal steps
+func (b *BlockDefinition) HasInternalSteps() bool {
+	return len(b.InternalSteps) > 0
+}
+
+// GetEffectiveCode returns the code to execute (resolved code for inherited blocks, own code otherwise)
+func (b *BlockDefinition) GetEffectiveCode() string {
+	if b.ResolvedCode != "" {
+		return b.ResolvedCode
+	}
+	return b.Code
+}
+
+// GetEffectiveConfigDefaults returns the config defaults to use (resolved for inherited blocks)
+func (b *BlockDefinition) GetEffectiveConfigDefaults() json.RawMessage {
+	if b.ResolvedConfigDefaults != nil && len(b.ResolvedConfigDefaults) > 0 {
+		return b.ResolvedConfigDefaults
+	}
+	return b.ConfigDefaults
 }
 
 // BlockError represents an error from block execution with error code

@@ -96,7 +96,13 @@ CREATE TABLE public.block_definitions (
     ui_config jsonb DEFAULT '{}'::jsonb NOT NULL,
     is_system boolean DEFAULT false NOT NULL,
     version integer DEFAULT 1 NOT NULL,
-    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying])::text[])))
+    parent_block_id uuid,
+    config_defaults jsonb DEFAULT '{}'::jsonb,
+    pre_process text,
+    post_process text,
+    internal_steps jsonb DEFAULT '[]'::jsonb,
+    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying])::text[]))),
+    CONSTRAINT no_self_reference CHECK (parent_block_id IS NULL OR parent_block_id != id)
 );
 
 
@@ -140,6 +146,41 @@ COMMENT ON COLUMN public.block_definitions.is_system IS 'System blocks can only 
 --
 
 COMMENT ON COLUMN public.block_definitions.version IS 'Version number, incremented on each update';
+
+
+--
+-- Name: COLUMN block_definitions.parent_block_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.block_definitions.parent_block_id IS 'Parent block for inheritance (only blocks with code can be inherited)';
+
+
+--
+-- Name: COLUMN block_definitions.config_defaults; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.block_definitions.config_defaults IS 'Default values for parent config_schema when inheriting';
+
+
+--
+-- Name: COLUMN block_definitions.pre_process; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.block_definitions.pre_process IS 'JavaScript code executed before main code (input transformation)';
+
+
+--
+-- Name: COLUMN block_definitions.post_process; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.block_definitions.post_process IS 'JavaScript code executed after main code (output transformation)';
+
+
+--
+-- Name: COLUMN block_definitions.internal_steps; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.block_definitions.internal_steps IS 'Array of internal steps to execute sequentially: [{type, config, output_key}]';
 
 
 --
@@ -1190,6 +1231,13 @@ CREATE INDEX idx_block_definitions_tenant ON public.block_definitions USING btre
 
 
 --
+-- Name: idx_block_definitions_parent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_block_definitions_parent ON public.block_definitions USING btree (parent_block_id) WHERE (parent_block_id IS NOT NULL);
+
+
+--
 -- Name: idx_block_group_runs_block_group; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1624,6 +1672,14 @@ ALTER TABLE ONLY public.audit_logs
 
 ALTER TABLE ONLY public.block_definitions
     ADD CONSTRAINT block_definitions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+
+--
+-- Name: block_definitions block_definitions_parent_block_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.block_definitions
+    ADD CONSTRAINT block_definitions_parent_block_id_fkey FOREIGN KEY (parent_block_id) REFERENCES public.block_definitions(id) ON DELETE SET NULL;
 
 
 --
