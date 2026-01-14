@@ -604,6 +604,13 @@ POST /runs/{run_id}/cancel
 
 Response `200`: Updated run with `status: cancelled`
 
+**Error Responses:**
+
+| Code | HTTP | Condition |
+|------|------|-----------|
+| `NOT_FOUND` | 404 | Run does not exist |
+| `INVALID_STATE` | 409 | Run is not in a cancellable state (e.g., already completed or cancelled) |
+
 ### Resume From Step
 ```
 POST /runs/{run_id}/resume
@@ -631,6 +638,13 @@ Response `202`:
   }
 }
 ```
+
+**Error Responses:**
+
+| Code | HTTP | Condition |
+|------|------|-----------|
+| `NOT_FOUND` | 404 | Run does not exist |
+| `INVALID_STATE` | 409 | Run is not in a resumable state (must be `completed` or `failed`) |
 
 ### Execute Single Step
 ```
