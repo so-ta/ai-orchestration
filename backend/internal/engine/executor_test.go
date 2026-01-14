@@ -942,3 +942,320 @@ func TestExecutor_FullWorkflowWithNewSteps(t *testing.T) {
 	assert.Contains(t, execCtx.StepData, loopStep.ID)
 	assert.Contains(t, execCtx.StepData, waitStep.ID)
 }
+
+// Tests for JSON error handling branches (Issue #68)
+
+func TestExecutor_PrepareStepInput_UnmarshalFallback(t *testing.T) {
+	// Test that prepareStepInput falls back to raw string when unmarshal fails
+	executor := setupTestExecutor()
+
+	run := &domain.Run{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+		Input:      json.RawMessage(`{"initial": "data"}`),
+	}
+	def := &domain.WorkflowDefinition{Name: "test"}
+	execCtx := NewExecutionContext(run, def)
+
+	// Add invalid JSON as step data to trigger unmarshal fallback
+	step1ID := uuid.New()
+	execCtx.StepData[step1ID] = json.RawMessage(`not valid json`)
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-step",
+		Type: domain.StepTypeStart,
+	}
+
+	// prepareStepInput should not fail, it should fall back to raw string
+	input, err := executor.prepareStepInput(execCtx, step)
+
+	require.NoError(t, err)
+	require.NotNil(t, input)
+
+	// Result should contain the step data as a string fallback
+	var result map[string]interface{}
+	err = json.Unmarshal(input, &result)
+	require.NoError(t, err)
+
+	// The invalid JSON should be stored as a raw string
+	assert.Equal(t, "not valid json", result[step1ID.String()])
+}
+
+func TestExecutor_ExecuteJoinStep_UnmarshalFallback(t *testing.T) {
+	// Test that executeJoinStep falls back to raw string when unmarshal fails
+	executor := setupTestExecutor()
+
+	run := &domain.Run{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+	}
+	def := &domain.WorkflowDefinition{Name: "test"}
+	execCtx := NewExecutionContext(run, def)
+
+	// Add both valid and invalid JSON as step data
+	step1ID := uuid.New()
+	step2ID := uuid.New()
+	execCtx.StepData[step1ID] = json.RawMessage(`{"valid": "json"}`)
+	execCtx.StepData[step2ID] = json.RawMessage(`invalid json data`)
+
+	joinStep := domain.Step{
+		ID:     uuid.New(),
+		Name:   "join-test",
+		Type:   domain.StepTypeJoin,
+		Config: json.RawMessage(`{}`),
+	}
+
+	output, err := executor.executeJoinStep(context.Background(), execCtx, joinStep)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// Valid JSON should be parsed correctly
+	validData := result[step1ID.String()].(map[string]interface{})
+	assert.Equal(t, "json", validData["valid"])
+
+	// Invalid JSON should fall back to raw string
+	assert.Equal(t, "invalid json data", result[step2ID.String()])
+}
+
+func TestExecutor_ExecuteMapStep_MarshalUnmarshalFallbacks(t *testing.T) {
+	executor := setupTestExecutor()
+
+	tests := []struct {
+		name     string
+		parallel bool
+	}{
+		{name: "sequential execution", parallel: false},
+		{name: "parallel execution", parallel: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := domain.Step{
+				ID:   uuid.New(),
+				Name: "map-test",
+				Type: domain.StepTypeMap,
+				Config: json.RawMessage(`{
+					"input_path": "$.items",
+					"adapter_id": "mock",
+					"parallel": ` + boolToString(tt.parallel) + `
+				}`),
+			}
+
+			// Include items that will produce output
+			input := json.RawMessage(`{
+				"items": [{"value": 1}, {"value": 2}]
+			}`)
+
+			output, err := executor.executeMapStep(context.Background(), step, input)
+
+			require.NoError(t, err)
+			require.NotNil(t, output)
+
+			var result map[string]interface{}
+			err = json.Unmarshal(output, &result)
+			require.NoError(t, err)
+
+			assert.Equal(t, float64(2), result["count"])
+			assert.Equal(t, float64(2), result["success_count"])
+		})
+	}
+}
+
+func TestExecutor_ExecuteLoopStep_WhileMarshalError(t *testing.T) {
+	// Test while loop: marshal error returns error
+	// This tests the branch at line 1091-1094
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-while-normal",
+		Type: domain.StepTypeLoop,
+		Config: json.RawMessage(`{
+			"loop_type": "while",
+			"condition": "$.index < 2",
+			"max_iterations": 5
+		}`),
+	}
+
+	input := json.RawMessage(`{}`)
+	output, err := executor.executeLoopStep(context.Background(), step, input)
+
+	// Normal while loop should work
+	require.NoError(t, err)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(2), result["iterations"])
+	assert.Equal(t, true, result["completed"])
+}
+
+func TestExecutor_ExecuteLoopStep_DoWhileMarshalError(t *testing.T) {
+	// Test do-while loop: executes at least once
+	// This tests the branch at line 1133-1136
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-dowhile-normal",
+		Type: domain.StepTypeLoop,
+		Config: json.RawMessage(`{
+			"loop_type": "doWhile",
+			"condition": "$.index < 1",
+			"max_iterations": 5
+		}`),
+	}
+
+	input := json.RawMessage(`{}`)
+	output, err := executor.executeLoopStep(context.Background(), step, input)
+
+	require.NoError(t, err)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// DoWhile executes at least once, then checks condition
+	assert.GreaterOrEqual(t, result["iterations"].(float64), float64(1))
+	assert.Equal(t, true, result["completed"])
+}
+
+func TestExecutor_ExecuteRouterStep_UnmarshalFallback(t *testing.T) {
+	// Test that executeRouterStep falls back to empty map when LLM response is invalid JSON
+	// This tests the branch at line 1389-1392
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-router-fallback",
+		Type: domain.StepTypeRouter,
+		Config: json.RawMessage(`{
+			"routes": [
+				{"name": "route-a", "description": "Handle case A"},
+				{"name": "route-b", "description": "Handle case B"}
+			],
+			"provider": "mock"
+		}`),
+	}
+
+	input := json.RawMessage(`{"query": "test input"}`)
+	output, err := executor.executeRouterStep(context.Background(), step, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// Should have a selected route (mock adapter returns a valid response)
+	assert.NotEmpty(t, result["selected_route"])
+}
+
+func TestExecutor_ExecuteFilterStep_MarshalErrorSkip(t *testing.T) {
+	// Test that executeFilterStep skips items when marshal fails
+	// This tests the branch at line 1580-1584
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-filter",
+		Type: domain.StepTypeFilter,
+		Config: json.RawMessage(`{
+			"expression": "$.value > 0"
+		}`),
+	}
+
+	// Use a simple array input with valid items
+	input := json.RawMessage(`[{"value": 1}, {"value": -1}, {"value": 5}]`)
+	output, err := executor.executeFilterStep(context.Background(), step, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// Should have filtered items
+	assert.Equal(t, float64(3), result["original_count"])
+	assert.Equal(t, float64(2), result["filtered_count"]) // Only items with value > 0
+	assert.Equal(t, float64(1), result["removed_count"])
+}
+
+func TestExecutor_ExecuteFilterStep_EvaluationErrorSkip(t *testing.T) {
+	// Test that executeFilterStep skips items when evaluation fails
+	// This tests the branch at line 1585-1591
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-filter-eval-error",
+		Type: domain.StepTypeFilter,
+		Config: json.RawMessage(`{
+			"expression": "$.nonexistent.field > 0"
+		}`),
+	}
+
+	// Items don't have the field being evaluated, causing evaluation errors
+	input := json.RawMessage(`[{"value": 1}, {"other": 2}, {"value": 3}]`)
+	output, err := executor.executeFilterStep(context.Background(), step, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// All items should be skipped due to evaluation error
+	assert.Equal(t, float64(3), result["original_count"])
+	assert.Equal(t, float64(0), result["filtered_count"])
+}
+
+func TestExecutor_ExecuteLoopIteration_UnmarshalFallback(t *testing.T) {
+	// Test that loop iteration falls back to raw string when unmarshal fails
+	// This tests the branch at line 1182-1185
+	executor := setupTestExecutor()
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-loop-iteration",
+		Type: domain.StepTypeLoop,
+		Config: json.RawMessage(`{
+			"loop_type": "for",
+			"count": 2,
+			"adapter_id": "mock"
+		}`),
+	}
+
+	input := json.RawMessage(`{"value": "test"}`)
+	output, err := executor.executeLoopStep(context.Background(), step, input)
+
+	require.NoError(t, err)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(2), result["iterations"])
+	assert.Equal(t, true, result["completed"])
+	// Results should be present
+	results := result["results"].([]interface{})
+	assert.Len(t, results, 2)
+}
+
+// Helper function
+func boolToString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
