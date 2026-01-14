@@ -144,7 +144,29 @@ Default tenant ID: `00000000-0000-0000-0000-000000000001`
 
 ---
 
-## Essential Rules (3 Most Important)
+## Essential Rules (MUST FOLLOW)
+
+### 0. CODEX REVIEW WORKFLOW（最重要・絶対遵守）
+
+**PRをpushした後は、必ず[CODEX_REVIEW](docs/rules/CODEX_REVIEW.md)のワークフローに従うこと。**
+
+```
+⚠️ これは絶対に守るべきルールです。違反は許可されません。
+
+1. git push 後は必ず Codex Review + CI の完了を待つ
+2. APPROVE + CI通過 まではマージしない
+3. REQUEST_CHANGES があれば全て修正して再push
+4. 修正後も再度レビュー結果を確認する
+5. 承認されるまでこのループを繰り返す
+```
+
+| 禁止事項 | 理由 |
+|----------|------|
+| レビュー結果を待たずにマージ | 品質担保のため |
+| REQUEST_CHANGESを無視してマージ | 指摘事項は全て対応必須 |
+| CI失敗を無視してマージ | テスト・ビルド通過必須 |
+
+---
 
 ### 1. Always Read Docs First
 
