@@ -17,8 +17,8 @@ func TestRegistry_AllWorkflowsValid(t *testing.T) {
 func TestRegistry_WorkflowCount(t *testing.T) {
 	registry := NewRegistry()
 
-	// Expect at least 7 workflows (4 copilot + 3 RAG)
-	minExpected := 7
+	// Expect at least 11 workflows (4 copilot + 3 RAG + 4 demo)
+	minExpected := 11
 	actual := registry.Count()
 	if actual < minExpected {
 		t.Errorf("Expected at least %d workflows, got %d", minExpected, actual)
@@ -37,6 +37,10 @@ func TestRegistry_GetBySlug(t *testing.T) {
 		"rag-document-indexing",
 		"rag-question-answering",
 		"rag-knowledge-base-chat",
+		"comprehensive-block-demo",
+		"data-pipeline-block-demo",
+		"ai-routing-block-demo",
+		"control-flow-block-demo",
 	}
 
 	for _, slug := range knownSlugs {
