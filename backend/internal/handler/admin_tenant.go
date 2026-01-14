@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -194,12 +195,10 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Check if slug already exists
 	existing, err := h.repo.GetBySlug(r.Context(), req.Slug)
-	if err != nil && err.Error() != "tenant not found" {
-		// Log unexpected DB errors (not "not found" errors)
-		slog.Error("failed to check tenant slug existence",
-			"slug", req.Slug,
-			"error", err,
-		)
+	if err != nil && !errors.Is(err, repository.ErrTenantNotFound) {
+		// Unexpected DB error - return 500
+		HandleError(w, err)
+		return
 	}
 	if err == nil && existing != nil {
 		Error(w, http.StatusConflict, "SLUG_EXISTS", "A tenant with this slug already exists", nil)
@@ -294,12 +293,10 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Slug != "" {
 		// Check if new slug already exists
 		existing, err := h.repo.GetBySlug(r.Context(), req.Slug)
-		if err != nil && err.Error() != "tenant not found" {
-			// Log unexpected DB errors (not "not found" errors)
-			slog.Error("failed to check tenant slug existence",
-				"slug", req.Slug,
-				"error", err,
-			)
+		if err != nil && !errors.Is(err, repository.ErrTenantNotFound) {
+			// Unexpected DB error - return 500
+			HandleError(w, err)
+			return
 		}
 		if err == nil && existing != nil && existing.ID != tenant.ID {
 			Error(w, http.StatusConflict, "SLUG_EXISTS", "A tenant with this slug already exists", nil)

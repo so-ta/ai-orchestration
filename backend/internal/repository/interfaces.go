@@ -2,10 +2,17 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
+)
+
+// Common repository errors
+var (
+	// ErrTenantNotFound is returned when a tenant is not found
+	ErrTenantNotFound = errors.New("tenant not found")
 )
 
 // WorkflowRepository defines the interface for workflow persistence
