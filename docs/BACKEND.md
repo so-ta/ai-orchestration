@@ -301,6 +301,83 @@ Steps within a BlockGroup have a `group_role` field:
 | `case_N` | switch_case | Case branch steps |
 | `default` | switch_case | Default branch steps |
 
+### BlockDefinition (domain/block.go)
+
+Block definitions represent reusable execution units that can be inherited and extended.
+
+```go
+type BlockDefinition struct {
+    ID            uuid.UUID
+    TenantID      *uuid.UUID       // nil for system blocks
+    Slug          string           // unique identifier
+    Name          string
+    Description   string
+    Category      BlockCategory
+    Icon          string
+    ConfigSchema  json.RawMessage  // JSON Schema for config
+    InputSchema   json.RawMessage  // JSON Schema for input
+    OutputSchema  json.RawMessage  // JSON Schema for output
+    InputPorts    []InputPort
+    OutputPorts   []OutputPort
+    ErrorCodes    []ErrorCodeDef
+
+    // Unified Block Model
+    Code          string           // JavaScript code executed in sandbox
+    UIConfig      json.RawMessage  // UI metadata (icon, color, etc.)
+    IsSystem      bool             // System blocks can only be edited by admins
+    Version       int              // Version number
+
+    // Block Inheritance/Extension
+    ParentBlockID *uuid.UUID       // Reference to parent block
+    ConfigDefaults json.RawMessage // Default values for parent's config
+    PreProcess    string           // JavaScript for input transformation
+    PostProcess   string           // JavaScript for output transformation
+    InternalSteps []InternalStep   // Composite block internal steps
+
+    // Resolved fields (populated by backend)
+    PreProcessChain        []string         // Chain of preProcess (child→root)
+    PostProcessChain       []string         // Chain of postProcess (root→child)
+    ResolvedCode           string           // Code from root ancestor
+    ResolvedConfigDefaults json.RawMessage  // Merged config defaults
+
+    Enabled    bool
+    CreatedAt  time.Time
+    UpdatedAt  time.Time
+}
+
+type InternalStep struct {
+    Type      string          `json:"type"`       // Block slug to execute
+    Config    json.RawMessage `json:"config"`     // Step configuration
+    OutputKey string          `json:"output_key"` // Key for storing output
+}
+
+type BlockCategory string
+const (
+    BlockCategoryAI          BlockCategory = "ai"
+    BlockCategoryLogic       BlockCategory = "logic"
+    BlockCategoryIntegration BlockCategory = "integration"
+    BlockCategoryData        BlockCategory = "data"
+    BlockCategoryControl     BlockCategory = "control"
+    BlockCategoryUtility     BlockCategory = "utility"
+)
+```
+
+#### Block Inheritance Constraints
+
+| Constraint | Value |
+|------------|-------|
+| Only blocks with code can be inherited | `Code != ""` |
+| Maximum inheritance depth | 10 levels |
+| Circular inheritance | Not allowed |
+
+#### Block Execution Flow
+
+When executing an inherited block:
+1. **PreProcess Chain** (child → root): Transform input through each preProcess
+2. **Internal Steps** (if any): Execute internal steps sequentially
+3. **Code Execution**: Run the resolved code from root ancestor
+4. **PostProcess Chain** (root → child): Transform output through each postProcess
+
 ### Run (domain/run.go)
 
 ```go

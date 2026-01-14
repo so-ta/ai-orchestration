@@ -1980,6 +1980,16 @@ func (e *Executor) executeCustomBlockStep(ctx context.Context, execCtx *Executio
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block definition: %w", err)
 	}
+	if blockDef == nil {
+		return nil, fmt.Errorf("block definition not found: %s", step.BlockDefinitionID)
+	}
+
+	// Validate tenant access: block must be either a system block (no tenant) or belong to the same tenant
+	if blockDef.TenantID != nil && execCtx != nil && execCtx.Run != nil {
+		if *blockDef.TenantID != execCtx.Run.TenantID {
+			return nil, fmt.Errorf("block definition belongs to a different tenant")
+		}
+	}
 
 	// Execute the block with unified model
 	return e.executeBlockDefinition(ctx, execCtx, step, blockDef, input)
