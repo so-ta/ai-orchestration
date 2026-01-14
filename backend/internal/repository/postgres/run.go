@@ -53,7 +53,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 		       triggered_by, run_number, triggered_by_user, started_at, completed_at, created_at,
 		       trigger_source, trigger_metadata
 		FROM runs
-		WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+		WHERE id = $1 AND tenant_id = $2
 	`
 	var run domain.Run
 	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
@@ -74,7 +74,7 @@ func (r *RunRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*d
 // ListByWorkflow retrieves runs for a workflow with pagination
 func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID, filter repository.RunFilter) ([]*domain.Run, int, error) {
 	// Count query
-	countQuery := `SELECT COUNT(*) FROM runs WHERE tenant_id = $1 AND workflow_id = $2 AND deleted_at IS NULL`
+	countQuery := `SELECT COUNT(*) FROM runs WHERE tenant_id = $1 AND workflow_id = $2`
 	args := []interface{}{tenantID, workflowID}
 
 	var total int
@@ -88,7 +88,7 @@ func (r *RunRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID
 		       triggered_by, run_number, triggered_by_user, started_at, completed_at, created_at,
 		       trigger_source, trigger_metadata
 		FROM runs
-		WHERE tenant_id = $1 AND workflow_id = $2 AND deleted_at IS NULL
+		WHERE tenant_id = $1 AND workflow_id = $2
 		ORDER BY created_at DESC
 	`
 

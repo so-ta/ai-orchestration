@@ -103,7 +103,7 @@ func main() {
 	edgeUsecase := usecase.NewEdgeUsecase(workflowRepo, stepRepo, edgeRepo)
 	runUsecase := usecase.NewRunUsecase(workflowRepo, runRepo, versionRepo, stepRepo, edgeRepo, stepRunRepo, redisClient)
 	scheduleUsecase := usecase.NewScheduleUsecase(scheduleRepo, workflowRepo, runRepo)
-	webhookUsecase := usecase.NewWebhookUsecase(webhookRepo, workflowRepo, runRepo)
+	webhookUsecase := usecase.NewWebhookUsecase(webhookRepo, workflowRepo, runRepo, stepRepo)
 	auditService := usecase.NewAuditService(auditRepo)
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
 	blockUsecase := usecase.NewBlockUsecase(blockRepo, blockVersionRepo)

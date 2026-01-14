@@ -1264,7 +1264,29 @@ func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionCo
 		"step_id", step.ID,
 	)
 
-	return json.Marshal(result)
+	// Marshal result to JSON
+	output, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result: %w", err)
+	}
+
+	// Filter output by schema if defined
+	if config.OutputSchema != nil && len(config.OutputSchema) > 0 {
+		filtered, filterErr := domain.FilterOutputBySchema(output, config.OutputSchema)
+		if filterErr != nil {
+			e.logger.Warn("Output filtering failed, using original output",
+				"step_id", step.ID,
+				"error", filterErr,
+			)
+			return output, nil
+		}
+		e.logger.Debug("Output filtered by schema",
+			"step_id", step.ID,
+		)
+		return filtered, nil
+	}
+
+	return output, nil
 }
 
 func (e *Executor) executeRouterStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
@@ -1976,7 +1998,36 @@ func (e *Executor) executeCustomBlockStep(ctx context.Context, execCtx *Executio
 		"block", blockDef.Slug,
 	)
 
-	return json.Marshal(result)
+	// Marshal result to JSON
+	output, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result: %w", err)
+	}
+
+	// Filter output by schema if defined in step config
+	if configMap != nil {
+		if outputSchemaRaw, ok := configMap["output_schema"]; ok && outputSchemaRaw != nil {
+			outputSchemaJSON, err := json.Marshal(outputSchemaRaw)
+			if err == nil && len(outputSchemaJSON) > 0 {
+				filtered, filterErr := domain.FilterOutputBySchema(output, outputSchemaJSON)
+				if filterErr != nil {
+					e.logger.Warn("Output filtering failed, using original output",
+						"step_id", step.ID,
+						"block", blockDef.Slug,
+						"error", filterErr,
+					)
+					return output, nil
+				}
+				e.logger.Debug("Output filtered by schema",
+					"step_id", step.ID,
+					"block", blockDef.Slug,
+				)
+				return filtered, nil
+			}
+		}
+	}
+
+	return output, nil
 }
 
 // executeCustomBlockStepBySlug executes a custom block by looking up the block definition by slug (step type)
@@ -2069,7 +2120,36 @@ func (e *Executor) executeCustomBlockStepBySlug(ctx context.Context, execCtx *Ex
 		"block", blockDef.Slug,
 	)
 
-	return json.Marshal(result)
+	// Marshal result to JSON
+	output, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal result: %w", err)
+	}
+
+	// Filter output by schema if defined in step config
+	if configMap != nil {
+		if outputSchemaRaw, ok := configMap["output_schema"]; ok && outputSchemaRaw != nil {
+			outputSchemaJSON, err := json.Marshal(outputSchemaRaw)
+			if err == nil && len(outputSchemaJSON) > 0 {
+				filtered, filterErr := domain.FilterOutputBySchema(output, outputSchemaJSON)
+				if filterErr != nil {
+					e.logger.Warn("Output filtering failed, using original output",
+						"step_id", step.ID,
+						"block", blockDef.Slug,
+						"error", filterErr,
+					)
+					return output, nil
+				}
+				e.logger.Debug("Output filtered by schema",
+					"step_id", step.ID,
+					"block", blockDef.Slug,
+				)
+				return filtered, nil
+			}
+		}
+	}
+
+	return output, nil
 }
 
 // wrapCustomBlockCode wraps custom block code with setup that provides expected globals

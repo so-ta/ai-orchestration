@@ -527,6 +527,15 @@
       "outputs": "出力ポート",
       "default": "デフォルト"
     },
+    "outputSchema": {
+      "title": "出力スキーマ（定義済み）",
+      "description": "このステップから次のステップへ渡される出力フィールドです。",
+      "note": "スキーマに定義されていないフィールドは次のステップに渡されません。"
+    },
+    "availableVariables": {
+      "title": "利用可能な入力変数",
+      "description": "テンプレートで使用できる変数です。二重波括弧で囲んで参照できます。"
+    },
     "filter": {
       "title": "フィルター設定",
       "expression": "フィルター式",

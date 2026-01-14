@@ -311,8 +311,11 @@ const effectiveStep = computed(() => {
 })
 
 // Convert input_schema to ConfigSchema format for workflow execution
+// Uses Start step's config.input_schema to define workflow input requirements
 const workflowInputSchema = computed<ConfigSchema | null>(() => {
-  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  // Get input_schema from Start step's config
+  const config = startStep.value?.config as Record<string, unknown> | undefined
+  const schema = config?.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
   const properties = schema.properties as Record<string, unknown> | undefined
   if (!properties || Object.keys(properties).length === 0) return null
@@ -324,7 +327,12 @@ const workflowInputSchema = computed<ConfigSchema | null>(() => {
 })
 
 // Convert input_schema to ConfigSchema format for step execution
+// For Start step, use the workflow input schema (from Start step's config.input_schema)
 const stepInputSchema = computed<ConfigSchema | null>(() => {
+  // For Start step, use workflowInputSchema (which comes from Start step's config.input_schema)
+  if (isStartStep.value) {
+    return workflowInputSchema.value
+  }
   const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
   const properties = schema.properties as Record<string, unknown> | undefined
@@ -343,7 +351,11 @@ const hasWorkflowInputFields = computed(() => {
 })
 
 // Check if step has input fields
+// For Start step, check workflowInputSchema instead
 const hasStepInputFields = computed(() => {
+  if (isStartStep.value) {
+    return hasWorkflowInputFields.value
+  }
   if (!stepInputSchema.value?.properties) return false
   return Object.keys(stepInputSchema.value.properties).length > 0
 })
@@ -864,18 +876,8 @@ watch(() => props.step, () => {
 <template>
   <div class="execution-tab">
     <div class="execution-content">
-      <!-- Step Selected: Show step-specific execution controls -->
-      <template v-if="step">
-        <!-- Start Step Info Banner -->
-        <div v-if="isStartStep && firstExecutableStep" class="info-banner">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="16" x2="12" y2="12"></line>
-            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-          </svg>
-          <span>{{ t('execution.startStepInfo', { nextStep: firstExecutableStep.name }) }}</span>
-        </div>
-
+      <!-- Step Selected (not Start): Show step-specific execution controls -->
+      <template v-if="step && !isStartStep">
         <!-- Input Section -->
         <div class="input-section">
           <div class="input-header">
@@ -1055,10 +1057,6 @@ watch(() => props.step, () => {
           </button>
         </div>
 
-        <p v-if="!latestRun" class="info-text">
-          {{ t('execution.inlineTestInfo') }}
-        </p>
-
         <!-- Step Execution History (from all test runs) -->
         <div class="test-run-history">
           <div class="history-header">
@@ -1126,7 +1124,7 @@ watch(() => props.step, () => {
         </div>
       </template>
 
-      <!-- No Step Selected: Show workflow test execution controls and history -->
+      <!-- No Step Selected OR Start Step: Show workflow execution controls and history -->
       <template v-else>
         <!-- Workflow Execution Section -->
         <div class="workflow-execution-section">

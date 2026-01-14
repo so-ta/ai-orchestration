@@ -76,6 +76,11 @@ func (u *RunUsecase) Create(ctx context.Context, input CreateRunInput) (*domain.
 		}
 	}
 
+	// Validate input against Start step's input_schema
+	if err := u.validateWorkflowInput(ctx, input.TenantID, workflow.ID, input.Input); err != nil {
+		return nil, err
+	}
+
 	// Create run
 	run := domain.NewRun(
 		input.TenantID,
@@ -645,4 +650,53 @@ func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUI
 	}
 
 	return result
+}
+
+// validateWorkflowInput validates workflow input against Start step's input_schema
+func (u *RunUsecase) validateWorkflowInput(ctx context.Context, tenantID, workflowID uuid.UUID, input json.RawMessage) error {
+	// Get all steps for the workflow
+	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	if err != nil {
+		return nil // Skip validation if we can't get steps
+	}
+
+	// Find the start step
+	var startStep *domain.Step
+	for _, step := range steps {
+		if step.Type == "start" {
+			startStep = step
+			break
+		}
+	}
+
+	if startStep == nil {
+		return nil // No start step, skip validation
+	}
+
+	// Extract input_schema from start step's config
+	inputSchema := extractInputSchemaFromConfig(startStep.Config)
+	if inputSchema == nil {
+		return nil // No input_schema defined, skip validation
+	}
+
+	// Validate input against schema
+	return domain.ValidateInputSchema(input, inputSchema)
+}
+
+// extractInputSchemaFromConfig extracts the input_schema from a step's config
+func extractInputSchemaFromConfig(config json.RawMessage) json.RawMessage {
+	if config == nil || len(config) == 0 {
+		return nil
+	}
+
+	var configMap map[string]json.RawMessage
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return nil
+	}
+
+	if inputSchema, ok := configMap["input_schema"]; ok {
+		return inputSchema
+	}
+
+	return nil
 }

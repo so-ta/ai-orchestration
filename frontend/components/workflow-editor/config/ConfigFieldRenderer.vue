@@ -9,6 +9,8 @@ import CheckboxWidget from './widgets/CheckboxWidget.vue';
 import ArrayWidget from './widgets/ArrayWidget.vue';
 import KeyValueWidget from './widgets/KeyValueWidget.vue';
 import CodeWidget from './widgets/CodeWidget.vue';
+import JsonWidget from './widgets/JsonWidget.vue';
+import OutputSchemaWidget from './widgets/OutputSchemaWidget.vue';
 
 const props = defineProps<{
   field: ParsedField;
@@ -40,8 +42,11 @@ const widgetComponent = computed(() => {
     case 'array':
       return ArrayWidget;
     case 'key-value':
-    case 'json': // Fallback to key-value for now
       return KeyValueWidget;
+    case 'json':
+      return JsonWidget;
+    case 'output-schema':
+      return OutputSchemaWidget;
     case 'code':
       return CodeWidget;
     default:
