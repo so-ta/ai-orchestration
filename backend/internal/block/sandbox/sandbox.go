@@ -534,6 +534,7 @@ func (s *Sandbox) httpRequest(vm *goja.Runtime, client *HTTPClient, method strin
 type HTTPClient struct {
 	client  *http.Client
 	headers map[string]string
+	mu      sync.RWMutex
 }
 
 // NewHTTPClient creates a new HTTPClient
@@ -548,7 +549,20 @@ func NewHTTPClient(timeout time.Duration) *HTTPClient {
 
 // SetHeader sets a default header for all requests
 func (c *HTTPClient) SetHeader(key, value string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.headers[key] = value
+}
+
+// getHeaders returns a copy of the default headers (thread-safe)
+func (c *HTTPClient) getHeaders() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	headers := make(map[string]string, len(c.headers))
+	for k, v := range c.headers {
+		headers[k] = v
+	}
+	return headers
 }
 
 // Request performs an HTTP request
@@ -567,8 +581,8 @@ func (c *HTTPClient) Request(method, url string, body interface{}, options map[s
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set default headers
-	for k, v := range c.headers {
+	// Set default headers (thread-safe read via copy)
+	for k, v := range c.getHeaders() {
 		req.Header.Set(k, v)
 	}
 
