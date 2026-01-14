@@ -105,8 +105,14 @@ func HandleError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrBlockGroupRunNotFound),
 		errors.Is(err, domain.ErrCredentialNotFound),
 		errors.Is(err, domain.ErrSystemCredentialNotFound),
-		errors.Is(err, domain.ErrBlockDefinitionNotFound):
+		errors.Is(err, domain.ErrBlockDefinitionNotFound),
+		errors.Is(err, domain.ErrStepRunNotFound):
 		Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrRunNotCancellable),
+		errors.Is(err, domain.ErrRunNotResumable),
+		errors.Is(err, domain.ErrScheduleDisabled):
+		Error(w, http.StatusConflict, "INVALID_STATE", err.Error(), nil)
 
 	case errors.Is(err, domain.ErrCredentialExpired),
 		errors.Is(err, domain.ErrCredentialRevoked),

@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"reflect"
 )
 
@@ -51,6 +52,7 @@ func ValidateInputSchema(input json.RawMessage, schemaJSON json.RawMessage) erro
 
 	var schema InputSchema
 	if err := json.Unmarshal(schemaJSON, &schema); err != nil {
+		slog.Warn("Invalid input schema format, skipping validation", "error", err)
 		return nil // Invalid schema format, skip validation
 	}
 
@@ -167,6 +169,7 @@ func FilterOutputBySchema(output json.RawMessage, schemaJSON json.RawMessage) (j
 
 	var schema InputSchema
 	if err := json.Unmarshal(schemaJSON, &schema); err != nil {
+		slog.Warn("Invalid output schema format, returning original output", "error", err)
 		return output, nil // Invalid schema format, return original
 	}
 

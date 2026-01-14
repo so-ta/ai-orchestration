@@ -2086,6 +2086,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    InvalidState:
+      description: リソースが操作に対して無効な状態です
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INVALID_STATE
+              message: run cannot be cancelled
     SchemaValidationError:
       description: input_schemaに対する入力データ検証エラー
       content:
