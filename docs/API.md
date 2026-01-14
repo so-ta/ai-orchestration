@@ -42,6 +42,7 @@ REST API endpoints, request/response schemas, and authentication.
 | `VALIDATION_ERROR` | 400 | Invalid request body |
 | `SCHEMA_VALIDATION_ERROR` | 400 | Input does not match workflow's input_schema |
 | `CONFLICT` | 409 | Resource conflict |
+| `INVALID_STATE` | 409 | Resource is in invalid state for operation (e.g., run cannot be cancelled/resumed, schedule is disabled) |
 | `INTERNAL_ERROR` | 500 | Server error |
 | `RATE_LIMIT_EXCEEDED` | 429 | Rate limit exceeded |
 
