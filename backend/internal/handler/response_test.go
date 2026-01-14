@@ -150,3 +150,32 @@ func TestHandleError_UnknownError(t *testing.T) {
 	assert.Equal(t, "INTERNAL_ERROR", result.Error.Code)
 	assert.Equal(t, "internal server error", result.Error.Message)
 }
+
+// TestHandleError_InputValidationErrors tests HandleError with InputValidationErrors
+func TestHandleError_InputValidationErrors(t *testing.T) {
+	rec := httptest.NewRecorder()
+	inputValidationErr := &domain.InputValidationErrors{
+		Errors: []domain.InputValidationError{
+			{Field: "email", Message: "email is required"},
+			{Field: "age", Message: "age must be of type integer"},
+		},
+	}
+
+	HandleError(rec, inputValidationErr)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var result ErrorResponse
+	err := json.NewDecoder(rec.Body).Decode(&result)
+	assert.NoError(t, err)
+	assert.Equal(t, "SCHEMA_VALIDATION_ERROR", result.Error.Code)
+	assert.Equal(t, "Input validation failed", result.Error.Message)
+	assert.NotNil(t, result.Error.Details)
+
+	// Check details structure
+	details, ok := result.Error.Details.(map[string]interface{})
+	assert.True(t, ok)
+	errorsArr, ok := details["errors"].([]interface{})
+	assert.True(t, ok)
+	assert.Len(t, errorsArr, 2)
+}
