@@ -155,7 +155,11 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 	if input != nil && len(input) > 0 {
 		stepInput = input
 	} else {
-		stepInput = e.prepareStepInput(execCtx, *targetStep)
+		var err error
+		stepInput, err = e.prepareStepInput(execCtx, *targetStep)
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare step input: %w", err)
+		}
 	}
 	stepRun.Start(stepInput)
 
@@ -505,12 +509,15 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	execCtx.mu.Unlock()
 
 	// Prepare input
-	input := e.prepareStepInput(execCtx, step)
+	input, err := e.prepareStepInput(execCtx, step)
+	if err != nil {
+		stepRun.Fail(fmt.Sprintf("failed to prepare step input: %v", err))
+		return fmt.Errorf("failed to prepare step input: %w", err)
+	}
 	stepRun.Start(input)
 
 	// Execute based on step type
 	var output json.RawMessage
-	var err error
 
 	switch step.Type {
 	case domain.StepTypeStart:
@@ -598,14 +605,14 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	return nil
 }
 
-func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step) json.RawMessage {
+func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step) (json.RawMessage, error) {
 	// For now, use the run input or previous step output
 	execCtx.mu.RLock()
 	defer execCtx.mu.RUnlock()
 
 	// Simple: use run input if no dependencies, otherwise merge outputs
 	if len(execCtx.StepData) == 0 {
-		return execCtx.Run.Input
+		return execCtx.Run.Input, nil
 	}
 
 	// Merge all previous outputs
@@ -623,10 +630,9 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 
 	result, err := json.Marshal(merged)
 	if err != nil {
-		e.logger.Error("Failed to marshal merged output", "error", err)
-		return json.RawMessage("{}")
+		return nil, fmt.Errorf("failed to marshal merged output: %w", err)
 	}
-	return result
+	return result, nil
 }
 
 func (e *Executor) executeStartStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
