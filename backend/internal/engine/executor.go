@@ -163,13 +163,6 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 	var output json.RawMessage
 	var err error
 
-	// Build a mini graph for the single step execution
-	graph := &Graph{
-		Steps:    map[uuid.UUID]domain.Step{targetStep.ID: *targetStep},
-		InEdges:  make(map[uuid.UUID][]domain.Edge),
-		OutEdges: make(map[uuid.UUID][]domain.Edge),
-	}
-
 	// Call executeNodeWithInput instead of executeNode to use custom input
 	output, err = e.executeStepWithInput(ctx, execCtx, *targetStep, stepRun, stepInput)
 
@@ -196,9 +189,6 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 		"run_id", execCtx.Run.ID,
 		"step_id", stepID,
 	)
-
-	// Suppress unused variable warning
-	_ = graph
 
 	return stepRun, nil
 }
@@ -624,11 +614,18 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 
 	for stepID, data := range execCtx.StepData {
 		var stepOutput interface{}
-		json.Unmarshal(data, &stepOutput)
+		if err := json.Unmarshal(data, &stepOutput); err != nil {
+			e.logger.Warn("Failed to unmarshal step output", "step_id", stepID, "error", err)
+			stepOutput = string(data) // fallback to raw string
+		}
 		merged[stepID.String()] = stepOutput
 	}
 
-	result, _ := json.Marshal(merged)
+	result, err := json.Marshal(merged)
+	if err != nil {
+		e.logger.Error("Failed to marshal merged output", "error", err)
+		return json.RawMessage("{}")
+	}
 	return result
 }
 
@@ -875,7 +872,12 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 				sem <- struct{}{}        // Acquire
 				defer func() { <-sem }() // Release
 
-				itemJSON, _ := json.Marshal(itm)
+				itemJSON, err := json.Marshal(itm)
+				if err != nil {
+					e.logger.Warn("Failed to marshal map item", "index", idx, "error", err)
+					errors[idx] = err
+					return
+				}
 				resp, err := adp.Execute(ctx, &adapter.Request{
 					Input:  itemJSON,
 					Config: step.Config,
@@ -886,7 +888,10 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 				}
 
 				var output interface{}
-				json.Unmarshal(resp.Output, &output)
+				if err := json.Unmarshal(resp.Output, &output); err != nil {
+					e.logger.Warn("Failed to unmarshal map item output", "index", idx, "error", err)
+					output = string(resp.Output)
+				}
 				results[idx] = output
 			}(i, item)
 		}
@@ -894,7 +899,12 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 	} else {
 		// Sequential execution
 		for i, item := range items {
-			itemJSON, _ := json.Marshal(item)
+			itemJSON, err := json.Marshal(item)
+			if err != nil {
+				e.logger.Warn("Failed to marshal map item", "index", i, "error", err)
+				errors[i] = err
+				continue
+			}
 			resp, err := adp.Execute(ctx, &adapter.Request{
 				Input:  itemJSON,
 				Config: step.Config,
@@ -905,7 +915,10 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 			}
 
 			var output interface{}
-			json.Unmarshal(resp.Output, &output)
+			if err := json.Unmarshal(resp.Output, &output); err != nil {
+				e.logger.Warn("Failed to unmarshal map item output", "index", i, "error", err)
+				output = string(resp.Output)
+			}
 			results[i] = output
 		}
 	}
@@ -951,7 +964,10 @@ func (e *Executor) executeJoinStep(ctx context.Context, execCtx *ExecutionContex
 	merged := make(map[string]interface{})
 	for stepID, data := range execCtx.StepData {
 		var output interface{}
-		json.Unmarshal(data, &output)
+		if err := json.Unmarshal(data, &output); err != nil {
+			e.logger.Warn("Failed to unmarshal step data in join", "step_id", stepID, "error", err)
+			output = string(data)
+		}
 		merged[stepID.String()] = output
 	}
 
@@ -1064,7 +1080,10 @@ func (e *Executor) executeLoopStep(ctx context.Context, step domain.Step, input 
 				iterInput["previous"] = results[len(results)-1]
 			}
 
-			inputJSON, _ := json.Marshal(iterInput)
+			inputJSON, err := json.Marshal(iterInput)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal while loop input: %w", err)
+			}
 			condResult, err := e.evaluator.Evaluate(config.Condition, inputJSON)
 			if err != nil || !condResult {
 				break
@@ -1103,7 +1122,10 @@ func (e *Executor) executeLoopStep(ctx context.Context, step domain.Step, input 
 			}
 
 			// Check condition after execution
-			inputJSON, _ := json.Marshal(iterInput)
+			inputJSON, err := json.Marshal(iterInput)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal do-while loop input: %w", err)
+			}
 			condResult, err := e.evaluator.Evaluate(config.Condition, inputJSON)
 			if err != nil || !condResult {
 				break
@@ -1136,7 +1158,10 @@ func (e *Executor) executeLoopIteration(ctx context.Context, step domain.Step, c
 	}
 
 	// Execute adapter
-	inputJSON, _ := json.Marshal(iterInput)
+	inputJSON, err := json.Marshal(iterInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal loop iteration input: %w", err)
+	}
 	resp, err := adp.Execute(ctx, &adapter.Request{
 		Input:  inputJSON,
 		Config: step.Config,
@@ -1146,7 +1171,10 @@ func (e *Executor) executeLoopIteration(ctx context.Context, step domain.Step, c
 	}
 
 	var output interface{}
-	json.Unmarshal(resp.Output, &output)
+	if err := json.Unmarshal(resp.Output, &output); err != nil {
+		e.logger.Warn("Failed to unmarshal loop iteration output", "error", err)
+		output = string(resp.Output)
+	}
 	return output, nil
 }
 
@@ -1325,7 +1353,10 @@ func (e *Executor) executeRouterStep(ctx context.Context, step domain.Step, inpu
 			{"role": "user", "content": string(input)},
 		},
 	}
-	llmConfigJSON, _ := json.Marshal(llmConfig)
+	llmConfigJSON, err := json.Marshal(llmConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal LLM config: %w", err)
+	}
 
 	resp, err := adp.Execute(ctx, &adapter.Request{
 		Input:  input,
@@ -1347,7 +1378,10 @@ func (e *Executor) executeRouterStep(ctx context.Context, step domain.Step, inpu
 
 	// Parse LLM response to determine route
 	var llmOutput map[string]interface{}
-	json.Unmarshal(resp.Output, &llmOutput)
+	if err := json.Unmarshal(resp.Output, &llmOutput); err != nil {
+		e.logger.Warn("Failed to parse LLM router response", "error", err)
+		llmOutput = map[string]interface{}{}
+	}
 
 	// Try to extract route from response
 	selectedRoute := config.Routes[0].Name
@@ -1534,8 +1568,12 @@ func (e *Executor) executeFilterStep(ctx context.Context, step domain.Step, inpu
 
 	// Filter items
 	var filteredItems []interface{}
-	for _, item := range items {
-		itemJSON, _ := json.Marshal(item)
+	for i, item := range items {
+		itemJSON, err := json.Marshal(item)
+		if err != nil {
+			e.logger.Warn("Failed to marshal filter item", "step_id", step.ID, "index", i, "error", err)
+			continue
+		}
 		result, err := e.evaluator.Evaluate(config.Expression, itemJSON)
 		if err != nil {
 			e.logger.Warn("Filter item evaluation failed",
