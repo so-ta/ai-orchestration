@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -244,10 +246,12 @@ func (u *WebhookUsecase) Trigger(ctx context.Context, input TriggerWebhookInput)
 
 	// Apply input mapping if configured
 	var runInput json.RawMessage
-	if webhook.InputMapping != nil {
-		// In production, apply the mapping transformation
-		// For now, just use the raw payload
-		runInput = input.Payload
+	if webhook.InputMapping != nil && len(webhook.InputMapping) > 0 {
+		mappedInput, err := u.applyInputMapping(input.Payload, webhook.InputMapping)
+		if err != nil {
+			return nil, fmt.Errorf("failed to apply input mapping: %w", err)
+		}
+		runInput = mappedInput
 	} else {
 		runInput = input.Payload
 	}
@@ -285,4 +289,69 @@ func (u *WebhookUsecase) verifySignature(secret string, payload json.RawMessage,
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 	return hmac.Equal([]byte(signature), []byte(expectedSig))
+}
+
+// applyInputMapping transforms the payload according to the input mapping configuration.
+// The mapping format is: {"output_field": "$.input.path", ...}
+// Example: {"event_type": "$.action", "repo_name": "$.repository.name"}
+func (u *WebhookUsecase) applyInputMapping(payload json.RawMessage, mapping json.RawMessage) (json.RawMessage, error) {
+	// Parse the payload
+	var payloadData map[string]interface{}
+	if err := json.Unmarshal(payload, &payloadData); err != nil {
+		return nil, fmt.Errorf("failed to parse payload: %w", err)
+	}
+
+	// Parse the mapping configuration
+	var mappingConfig map[string]string
+	if err := json.Unmarshal(mapping, &mappingConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse input mapping: %w", err)
+	}
+
+	// Apply the mapping
+	result := make(map[string]interface{})
+	for outputField, inputPath := range mappingConfig {
+		value, err := u.resolvePath(inputPath, payloadData)
+		if err != nil {
+			// Skip fields that don't exist in the payload
+			continue
+		}
+		result[outputField] = value
+	}
+
+	// Marshal the result
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal mapped result: %w", err)
+	}
+
+	return resultJSON, nil
+}
+
+// resolvePath resolves a JSONPath expression (e.g., "$.field.nested") against data
+func (u *WebhookUsecase) resolvePath(path string, data map[string]interface{}) (interface{}, error) {
+	// Remove JSONPath prefix
+	path = strings.TrimPrefix(path, "$.")
+	path = strings.TrimPrefix(path, "$")
+
+	if path == "" {
+		return data, nil
+	}
+
+	parts := strings.Split(path, ".")
+	var current interface{} = data
+
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			val, ok := v[part]
+			if !ok {
+				return nil, fmt.Errorf("field not found: %s", part)
+			}
+			current = val
+		default:
+			return nil, fmt.Errorf("cannot access %s on non-object", part)
+		}
+	}
+
+	return current, nil
 }

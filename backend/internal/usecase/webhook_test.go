@@ -847,3 +847,264 @@ func TestWebhookUsecase_verifySignature(t *testing.T) {
 		assert.False(t, result)
 	})
 }
+
+// Tests for applyInputMapping
+
+func TestWebhookUsecase_applyInputMapping(t *testing.T) {
+	uc := &WebhookUsecase{}
+
+	t.Run("simple mapping", func(t *testing.T) {
+		payload := json.RawMessage(`{"action": "opened", "repository": {"name": "test-repo"}}`)
+		mapping := json.RawMessage(`{"event_type": "$.action", "repo_name": "$.repository.name"}`)
+
+		result, err := uc.applyInputMapping(payload, mapping)
+		require.NoError(t, err)
+
+		var resultMap map[string]interface{}
+		err = json.Unmarshal(result, &resultMap)
+		require.NoError(t, err)
+
+		assert.Equal(t, "opened", resultMap["event_type"])
+		assert.Equal(t, "test-repo", resultMap["repo_name"])
+	})
+
+	t.Run("root reference", func(t *testing.T) {
+		payload := json.RawMessage(`{"key": "value"}`)
+		mapping := json.RawMessage(`{"all": "$"}`)
+
+		result, err := uc.applyInputMapping(payload, mapping)
+		require.NoError(t, err)
+
+		var resultMap map[string]interface{}
+		err = json.Unmarshal(result, &resultMap)
+		require.NoError(t, err)
+
+		allData, ok := resultMap["all"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "value", allData["key"])
+	})
+
+	t.Run("missing field skipped", func(t *testing.T) {
+		payload := json.RawMessage(`{"existing": "value"}`)
+		mapping := json.RawMessage(`{"found": "$.existing", "not_found": "$.missing.field"}`)
+
+		result, err := uc.applyInputMapping(payload, mapping)
+		require.NoError(t, err)
+
+		var resultMap map[string]interface{}
+		err = json.Unmarshal(result, &resultMap)
+		require.NoError(t, err)
+
+		assert.Equal(t, "value", resultMap["found"])
+		_, exists := resultMap["not_found"]
+		assert.False(t, exists)
+	})
+
+	t.Run("nested path", func(t *testing.T) {
+		payload := json.RawMessage(`{"level1": {"level2": {"level3": "deep_value"}}}`)
+		mapping := json.RawMessage(`{"deep": "$.level1.level2.level3"}`)
+
+		result, err := uc.applyInputMapping(payload, mapping)
+		require.NoError(t, err)
+
+		var resultMap map[string]interface{}
+		err = json.Unmarshal(result, &resultMap)
+		require.NoError(t, err)
+
+		assert.Equal(t, "deep_value", resultMap["deep"])
+	})
+
+	t.Run("invalid payload json", func(t *testing.T) {
+		payload := json.RawMessage(`{invalid json}`)
+		mapping := json.RawMessage(`{"field": "$.value"}`)
+
+		_, err := uc.applyInputMapping(payload, mapping)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse payload")
+	})
+
+	t.Run("invalid mapping json", func(t *testing.T) {
+		payload := json.RawMessage(`{"key": "value"}`)
+		mapping := json.RawMessage(`{invalid mapping}`)
+
+		_, err := uc.applyInputMapping(payload, mapping)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse input mapping")
+	})
+
+	t.Run("empty mapping", func(t *testing.T) {
+		payload := json.RawMessage(`{"key": "value"}`)
+		mapping := json.RawMessage(`{}`)
+
+		result, err := uc.applyInputMapping(payload, mapping)
+		require.NoError(t, err)
+
+		var resultMap map[string]interface{}
+		err = json.Unmarshal(result, &resultMap)
+		require.NoError(t, err)
+
+		assert.Empty(t, resultMap)
+	})
+}
+
+// Tests for resolvePath
+
+func TestWebhookUsecase_resolvePath(t *testing.T) {
+	uc := &WebhookUsecase{}
+	data := map[string]interface{}{
+		"simple": "value",
+		"nested": map[string]interface{}{
+			"field": "nested_value",
+			"deep": map[string]interface{}{
+				"value": "deep_value",
+			},
+		},
+	}
+
+	t.Run("simple field", func(t *testing.T) {
+		result, err := uc.resolvePath("$.simple", data)
+		require.NoError(t, err)
+		assert.Equal(t, "value", result)
+	})
+
+	t.Run("nested field", func(t *testing.T) {
+		result, err := uc.resolvePath("$.nested.field", data)
+		require.NoError(t, err)
+		assert.Equal(t, "nested_value", result)
+	})
+
+	t.Run("deep nested field", func(t *testing.T) {
+		result, err := uc.resolvePath("$.nested.deep.value", data)
+		require.NoError(t, err)
+		assert.Equal(t, "deep_value", result)
+	})
+
+	t.Run("root reference", func(t *testing.T) {
+		result, err := uc.resolvePath("$", data)
+		require.NoError(t, err)
+		assert.Equal(t, data, result)
+	})
+
+	t.Run("field not found", func(t *testing.T) {
+		_, err := uc.resolvePath("$.nonexistent", data)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "field not found")
+	})
+
+	t.Run("access on non-object", func(t *testing.T) {
+		_, err := uc.resolvePath("$.simple.invalid", data)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot access")
+	})
+}
+
+// Tests for Trigger with input mapping
+
+func TestWebhookUsecase_Trigger_WithInputMapping(t *testing.T) {
+	ctx := context.Background()
+	tenantID := uuid.New()
+	webhookID := uuid.New()
+	workflowID := uuid.New()
+	secret := "test-secret"
+
+	generateSignature := func(payload []byte, secret string) string {
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(payload)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+
+	t.Run("with input mapping", func(t *testing.T) {
+		payload := json.RawMessage(`{"action": "opened", "repository": {"name": "test-repo"}}`)
+		signature := generateSignature(payload, secret)
+		inputMapping := json.RawMessage(`{"event_type": "$.action", "repo_name": "$.repository.name"}`)
+
+		var capturedInput json.RawMessage
+		webhook := &domain.Webhook{
+			ID:              webhookID,
+			TenantID:        tenantID,
+			WorkflowID:      workflowID,
+			WorkflowVersion: 1,
+			Secret:          secret,
+			Enabled:         true,
+			InputMapping:    inputMapping,
+		}
+		webhookRepo := &mockWebhookRepo{
+			getByIDForTriggerFn: func(ctx context.Context, id uuid.UUID) (*domain.Webhook, error) {
+				return webhook, nil
+			},
+			updateFunc: func(ctx context.Context, w *domain.Webhook) error {
+				return nil
+			},
+		}
+		runRepo := &mockRunRepo{
+			createFunc: func(ctx context.Context, run *domain.Run) error {
+				capturedInput = run.Input
+				return nil
+			},
+		}
+
+		uc := newTestWebhookUsecase(webhookRepo, nil, runRepo)
+
+		input := TriggerWebhookInput{
+			WebhookID: webhookID,
+			Signature: signature,
+			Payload:   payload,
+		}
+
+		run, err := uc.Trigger(ctx, input)
+		require.NoError(t, err)
+		assert.NotNil(t, run)
+
+		// Verify the input was transformed
+		var resultMap map[string]interface{}
+		err = json.Unmarshal(capturedInput, &resultMap)
+		require.NoError(t, err)
+		assert.Equal(t, "opened", resultMap["event_type"])
+		assert.Equal(t, "test-repo", resultMap["repo_name"])
+	})
+
+	t.Run("without input mapping uses raw payload", func(t *testing.T) {
+		payload := json.RawMessage(`{"action": "opened"}`)
+		signature := generateSignature(payload, secret)
+
+		var capturedInput json.RawMessage
+		webhook := &domain.Webhook{
+			ID:              webhookID,
+			TenantID:        tenantID,
+			WorkflowID:      workflowID,
+			WorkflowVersion: 1,
+			Secret:          secret,
+			Enabled:         true,
+			InputMapping:    nil,
+		}
+		webhookRepo := &mockWebhookRepo{
+			getByIDForTriggerFn: func(ctx context.Context, id uuid.UUID) (*domain.Webhook, error) {
+				return webhook, nil
+			},
+			updateFunc: func(ctx context.Context, w *domain.Webhook) error {
+				return nil
+			},
+		}
+		runRepo := &mockRunRepo{
+			createFunc: func(ctx context.Context, run *domain.Run) error {
+				capturedInput = run.Input
+				return nil
+			},
+		}
+
+		uc := newTestWebhookUsecase(webhookRepo, nil, runRepo)
+
+		input := TriggerWebhookInput{
+			WebhookID: webhookID,
+			Signature: signature,
+			Payload:   payload,
+		}
+
+		run, err := uc.Trigger(ctx, input)
+		require.NoError(t, err)
+		assert.NotNil(t, run)
+
+		// Verify the raw payload was used
+		assert.JSONEq(t, string(payload), string(capturedInput))
+	})
+}
