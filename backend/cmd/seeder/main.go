@@ -49,7 +49,11 @@ func main() {
 	}
 
 	// Connect to database
-	dbURL := getEnv("DATABASE_URL", "postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable")
+	dbURL := getEnv("DATABASE_URL", "")
+	if dbURL == "" {
+		fmt.Println("❌ DATABASE_URL environment variable is required")
+		os.Exit(1)
+	}
 	ctx := context.Background()
 
 	pool, err := database.NewPool(ctx, database.DefaultConfig(dbURL))

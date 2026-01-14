@@ -248,7 +248,7 @@ db-seed:
 # Seed blocks (Go programmatic seeder)
 seed-blocks:
 	@echo "Running block seeder..."
-	@cd backend && go run ./cmd/seeder
+	@cd backend && DATABASE_URL="postgres://$(DB_USER):aio_password@localhost:5432/$(DB_NAME)?sslmode=disable" go run ./cmd/seeder
 	@echo "Block seeding complete!"
 
 # Validate block definitions
@@ -259,7 +259,7 @@ seed-blocks-validate:
 # Seed blocks (dry run)
 seed-blocks-dry-run:
 	@echo "Running block seeder (dry run)..."
-	@cd backend && go run ./cmd/seeder -dry-run -verbose
+	@cd backend && DATABASE_URL="postgres://$(DB_USER):aio_password@localhost:5432/$(DB_NAME)?sslmode=disable" go run ./cmd/seeder -dry-run -verbose
 
 # Reset database
 db-reset:
