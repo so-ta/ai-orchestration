@@ -20,6 +20,7 @@ type WebhookUsecase struct {
 	webhookRepo  repository.WebhookRepository
 	workflowRepo repository.WorkflowRepository
 	runRepo      repository.RunRepository
+	stepRepo     repository.StepRepository
 }
 
 // NewWebhookUsecase creates a new WebhookUsecase
@@ -27,11 +28,13 @@ func NewWebhookUsecase(
 	webhookRepo repository.WebhookRepository,
 	workflowRepo repository.WorkflowRepository,
 	runRepo repository.RunRepository,
+	stepRepo repository.StepRepository,
 ) *WebhookUsecase {
 	return &WebhookUsecase{
 		webhookRepo:  webhookRepo,
 		workflowRepo: workflowRepo,
 		runRepo:      runRepo,
+		stepRepo:     stepRepo,
 	}
 }
 
@@ -256,6 +259,11 @@ func (u *WebhookUsecase) Trigger(ctx context.Context, input TriggerWebhookInput)
 		runInput = input.Payload
 	}
 
+	// Validate input against Start step's input_schema
+	if err := u.validateWorkflowInput(ctx, webhook.TenantID, webhook.WorkflowID, runInput); err != nil {
+		return nil, err
+	}
+
 	// Create a new run
 	run := domain.NewRun(
 		webhook.TenantID,
@@ -289,6 +297,59 @@ func (u *WebhookUsecase) verifySignature(secret string, payload json.RawMessage,
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 	return hmac.Equal([]byte(signature), []byte(expectedSig))
+}
+
+// validateWorkflowInput validates workflow input against Start step's input_schema
+func (u *WebhookUsecase) validateWorkflowInput(ctx context.Context, tenantID, workflowID uuid.UUID, input json.RawMessage) error {
+	if u.stepRepo == nil {
+		return nil // Skip validation if stepRepo is not available
+	}
+
+	// Get all steps for the workflow
+	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	if err != nil {
+		return nil // Skip validation if we can't get steps
+	}
+
+	// Find the start step
+	var startStep *domain.Step
+	for _, step := range steps {
+		if step.Type == "start" {
+			startStep = step
+			break
+		}
+	}
+
+	if startStep == nil {
+		return nil // No start step, skip validation
+	}
+
+	// Extract input_schema from start step's config
+	inputSchema := extractInputSchemaFromStepConfig(startStep.Config)
+	if inputSchema == nil {
+		return nil // No input_schema defined, skip validation
+	}
+
+	// Validate input against schema
+	return domain.ValidateInputSchema(input, inputSchema)
+}
+
+// extractInputSchemaFromStepConfig extracts the input_schema from a step's config
+func extractInputSchemaFromStepConfig(config json.RawMessage) json.RawMessage {
+	if config == nil || len(config) == 0 {
+		return nil
+	}
+
+	var configMap map[string]json.RawMessage
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return nil
+	}
+
+	if inputSchema, ok := configMap["input_schema"]; ok {
+		return inputSchema
+	}
+
+	return nil
 }
 
 // hasValidInputMapping checks if the input mapping is configured and non-empty

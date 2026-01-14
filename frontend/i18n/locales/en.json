@@ -527,6 +527,15 @@
       "outputs": "Output Ports",
       "default": "default"
     },
+    "outputSchema": {
+      "title": "Output Schema (Defined)",
+      "description": "Output fields that will be passed to the next step.",
+      "note": "Fields not defined in the schema will not be passed to the next step."
+    },
+    "availableVariables": {
+      "title": "Available Input Variables",
+      "description": "Variables available for use in templates. Reference them using double curly braces."
+    },
     "filter": {
       "title": "Filter Configuration",
       "expression": "Filter Expression",

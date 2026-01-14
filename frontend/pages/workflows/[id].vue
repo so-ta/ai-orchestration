@@ -881,13 +881,8 @@ async function handleAutoLayout() {
     saving.value = true
 
     // Calculate new positions using dagre (Left-to-Right layout)
-    const layoutResults = calculateLayout(steps, edges, {
-      direction: 'LR',
-      nodeWidth: 180,
-      nodeHeight: 60,
-      nodeSeparation: 60,
-      rankSeparation: 120,
-    })
+    // Uses default options from graph-layout.ts which snap to 20px grid
+    const layoutResults = calculateLayout(steps, edges)
 
     // Update all step positions
     const updatePromises = layoutResults.map(result =>

@@ -28,6 +28,7 @@ export function inferWidgetType(prop: JSONSchemaProperty): WidgetType {
       'textarea': 'textarea',
       'code': 'code',
       'json': 'json',
+      'output-schema': 'output-schema',
       'select': 'select',
       'checkbox': 'checkbox',
       'switch': 'switch',

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -71,15 +72,19 @@ func (a *MockAdapter) Execute(ctx context.Context, req *Request) (*Response, err
 
 	// Build response
 	var output json.RawMessage
+	var err error
 	if config.Response != "" {
 		output = json.RawMessage(config.Response)
 	} else {
 		// Echo input with success status
-		output, _ = json.Marshal(map[string]interface{}{
+		output, err = json.Marshal(map[string]interface{}{
 			"success": true,
 			"input":   json.RawMessage(req.Input),
 			"message": "Mock adapter executed successfully",
 		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal mock response: %w", err)
+		}
 	}
 
 	return &Response{

@@ -97,6 +97,7 @@ export type WidgetType =
   | 'code'
   | 'template-editor'
   | 'json'
+  | 'output-schema'
   | 'key-value'
   | 'array'
   | 'secret'

@@ -20,7 +20,7 @@ const DEFAULT_OPTIONS: Required<LayoutOptions> = {
   nodeWidth: 180,
   nodeHeight: 60,
   nodeSeparation: 60,
-  rankSeparation: 120,
+  rankSeparation: 40, // Reduced from 120 to 40 (1/3)
 }
 
 /**
@@ -36,13 +36,16 @@ export function calculateLayout(
   // Create a new directed graph
   const g = new dagre.graphlib.Graph()
 
-  // Set graph options
+  // Grid size for snapping (must match Vue Flow's snap-grid)
+  const GRID_SIZE = 20
+
+  // Set graph options (margins must be divisible by grid size)
   g.setGraph({
     rankdir: opts.direction,
     nodesep: opts.nodeSeparation,
     ranksep: opts.rankSeparation,
-    marginx: 50,
-    marginy: 50,
+    marginx: 40, // Changed from 50 to 40 (divisible by 20)
+    marginy: 40, // Changed from 50 to 40 (divisible by 20)
   })
 
   // Default edge label (required by dagre)
@@ -64,16 +67,23 @@ export function calculateLayout(
   // Calculate layout
   dagre.layout(g)
 
-  // Extract positions
+  // Helper function to snap value to grid
+  const snapToGrid = (value: number): number => {
+    return Math.round(value / GRID_SIZE) * GRID_SIZE
+  }
+
+  // Extract positions and snap to grid
   const results: LayoutResult[] = []
   for (const step of steps) {
     const node = g.node(step.id)
     if (node) {
+      // dagre returns center position, adjust to top-left and snap to grid
+      const rawX = node.x - opts.nodeWidth / 2
+      const rawY = node.y - opts.nodeHeight / 2
       results.push({
         stepId: step.id,
-        // dagre returns center position, adjust to top-left
-        x: Math.round(node.x - opts.nodeWidth / 2),
-        y: Math.round(node.y - opts.nodeHeight / 2),
+        x: snapToGrid(rawX),
+        y: snapToGrid(rawY),
       })
     }
   }

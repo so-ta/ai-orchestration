@@ -57,6 +57,101 @@ function handleBlur() {
   emit('blur')
 }
 
+// Format code - simple JavaScript formatter
+function formatCode() {
+  const code = props.modelValue || ''
+  if (!code.trim()) return
+
+  try {
+    const formatted = formatJavaScript(code)
+    emit('update:modelValue', formatted)
+  } catch (e) {
+    // If formatting fails, keep original code
+    console.warn('Code formatting failed:', e)
+  }
+}
+
+// Simple JavaScript formatter
+function formatJavaScript(code: string): string {
+  let result = ''
+  let indentLevel = 0
+  const indentString = '  ' // 2 spaces
+  let inMultilineComment = false
+
+  const lines = code.split('\n')
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex].trim()
+
+    // Skip empty lines but preserve one
+    if (!line) {
+      if (result && !result.endsWith('\n\n')) {
+        result += '\n'
+      }
+      continue
+    }
+
+    // Check for multiline comment start/end
+    if (line.startsWith('/*')) {
+      inMultilineComment = true
+    }
+    if (line.endsWith('*/')) {
+      result += indentString.repeat(indentLevel) + line + '\n'
+      inMultilineComment = false
+      continue
+    }
+    if (inMultilineComment) {
+      result += indentString.repeat(indentLevel) + line + '\n'
+      continue
+    }
+
+    // Check for single line comment
+    if (line.startsWith('//')) {
+      result += indentString.repeat(indentLevel) + line + '\n'
+      continue
+    }
+
+    // Decrease indent for closing braces/brackets at start of line
+    if (line.startsWith('}') || line.startsWith(']') || line.startsWith(')')) {
+      indentLevel = Math.max(0, indentLevel - 1)
+    }
+
+    // Add formatted line
+    result += indentString.repeat(indentLevel) + line + '\n'
+
+    // Count braces to adjust indent (ignoring those in strings)
+    let tempInString: string | null = null
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      const prevChar = i > 0 ? line[i - 1] : ''
+
+      // Handle string detection
+      if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
+        if (tempInString === char) {
+          tempInString = null
+        } else if (tempInString === null) {
+          tempInString = char
+        }
+        continue
+      }
+
+      // Only count braces outside strings
+      if (tempInString === null) {
+        if (char === '{' || char === '[' || char === '(') {
+          // Don't increase if closing brace is on same line
+          const remaining = line.slice(i + 1)
+          const closingChar = char === '{' ? '}' : char === '[' ? ']' : ')'
+          if (!remaining.includes(closingChar)) {
+            indentLevel++
+          }
+        }
+      }
+    }
+  }
+
+  return result.trim() + '\n'
+}
+
 // Simple syntax highlighting keywords for JavaScript
 // Uses placeholders to avoid replacement conflicts
 const highlightedCode = computed(() => {
@@ -146,6 +241,17 @@ const highlightedCode = computed(() => {
         </div>
       </div>
       <div class="code-footer">
+        <button
+          type="button"
+          class="format-button"
+          :disabled="disabled || !modelValue"
+          @click="formatCode"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 10H3M21 6H3M21 14H3M21 18H3"/>
+          </svg>
+          Format
+        </button>
         <span class="language-badge">{{ language }}</span>
       </div>
     </div>
@@ -264,10 +370,40 @@ const highlightedCode = computed(() => {
 
 .code-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding: 0.375rem 0.75rem;
   background: #2d2d2d;
   border-top: 1px solid #404040;
+}
+
+.format-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: #9ca3af;
+  background: #404040;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.format-button:hover:not(:disabled) {
+  background: #4a4a4a;
+  color: #d4d4d4;
+}
+
+.format-button:active:not(:disabled) {
+  background: #3a3a3a;
+}
+
+.format-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .language-badge {
