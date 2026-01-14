@@ -20,6 +20,7 @@ func NewRegistry() *Registry {
 	r.registerDataBlocks()
 	r.registerIntegrationBlocks()
 	r.registerUtilityBlocks()
+	r.registerRAGBlocks()
 
 	return r
 }

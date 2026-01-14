@@ -198,7 +198,7 @@ const items = getPath(input, config.input_path) || [];
 const maxWorkers = config.max_workers || 10;
 let results;
 if (config.parallel) {
-    results = await Promise.all(
+    results = Promise.all(
         items.map((item, index) => ({ item, index, processed: true }))
     );
 } else {

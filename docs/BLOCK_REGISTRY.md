@@ -472,6 +472,43 @@ func (e *BlockError) Error() string {
 | `RAG_001` | QUERY_REQUIRED | rag-query | ❌ | Query text is required |
 | `RAG_002` | COLLECTION_REQUIRED | rag-query | ❌ | Collection name is required |
 
+### Goja Runtime Constraints (重要)
+
+ブロックコードはGoja JavaScript VMで実行されます。以下の制約があります：
+
+| 制約 | 説明 | 対処法 |
+|------|------|--------|
+| **`await`禁止** | gojaは`await`キーワードをサポートしない | `ctx.*`メソッドは同期的に呼び出す |
+| **`async function`禁止** | async関数定義不可 | 通常の`function`を使用 |
+| **`async () =>`禁止** | async arrow function不可 | 通常の`() =>`を使用 |
+
+#### なぜ同期的に動作するか
+
+`ctx.llm.chat()`, `ctx.http.get()`などのメソッドは、Go側で非同期処理を行い、結果が返るまでブロックします。
+JavaScript側からは同期的な関数呼び出しに見えます。
+
+```javascript
+// ❌ NG: awaitは使用不可
+const response = await ctx.llm.chat(...);
+
+// ✅ OK: 同期的に呼び出す（内部でブロッキング）
+const response = ctx.llm.chat(...);
+```
+
+#### バリデーション
+
+seederコマンドはブロックコードをバリデーションし、`await`/`async`の使用を検出します：
+
+```bash
+go run ./cmd/seeder --validate
+```
+
+バリデーションエラー例：
+```
+❌ Block Validation Errors:
+   [rag-query.code] goja runtime incompatibility: goja does not support 'await' keyword. Use synchronous ctx.* methods instead (they are blocking)
+```
+
 ### システムブロックのコード例
 
 ```javascript
@@ -479,7 +516,7 @@ func (e *BlockError) Error() string {
 const prompt = renderTemplate(config.user_prompt || '', input);
 const systemPrompt = config.system_prompt || '';
 
-const response = await ctx.llm.chat(config.provider, config.model, {
+const response = ctx.llm.chat(config.provider, config.model, {
     messages: [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         { role: 'user', content: prompt }
@@ -498,7 +535,7 @@ return {
 // http block
 const url = renderTemplate(config.url, input);
 
-const response = await ctx.http.request(url, {
+const response = ctx.http.request(url, {
     method: config.method || 'GET',
     headers: config.headers || {},
     body: config.body ? renderTemplate(JSON.stringify(config.body), input) : null
@@ -523,7 +560,7 @@ const payload = {
     icon_emoji: config.icon_emoji
 };
 
-const response = await ctx.http.post(webhookUrl, payload, {
+const response = ctx.http.post(webhookUrl, payload, {
     headers: { 'Content-Type': 'application/json' }
 });
 
@@ -535,7 +572,7 @@ return { success: true, status: response.status };
 const token = config.token || ctx.secrets.GITHUB_TOKEN;
 const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/issues';
 
-const response = await ctx.http.post(url, {
+const response = ctx.http.post(url, {
     title: renderTemplate(config.title, input),
     body: renderTemplate(config.body, input),
     labels: config.labels,
@@ -559,7 +596,7 @@ return {
 // embedding block
 // Supported providers: openai, cohere, voyage (Phase 3.3)
 const texts = Array.isArray(input.texts) ? input.texts : [input.text || input.content];
-const result = await ctx.embedding.embed(
+const result = ctx.embedding.embed(
     config.provider || 'openai',  // 'openai', 'cohere', 'voyage'
     config.model || 'text-embedding-3-small',
     texts
@@ -586,7 +623,7 @@ const documents = (input.documents || [input]).map(doc => ({
     vector: doc.vector
 }));
 
-const result = await ctx.vector.upsert(config.collection, documents, {
+const result = ctx.vector.upsert(config.collection, documents, {
     embedding_provider: config.embedding_provider,
     embedding_model: config.embedding_model
 });
@@ -598,7 +635,7 @@ return { upserted_count: result.upserted_count, ids: result.ids };
 // vector-search block
 let queryVector = input.vector;
 if (!queryVector && input.query) {
-    const embResult = await ctx.embedding.embed(
+    const embResult = ctx.embedding.embed(
         config.embedding_provider || 'openai',
         config.embedding_model || 'text-embedding-3-small',
         [input.query]
@@ -606,7 +643,7 @@ if (!queryVector && input.query) {
     queryVector = embResult.vectors[0];
 }
 
-const result = await ctx.vector.query(config.collection, queryVector, {
+const result = ctx.vector.query(config.collection, queryVector, {
     top_k: config.top_k || 5,
     threshold: config.threshold,
     filter: config.filter,
@@ -619,7 +656,7 @@ return { matches: result.matches };
 ```javascript
 // vector-search with advanced filters (Phase 3.1)
 // Supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains
-const result = await ctx.vector.query(config.collection, queryVector, {
+const result = ctx.vector.query(config.collection, queryVector, {
     top_k: 10,
     filter: {
         "$or": [
@@ -635,7 +672,7 @@ const result = await ctx.vector.query(config.collection, queryVector, {
 ```javascript
 // vector-search with hybrid search (Phase 3.2)
 // Combines vector similarity + keyword search using RRF
-const result = await ctx.vector.query(config.collection, queryVector, {
+const result = ctx.vector.query(config.collection, queryVector, {
     top_k: 10,
     keyword: "machine learning",  // Enable hybrid search
     hybrid_alpha: 0.7             // 70% vector, 30% keyword
@@ -645,14 +682,14 @@ const result = await ctx.vector.query(config.collection, queryVector, {
 ```javascript
 // rag-query block (RAG検索+LLM生成)
 // 1. Embedding query
-const embResult = await ctx.embedding.embed(
+const embResult = ctx.embedding.embed(
     config.embedding_provider || 'openai',
     config.embedding_model || 'text-embedding-3-small',
     [input.query]
 );
 
 // 2. Vector search
-const searchResult = await ctx.vector.query(config.collection, embResult.vectors[0], {
+const searchResult = ctx.vector.query(config.collection, embResult.vectors[0], {
     top_k: config.top_k || 5,
     include_content: true
 });
@@ -665,7 +702,7 @@ const systemPrompt = config.system_prompt ||
     'Answer the question based on the following context. If the answer is not in the context, say so.';
 const userPrompt = 'Context:\n' + context + '\n\nQuestion: ' + input.query;
 
-const response = await ctx.llm.chat(
+const response = ctx.llm.chat(
     config.llm_provider || 'openai',
     config.llm_model || 'gpt-4o-mini',
     {
@@ -725,7 +762,7 @@ const payload = {
     content: renderTemplate(config.message, input)
 };
 
-const response = await ctx.http.post(webhookUrl, payload, {
+const response = ctx.http.post(webhookUrl, payload, {
     headers: { 'Content-Type': 'application/json' }
 });
 

@@ -85,7 +85,7 @@ func WaitBlock() *SystemBlockDefinition {
 		},
 		Code: `
 if (config.duration_ms) {
-    await new Promise(resolve => setTimeout(resolve, config.duration_ms));
+    new Promise(resolve => setTimeout(resolve, config.duration_ms));
 }
 return input;
 `,
@@ -164,7 +164,7 @@ func HumanInLoopBlock() *SystemBlockDefinition {
 			{Name: "timeout", Label: "Timeout", IsDefault: false, Description: "When timed out"},
 		},
 		Code: `
-return await ctx.human.requestApproval({
+return ctx.human.requestApproval({
     instructions: config.instructions,
     timeout: config.timeout_hours,
     data: input
