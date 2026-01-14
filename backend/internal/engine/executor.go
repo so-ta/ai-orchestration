@@ -511,6 +511,8 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	// Prepare input
 	input, err := e.prepareStepInput(execCtx, step)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		stepRun.Fail(fmt.Sprintf("failed to prepare step input: %v", err))
 		return fmt.Errorf("failed to prepare step input: %w", err)
 	}
