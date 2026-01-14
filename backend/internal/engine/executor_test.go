@@ -1520,3 +1520,150 @@ func TestExecutor_ExecuteBlockDefinition_EmptyInput(t *testing.T) {
 	// Empty input should be passed through
 	assert.Empty(t, result)
 }
+
+// mockBlockDefinitionGetter is a mock implementation of BlockDefinitionGetter for testing
+type mockBlockDefinitionGetter struct {
+	blocks map[uuid.UUID]*domain.BlockDefinition
+}
+
+func newMockBlockDefinitionGetter() *mockBlockDefinitionGetter {
+	return &mockBlockDefinitionGetter{
+		blocks: make(map[uuid.UUID]*domain.BlockDefinition),
+	}
+}
+
+func (m *mockBlockDefinitionGetter) Add(block *domain.BlockDefinition) {
+	m.blocks[block.ID] = block
+}
+
+func (m *mockBlockDefinitionGetter) GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error) {
+	if block, ok := m.blocks[id]; ok {
+		return block, nil
+	}
+	return nil, nil
+}
+
+func (m *mockBlockDefinitionGetter) GetBySlug(ctx context.Context, tenantID *uuid.UUID, slug string) (*domain.BlockDefinition, error) {
+	for _, block := range m.blocks {
+		if block.Slug == slug {
+			return block, nil
+		}
+	}
+	return nil, nil
+}
+
+func setupTestExecutorWithBlockRepo(repo BlockDefinitionGetter) *Executor {
+	registry := adapter.NewRegistry()
+	registry.Register(adapter.NewMockAdapter())
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	return NewExecutor(registry, logger, WithBlockDefinitionRepository(repo))
+}
+
+func TestExecutor_ExecuteCustomBlockStep_NilExecCtx_TenantBlock_Error(t *testing.T) {
+	// Test that tenant-specific blocks fail when execCtx is nil
+	mockRepo := newMockBlockDefinitionGetter()
+
+	tenantID := uuid.New()
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: &tenantID, // Tenant-specific block
+		Slug:     "tenant-block",
+		Name:     "Tenant Block",
+		Category: domain.BlockCategoryUtility,
+	}
+	mockRepo.Add(blockDef)
+
+	executor := setupTestExecutorWithBlockRepo(mockRepo)
+
+	step := domain.Step{
+		ID:                uuid.New(),
+		Name:              "test-tenant-block-nil-ctx",
+		Type:              "tenant-block",
+		BlockDefinitionID: &blockDef.ID,
+	}
+
+	input := json.RawMessage(`{"data": "test"}`)
+
+	// Call with nil execCtx - should fail for tenant-specific block
+	_, err := executor.executeCustomBlockStep(context.Background(), nil, step, input)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tenant-specific block")
+	assert.Contains(t, err.Error(), "requires execution context")
+	assert.Contains(t, err.Error(), blockDef.Slug) // Error should include block slug
+}
+
+func TestExecutor_ExecuteCustomBlockStep_NilRun_TenantBlock_Error(t *testing.T) {
+	// Test that tenant-specific blocks fail when execCtx.Run is nil
+	mockRepo := newMockBlockDefinitionGetter()
+
+	tenantID := uuid.New()
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: &tenantID, // Tenant-specific block
+		Slug:     "tenant-block-nil-run",
+		Name:     "Tenant Block Nil Run",
+		Category: domain.BlockCategoryUtility,
+	}
+	mockRepo.Add(blockDef)
+
+	executor := setupTestExecutorWithBlockRepo(mockRepo)
+
+	step := domain.Step{
+		ID:                uuid.New(),
+		Name:              "test-tenant-block-nil-run",
+		Type:              "tenant-block-nil-run",
+		BlockDefinitionID: &blockDef.ID,
+	}
+
+	input := json.RawMessage(`{"data": "test"}`)
+
+	// Create execCtx with nil Run
+	execCtx := &ExecutionContext{
+		Run: nil, // Nil run
+	}
+
+	// Call with nil Run in execCtx - should fail for tenant-specific block
+	_, err := executor.executeCustomBlockStep(context.Background(), execCtx, step, input)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tenant-specific block")
+	assert.Contains(t, err.Error(), "requires execution context")
+}
+
+func TestExecutor_ExecuteCustomBlockStep_SystemBlock_NilExecCtx_Success(t *testing.T) {
+	// Test that system blocks (no tenant) work with nil execCtx
+	mockRepo := newMockBlockDefinitionGetter()
+
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: nil, // System block (no tenant)
+		Slug:     "system-block-test",
+		Name:     "System Block Test",
+		Category: domain.BlockCategoryUtility,
+	}
+	mockRepo.Add(blockDef)
+
+	executor := setupTestExecutorWithBlockRepo(mockRepo)
+
+	step := domain.Step{
+		ID:                uuid.New(),
+		Name:              "test-system-block",
+		Type:              "system-block-test",
+		BlockDefinitionID: &blockDef.ID,
+	}
+
+	input := json.RawMessage(`{"data": "system test"}`)
+
+	// System blocks should work even with nil execCtx
+	output, err := executor.executeCustomBlockStep(context.Background(), nil, step, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	assert.Equal(t, "system test", result["data"])
+}

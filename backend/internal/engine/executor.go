@@ -1988,10 +1988,10 @@ func (e *Executor) executeCustomBlockStep(ctx context.Context, execCtx *Executio
 	if blockDef.TenantID != nil {
 		// Tenant-specific blocks require a valid execution context with tenant info
 		if execCtx == nil || execCtx.Run == nil {
-			return nil, fmt.Errorf("tenant-specific block requires execution context with run information")
+			return nil, fmt.Errorf("tenant-specific block %q (step: %s) requires execution context with run information", blockDef.Slug, step.Name)
 		}
 		if *blockDef.TenantID != execCtx.Run.TenantID {
-			return nil, fmt.Errorf("block definition belongs to a different tenant")
+			return nil, fmt.Errorf("block definition %q belongs to a different tenant", blockDef.Slug)
 		}
 	}
 
