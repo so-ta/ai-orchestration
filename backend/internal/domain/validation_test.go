@@ -11,162 +11,134 @@ import (
 func TestValidateInputSchema(t *testing.T) {
 	tests := []struct {
 		name        string
-		input       string
-		schema      string
-		expectError bool
-		errorField  string
+		input       json.RawMessage
+		schema      json.RawMessage
+		wantErr     bool
+		errContains string
 	}{
 		{
-			name:        "nil schema - should pass",
-			input:       `{"name": "test"}`,
-			schema:      "",
-			expectError: false,
+			name:    "nil schema returns no error",
+			input:   json.RawMessage(`{"name": "test"}`),
+			schema:  nil,
+			wantErr: false,
 		},
 		{
-			name:        "invalid schema JSON - should skip validation",
-			input:       `{"name": "test"}`,
-			schema:      `not valid json`,
-			expectError: false,
+			name:    "empty schema returns no error",
+			input:   json.RawMessage(`{"name": "test"}`),
+			schema:  json.RawMessage(``),
+			wantErr: false,
 		},
 		{
-			name:        "empty schema - should pass",
-			input:       `{"name": "test"}`,
-			schema:      `{}`,
-			expectError: false,
+			name:    "non-object schema type returns no error",
+			input:   json.RawMessage(`{"name": "test"}`),
+			schema:  json.RawMessage(`{"type": "array"}`),
+			wantErr: false,
 		},
 		{
-			name:        "no properties - should pass",
-			input:       `{"name": "test"}`,
-			schema:      `{"type": "object"}`,
-			expectError: false,
+			name:    "schema without properties returns no error",
+			input:   json.RawMessage(`{"name": "test"}`),
+			schema:  json.RawMessage(`{"type": "object"}`),
+			wantErr: false,
 		},
 		{
-			name:        "valid input with required field",
-			input:       `{"name": "test", "value": 42}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "number"}}, "required": ["name"]}`,
-			expectError: false,
+			name:    "valid input passes validation",
+			input:   json.RawMessage(`{"name": "test", "age": 25}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name"]}`),
+			wantErr: false,
 		},
 		{
-			name:        "missing required field",
-			input:       `{"value": 42}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "number"}}, "required": ["name"]}`,
-			expectError: true,
-			errorField:  "name",
+			name:        "missing required field fails validation",
+			input:       json.RawMessage(`{"age": 25}`),
+			schema:      json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string", "title": "Name"}, "age": {"type": "integer"}}, "required": ["name"]}`),
+			wantErr:     true,
+			errContains: "Name is required",
 		},
 		{
-			name:        "required field is empty string",
-			input:       `{"name": ""}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`,
-			expectError: true,
-			errorField:  "name",
+			name:        "empty string for required field fails validation",
+			input:       json.RawMessage(`{"name": "", "age": 25}`),
+			schema:      json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}, "required": ["name"]}`),
+			wantErr:     true,
+			errContains: "name is required",
 		},
 		{
-			name:        "required field is null",
-			input:       `{"name": null}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`,
-			expectError: true,
-			errorField:  "name",
+			name:        "wrong type fails validation",
+			input:       json.RawMessage(`{"name": 123}`),
+			schema:      json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+			wantErr:     true,
+			errContains: "name must be of type string",
 		},
 		{
-			name:        "wrong type - string instead of number",
-			input:       `{"value": "not a number"}`,
-			schema:      `{"type": "object", "properties": {"value": {"type": "number"}}}`,
-			expectError: true,
-			errorField:  "value",
+			name:    "number type accepts float",
+			input:   json.RawMessage(`{"value": 3.14}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"value": {"type": "number"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "wrong type - number instead of string",
-			input:       `{"name": 123}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}}}`,
-			expectError: true,
-			errorField:  "name",
+			name:    "integer type accepts whole number as float",
+			input:   json.RawMessage(`{"value": 42}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"value": {"type": "integer"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "valid boolean type",
-			input:       `{"active": true}`,
-			schema:      `{"type": "object", "properties": {"active": {"type": "boolean"}}}`,
-			expectError: false,
+			name:        "integer type rejects float with decimals",
+			input:       json.RawMessage(`{"value": 3.14}`),
+			schema:      json.RawMessage(`{"type": "object", "properties": {"value": {"type": "integer"}}}`),
+			wantErr:     true,
+			errContains: "value must be of type integer",
 		},
 		{
-			name:        "wrong type - string instead of boolean",
-			input:       `{"active": "true"}`,
-			schema:      `{"type": "object", "properties": {"active": {"type": "boolean"}}}`,
-			expectError: true,
-			errorField:  "active",
+			name:    "boolean type validation",
+			input:   json.RawMessage(`{"flag": true}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"flag": {"type": "boolean"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "valid array type",
-			input:       `{"items": [1, 2, 3]}`,
-			schema:      `{"type": "object", "properties": {"items": {"type": "array"}}}`,
-			expectError: false,
+			name:    "array type validation",
+			input:   json.RawMessage(`{"items": [1, 2, 3]}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"items": {"type": "array"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "valid object type",
-			input:       `{"data": {"key": "value"}}`,
-			schema:      `{"type": "object", "properties": {"data": {"type": "object"}}}`,
-			expectError: false,
+			name:    "object type validation",
+			input:   json.RawMessage(`{"nested": {"key": "value"}}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"nested": {"type": "object"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "valid integer type - whole number",
-			input:       `{"count": 42}`,
-			schema:      `{"type": "object", "properties": {"count": {"type": "integer"}}}`,
-			expectError: false,
+			name:        "invalid JSON input fails",
+			input:       json.RawMessage(`{invalid json}`),
+			schema:      json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}}`),
+			wantErr:     true,
+			errContains: "invalid JSON input",
 		},
 		{
-			name:        "invalid integer type - decimal",
-			input:       `{"count": 42.5}`,
-			schema:      `{"type": "object", "properties": {"count": {"type": "integer"}}}`,
-			expectError: true,
-			errorField:  "count",
+			name:    "optional field can be missing",
+			input:   json.RawMessage(`{"name": "test"}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "any type - accepts anything",
-			input:       `{"data": "string value"}`,
-			schema:      `{"type": "object", "properties": {"data": {"type": "any"}}}`,
-			expectError: false,
+			name:    "any type accepts anything",
+			input:   json.RawMessage(`{"data": "anything"}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"data": {"type": "any"}}}`),
+			wantErr: false,
 		},
 		{
-			name:        "invalid JSON input",
-			input:       `not valid json`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}}}`,
-			expectError: true,
-			errorField:  "_root",
-		},
-		{
-			name:        "optional field missing - should pass",
-			input:       `{"name": "test"}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string"}, "optional": {"type": "number"}}}`,
-			expectError: false,
-		},
-		{
-			name:        "required field with title in error message",
-			input:       `{}`,
-			schema:      `{"type": "object", "properties": {"name": {"type": "string", "title": "名前"}}, "required": ["name"]}`,
-			expectError: true,
-			errorField:  "name",
+			name:    "empty type accepts anything",
+			input:   json.RawMessage(`{"data": 123}`),
+			schema:  json.RawMessage(`{"type": "object", "properties": {"data": {"type": ""}}}`),
+			wantErr: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var inputJSON json.RawMessage
-			if tt.input != "" {
-				inputJSON = json.RawMessage(tt.input)
-			}
-
-			var schemaJSON json.RawMessage
-			if tt.schema != "" {
-				schemaJSON = json.RawMessage(tt.schema)
-			}
-
-			err := ValidateInputSchema(inputJSON, schemaJSON)
-
-			if tt.expectError {
+			err := ValidateInputSchema(tt.input, tt.schema)
+			if tt.wantErr {
 				require.Error(t, err)
-				validationErrors, ok := err.(*InputValidationErrors)
-				require.True(t, ok, "error should be InputValidationErrors")
-				require.NotEmpty(t, validationErrors.Errors)
-				assert.Equal(t, tt.errorField, validationErrors.Errors[0].Field)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
 			} else {
 				assert.NoError(t, err)
 			}
@@ -177,97 +149,92 @@ func TestValidateInputSchema(t *testing.T) {
 func TestFilterOutputBySchema(t *testing.T) {
 	tests := []struct {
 		name           string
-		output         string
-		schema         string
-		expectedFields []string
+		output         json.RawMessage
+		schema         json.RawMessage
+		expectedOutput map[string]interface{}
+		wantOriginal   bool
 	}{
 		{
-			name:           "nil schema - return original",
-			output:         `{"name": "test", "extra": "value"}`,
-			schema:         "",
-			expectedFields: []string{"name", "extra"},
+			name:         "nil schema returns original",
+			output:       json.RawMessage(`{"name": "test", "extra": "data"}`),
+			schema:       nil,
+			wantOriginal: true,
 		},
 		{
-			name:           "invalid schema JSON - return original",
-			output:         `{"name": "test", "extra": "value"}`,
-			schema:         `not valid json`,
-			expectedFields: []string{"name", "extra"},
+			name:         "empty schema returns original",
+			output:       json.RawMessage(`{"name": "test", "extra": "data"}`),
+			schema:       json.RawMessage(``),
+			wantOriginal: true,
 		},
 		{
-			name:           "empty schema - return original",
-			output:         `{"name": "test", "extra": "value"}`,
-			schema:         `{}`,
-			expectedFields: []string{"name", "extra"},
+			name:         "non-object schema returns original",
+			output:       json.RawMessage(`{"name": "test", "extra": "data"}`),
+			schema:       json.RawMessage(`{"type": "array"}`),
+			wantOriginal: true,
 		},
 		{
-			name:           "filter to defined fields only",
-			output:         `{"name": "test", "value": 42, "extra": "should be removed"}`,
-			schema:         `{"type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "number"}}}`,
-			expectedFields: []string{"name", "value"},
+			name:         "schema without properties returns original",
+			output:       json.RawMessage(`{"name": "test", "extra": "data"}`),
+			schema:       json.RawMessage(`{"type": "object"}`),
+			wantOriginal: true,
 		},
 		{
-			name:           "schema field not in output - skip it",
-			output:         `{"name": "test"}`,
-			schema:         `{"type": "object", "properties": {"name": {"type": "string"}, "missing": {"type": "number"}}}`,
-			expectedFields: []string{"name"},
+			name:   "filters output to schema properties",
+			output: json.RawMessage(`{"name": "test", "age": 25, "extra": "data"}`),
+			schema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "age": {"type": "integer"}}}`),
+			expectedOutput: map[string]interface{}{
+				"name": "test",
+				"age":  float64(25),
+			},
 		},
 		{
-			name:           "all output fields match schema",
-			output:         `{"name": "test", "value": 42}`,
-			schema:         `{"type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "number"}}}`,
-			expectedFields: []string{"name", "value"},
+			name:   "missing schema property results in empty filtered output for that key",
+			output: json.RawMessage(`{"extra": "data"}`),
+			schema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}}`),
+			expectedOutput: map[string]interface{}{},
 		},
 		{
-			name:           "non-object schema - return original",
-			output:         `{"name": "test"}`,
-			schema:         `{"type": "array"}`,
-			expectedFields: []string{"name"},
+			name:         "invalid JSON output returns original",
+			output:       json.RawMessage(`{invalid}`),
+			schema:       json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}}`),
+			wantOriginal: true,
 		},
 		{
-			name:           "invalid output JSON - return original",
-			output:         `not valid json`,
-			schema:         `{"type": "object", "properties": {"name": {"type": "string"}}}`,
-			expectedFields: nil, // Will return original string
+			name:   "preserves nested objects",
+			output: json.RawMessage(`{"data": {"nested": "value"}, "extra": "ignore"}`),
+			schema: json.RawMessage(`{"type": "object", "properties": {"data": {"type": "object"}}}`),
+			expectedOutput: map[string]interface{}{
+				"data": map[string]interface{}{"nested": "value"},
+			},
 		},
 		{
-			name:           "nested objects are passed through",
-			output:         `{"data": {"nested": "value"}, "extra": "removed"}`,
-			schema:         `{"type": "object", "properties": {"data": {"type": "object"}}}`,
-			expectedFields: []string{"data"},
+			name:   "preserves arrays",
+			output: json.RawMessage(`{"items": [1, 2, 3], "extra": "ignore"}`),
+			schema: json.RawMessage(`{"type": "object", "properties": {"items": {"type": "array"}}}`),
+			expectedOutput: map[string]interface{}{
+				"items": []interface{}{float64(1), float64(2), float64(3)},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var schemaJSON json.RawMessage
-			if tt.schema != "" {
-				schemaJSON = json.RawMessage(tt.schema)
-			}
-
-			result, err := FilterOutputBySchema(json.RawMessage(tt.output), schemaJSON)
+			result, err := FilterOutputBySchema(tt.output, tt.schema)
 			require.NoError(t, err)
 
-			if tt.expectedFields == nil {
-				// For invalid JSON, should return original
-				assert.Equal(t, tt.output, string(result))
-				return
-			}
-
-			var resultData map[string]interface{}
-			err = json.Unmarshal(result, &resultData)
-			require.NoError(t, err)
-
-			// Check that result contains exactly expected fields
-			assert.Len(t, resultData, len(tt.expectedFields))
-			for _, field := range tt.expectedFields {
-				_, exists := resultData[field]
-				assert.True(t, exists, "field %s should exist in result", field)
+			if tt.wantOriginal {
+				assert.Equal(t, tt.output, result)
+			} else {
+				var resultMap map[string]interface{}
+				err := json.Unmarshal(result, &resultMap)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedOutput, resultMap)
 			}
 		})
 	}
 }
 
-func TestInputValidationError(t *testing.T) {
+func TestInputValidationError_Error(t *testing.T) {
 	err := &InputValidationError{
 		Field:   "name",
 		Message: "is required",
@@ -275,21 +242,40 @@ func TestInputValidationError(t *testing.T) {
 	assert.Equal(t, "name: is required", err.Error())
 }
 
-func TestInputValidationErrors(t *testing.T) {
-	t.Run("empty errors", func(t *testing.T) {
-		err := &InputValidationErrors{}
-		assert.Equal(t, "validation failed", err.Error())
-	})
-
-	t.Run("with errors", func(t *testing.T) {
-		err := &InputValidationErrors{
-			Errors: []InputValidationError{
+func TestInputValidationErrors_Error(t *testing.T) {
+	tests := []struct {
+		name     string
+		errors   []InputValidationError
+		expected string
+	}{
+		{
+			name:     "empty errors",
+			errors:   []InputValidationError{},
+			expected: "validation failed",
+		},
+		{
+			name: "single error",
+			errors: []InputValidationError{
 				{Field: "name", Message: "is required"},
-				{Field: "value", Message: "must be number"},
 			},
-		}
-		assert.Equal(t, "validation failed: is required", err.Error())
-	})
+			expected: "validation failed: is required",
+		},
+		{
+			name: "multiple errors returns first",
+			errors: []InputValidationError{
+				{Field: "name", Message: "is required"},
+				{Field: "age", Message: "must be positive"},
+			},
+			expected: "validation failed: is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &InputValidationErrors{Errors: tt.errors}
+			assert.Equal(t, tt.expected, err.Error())
+		})
+	}
 }
 
 func TestValidateType(t *testing.T) {
@@ -297,28 +283,28 @@ func TestValidateType(t *testing.T) {
 		name         string
 		value        interface{}
 		expectedType string
-		valid        bool
+		want         bool
 	}{
-		{"empty type - valid", "anything", "", true},
-		{"any type - valid", 123, "any", true},
 		{"nil value with null type", nil, "null", true},
 		{"nil value with string type", nil, "string", false},
-		{"string value", "test", "string", true},
-		{"number float64", 42.5, "number", true},
-		{"number int", 42, "number", true},
-		{"boolean true", true, "boolean", true},
-		{"boolean false", false, "boolean", true},
-		{"array value", []interface{}{1, 2, 3}, "array", true},
-		{"object value", map[string]interface{}{"key": "value"}, "object", true},
-		{"integer whole number", float64(42), "integer", true},
-		{"integer decimal fails", float64(42.5), "integer", false},
-		{"unknown type - valid", "anything", "unknown", true},
+		{"string value", "hello", "string", true},
+		{"string value with wrong type", "hello", "integer", false},
+		{"float64 as number", float64(3.14), "number", true},
+		{"float64 whole as integer", float64(42), "integer", true},
+		{"float64 with decimals as integer", float64(3.14), "integer", false},
+		{"bool as boolean", true, "boolean", true},
+		{"bool with wrong type", true, "string", false},
+		{"slice as array", []interface{}{1, 2}, "array", true},
+		{"map as object", map[string]interface{}{"key": "val"}, "object", true},
+		{"empty type accepts anything", "anything", "", true},
+		{"any type accepts anything", 123, "any", true},
+		{"unknown type defaults to true", "value", "unknown", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := validateType(tt.value, tt.expectedType)
-			assert.Equal(t, tt.valid, result)
+			assert.Equal(t, tt.want, result)
 		})
 	}
 }

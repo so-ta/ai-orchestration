@@ -29,7 +29,7 @@ func setupTestContext(ctx context.Context, tenantID uuid.UUID) context.Context {
 // TestWorkflowHandler_Create_InvalidJSON tests Create handler with invalid JSON
 func TestWorkflowHandler_Create_InvalidJSON(t *testing.T) {
 	tenantID := uuid.New()
-	handler := NewWorkflowHandler(nil) // usecase is nil but won't be called due to early validation failure
+	handler := NewWorkflowHandler(nil, nil) // usecase is nil but won't be called due to early validation failure
 
 	tests := []struct {
 		name           string
@@ -74,7 +74,7 @@ func TestWorkflowHandler_Create_InvalidJSON(t *testing.T) {
 // TestWorkflowHandler_Get_InvalidUUID tests Get handler with invalid UUID
 func TestWorkflowHandler_Get_InvalidUUID(t *testing.T) {
 	tenantID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -122,7 +122,7 @@ func TestWorkflowHandler_Get_InvalidUUID(t *testing.T) {
 func TestWorkflowHandler_Update_Validation(t *testing.T) {
 	tenantID := uuid.New()
 	workflowID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -173,7 +173,7 @@ func TestWorkflowHandler_Update_Validation(t *testing.T) {
 // TestWorkflowHandler_Delete_InvalidUUID tests Delete handler with invalid UUID
 func TestWorkflowHandler_Delete_InvalidUUID(t *testing.T) {
 	tenantID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	r := chi.NewRouter()
 	r.Delete("/api/v1/workflows/{id}", handler.Delete)
@@ -199,7 +199,7 @@ func TestWorkflowHandler_Save_Validation(t *testing.T) {
 	workflowID := uuid.New()
 	stepID := uuid.New()
 	edgeID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -295,7 +295,7 @@ func TestWorkflowHandler_Save_Validation(t *testing.T) {
 func TestWorkflowHandler_SaveDraft_Validation(t *testing.T) {
 	tenantID := uuid.New()
 	workflowID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -346,7 +346,7 @@ func TestWorkflowHandler_SaveDraft_Validation(t *testing.T) {
 // TestWorkflowHandler_DiscardDraft_InvalidUUID tests DiscardDraft handler with invalid UUID
 func TestWorkflowHandler_DiscardDraft_InvalidUUID(t *testing.T) {
 	tenantID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	r := chi.NewRouter()
 	r.Delete("/api/v1/workflows/{id}/draft", handler.DiscardDraft)
@@ -370,7 +370,7 @@ func TestWorkflowHandler_DiscardDraft_InvalidUUID(t *testing.T) {
 func TestWorkflowHandler_RestoreVersion_Validation(t *testing.T) {
 	tenantID := uuid.New()
 	workflowID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	tests := []struct {
 		name           string
@@ -435,7 +435,7 @@ func TestWorkflowHandler_RestoreVersion_Validation(t *testing.T) {
 // TestWorkflowHandler_Publish_InvalidUUID tests Publish handler with invalid UUID
 func TestWorkflowHandler_Publish_InvalidUUID(t *testing.T) {
 	tenantID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	r := chi.NewRouter()
 	r.Post("/api/v1/workflows/{id}/publish", handler.Publish)
@@ -458,7 +458,7 @@ func TestWorkflowHandler_Publish_InvalidUUID(t *testing.T) {
 // TestWorkflowHandler_ListVersions_InvalidUUID tests ListVersions handler with invalid UUID
 func TestWorkflowHandler_ListVersions_InvalidUUID(t *testing.T) {
 	tenantID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	r := chi.NewRouter()
 	r.Get("/api/v1/workflows/{id}/versions", handler.ListVersions)
@@ -482,7 +482,7 @@ func TestWorkflowHandler_ListVersions_InvalidUUID(t *testing.T) {
 func TestWorkflowHandler_GetVersion_Validation(t *testing.T) {
 	tenantID := uuid.New()
 	workflowID := uuid.New()
-	handler := NewWorkflowHandler(nil)
+	handler := NewWorkflowHandler(nil, nil)
 
 	tests := []struct {
 		name           string

@@ -1184,3 +1184,164 @@ func TestWebhookUsecase_hasValidInputMapping(t *testing.T) {
 		assert.True(t, result)
 	})
 }
+
+// Tests for validateWorkflowInput
+// Note: Uses mockStepRepo from run_test.go
+
+func TestWebhookUsecase_validateWorkflowInput(t *testing.T) {
+	ctx := context.Background()
+	tenantID := uuid.New()
+	workflowID := uuid.New()
+
+	t.Run("no stepRepo skips validation", func(t *testing.T) {
+		uc := &WebhookUsecase{
+			stepRepo: nil,
+		}
+
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, json.RawMessage(`{}`))
+		assert.NoError(t, err)
+	})
+
+	t.Run("stepRepo error skips validation", func(t *testing.T) {
+		stepRepo := &mockStepRepo{
+			listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
+				return nil, errors.New("database error")
+			},
+		}
+		uc := &WebhookUsecase{
+			stepRepo: stepRepo,
+		}
+
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, json.RawMessage(`{}`))
+		assert.NoError(t, err)
+	})
+
+	t.Run("no start step skips validation", func(t *testing.T) {
+		stepRepo := &mockStepRepo{
+			listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
+				return []*domain.Step{
+					{ID: uuid.New(), Type: "llm"},
+					{ID: uuid.New(), Type: "tool"},
+				}, nil
+			},
+		}
+		uc := &WebhookUsecase{
+			stepRepo: stepRepo,
+		}
+
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, json.RawMessage(`{}`))
+		assert.NoError(t, err)
+	})
+
+	t.Run("start step without input_schema skips validation", func(t *testing.T) {
+		stepRepo := &mockStepRepo{
+			listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
+				return []*domain.Step{
+					{ID: uuid.New(), Type: "start", Config: json.RawMessage(`{}`)},
+				}, nil
+			},
+		}
+		uc := &WebhookUsecase{
+			stepRepo: stepRepo,
+		}
+
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, json.RawMessage(`{}`))
+		assert.NoError(t, err)
+	})
+
+	t.Run("start step with empty config skips validation", func(t *testing.T) {
+		stepRepo := &mockStepRepo{
+			listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
+				return []*domain.Step{
+					{ID: uuid.New(), Type: "start", Config: nil},
+				}, nil
+			},
+		}
+		uc := &WebhookUsecase{
+			stepRepo: stepRepo,
+		}
+
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, json.RawMessage(`{}`))
+		assert.NoError(t, err)
+	})
+
+	t.Run("valid input passes validation", func(t *testing.T) {
+		inputSchema := `{
+			"type": "object",
+			"properties": {
+				"name": {"type": "string"},
+				"age": {"type": "number"}
+			},
+			"required": ["name"]
+		}`
+		stepRepo := &mockStepRepo{
+			listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
+				return []*domain.Step{
+					{ID: uuid.New(), Type: "start", Config: json.RawMessage(`{"input_schema": ` + inputSchema + `}`)},
+				}, nil
+			},
+		}
+		uc := &WebhookUsecase{
+			stepRepo: stepRepo,
+		}
+
+		input := json.RawMessage(`{"name": "John", "age": 30}`)
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, input)
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid input fails validation - missing required field", func(t *testing.T) {
+		inputSchema := `{
+			"type": "object",
+			"properties": {
+				"name": {"type": "string"}
+			},
+			"required": ["name"]
+		}`
+		stepRepo := &mockStepRepo{
+			listByWorkflowFn: func(ctx context.Context, tid, wid uuid.UUID) ([]*domain.Step, error) {
+				return []*domain.Step{
+					{ID: uuid.New(), Type: "start", Config: json.RawMessage(`{"input_schema": ` + inputSchema + `}`)},
+				}, nil
+			},
+		}
+		uc := &WebhookUsecase{
+			stepRepo: stepRepo,
+		}
+
+		input := json.RawMessage(`{}`)
+		err := uc.validateWorkflowInput(ctx, tenantID, workflowID, input)
+		assert.Error(t, err)
+	})
+}
+
+// Tests for extractInputSchemaFromStepConfig
+
+func TestExtractInputSchemaFromStepConfig(t *testing.T) {
+	t.Run("nil config", func(t *testing.T) {
+		result := extractInputSchemaFromStepConfig(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("empty config", func(t *testing.T) {
+		result := extractInputSchemaFromStepConfig(json.RawMessage{})
+		assert.Nil(t, result)
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		result := extractInputSchemaFromStepConfig(json.RawMessage(`{invalid}`))
+		assert.Nil(t, result)
+	})
+
+	t.Run("no input_schema key", func(t *testing.T) {
+		result := extractInputSchemaFromStepConfig(json.RawMessage(`{"other": "value"}`))
+		assert.Nil(t, result)
+	})
+
+	t.Run("valid input_schema", func(t *testing.T) {
+		config := json.RawMessage(`{"input_schema": {"type": "object"}}`)
+		result := extractInputSchemaFromStepConfig(config)
+		assert.NotNil(t, result)
+		assert.JSONEq(t, `{"type": "object"}`, string(result))
+	})
+}

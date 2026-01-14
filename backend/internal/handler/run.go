@@ -14,12 +14,16 @@ import (
 
 // RunHandler handles run HTTP requests
 type RunHandler struct {
-	runUsecase *usecase.RunUsecase
+	runUsecase   *usecase.RunUsecase
+	auditService *usecase.AuditService
 }
 
 // NewRunHandler creates a new RunHandler
-func NewRunHandler(runUsecase *usecase.RunUsecase) *RunHandler {
-	return &RunHandler{runUsecase: runUsecase}
+func NewRunHandler(runUsecase *usecase.RunUsecase, auditService *usecase.AuditService) *RunHandler {
+	return &RunHandler{
+		runUsecase:   runUsecase,
+		auditService: auditService,
+	}
 }
 
 // CreateRunRequest represents a create run request
@@ -90,6 +94,12 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionRunCreate, domain.AuditResourceRun, &run.ID, map[string]interface{}{
+		"workflow_id":  workflowID,
+		"triggered_by": string(triggeredBy),
+	})
+
 	JSONData(w, http.StatusCreated, run)
 }
 
@@ -156,6 +166,9 @@ func (h *RunHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionRunCancel, domain.AuditResourceRun, &runID, nil)
 
 	JSONData(w, http.StatusOK, run)
 }

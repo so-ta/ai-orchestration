@@ -12,12 +12,16 @@ import (
 
 // ScheduleHandler handles HTTP requests for schedules
 type ScheduleHandler struct {
-	usecase *usecase.ScheduleUsecase
+	usecase      *usecase.ScheduleUsecase
+	auditService *usecase.AuditService
 }
 
 // NewScheduleHandler creates a new ScheduleHandler
-func NewScheduleHandler(usecase *usecase.ScheduleUsecase) *ScheduleHandler {
-	return &ScheduleHandler{usecase: usecase}
+func NewScheduleHandler(uc *usecase.ScheduleUsecase, auditService *usecase.AuditService) *ScheduleHandler {
+	return &ScheduleHandler{
+		usecase:      uc,
+		auditService: auditService,
+	}
 }
 
 // CreateScheduleRequest represents the request body for creating a schedule
@@ -61,6 +65,13 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleCreate, domain.AuditResourceSchedule, &schedule.ID, map[string]interface{}{
+		"name":        schedule.Name,
+		"workflow_id": workflowID,
+		"cron":        schedule.CronExpression,
+	})
 
 	JSON(w, http.StatusCreated, schedule)
 }
@@ -157,6 +168,11 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleUpdate, domain.AuditResourceSchedule, &schedule.ID, map[string]interface{}{
+		"name": schedule.Name,
+	})
+
 	JSON(w, http.StatusOK, schedule)
 }
 
@@ -175,6 +191,9 @@ func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleDelete, domain.AuditResourceSchedule, &id, nil)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -196,6 +215,9 @@ func (h *ScheduleHandler) Pause(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionSchedulePause, domain.AuditResourceSchedule, &schedule.ID, nil)
+
 	JSON(w, http.StatusOK, schedule)
 }
 
@@ -216,6 +238,9 @@ func (h *ScheduleHandler) Resume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleResume, domain.AuditResourceSchedule, &schedule.ID, nil)
+
 	JSON(w, http.StatusOK, schedule)
 }
 
@@ -235,6 +260,11 @@ func (h *ScheduleHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 		HandleError(w, err)
 		return
 	}
+
+	// Log audit event
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleTrigger, domain.AuditResourceSchedule, &id, map[string]interface{}{
+		"run_id": run.ID,
+	})
 
 	JSON(w, http.StatusOK, run)
 }

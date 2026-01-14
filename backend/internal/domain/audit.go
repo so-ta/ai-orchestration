@@ -55,20 +55,28 @@ const (
 	AuditActionSecretCreate AuditAction = "secret.create"
 	AuditActionSecretUpdate AuditAction = "secret.update"
 	AuditActionSecretDelete AuditAction = "secret.delete"
+
+	// Credential actions
+	AuditActionCredentialCreate   AuditAction = "credential.create"
+	AuditActionCredentialUpdate   AuditAction = "credential.update"
+	AuditActionCredentialDelete   AuditAction = "credential.delete"
+	AuditActionCredentialRevoke   AuditAction = "credential.revoke"
+	AuditActionCredentialActivate AuditAction = "credential.activate"
 )
 
 // AuditResourceType represents the type of resource being audited
 type AuditResourceType string
 
 const (
-	AuditResourceWorkflow AuditResourceType = "workflow"
-	AuditResourceStep     AuditResourceType = "step"
-	AuditResourceEdge     AuditResourceType = "edge"
-	AuditResourceRun      AuditResourceType = "run"
-	AuditResourceSchedule AuditResourceType = "schedule"
-	AuditResourceWebhook  AuditResourceType = "webhook"
-	AuditResourceUser     AuditResourceType = "user"
-	AuditResourceSecret   AuditResourceType = "secret"
+	AuditResourceWorkflow   AuditResourceType = "workflow"
+	AuditResourceStep       AuditResourceType = "step"
+	AuditResourceEdge       AuditResourceType = "edge"
+	AuditResourceRun        AuditResourceType = "run"
+	AuditResourceSchedule   AuditResourceType = "schedule"
+	AuditResourceWebhook    AuditResourceType = "webhook"
+	AuditResourceUser       AuditResourceType = "user"
+	AuditResourceSecret     AuditResourceType = "secret"
+	AuditResourceCredential AuditResourceType = "credential"
 )
 
 // AuditLog represents an audit log entry
