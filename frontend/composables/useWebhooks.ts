@@ -1,34 +1,13 @@
 import type { Webhook, CreateWebhookRequest, UpdateWebhookRequest, ApiResponse, PaginatedResponse } from '~/types/api'
 
 export function useWebhooks() {
+  const api = useApi()
   const config = useRuntimeConfig()
   const baseUrl = config.public.apiBase || 'http://localhost:8080'
 
   const webhooks = ref<Webhook[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-
-  const getHeaders = () => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    }
-
-    // Add tenant ID header for development (client-side only)
-    if (import.meta.client) {
-      const tenantId = localStorage.getItem('tenant_id') || '00000000-0000-0000-0000-000000000001'
-      headers['X-Tenant-ID'] = tenantId
-
-      // Add auth token if available
-      const token = localStorage.getItem('auth_token')
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`
-      }
-    } else {
-      headers['X-Tenant-ID'] = '00000000-0000-0000-0000-000000000001'
-    }
-
-    return headers
-  }
 
   const list = async (workflowId?: string): Promise<Webhook[]> => {
     loading.value = true
@@ -39,15 +18,9 @@ export function useWebhooks() {
         params.append('workflow_id', workflowId)
       }
       const queryString = params.toString()
-      const url = `${baseUrl}/webhooks${queryString ? `?${queryString}` : ''}`
+      const endpoint = `/webhooks${queryString ? `?${queryString}` : ''}`
 
-      const response = await fetch(url, {
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to fetch webhooks: ${response.statusText}`)
-      }
-      const result: PaginatedResponse<Webhook> = await response.json()
+      const result = await api.get<PaginatedResponse<Webhook>>(endpoint)
       webhooks.value = result.data || []
       return result.data || []
     } catch (e) {
@@ -62,13 +35,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks/${id}`, {
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to fetch webhook: ${response.statusText}`)
-      }
-      const result: ApiResponse<Webhook> = await response.json()
+      const result = await api.get<ApiResponse<Webhook>>(`/webhooks/${id}`)
       return result.data
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
@@ -82,15 +49,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to create webhook: ${response.statusText}`)
-      }
-      const result: ApiResponse<Webhook> = await response.json()
+      const result = await api.post<ApiResponse<Webhook>>('/webhooks', data)
       webhooks.value.push(result.data)
       return result.data
     } catch (e) {
@@ -105,15 +64,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks/${id}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify(data),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to update webhook: ${response.statusText}`)
-      }
-      const result: ApiResponse<Webhook> = await response.json()
+      const result = await api.put<ApiResponse<Webhook>>(`/webhooks/${id}`, data)
       const index = webhooks.value.findIndex(w => w.id === id)
       if (index !== -1) {
         webhooks.value[index] = result.data
@@ -131,13 +82,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks/${id}`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to delete webhook: ${response.statusText}`)
-      }
+      await api.delete(`/webhooks/${id}`)
       webhooks.value = webhooks.value.filter(w => w.id !== id)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
@@ -151,14 +96,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks/${id}/enable`, {
-        method: 'POST',
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to enable webhook: ${response.statusText}`)
-      }
-      const result: ApiResponse<Webhook> = await response.json()
+      const result = await api.post<ApiResponse<Webhook>>(`/webhooks/${id}/enable`)
       const index = webhooks.value.findIndex(w => w.id === id)
       if (index !== -1) {
         webhooks.value[index] = result.data
@@ -176,14 +114,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks/${id}/disable`, {
-        method: 'POST',
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to disable webhook: ${response.statusText}`)
-      }
-      const result: ApiResponse<Webhook> = await response.json()
+      const result = await api.post<ApiResponse<Webhook>>(`/webhooks/${id}/disable`)
       const index = webhooks.value.findIndex(w => w.id === id)
       if (index !== -1) {
         webhooks.value[index] = result.data
@@ -201,14 +132,7 @@ export function useWebhooks() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch(`${baseUrl}/webhooks/${id}/regenerate-secret`, {
-        method: 'POST',
-        headers: getHeaders(),
-      })
-      if (!response.ok) {
-        throw new Error(`Failed to regenerate webhook secret: ${response.statusText}`)
-      }
-      const result: ApiResponse<Webhook> = await response.json()
+      const result = await api.post<ApiResponse<Webhook>>(`/webhooks/${id}/regenerate-secret`)
       const index = webhooks.value.findIndex(w => w.id === id)
       if (index !== -1) {
         webhooks.value[index] = result.data

@@ -163,7 +163,7 @@ func writeRateLimitError(w http.ResponseWriter, result *RateLimitResult, scope R
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Retry-After", strconv.FormatInt(int64(time.Until(result.ResetAt).Seconds()), 10))
 	w.WriteHeader(http.StatusTooManyRequests)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": map[string]interface{}{
 			"code":       "RATE_LIMIT_EXCEEDED",
 			"message":    fmt.Sprintf("Rate limit exceeded for %s scope", scope),
@@ -171,7 +171,9 @@ func writeRateLimitError(w http.ResponseWriter, result *RateLimitResult, scope R
 			"limit":      result.Limit,
 			"scope":      scope,
 		},
-	})
+	}); err != nil {
+		slog.Error("failed to encode rate limit error response", "error", err, "scope", scope)
+	}
 }
 
 // TenantRateLimitMiddleware creates a middleware that rate limits by tenant
