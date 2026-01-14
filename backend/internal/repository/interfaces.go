@@ -163,6 +163,9 @@ type BlockDefinitionRepository interface {
 	Update(ctx context.Context, block *domain.BlockDefinition) error
 	// Delete deletes a block definition (only custom blocks)
 	Delete(ctx context.Context, id uuid.UUID) error
+	// ValidateInheritance validates that a block can inherit from the specified parent
+	// Checks for circular inheritance, inheritance depth, and parent inheritability
+	ValidateInheritance(ctx context.Context, blockID uuid.UUID, parentBlockID uuid.UUID) error
 }
 
 // BlockDefinitionFilter defines filtering options for block definition list

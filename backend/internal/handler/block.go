@@ -185,6 +185,21 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 
 		block.ParentBlockID = &parentID
+
+		// Validate inheritance (circular reference and depth)
+		if err := h.blockRepo.ValidateInheritance(r.Context(), block.ID, parentID); err != nil {
+			switch err {
+			case domain.ErrCircularInheritance:
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "circular inheritance detected", nil)
+				return
+			case domain.ErrInheritanceDepthExceeded:
+				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "inheritance depth exceeded maximum limit", nil)
+				return
+			default:
+				HandleError(w, err)
+				return
+			}
+		}
 	}
 
 	if req.ConfigDefaults != nil {
@@ -328,10 +343,19 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// Prevent circular inheritance
-			if parentID == block.ID {
-				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "block cannot inherit from itself", nil)
-				return
+			// Validate inheritance (circular reference and depth)
+			if err := h.blockRepo.ValidateInheritance(r.Context(), block.ID, parentID); err != nil {
+				switch err {
+				case domain.ErrCircularInheritance:
+					Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "circular inheritance detected", nil)
+					return
+				case domain.ErrInheritanceDepthExceeded:
+					Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "inheritance depth exceeded maximum limit", nil)
+					return
+				default:
+					HandleError(w, err)
+					return
+				}
 			}
 
 			block.ParentBlockID = &parentID

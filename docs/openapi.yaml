@@ -29,6 +29,8 @@ tags:
     description: スケジュール管理
   - name: Webhooks
     description: Webhook管理
+  - name: Blocks
+    description: ブロック定義管理（継承・拡張対応）
   - name: Adapters
     description: アダプタ情報
   - name: AuditLogs
@@ -737,6 +739,117 @@ paths:
                     type: string
         '400':
           $ref: '#/components/responses/SchemaValidationError'
+
+  /blocks:
+    get:
+      tags: [Blocks]
+      summary: ブロック定義一覧取得
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [ai, logic, integration, data, control, utility]
+        - name: enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blocks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BlockDefinition'
+    post:
+      tags: [Blocks]
+      summary: ブロック定義作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockDefinition'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: slug重複
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /blocks/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Blocks]
+      summary: ブロック定義取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Blocks]
+      summary: ブロック定義更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBlockRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockDefinition'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          description: システムブロックは編集不可
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [Blocks]
+      summary: ブロック定義削除
+      responses:
+        '204':
+          description: 削除成功
+        '403':
+          description: システムブロックは削除不可
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /adapters:
     get:
@@ -1966,6 +2079,194 @@ components:
         output_cost_per_1k:
           type: number
 
+    InternalStep:
+      type: object
+      description: 複合ブロック内の内部ステップ定義
+      properties:
+        type:
+          type: string
+          description: 実行するブロックのslug
+        config:
+          type: object
+          description: ステップの設定
+        output_key:
+          type: string
+          description: このステップの出力を格納するキー
+
+    BlockDefinition:
+      type: object
+      description: ブロック定義（テナント固有またはシステムブロック）
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+          nullable: true
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [ai, logic, integration, data, control, utility]
+        icon:
+          type: string
+        code:
+          type: string
+        config_schema:
+          type: object
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        input_ports:
+          type: array
+          items:
+            type: object
+        output_ports:
+          type: array
+          items:
+            type: object
+        error_codes:
+          type: array
+          items:
+            type: object
+        ui_config:
+          type: object
+        is_system:
+          type: boolean
+        version:
+          type: integer
+        # Block Inheritance/Extension fields
+        parent_block_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 継承元の親ブロックID（コードを持つブロックのみ継承可能）
+        config_defaults:
+          type: object
+          description: 親のconfig_schemaに対するデフォルト値
+        pre_process:
+          type: string
+          description: 入力変換用JavaScriptコード
+        post_process:
+          type: string
+          description: 出力変換用JavaScriptコード
+        internal_steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalStep'
+          description: 複合ブロック用の内部ステップ配列
+        # Resolved fields (populated by backend)
+        pre_process_chain:
+          type: array
+          items:
+            type: string
+          description: preProcessコードのチェーン（child→root）
+        post_process_chain:
+          type: array
+          items:
+            type: string
+          description: postProcessコードのチェーン（root→child）
+        resolved_code:
+          type: string
+          description: ルート祖先から解決されたコード
+        resolved_config_defaults:
+          type: object
+          description: 継承チェーンからマージされたconfig_defaults
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateBlockRequest:
+      type: object
+      required: [slug, name, category]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          enum: [ai, logic, integration, data, control, utility]
+        icon:
+          type: string
+        code:
+          type: string
+        config_schema:
+          type: object
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        ui_config:
+          type: object
+        parent_block_id:
+          type: string
+          format: uuid
+          description: 継承元の親ブロックID
+        config_defaults:
+          type: object
+          description: 親のconfig_schemaに対するデフォルト値
+        pre_process:
+          type: string
+          description: 入力変換用JavaScriptコード
+        post_process:
+          type: string
+          description: 出力変換用JavaScriptコード
+        internal_steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalStep'
+
+    UpdateBlockRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        code:
+          type: string
+        config_schema:
+          type: object
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        ui_config:
+          type: object
+        enabled:
+          type: boolean
+        parent_block_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 継承元の親ブロックID（nullで解除）
+        config_defaults:
+          type: object
+        pre_process:
+          type: string
+        post_process:
+          type: string
+        internal_steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalStep'
+
     SystemBlock:
       type: object
       properties:
@@ -1994,6 +2295,21 @@ components:
           type: boolean
         version:
           type: integer
+        # Block Inheritance fields (for system blocks)
+        parent_block_id:
+          type: string
+          format: uuid
+          nullable: true
+        config_defaults:
+          type: object
+        pre_process:
+          type: string
+        post_process:
+          type: string
+        internal_steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternalStep'
         enabled:
           type: boolean
         created_at:
