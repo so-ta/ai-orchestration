@@ -624,13 +624,13 @@ onMounted(() => {
 .run-group-title {
   font-weight: 600;
   font-size: 0.875rem;
-  color: var(--color-text);
+  color: var(--color-primary);
   text-decoration: none;
   transition: color 0.2s;
 }
 
 .run-group-title:hover {
-  color: var(--color-primary);
+  text-decoration: underline;
 }
 
 .run-group-trigger {

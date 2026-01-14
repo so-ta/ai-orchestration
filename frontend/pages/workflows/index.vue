@@ -247,7 +247,7 @@ onMounted(fetchWorkflows)
                       </svg>
                     </div>
                     <div>
-                      <NuxtLink :to="`/workflows/${workflow.id}`" class="workflow-name">
+                      <NuxtLink :to="`/workflows/${workflow.id}`" class="workflow-link">
                         {{ workflow.name }}
                       </NuxtLink>
                       <div v-if="workflow.description" class="workflow-desc">
@@ -586,17 +586,6 @@ onMounted(fetchWorkflows)
   justify-content: center;
   color: var(--color-primary);
   flex-shrink: 0;
-}
-
-.workflow-name {
-  font-weight: 500;
-  color: var(--color-text);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.workflow-name:hover {
-  color: var(--color-primary);
 }
 
 .workflow-desc {

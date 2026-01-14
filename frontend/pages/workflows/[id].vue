@@ -1319,15 +1319,6 @@ onMounted(() => {
   margin-bottom: 0.5rem;
 }
 
-.breadcrumb-link {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-.breadcrumb-link:hover {
-  text-decoration: underline;
-}
-
 .breadcrumb-separator {
   color: var(--color-text-secondary);
 }

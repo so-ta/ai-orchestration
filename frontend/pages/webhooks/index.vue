@@ -519,15 +519,6 @@ X-Webhook-Secret: {{ webhook.secret }}</pre>
   flex-shrink: 0;
 }
 
-.workflow-link {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-.workflow-link:hover {
-  text-decoration: underline;
-}
-
 .url-container,
 .secret-container {
   display: flex;

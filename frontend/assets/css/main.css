@@ -596,6 +596,27 @@ body {
   text-decoration: underline;
 }
 
+/* Breadcrumb link - navigational link to parent pages */
+.breadcrumb-link {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
+/* Workflow link - link to workflow detail page */
+.workflow-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.workflow-link:hover {
+  text-decoration: underline;
+}
+
 /* Focus ring for accessibility */
 .focus-ring:focus {
   outline: none;
