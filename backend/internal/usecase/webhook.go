@@ -59,13 +59,16 @@ func (u *WebhookUsecase) Create(ctx context.Context, input CreateWebhookInput) (
 		return nil, domain.NewValidationError("workflow_id", "workflow must be published")
 	}
 
-	webhook := domain.NewWebhook(
+	webhook, err := domain.NewWebhook(
 		input.TenantID,
 		input.WorkflowID,
 		workflow.Version,
 		input.Name,
 		input.InputMapping,
 	)
+	if err != nil {
+		return nil, err
+	}
 	webhook.Description = input.Description
 	webhook.CreatedBy = input.CreatedBy
 
@@ -205,7 +208,9 @@ func (u *WebhookUsecase) RegenerateSecret(ctx context.Context, tenantID, id uuid
 		return nil, err
 	}
 
-	webhook.RegenerateSecret()
+	if err := webhook.RegenerateSecret(); err != nil {
+		return nil, err
+	}
 
 	if err := u.webhookRepo.Update(ctx, webhook); err != nil {
 		return nil, err
