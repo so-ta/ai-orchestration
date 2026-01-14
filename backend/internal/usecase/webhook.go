@@ -299,13 +299,22 @@ func (u *WebhookUsecase) verifySignature(secret string, payload json.RawMessage,
 	return hmac.Equal([]byte(signature), []byte(expectedSig))
 }
 
-// validateWorkflowInput validates workflow input against Start step's input_schema
+// validateWorkflowInput validates workflow input against Start step's input_schema.
+// Note: This function intentionally skips validation (returns nil) when:
+// - stepRepo is not available
+// - Steps cannot be retrieved (e.g., database errors)
+// - No start step is found
+// - No input_schema is defined
+// This design choice prioritizes workflow execution over strict validation,
+// as the validation is an optional enhancement rather than a hard requirement.
 func (u *WebhookUsecase) validateWorkflowInput(ctx context.Context, tenantID, workflowID uuid.UUID, input json.RawMessage) error {
 	if u.stepRepo == nil {
 		return nil // Skip validation if stepRepo is not available
 	}
 
 	// Get all steps for the workflow
+	// Note: Errors are intentionally ignored to allow workflow execution to proceed
+	// even when step metadata is temporarily unavailable
 	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
 	if err != nil {
 		return nil // Skip validation if we can't get steps
