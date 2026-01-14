@@ -246,7 +246,7 @@ func (u *WebhookUsecase) Trigger(ctx context.Context, input TriggerWebhookInput)
 
 	// Apply input mapping if configured
 	var runInput json.RawMessage
-	if webhook.InputMapping != nil && len(webhook.InputMapping) > 0 {
+	if u.hasValidInputMapping(webhook.InputMapping) {
 		mappedInput, err := u.applyInputMapping(input.Payload, webhook.InputMapping)
 		if err != nil {
 			return nil, fmt.Errorf("failed to apply input mapping: %w", err)
@@ -289,6 +289,19 @@ func (u *WebhookUsecase) verifySignature(secret string, payload json.RawMessage,
 	expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 	return hmac.Equal([]byte(signature), []byte(expectedSig))
+}
+
+// hasValidInputMapping checks if the input mapping is configured and non-empty
+func (u *WebhookUsecase) hasValidInputMapping(mapping json.RawMessage) bool {
+	if mapping == nil || len(mapping) == 0 {
+		return false
+	}
+	// Parse to check if it's a valid non-empty mapping
+	var mappingConfig map[string]string
+	if err := json.Unmarshal(mapping, &mappingConfig); err != nil {
+		return false
+	}
+	return len(mappingConfig) > 0
 }
 
 // applyInputMapping transforms the payload according to the input mapping configuration.

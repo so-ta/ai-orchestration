@@ -1107,4 +1107,80 @@ func TestWebhookUsecase_Trigger_WithInputMapping(t *testing.T) {
 		// Verify the raw payload was used
 		assert.JSONEq(t, string(payload), string(capturedInput))
 	})
+
+	t.Run("empty input mapping uses raw payload", func(t *testing.T) {
+		payload := json.RawMessage(`{"action": "opened", "data": "test"}`)
+		signature := generateSignature(payload, secret)
+
+		var capturedInput json.RawMessage
+		webhook := &domain.Webhook{
+			ID:              webhookID,
+			TenantID:        tenantID,
+			WorkflowID:      workflowID,
+			WorkflowVersion: 1,
+			Secret:          secret,
+			Enabled:         true,
+			InputMapping:    json.RawMessage(`{}`), // empty mapping
+		}
+		webhookRepo := &mockWebhookRepo{
+			getByIDForTriggerFn: func(ctx context.Context, id uuid.UUID) (*domain.Webhook, error) {
+				return webhook, nil
+			},
+			updateFunc: func(ctx context.Context, w *domain.Webhook) error {
+				return nil
+			},
+		}
+		runRepo := &mockRunRepo{
+			createFunc: func(ctx context.Context, run *domain.Run) error {
+				capturedInput = run.Input
+				return nil
+			},
+		}
+
+		uc := newTestWebhookUsecase(webhookRepo, nil, runRepo)
+
+		input := TriggerWebhookInput{
+			WebhookID: webhookID,
+			Signature: signature,
+			Payload:   payload,
+		}
+
+		run, err := uc.Trigger(ctx, input)
+		require.NoError(t, err)
+		assert.NotNil(t, run)
+
+		// Verify the raw payload was used (not transformed to {})
+		assert.JSONEq(t, string(payload), string(capturedInput))
+	})
+}
+
+// Tests for hasValidInputMapping
+
+func TestWebhookUsecase_hasValidInputMapping(t *testing.T) {
+	uc := &WebhookUsecase{}
+
+	t.Run("nil mapping", func(t *testing.T) {
+		result := uc.hasValidInputMapping(nil)
+		assert.False(t, result)
+	})
+
+	t.Run("empty bytes", func(t *testing.T) {
+		result := uc.hasValidInputMapping(json.RawMessage{})
+		assert.False(t, result)
+	})
+
+	t.Run("empty json object", func(t *testing.T) {
+		result := uc.hasValidInputMapping(json.RawMessage(`{}`))
+		assert.False(t, result)
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		result := uc.hasValidInputMapping(json.RawMessage(`{invalid}`))
+		assert.False(t, result)
+	})
+
+	t.Run("valid mapping", func(t *testing.T) {
+		result := uc.hasValidInputMapping(json.RawMessage(`{"field": "$.value"}`))
+		assert.True(t, result)
+	})
 }
