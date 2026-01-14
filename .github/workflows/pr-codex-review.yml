@@ -14,6 +14,8 @@
 # 参照:
 # - https://developers.openai.com/codex/github-action/
 # - AGENTS.md: Codex用のレビューガイドライン
+#
+# Updated: 2026-01-14 - ワークフロー再認識のためのコメント追加
 
 name: Codex PR Review
 
