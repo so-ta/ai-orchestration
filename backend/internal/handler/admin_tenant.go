@@ -206,7 +206,11 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create tenant
-	tenant := domain.NewTenant(req.Name, req.Slug, plan)
+	tenant, err := domain.NewTenant(req.Name, req.Slug, plan)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
 	tenant.OwnerEmail = req.OwnerEmail
 	tenant.OwnerName = req.OwnerName
 	tenant.BillingEmail = req.BillingEmail
