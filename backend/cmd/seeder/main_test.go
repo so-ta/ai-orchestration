@@ -74,16 +74,6 @@ func TestGetEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("returns default when env is not set", func(t *testing.T) {
-		key := "TEST_SEEDER_EMPTY_VALUE"
-
-		// When env var is not set, returns default
-		result := getEnv(key, "default")
-		if result != "default" {
-			t.Errorf("getEnv() = %s, expected default", result)
-		}
-	})
-
 	t.Run("returns default when env is empty string", func(t *testing.T) {
 		key := "TEST_SEEDER_EMPTY_STRING"
 

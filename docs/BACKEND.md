@@ -667,15 +667,19 @@ CLIを直接実行する場合：
 ```bash
 cd backend
 
-# マイグレーション実行
-go run ./cmd/seeder
+# マイグレーション実行（DATABASE_URL環境変数が必須）
+DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
+  go run ./cmd/seeder
 
-# バリデーションのみ
+# バリデーションのみ（DB接続不要）
 go run ./cmd/seeder -validate
 
 # ドライラン（詳細出力）
-go run ./cmd/seeder -dry-run -verbose
+DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
+  go run ./cmd/seeder -dry-run -verbose
 ```
+
+**Note**: `make seed-blocks` コマンドはMakefile内でDATABASE_URLを自動設定します。
 
 ## Related Documents
 
