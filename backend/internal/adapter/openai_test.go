@@ -209,3 +209,148 @@ func TestOpenAIAdapter_Metadata(t *testing.T) {
 	assert.NotEmpty(t, adapter.InputSchema())
 	assert.NotEmpty(t, adapter.OutputSchema())
 }
+
+func TestOpenAIAdapter_Execute_TemperatureZero(t *testing.T) {
+	// Create mock server that verifies temperature is 0
+	var receivedTemperature float64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Parse request body to verify temperature
+		var reqBody openAIRequest
+		json.NewDecoder(r.Body).Decode(&reqBody)
+		receivedTemperature = reqBody.Temperature
+
+		// Return mock response
+		resp := openAIResponse{
+			ID:      "chatcmpl-123",
+			Object:  "chat.completion",
+			Created: 1677652288,
+			Model:   "gpt-4",
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{
+				{
+					Index: 0,
+					Message: openAIMessage{
+						Role:    "assistant",
+						Content: "Response with temperature 0",
+					},
+					FinishReason: "stop",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{
+				PromptTokens:     10,
+				CompletionTokens: 20,
+				TotalTokens:      30,
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	adapter := &OpenAIAdapter{
+		id:         "openai",
+		name:       "OpenAI",
+		httpClient: server.Client(),
+		apiKey:     "test-api-key",
+		baseURL:    server.URL,
+	}
+
+	// Create request with temperature = 0 (explicitly set)
+	tempZero := 0.0
+	config, _ := json.Marshal(OpenAIConfig{
+		Model:       "gpt-4",
+		Prompt:      "Test prompt",
+		Temperature: &tempZero,
+	})
+
+	req := &Request{
+		Config: config,
+	}
+
+	ctx := context.Background()
+	resp, err := adapter.Execute(ctx, req)
+
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	// Verify that temperature 0 was sent to the API (not replaced with default 0.7)
+	assert.Equal(t, 0.0, receivedTemperature, "temperature=0 should be sent to API, not replaced with default")
+}
+
+func TestOpenAIAdapter_Execute_TemperatureDefault(t *testing.T) {
+	// Create mock server that verifies default temperature
+	var receivedTemperature float64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody openAIRequest
+		json.NewDecoder(r.Body).Decode(&reqBody)
+		receivedTemperature = reqBody.Temperature
+
+		resp := openAIResponse{
+			ID:      "chatcmpl-123",
+			Object:  "chat.completion",
+			Created: 1677652288,
+			Model:   "gpt-4",
+			Choices: []struct {
+				Index        int           `json:"index"`
+				Message      openAIMessage `json:"message"`
+				FinishReason string        `json:"finish_reason"`
+			}{
+				{
+					Index: 0,
+					Message: openAIMessage{
+						Role:    "assistant",
+						Content: "Response with default temperature",
+					},
+					FinishReason: "stop",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{
+				PromptTokens:     10,
+				CompletionTokens: 20,
+				TotalTokens:      30,
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	adapter := &OpenAIAdapter{
+		id:         "openai",
+		name:       "OpenAI",
+		httpClient: server.Client(),
+		apiKey:     "test-api-key",
+		baseURL:    server.URL,
+	}
+
+	// Create request without temperature (should use default)
+	config, _ := json.Marshal(OpenAIConfig{
+		Model:  "gpt-4",
+		Prompt: "Test prompt",
+		// Temperature not set - should use default 0.7
+	})
+
+	req := &Request{
+		Config: config,
+	}
+
+	ctx := context.Background()
+	resp, err := adapter.Execute(ctx, req)
+
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	// Verify that default temperature 0.7 was used
+	assert.Equal(t, 0.7, receivedTemperature, "default temperature should be 0.7 when not specified")
+}

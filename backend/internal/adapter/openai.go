@@ -26,7 +26,7 @@ type OpenAIConfig struct {
 	Model       string   `json:"model"`        // gpt-4, gpt-4-turbo, gpt-3.5-turbo
 	Prompt      string   `json:"prompt"`       // User prompt template with {{variable}} placeholders
 	System      string   `json:"system"`       // System message
-	Temperature float64  `json:"temperature"`  // 0.0 - 2.0
+	Temperature *float64 `json:"temperature"`  // 0.0 - 2.0 (nil = use default 0.7)
 	MaxTokens   int      `json:"max_tokens"`   // Maximum tokens to generate
 	TopP        float64  `json:"top_p"`        // Nucleus sampling
 	Stop        []string `json:"stop"`         // Stop sequences
@@ -116,11 +116,14 @@ func (a *OpenAIAdapter) Execute(ctx context.Context, req *Request) (*Response, e
 	if config.Model == "" {
 		config.Model = "gpt-4"
 	}
-	if config.Temperature == 0 {
-		config.Temperature = 0.7
-	}
 	if config.MaxTokens == 0 {
 		config.MaxTokens = 2048
+	}
+
+	// Handle temperature: use default 0.7 only if not explicitly set (nil)
+	var temperature float64 = 0.7
+	if config.Temperature != nil {
+		temperature = *config.Temperature
 	}
 
 	// Parse input and substitute variables in prompt
@@ -151,7 +154,7 @@ func (a *OpenAIAdapter) Execute(ctx context.Context, req *Request) (*Response, e
 	apiReq := openAIRequest{
 		Model:       config.Model,
 		Messages:    messages,
-		Temperature: config.Temperature,
+		Temperature: temperature,
 		MaxTokens:   config.MaxTokens,
 	}
 	if config.TopP > 0 {
