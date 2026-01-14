@@ -202,3 +202,44 @@ func TestCopilotHandler_Optimize_InvalidJSON(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "INVALID_REQUEST", errResp["error"].(map[string]interface{})["code"])
 }
+
+// TestCopilotHandler_Chat_InvalidJSON tests Chat with invalid JSON body
+func TestCopilotHandler_Chat_InvalidJSON(t *testing.T) {
+	handler := NewCopilotHandler(nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/copilot/chat", bytes.NewBufferString("{invalid json"))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	handler.Chat(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var errResp map[string]interface{}
+	err := json.NewDecoder(rec.Body).Decode(&errResp)
+	assert.NoError(t, err)
+	assert.Equal(t, "INVALID_REQUEST", errResp["error"].(map[string]interface{})["code"])
+}
+
+// TestCopilotHandler_Chat_EmptyMessage tests Chat with empty message
+func TestCopilotHandler_Chat_EmptyMessage(t *testing.T) {
+	handler := NewCopilotHandler(nil, nil)
+
+	reqBody := map[string]interface{}{
+		"message": "",
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/copilot/chat", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	handler.Chat(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var errResp map[string]interface{}
+	err := json.NewDecoder(rec.Body).Decode(&errResp)
+	assert.NoError(t, err)
+	assert.Equal(t, "EMPTY_MESSAGE", errResp["error"].(map[string]interface{})["code"])
+}
