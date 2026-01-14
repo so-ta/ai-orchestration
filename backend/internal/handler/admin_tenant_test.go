@@ -340,6 +340,52 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 			},
 		},
 		{
+			name: "success - creates tenant with custom metadata",
+			body: `{
+				"name": "Metadata Tenant",
+				"slug": "metadata-tenant",
+				"metadata": {
+					"custom_key": "custom_value",
+					"organization": "Acme Corp"
+				}
+			}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return nil
+				},
+			},
+			expectedStatus: http.StatusCreated,
+			validateResponse: func(t *testing.T, body []byte) {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(body, &resp))
+				assert.Equal(t, "Metadata Tenant", resp["name"])
+				assert.NotNil(t, resp["metadata"])
+			},
+		},
+		{
+			name: "success - default settings is empty JSON object",
+			body: `{"name": "Settings Tenant", "slug": "settings-tenant"}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return nil
+				},
+			},
+			expectedStatus: http.StatusCreated,
+			validateResponse: func(t *testing.T, body []byte) {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(body, &resp))
+				assert.Equal(t, "Settings Tenant", resp["name"])
+				// settings should be present with default empty JSON
+				assert.NotNil(t, resp["settings"])
+			},
+		},
+		{
 			name:           "error - invalid JSON body",
 			body:           `{invalid json`,
 			mockRepo:       &mockTenantRepository{},
