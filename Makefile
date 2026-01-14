@@ -248,18 +248,18 @@ db-seed:
 # Seed blocks (Go programmatic seeder)
 seed-blocks:
 	@echo "Running block seeder..."
-	@cd backend && go run ./cmd/seeder/...
+	@cd backend && go run ./cmd/seeder
 	@echo "Block seeding complete!"
 
 # Validate block definitions
 seed-blocks-validate:
 	@echo "Validating block definitions..."
-	@cd backend && go run ./cmd/seeder/... -validate
+	@cd backend && go run ./cmd/seeder -validate
 
 # Seed blocks (dry run)
 seed-blocks-dry-run:
 	@echo "Running block seeder (dry run)..."
-	@cd backend && go run ./cmd/seeder/... -dry-run -verbose
+	@cd backend && go run ./cmd/seeder -dry-run -verbose
 
 # Reset database
 db-reset:
