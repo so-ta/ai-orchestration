@@ -79,7 +79,11 @@ func main() {
 		if len(changes.ToCreate) > 0 {
 			fmt.Printf("📥 Blocks to create (%d):\n", len(changes.ToCreate))
 			for _, slug := range changes.ToCreate {
-				block, _ := registry.GetBySlug(slug)
+				block, ok := registry.GetBySlug(slug)
+				if !ok {
+					fmt.Printf("   + %s (unknown block)\n", slug)
+					continue
+				}
 				fmt.Printf("   + %s (v%d) - %s\n", slug, block.Version, block.Name)
 			}
 		}
