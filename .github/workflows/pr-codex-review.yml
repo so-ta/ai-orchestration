@@ -106,17 +106,19 @@ jobs:
         with:
           script: |
             const prNumber = context.issue.number;
-            const body = `## 🤖 Codex Code Review
-
-### 概要
-このPRにはレビュー対象の変更がありません（baseブランチと差分なし）。
-
-### 判定
-**APPROVE**
-変更がないため、問題ありません。
-
----
-*このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*`;
+            const body = [
+              '## 🤖 Codex Code Review',
+              '',
+              '### 概要',
+              'このPRにはレビュー対象の変更がありません（baseブランチと差分なし）。',
+              '',
+              '### 判定',
+              '**APPROVE**',
+              '変更がないため、問題ありません。',
+              '',
+              '---',
+              '*このレビューは [OpenAI Codex](https://openai.com/codex/) による自動生成です*'
+            ].join('\n');
 
             await github.rest.pulls.createReview({
               owner: context.repo.owner,
