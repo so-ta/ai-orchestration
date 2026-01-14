@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAuditLogs } from '~/composables/useAuditLogs'
 import type { BlockDefinition, BlockCategory, Credential, CredentialType, CredentialStatus, CreateCredentialRequest, CredentialData, AuditLog, AuditAction } from '~/types/api'
 import type { AuditLogFilter } from '~/composables/useAuditLogs'
 

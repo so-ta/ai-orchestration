@@ -111,7 +111,11 @@ func logAudit(
 		UserAgent:    r.UserAgent(),
 	}
 
-	// Log asynchronously to not block the response
+	// Log asynchronously to not block the response.
+	// We intentionally use context.Background() here because:
+	// 1. Audit logging should complete even after HTTP response is sent
+	// 2. The original request context may be cancelled after response
+	// 3. Audit logs are fire-and-forget operations for the request flow
 	go func() {
 		if err := auditService.Log(context.Background(), input); err != nil {
 			log.Printf("Failed to log audit event: %v", err)
