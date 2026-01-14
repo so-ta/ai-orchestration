@@ -169,7 +169,7 @@ Default tenant ID: `00000000-0000-0000-0000-000000000001`
 
 ### 0. CODEX REVIEW WORKFLOW（最重要・絶対遵守）
 
-**PRをpushした後は、必ず[CODEX_REVIEW](docs/rules/CODEX_REVIEW.md)のワークフローに従うこと。**
+**作業完了後は、必ず[CODEX_REVIEW](docs/rules/CODEX_REVIEW.md)のワークフローに従うプルリクエストを作成すること。**
 
 ```
 ⚠️ これは絶対に守るべきルールです。違反は許可されません。
