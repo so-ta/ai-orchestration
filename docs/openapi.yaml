@@ -492,6 +492,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Run'
+        '400':
+          $ref: '#/components/responses/SchemaValidationError'
 
   /runs/{runId}:
     parameters:
@@ -725,6 +727,8 @@ paths:
                     format: uuid
                   status:
                     type: string
+        '400':
+          $ref: '#/components/responses/SchemaValidationError'
 
   /adapters:
     get:
@@ -2082,3 +2086,33 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    SchemaValidationError:
+      description: input_schemaに対する入力データ検証エラー
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: SCHEMA_VALIDATION_ERROR
+                  message:
+                    type: string
+                    example: Input validation failed
+                  details:
+                    type: object
+                    properties:
+                      errors:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field:
+                              type: string
+                              example: email
+                            message:
+                              type: string
+                              example: email is required

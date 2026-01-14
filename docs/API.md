@@ -40,9 +40,39 @@ REST API endpoints, request/response schemas, and authentication.
 | `FORBIDDEN` | 403 | Insufficient permissions |
 | `NOT_FOUND` | 404 | Resource not found |
 | `VALIDATION_ERROR` | 400 | Invalid request body |
+| `SCHEMA_VALIDATION_ERROR` | 400 | Input does not match workflow's input_schema |
 | `CONFLICT` | 409 | Resource conflict |
 | `INTERNAL_ERROR` | 500 | Server error |
 | `RATE_LIMIT_EXCEEDED` | 429 | Rate limit exceeded |
+
+### Schema Validation Error Response
+
+When the input data does not match the workflow's `input_schema` (defined in the Start step), the API returns a detailed validation error:
+
+```json
+{
+  "error": {
+    "code": "SCHEMA_VALIDATION_ERROR",
+    "message": "Input validation failed",
+    "details": {
+      "errors": [
+        {
+          "field": "email",
+          "message": "email is required"
+        },
+        {
+          "field": "age",
+          "message": "age must be of type integer"
+        }
+      ]
+    }
+  }
+}
+```
+
+This error is returned by:
+- `POST /workflows/{workflow_id}/runs` - when run input doesn't match workflow's input_schema
+- `POST /webhooks/{webhook_id}` - when webhook payload (after input_mapping) doesn't match workflow's input_schema
 
 ---
 

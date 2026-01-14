@@ -75,6 +75,15 @@ func Error(w http.ResponseWriter, status int, code, message string, details inte
 
 // HandleError converts domain errors to HTTP responses
 func HandleError(w http.ResponseWriter, err error) {
+	// Check for input schema validation errors first
+	var inputValidationErrs *domain.InputValidationErrors
+	if errors.As(err, &inputValidationErrs) {
+		Error(w, http.StatusBadRequest, "SCHEMA_VALIDATION_ERROR", "Input validation failed", map[string]interface{}{
+			"errors": inputValidationErrs.Errors,
+		})
+		return
+	}
+
 	var validationErr domain.ValidationError
 	if errors.As(err, &validationErr) {
 		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", validationErr.Message, map[string]string{
