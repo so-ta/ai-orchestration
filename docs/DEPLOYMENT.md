@@ -7,7 +7,7 @@ Docker, Kubernetes, and environment configuration for development and production
 | Item | Value |
 |------|-------|
 | Development | Docker Compose |
-| Production | Kubernetes |
+| Production | ECS (別途構築) |
 | Container Registry | Local build / Custom |
 | API Port | 8080 |
 | Frontend Port | 3000 |
@@ -88,203 +88,6 @@ TELEMETRY_ENABLED=true
 | Keycloak Admin | admin | admin |
 | Test User (admin) | admin@example.com | admin123 |
 | Test User (builder) | builder@example.com | builder123 |
-
----
-
-## Kubernetes Deployment
-
-### Manifests Structure
-
-```
-deploy/kubernetes/
-├── namespace.yaml          # ai-orchestration namespace
-├── configmap.yaml          # Non-secret config
-├── secrets.yaml            # Credentials (base64)
-├── api-deployment.yaml     # API Deployment + Service + ServiceAccount
-├── worker-deployment.yaml  # Worker Deployment
-├── ingress.yaml            # External access
-├── hpa.yaml                # Horizontal Pod Autoscaler
-└── kustomization.yaml      # Kustomize config
-```
-
-### Apply
-
-```bash
-# Using kustomize
-kubectl apply -k deploy/kubernetes/
-
-# Or individual files
-kubectl apply -f deploy/kubernetes/namespace.yaml
-kubectl apply -f deploy/kubernetes/configmap.yaml
-kubectl apply -f deploy/kubernetes/secrets.yaml
-kubectl apply -f deploy/kubernetes/api-deployment.yaml
-kubectl apply -f deploy/kubernetes/worker-deployment.yaml
-kubectl apply -f deploy/kubernetes/ingress.yaml
-kubectl apply -f deploy/kubernetes/hpa.yaml
-```
-
-### API Deployment Spec
-
-```yaml
-spec:
-  replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-
-  template:
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-
-      containers:
-        - name: api
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 30
-
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 10
-
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: api
-                topologyKey: kubernetes.io/hostname
-```
-
-### Worker Deployment Spec
-
-```yaml
-spec:
-  replicas: 2
-
-  template:
-    spec:
-      containers:
-        - name: worker
-          resources:
-            requests:
-              cpu: 200m
-              memory: 256Mi
-            limits:
-              cpu: 1000m
-              memory: 1Gi
-
-          livenessProbe:
-            exec:
-              command: ["/app/worker", "health"]
-            initialDelaySeconds: 10
-            periodSeconds: 30
-```
-
-### ConfigMap
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ai-orchestration-config
-  namespace: ai-orchestration
-data:
-  DATABASE_URL: postgres://user:pass@postgres:5432/ai_orchestration
-  REDIS_URL: redis://redis:6379
-  KEYCLOAK_URL: http://keycloak:8080
-  KEYCLOAK_REALM: ai-orchestration
-  AUTH_ENABLED: "true"
-  TELEMETRY_ENABLED: "true"
-  ENVIRONMENT: production
-```
-
-### Secrets
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ai-orchestration-secrets
-  namespace: ai-orchestration
-type: Opaque
-data:
-  OPENAI_API_KEY: <base64>
-  ANTHROPIC_API_KEY: <base64>
-  DATABASE_PASSWORD: <base64>
-```
-
-### HPA
-
-```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: api-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: api
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-```
-
-### Ingress
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: ai-orchestration
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-spec:
-  rules:
-    - host: api.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: api
-                port:
-                  number: 80
-```
 
 ---
 
@@ -410,22 +213,18 @@ jaeger:
 ### Debug Commands
 
 ```bash
-# Check pod status
-kubectl get pods -n ai-orchestration
+# Docker Compose logs
+docker compose logs -f api
+docker compose logs -f worker
 
-# View logs
-kubectl logs -f deployment/api -n ai-orchestration
-
-# Exec into pod
-kubectl exec -it deployment/api -n ai-orchestration -- sh
+# Exec into container
+docker compose exec api sh
 
 # Check DB connection
-kubectl exec -it deployment/api -n ai-orchestration -- \
-  psql $DATABASE_URL -c "SELECT 1"
+docker compose exec api psql $DATABASE_URL -c "SELECT 1"
 
 # Check Redis
-kubectl exec -it deployment/api -n ai-orchestration -- \
-  redis-cli -u $REDIS_URL PING
+docker compose exec api redis-cli -u $REDIS_URL PING
 ```
 
 ---
@@ -434,7 +233,7 @@ kubectl exec -it deployment/api -n ai-orchestration -- \
 
 | Component | Strategy | Notes |
 |-----------|----------|-------|
-| API | Horizontal scaling | Stateless, HPA with CPU target 70% |
+| API | Horizontal scaling | Stateless, CPU-based autoscaling recommended |
 | Worker | Queue-based scaling | Each worker processes sequentially, more workers = more parallelism |
 | Database | Connection pooling | PgBouncer recommended, read replicas for read-heavy |
 | Redis | Cluster mode | Separate instances for cache vs queue (optional) |

@@ -286,4 +286,4 @@ All phases complete (Phase 1-8):
 - Workflow CRUD, Steps, Edges, DAG execution engine
 - Adapters (Mock, OpenAI, Anthropic, HTTP)
 - Schedules, Webhooks, Keycloak OIDC auth
-- OpenTelemetry tracing, E2E tests, K8s deployment
+- OpenTelemetry tracing, E2E tests
