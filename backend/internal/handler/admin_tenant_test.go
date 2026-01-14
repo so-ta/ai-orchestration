@@ -292,8 +292,9 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				"name": "Custom Tenant",
 				"slug": "custom-tenant",
 				"feature_flags": {
-					"enable_api_access": true,
-					"enable_custom_blocks": false
+					"api_access": true,
+					"custom_blocks": false,
+					"copilot_enabled": true
 				}
 			}`,
 			mockRepo: &mockTenantRepository{
@@ -320,7 +321,9 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				"slug": "limited-tenant",
 				"limits": {
 					"max_workflows": 100,
-					"max_runs_per_day": 1000
+					"max_runs_per_day": 1000,
+					"max_users": 50,
+					"max_storage_mb": 10240
 				}
 			}`,
 			mockRepo: &mockTenantRepository{
@@ -345,8 +348,11 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				"name": "Metadata Tenant",
 				"slug": "metadata-tenant",
 				"metadata": {
-					"custom_key": "custom_value",
-					"organization": "Acme Corp"
+					"industry": "technology",
+					"company_size": "50-200",
+					"website": "https://example.com",
+					"country": "Japan",
+					"notes": "Test tenant for API"
 				}
 			}`,
 			mockRepo: &mockTenantRepository{
