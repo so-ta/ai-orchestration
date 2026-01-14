@@ -23,6 +23,12 @@ func TestValidateInputSchema(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "invalid schema JSON - should skip validation",
+			input:       `{"name": "test"}`,
+			schema:      `not valid json`,
+			expectError: false,
+		},
+		{
 			name:        "empty schema - should pass",
 			input:       `{"name": "test"}`,
 			schema:      `{}`,
@@ -179,6 +185,12 @@ func TestFilterOutputBySchema(t *testing.T) {
 			name:           "nil schema - return original",
 			output:         `{"name": "test", "extra": "value"}`,
 			schema:         "",
+			expectedFields: []string{"name", "extra"},
+		},
+		{
+			name:           "invalid schema JSON - return original",
+			output:         `{"name": "test", "extra": "value"}`,
+			schema:         `not valid json`,
 			expectedFields: []string{"name", "extra"},
 		},
 		{
