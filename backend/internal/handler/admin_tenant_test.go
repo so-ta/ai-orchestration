@@ -254,6 +254,11 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				assert.Equal(t, "test-tenant", resp["slug"])
 				assert.Equal(t, "free", resp["plan"]) // Default plan
 				assert.Equal(t, "active", resp["status"])
+				// Verify default fields are present
+				assert.NotNil(t, resp["settings"], "settings should be present with default value")
+				assert.NotNil(t, resp["metadata"], "metadata should be present with default value")
+				assert.NotNil(t, resp["feature_flags"], "feature_flags should be present with default value")
+				assert.NotNil(t, resp["limits"], "limits should be present with default value")
 			},
 		},
 		{
