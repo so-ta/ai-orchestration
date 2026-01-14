@@ -267,3 +267,81 @@ func TestSandbox_Execute_PrimitiveResult(t *testing.T) {
 	// Primitive results should be wrapped
 	assert.Equal(t, int64(42), result["result"])
 }
+
+// TestHTTPClient_SetHeader tests the SetHeader method
+func TestHTTPClient_SetHeader(t *testing.T) {
+	client := NewHTTPClient(10 * time.Second)
+
+	client.SetHeader("Authorization", "Bearer token")
+	client.SetHeader("X-Custom-Header", "custom-value")
+
+	headers := client.getHeaders()
+	assert.Equal(t, "Bearer token", headers["Authorization"])
+	assert.Equal(t, "custom-value", headers["X-Custom-Header"])
+}
+
+// TestHTTPClient_SetHeader_Concurrent tests concurrent access to SetHeader and getHeaders
+func TestHTTPClient_SetHeader_Concurrent(t *testing.T) {
+	client := NewHTTPClient(10 * time.Second)
+
+	// Run multiple goroutines writing and reading headers concurrently
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				client.SetHeader("Header", "value")
+			}
+			done <- true
+		}()
+		go func() {
+			for j := 0; j < 100; j++ {
+				_ = client.getHeaders()
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < 20; i++ {
+		<-done
+	}
+}
+
+// TestHTTPClient_Request tests the Request method with a mock server
+func TestHTTPClient_Request(t *testing.T) {
+	// Create a mock server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify default header is present
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"message": "success"}`))
+	}))
+	defer server.Close()
+
+	client := NewHTTPClient(10 * time.Second)
+	client.SetHeader("Authorization", "Bearer test-token")
+
+	result, err := client.Request("POST", server.URL, map[string]string{"data": "test"}, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, 200, result["status"])
+	data, ok := result["data"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "success", data["message"])
+}
+
+// TestHTTPClient_getHeaders_ReturnsCopy tests that getHeaders returns a copy
+func TestHTTPClient_getHeaders_ReturnsCopy(t *testing.T) {
+	client := NewHTTPClient(10 * time.Second)
+	client.SetHeader("Key", "original")
+
+	headers := client.getHeaders()
+	headers["Key"] = "modified"
+
+	// Original should be unchanged
+	originalHeaders := client.getHeaders()
+	assert.Equal(t, "original", originalHeaders["Key"])
+}
