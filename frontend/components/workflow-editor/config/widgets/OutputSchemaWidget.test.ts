@@ -336,7 +336,8 @@ describe('OutputSchemaWidget', () => {
 
     // Check that JSON textarea has content
     const textarea = wrapper.find('.json-textarea')
-    expect(textarea.element.value).toContain('"type"')
-    expect(textarea.element.value).toContain('"properties"')
+    const textareaElement = textarea.element as HTMLTextAreaElement
+    expect(textareaElement.value).toContain('"type"')
+    expect(textareaElement.value).toContain('"properties"')
   })
 })
