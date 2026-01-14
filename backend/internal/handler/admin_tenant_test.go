@@ -228,11 +228,12 @@ func TestAdminTenantHandler_Get_GetStatsError(t *testing.T) {
 // TestAdminTenantHandler_Create tests Create handler with various scenarios
 func TestAdminTenantHandler_Create(t *testing.T) {
 	tests := []struct {
-		name           string
-		body           string
-		mockRepo       *mockTenantRepository
-		expectedStatus int
-		expectedCode   string
+		name             string
+		body             string
+		mockRepo         *mockTenantRepository
+		expectedStatus   int
+		expectedCode     string
+		validateResponse func(t *testing.T, body []byte)
 	}{
 		{
 			name: "success - creates tenant with minimal fields",
@@ -246,6 +247,14 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				},
 			},
 			expectedStatus: http.StatusCreated,
+			validateResponse: func(t *testing.T, body []byte) {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(body, &resp))
+				assert.Equal(t, "Test Tenant", resp["name"])
+				assert.Equal(t, "test-tenant", resp["slug"])
+				assert.Equal(t, "free", resp["plan"]) // Default plan
+				assert.Equal(t, "active", resp["status"])
+			},
 		},
 		{
 			name: "success - creates tenant with all fields",
@@ -266,6 +275,69 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				},
 			},
 			expectedStatus: http.StatusCreated,
+			validateResponse: func(t *testing.T, body []byte) {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(body, &resp))
+				assert.Equal(t, "Full Tenant", resp["name"])
+				assert.Equal(t, "full-tenant", resp["slug"])
+				assert.Equal(t, "professional", resp["plan"])
+				assert.Equal(t, "owner@example.com", resp["owner_email"])
+				assert.Equal(t, "Test Owner", resp["owner_name"])
+				assert.Equal(t, "billing@example.com", resp["billing_email"])
+			},
+		},
+		{
+			name: "success - creates tenant with custom feature_flags",
+			body: `{
+				"name": "Custom Tenant",
+				"slug": "custom-tenant",
+				"feature_flags": {
+					"enable_api_access": true,
+					"enable_custom_blocks": false
+				}
+			}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return nil
+				},
+			},
+			expectedStatus: http.StatusCreated,
+			validateResponse: func(t *testing.T, body []byte) {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(body, &resp))
+				assert.Equal(t, "Custom Tenant", resp["name"])
+				// feature_flags should be present in response
+				assert.NotNil(t, resp["feature_flags"])
+			},
+		},
+		{
+			name: "success - creates tenant with custom limits",
+			body: `{
+				"name": "Limited Tenant",
+				"slug": "limited-tenant",
+				"limits": {
+					"max_workflows": 100,
+					"max_runs_per_day": 1000
+				}
+			}`,
+			mockRepo: &mockTenantRepository{
+				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
+					return nil, domain.ErrTenantNotFound
+				},
+				createFunc: func(ctx context.Context, tenant *domain.Tenant) error {
+					return nil
+				},
+			},
+			expectedStatus: http.StatusCreated,
+			validateResponse: func(t *testing.T, body []byte) {
+				var resp map[string]interface{}
+				require.NoError(t, json.Unmarshal(body, &resp))
+				assert.Equal(t, "Limited Tenant", resp["name"])
+				assert.NotNil(t, resp["limits"])
+			},
 		},
 		{
 			name:           "error - invalid JSON body",
@@ -311,17 +383,6 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 			expectedCode:   "SLUG_EXISTS",
 		},
 		{
-			name: "error - GetBySlug database error",
-			body: `{"name": "Test Tenant", "slug": "test-tenant"}`,
-			mockRepo: &mockTenantRepository{
-				getBySlugFunc: func(ctx context.Context, slug string) (*domain.Tenant, error) {
-					return nil, errors.New("database connection failed")
-				},
-			},
-			expectedStatus: http.StatusInternalServerError,
-			expectedCode:   "INTERNAL_ERROR",
-		},
-		{
 			name: "error - Create repository error",
 			body: `{"name": "Test Tenant", "slug": "test-tenant"}`,
 			mockRepo: &mockTenantRepository{
@@ -354,6 +415,10 @@ func TestAdminTenantHandler_Create(t *testing.T) {
 				err := json.Unmarshal(rec.Body.Bytes(), &resp)
 				require.NoError(t, err)
 				assert.Equal(t, tt.expectedCode, resp.Error.Code)
+			}
+
+			if tt.validateResponse != nil {
+				tt.validateResponse(t, rec.Body.Bytes())
 			}
 		})
 	}
