@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -191,7 +192,11 @@ func (rl *RateLimiter) TenantRateLimitMiddleware() func(http.Handler) http.Handl
 
 			result, err := rl.CheckTenant(r.Context(), tenantID)
 			if err != nil {
-				// On error, allow the request but log
+				// On error, allow the request but log for debugging
+				slog.Error("rate limit check failed for tenant",
+					"tenant_id", tenantID.String(),
+					"error", err,
+				)
 				next.ServeHTTP(w, r)
 				return
 			}
