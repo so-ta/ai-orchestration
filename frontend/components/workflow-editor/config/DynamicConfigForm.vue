@@ -53,10 +53,10 @@ const {
   validate,
 } = useValidation(schemaRef, valuesRef);
 
-// Watch validation state
+// Watch validation state - emit immediately to set initial state
 watch(isValid, (valid) => {
   emit('validation-change', valid);
-});
+}, { immediate: true });
 
 /**
  * Get default value from schema property

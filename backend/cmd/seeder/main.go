@@ -101,7 +101,7 @@ func main() {
 
 	// Create migrators
 	blockMigrator := migration.NewMigrator(blockRepo, versionRepo)
-	workflowMigrator := migration.NewWorkflowMigrator(workflowRepo, stepRepo, edgeRepo)
+	workflowMigrator := migration.NewWorkflowMigrator(workflowRepo, stepRepo, edgeRepo).WithBlockRepo(blockRepo)
 
 	if *dryRun {
 		// Dry run mode

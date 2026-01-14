@@ -608,16 +608,36 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 }
 
 func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step) (json.RawMessage, error) {
-	// For now, use the run input or previous step output
 	execCtx.mu.RLock()
 	defer execCtx.mu.RUnlock()
 
-	// Simple: use run input if no dependencies, otherwise merge outputs
+	// No previous step outputs - use workflow input
 	if len(execCtx.StepData) == 0 {
 		return execCtx.Run.Input, nil
 	}
 
-	// Merge all previous outputs
+	// Find edges pointing to this step (source edges)
+	var sourceEdges []domain.Edge
+	if execCtx.Definition != nil {
+		for _, edge := range execCtx.Definition.Edges {
+			if edge.TargetStepID == step.ID {
+				sourceEdges = append(sourceEdges, edge)
+			}
+		}
+	}
+
+	// If exactly one source edge, use that step's output directly (pass-through mode)
+	// This enables linear workflows where data flows naturally from step to step
+	if len(sourceEdges) == 1 {
+		sourceStepID := sourceEdges[0].SourceStepID
+		if data, ok := execCtx.StepData[sourceStepID]; ok {
+			return data, nil
+		}
+		// Fallback to workflow input if source step has no data
+		return execCtx.Run.Input, nil
+	}
+
+	// Multiple sources or no edge info: merge all outputs (for join steps, etc.)
 	merged := make(map[string]interface{})
 	merged["workflow_input"] = json.RawMessage(execCtx.Run.Input)
 

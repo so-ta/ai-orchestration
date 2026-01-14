@@ -1209,6 +1209,7 @@ onMounted(() => {
           <PropertiesPanel
             :step="selectedStep"
             :workflow-id="workflowId"
+            :workflow-input-schema="workflow?.input_schema"
             :readonly-mode="isReadonly"
             :saving="saving"
             :latest-run="latestRun"

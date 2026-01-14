@@ -3,14 +3,16 @@ import type { Workflow } from '~/types/api'
 
 const { t } = useI18n()
 const { list: listWorkflows } = useWorkflows()
-const runsApi = useRuns()
 const toast = useToast()
 
 // State
 const workflows = ref<Workflow[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
-const runningWorkflows = ref<Set<string>>(new Set())
+
+// Run modal state
+const showRunModal = ref(false)
+const selectedWorkflow = ref<Workflow | null>(null)
 
 // Filters
 const statusFilter = ref<string>('all')
@@ -58,21 +60,26 @@ const stats = computed(() => ({
   draft: workflows.value.filter(w => w.status === 'draft').length,
 }))
 
-// Run workflow
-async function runWorkflow(workflow: Workflow) {
+// Open run modal
+function openRunModal(workflow: Workflow) {
   if (workflow.status !== 'published') {
     return
   }
+  selectedWorkflow.value = workflow
+  showRunModal.value = true
+}
 
-  runningWorkflows.value.add(workflow.id)
-  try {
-    const response = await runsApi.create(workflow.id, { input: {}, triggered_by: 'manual' })
-    navigateTo(`/runs/${response.data.id}`)
-  } catch (e) {
-    toast.error('Failed to start run', e instanceof Error ? e.message : undefined)
-  } finally {
-    runningWorkflows.value.delete(workflow.id)
-  }
+// Handle successful run
+function handleRunSuccess(runId: string) {
+  showRunModal.value = false
+  selectedWorkflow.value = null
+  navigateTo(`/runs/${runId}`)
+}
+
+// Close run modal
+function closeRunModal() {
+  showRunModal.value = false
+  selectedWorkflow.value = null
 }
 
 // Format date
@@ -272,14 +279,13 @@ onMounted(fetchWorkflows)
                     </NuxtLink>
                     <button
                       class="btn btn-primary btn-sm"
-                      :disabled="workflow.status !== 'published' || runningWorkflows.has(workflow.id)"
-                      @click="runWorkflow(workflow)"
+                      :disabled="workflow.status !== 'published'"
+                      @click="openRunModal(workflow)"
                     >
-                      <svg v-if="!runningWorkflows.has(workflow.id)" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
                       </svg>
-                      <span v-else class="btn-spinner"></span>
-                      {{ runningWorkflows.has(workflow.id) ? t('workflows.running') : t('workflows.run') }}
+                      {{ t('workflows.run') }}
                     </button>
                   </div>
                 </td>
@@ -289,6 +295,15 @@ onMounted(fetchWorkflows)
         </div>
       </div>
     </template>
+
+    <!-- Run Modal -->
+    <WorkflowRunModal
+      :show="showRunModal"
+      :workflow-id="selectedWorkflow?.id ?? ''"
+      :workflow-name="selectedWorkflow?.name ?? ''"
+      @close="closeRunModal"
+      @success="handleRunSuccess"
+    />
   </div>
 </template>
 

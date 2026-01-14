@@ -10,6 +10,7 @@ const toast = useToast()
 const props = defineProps<{
   step: Step | null
   workflowId: string
+  workflowInputSchema?: object
   latestRun: Run | null
   isActive?: boolean
   steps: Step[]
@@ -27,6 +28,7 @@ const executing = ref(false)
 
 // Input mode toggle (form vs json)
 const useJsonMode = ref(false)
+const useWorkflowJsonMode = ref(false)
 
 // Custom input state (always shown, no toggle)
 const customInputJson = ref('{}')
@@ -193,13 +195,31 @@ function clearInput() {
   }
 }
 
-// Toggle between form and JSON mode
+// Toggle between form and JSON mode (for step execution)
 function toggleInputMode() {
   if (useJsonMode.value) {
     // Switching from JSON to Form - parse JSON and set form values
     try {
       const parsed = JSON.parse(customInputJson.value)
       stepInputValues.value = parsed
+      inputError.value = null
+    } catch {
+      inputError.value = t('execution.errors.invalidJson')
+      return // Don't switch if JSON is invalid
+    }
+  } else {
+    // Switching from Form to JSON - serialize form values
+    customInputJson.value = JSON.stringify(stepInputValues.value, null, 2)
+  }
+  useJsonMode.value = !useJsonMode.value
+}
+
+// Toggle between form and JSON mode (for workflow execution)
+function toggleWorkflowInputMode() {
+  if (useWorkflowJsonMode.value) {
+    // Switching from JSON to Form - parse JSON and set form values
+    try {
+      const parsed = JSON.parse(customInputJson.value)
       workflowInputValues.value = parsed
       inputError.value = null
     } catch {
@@ -208,10 +228,9 @@ function toggleInputMode() {
     }
   } else {
     // Switching from Form to JSON - serialize form values
-    const values = props.step ? stepInputValues.value : workflowInputValues.value
-    customInputJson.value = JSON.stringify(values, null, 2)
+    customInputJson.value = JSON.stringify(workflowInputValues.value, null, 2)
   }
-  useJsonMode.value = !useJsonMode.value
+  useWorkflowJsonMode.value = !useWorkflowJsonMode.value
 }
 
 // Get previous step in the workflow (for autocomplete)
@@ -311,11 +330,10 @@ const effectiveStep = computed(() => {
 })
 
 // Convert input_schema to ConfigSchema format for workflow execution
-// Uses Start step's config.input_schema to define workflow input requirements
+// Uses workflow's input_schema passed from parent (consistent with WorkflowRunModal)
 const workflowInputSchema = computed<ConfigSchema | null>(() => {
-  // Get input_schema from Start step's config
-  const config = startStep.value?.config as Record<string, unknown> | undefined
-  const schema = config?.input_schema as Record<string, unknown> | undefined
+  // Use workflow's input_schema passed from parent
+  const schema = props.workflowInputSchema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
   const properties = schema.properties as Record<string, unknown> | undefined
   if (!properties || Object.keys(properties).length === 0) return null
@@ -404,7 +422,8 @@ function getSchemaFields(schema: Record<string, unknown> | undefined | null): Sc
 
 // Get workflow schema fields for preview
 const workflowSchemaFields = computed(() => {
-  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  // Use workflow's input_schema for consistency
+  const schema = props.workflowInputSchema as Record<string, unknown> | undefined
   return getSchemaFields(schema)
 })
 
@@ -1128,22 +1147,41 @@ watch(() => props.step, () => {
       <template v-else>
         <!-- Workflow Execution Section -->
         <div class="workflow-execution-section">
-          <h4 class="section-title">{{ t('execution.testExecution') }}</h4>
-
-          <!-- First Step Info -->
-          <div v-if="firstExecutableStep" class="info-banner info-banner-subtle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-            <span>{{ t('execution.workflowStartsAt', { stepName: firstExecutableStep.name }) }}</span>
-          </div>
-
           <!-- Input Section -->
           <div class="input-section">
-            <label class="input-label">{{ t('execution.customInput') }}</label>
+            <div class="input-header">
+              <label class="input-label">{{ t('execution.customInput') }}</label>
+              <div class="input-actions">
+                <!-- Clear Button -->
+                <button
+                  class="btn-icon"
+                  :title="t('execution.clearInput')"
+                  @click="clearInput"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"></path>
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                  </svg>
+                </button>
+                <!-- Toggle Form/JSON Mode -->
+                <button
+                  v-if="hasWorkflowInputFields"
+                  class="btn-icon"
+                  :class="{ active: useWorkflowJsonMode }"
+                  :title="useWorkflowJsonMode ? t('execution.switchToForm') : t('execution.switchToJson')"
+                  @click="toggleWorkflowInputMode"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="16 18 22 12 16 6"></polyline>
+                    <polyline points="8 6 2 12 8 18"></polyline>
+                  </svg>
+                </button>
+              </div>
+            </div>
 
-            <!-- Dynamic Form (when input_schema is available) -->
-            <template v-if="hasWorkflowInputFields">
+            <!-- Dynamic Form (when input_schema is available and not in JSON mode) -->
+            <template v-if="hasWorkflowInputFields && !useWorkflowJsonMode">
               <p class="input-description">
                 {{ t('execution.inputDescription', { stepName: firstExecutableStep?.name }) }}
               </p>
@@ -1155,7 +1193,7 @@ watch(() => props.step, () => {
               />
             </template>
 
-            <!-- JSON Textarea with Schema Preview (fallback) -->
+            <!-- JSON Textarea (when no schema, or JSON mode is active) -->
             <template v-else>
               <!-- Schema Preview (if we have schema info) -->
               <div v-if="workflowSchemaFields.length > 0" class="schema-preview">

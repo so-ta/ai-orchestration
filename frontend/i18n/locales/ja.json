@@ -151,10 +151,12 @@
     "runDialog": {
       "title": "ワークフローを実行",
       "inputTitle": "入力データ",
-      "inputDescription": "「{stepName}」ステップに渡すデータを入力してください",
+      "inputDescription": "ワークフローの実行に必要な入力データを入力してください",
       "noInputRequired": "このワークフローは入力データなしで実行できます",
       "schemaDetails": "入力スキーマの詳細",
-      "run": "実行"
+      "run": "実行",
+      "started": "ワークフローを開始しました",
+      "failed": "ワークフローの実行に失敗しました"
     }
   },
   "editor": {

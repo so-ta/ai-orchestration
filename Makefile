@@ -265,9 +265,10 @@ seed-blocks-dry-run:
 # Reset database
 db-reset:
 	@echo "Resetting database..."
-	@docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+	@docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS vector;"
 	@$(MAKE) db-apply
 	@$(MAKE) db-seed
+	@$(MAKE) seed-blocks
 	@echo "Database reset complete!"
 
 # Export schema

@@ -151,10 +151,12 @@
     "runDialog": {
       "title": "Run Workflow",
       "inputTitle": "Input Data",
-      "inputDescription": "Enter data to pass to the \"{stepName}\" step",
+      "inputDescription": "Enter the required input data for this workflow",
       "noInputRequired": "This workflow can be run without input data",
       "schemaDetails": "Input Schema Details",
-      "run": "Run"
+      "run": "Run",
+      "started": "Workflow started",
+      "failed": "Failed to start workflow"
     }
   },
   "editor": {

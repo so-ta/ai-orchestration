@@ -15,6 +15,7 @@ const props = defineProps<{
   override?: FieldOverride;
   error?: string;
   disabled?: boolean;
+  required?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -147,6 +148,7 @@ function getSimpleItemField(): ParsedField | null {
     <div class="array-header">
       <label class="field-label">
         {{ property.title || name }}
+        <span v-if="required" class="field-required">*</span>
         <span v-if="property.minItems || property.maxItems" class="field-count">
           ({{ items.length }}{{ property.maxItems ? ` / ${property.maxItems}` : '' }})
         </span>
@@ -257,6 +259,11 @@ function getSimpleItemField(): ParsedField | null {
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary, #6b7280);
+}
+
+.field-required {
+  color: var(--color-error, #ef4444);
+  margin-left: 2px;
 }
 
 .field-count {

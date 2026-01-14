@@ -33,7 +33,8 @@ type SystemStepDefinition struct {
 	Config      json.RawMessage `json:"config,omitempty"`        // Step configuration
 	PositionX   int             `json:"position_x"`              // Canvas X position
 	PositionY   int             `json:"position_y"`              // Canvas Y position
-	BlockDefID  *string         `json:"block_definition_id"`     // Optional block definition ID reference
+	BlockDefID  *string         `json:"block_definition_id"`     // Optional block definition ID reference (deprecated, use BlockSlug)
+	BlockSlug   string          `json:"block_slug,omitempty"`    // Block slug reference (resolved to ID at migration time)
 }
 
 // SystemEdgeDefinition represents an edge (connection) between steps

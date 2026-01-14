@@ -17,6 +17,7 @@ const props = defineProps<{
   modelValue: unknown;
   error?: string;
   disabled?: boolean;
+  required?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -81,6 +82,7 @@ function handleBlur() {
     :override="field.override"
     :error="error"
     :disabled="disabled"
+    :required="field.required"
     @update:model-value="handleUpdate"
     @blur="handleBlur"
   />

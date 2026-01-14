@@ -9,6 +9,7 @@ const props = defineProps<{
   override?: FieldOverride
   error?: string
   disabled?: boolean
+  required?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -36,9 +37,9 @@ const description = computed(() => {
   return props.property.description
 })
 
-// Is required?
+// Is required? (from prop or x-required)
 const isRequired = computed(() => {
-  return props.property['x-required'] === true
+  return props.required || props.property['x-required'] === true
 })
 
 // Number of rows

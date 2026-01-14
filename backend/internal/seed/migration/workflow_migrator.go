@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -40,6 +41,7 @@ type WorkflowMigrator struct {
 	workflowRepo repository.WorkflowRepository
 	stepRepo     repository.StepRepository
 	edgeRepo     repository.EdgeRepository
+	blockRepo    repository.BlockDefinitionRepository
 }
 
 // NewWorkflowMigrator creates a new workflow migrator
@@ -53,6 +55,12 @@ func NewWorkflowMigrator(
 		stepRepo:     stepRepo,
 		edgeRepo:     edgeRepo,
 	}
+}
+
+// WithBlockRepo sets the block definition repository for resolving block slugs
+func (m *WorkflowMigrator) WithBlockRepo(blockRepo repository.BlockDefinitionRepository) *WorkflowMigrator {
+	m.blockRepo = blockRepo
+	return m
 }
 
 // Migrate performs UPSERT for all workflows in the registry
@@ -96,12 +104,11 @@ func (m *WorkflowMigrator) upsertWorkflow(ctx context.Context, seedWorkflow *wor
 	// Look up existing workflow by ID
 	existing, err := m.workflowRepo.GetByID(ctx, tenantID, workflowID)
 	if err != nil {
+		if errors.Is(err, domain.ErrWorkflowNotFound) {
+			// Workflow doesn't exist, create it
+			return m.createWorkflow(ctx, seedWorkflow, tenantID, workflowID)
+		}
 		return "", fmt.Errorf("failed to get existing workflow: %w", err)
-	}
-
-	if existing == nil {
-		// CREATE new workflow
-		return m.createWorkflow(ctx, seedWorkflow, tenantID, workflowID)
 	}
 
 	// Check if update is needed
@@ -162,7 +169,19 @@ func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workfl
 		stepIDMap[seedStep.TempID] = stepID
 
 		var blockDefID *uuid.UUID
-		if seedStep.BlockDefID != nil {
+
+		// Resolve block ID from slug (preferred) or use direct ID (deprecated)
+		if seedStep.BlockSlug != "" && m.blockRepo != nil {
+			// Look up block by slug (system blocks have tenant_id = NULL)
+			block, err := m.blockRepo.GetBySlug(ctx, nil, seedStep.BlockSlug)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve block slug %s: %w", seedStep.BlockSlug, err)
+			}
+			if block != nil {
+				blockDefID = &block.ID
+			}
+		} else if seedStep.BlockDefID != nil {
+			// Fallback to direct ID (deprecated)
 			parsed, err := uuid.Parse(*seedStep.BlockDefID)
 			if err == nil {
 				blockDefID = &parsed
@@ -329,12 +348,11 @@ func (m *WorkflowMigrator) DryRun(ctx context.Context, registry *workflows.Regis
 
 		existing, err := m.workflowRepo.GetByID(ctx, tenantID, workflowID)
 		if err != nil {
+			if errors.Is(err, domain.ErrWorkflowNotFound) {
+				result.ToCreate = append(result.ToCreate, seedWorkflow.SystemSlug)
+				continue
+			}
 			return nil, fmt.Errorf("failed to get existing workflow %s: %w", seedWorkflow.SystemSlug, err)
-		}
-
-		if existing == nil {
-			result.ToCreate = append(result.ToCreate, seedWorkflow.SystemSlug)
-			continue
 		}
 
 		if m.hasChanges(existing, seedWorkflow) {

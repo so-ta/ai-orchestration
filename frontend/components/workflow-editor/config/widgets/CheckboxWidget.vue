@@ -8,6 +8,7 @@ const props = defineProps<{
   override?: FieldOverride;
   error?: string;
   disabled?: boolean;
+  required?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -61,6 +62,7 @@ function handleBlur() {
         </svg>
       </span>
       <span class="checkbox-text">{{ property.title || name }}</span>
+      <span v-if="required" class="field-required">*</span>
     </label>
 
     <p v-if="property.description && !error" class="field-description">
@@ -134,6 +136,11 @@ function handleBlur() {
 .checkbox-text {
   font-size: 14px;
   color: var(--color-text, #111827);
+}
+
+.field-required {
+  color: var(--color-error, #ef4444);
+  margin-left: 2px;
 }
 
 .field-description {

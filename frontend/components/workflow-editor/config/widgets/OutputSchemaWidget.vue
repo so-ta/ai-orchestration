@@ -9,6 +9,7 @@ const props = defineProps<{
   override?: FieldOverride
   error?: string
   disabled?: boolean
+  required?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -201,6 +202,7 @@ function handleBlur() {
     <div class="widget-header">
       <label class="widget-label">
         {{ title }}
+        <span v-if="required" class="field-required">*</span>
       </label>
       <button
         type="button"
@@ -396,6 +398,11 @@ function handleBlur() {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text);
+}
+
+.field-required {
+  color: var(--color-error, #ef4444);
+  margin-left: 2px;
 }
 
 .toggle-button {

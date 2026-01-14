@@ -8,6 +8,7 @@ const props = defineProps<{
   override?: FieldOverride;
   error?: string;
   disabled?: boolean;
+  required?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -49,6 +50,7 @@ function formatOptionLabel(option: string | number): string {
   <div class="select-widget">
     <label :for="name" class="field-label">
       {{ property.title || name }}
+      <span v-if="required" class="field-required">*</span>
     </label>
 
     <select
@@ -92,6 +94,11 @@ function formatOptionLabel(option: string | number): string {
   font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary, #6b7280);
+}
+
+.field-required {
+  color: var(--color-error, #ef4444);
+  margin-left: 2px;
 }
 
 .field-select {

@@ -10,11 +10,6 @@ func (r *Registry) registerRAGWorkflows() {
 
 // RAGDocumentIndexingWorkflow indexes documents into vector database for RAG queries
 func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
-	// Block definition IDs for reference
-	textSplitterBlockID := "0a900006-0000-0000-0000-000000000001"
-	embeddingBlockID := "0a900001-0000-0000-0000-000000000001"
-	vectorUpsertBlockID := "0a900002-0000-0000-0000-000000000001"
-
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000101",
 		SystemSlug:  "rag-document-indexing",
@@ -56,36 +51,36 @@ func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
 				Config:    json.RawMessage(`{}`),
 			},
 			{
-				TempID:     "step_2",
-				Name:       "Split Documents",
-				Type:       "text-splitter",
-				PositionX:  400,
-				PositionY:  200,
-				BlockDefID: &textSplitterBlockID,
+				TempID:    "step_2",
+				Name:      "Split Documents",
+				Type:      "text-splitter",
+				PositionX: 400,
+				PositionY: 200,
+				BlockSlug: "text-splitter",
 				Config: json.RawMessage(`{
 					"chunk_size": 1000,
 					"chunk_overlap": 200
 				}`),
 			},
 			{
-				TempID:     "step_3",
-				Name:       "Generate Embeddings",
-				Type:       "embedding",
-				PositionX:  400,
-				PositionY:  350,
-				BlockDefID: &embeddingBlockID,
+				TempID:    "step_3",
+				Name:      "Generate Embeddings",
+				Type:      "embedding",
+				PositionX: 400,
+				PositionY: 350,
+				BlockSlug: "embedding",
 				Config: json.RawMessage(`{
 					"provider": "openai",
 					"model": "text-embedding-3-small"
 				}`),
 			},
 			{
-				TempID:     "step_4",
-				Name:       "Store in Vector DB",
-				Type:       "vector-upsert",
-				PositionX:  400,
-				PositionY:  500,
-				BlockDefID: &vectorUpsertBlockID,
+				TempID:    "step_4",
+				Name:      "Store in Vector DB",
+				Type:      "vector-upsert",
+				PositionX: 400,
+				PositionY: 500,
+				BlockSlug: "vector-upsert",
 				Config: json.RawMessage(`{
 					"collection": "{{$.collection}}"
 				}`),
@@ -113,8 +108,6 @@ func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
 
 // RAGQuestionAnsweringWorkflow answers questions using RAG
 func RAGQuestionAnsweringWorkflow() *SystemWorkflowDefinition {
-	ragQueryBlockID := "0a900007-0000-0000-0000-000000000001"
-
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000102",
 		SystemSlug:  "rag-question-answering",
@@ -147,12 +140,12 @@ func RAGQuestionAnsweringWorkflow() *SystemWorkflowDefinition {
 				Config:    json.RawMessage(`{}`),
 			},
 			{
-				TempID:     "step_2",
-				Name:       "RAG Query",
-				Type:       "rag-query",
-				PositionX:  400,
-				PositionY:  200,
-				BlockDefID: &ragQueryBlockID,
+				TempID:    "step_2",
+				Name:      "RAG Query",
+				Type:      "rag-query",
+				PositionX: 400,
+				PositionY: 200,
+				BlockSlug: "rag-query",
 				Config: json.RawMessage(`{
 					"collection": "{{$.collection}}",
 					"top_k": 5,
@@ -170,8 +163,6 @@ func RAGQuestionAnsweringWorkflow() *SystemWorkflowDefinition {
 
 // RAGKnowledgeBaseChatWorkflow provides interactive chat with knowledge base
 func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
-	vectorSearchBlockID := "0a900003-0000-0000-0000-000000000001"
-
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000103",
 		SystemSlug:  "rag-knowledge-base-chat",
@@ -215,12 +206,12 @@ func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
 				Config:    json.RawMessage(`{}`),
 			},
 			{
-				TempID:     "step_2",
-				Name:       "Search Documents",
-				Type:       "vector-search",
-				PositionX:  400,
-				PositionY:  200,
-				BlockDefID: &vectorSearchBlockID,
+				TempID:    "step_2",
+				Name:      "Search Documents",
+				Type:      "vector-search",
+				PositionX: 400,
+				PositionY: 200,
+				BlockSlug: "vector-search",
 				Config: json.RawMessage(`{
 					"collection": "{{$.collection}}",
 					"top_k": 5,

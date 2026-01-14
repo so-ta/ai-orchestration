@@ -9,6 +9,7 @@ const props = defineProps<{
   override?: FieldOverride
   error?: string
   disabled?: boolean
+  required?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -150,6 +151,7 @@ const highlightedJson = computed(() => {
     <div class="json-widget-header">
       <label :for="name" class="json-widget-label">
         {{ title }}
+        <span v-if="required" class="field-required">*</span>
       </label>
       <div class="header-actions">
         <button
@@ -240,6 +242,11 @@ const highlightedJson = computed(() => {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-text);
+}
+
+.field-required {
+  color: var(--color-error, #ef4444);
+  margin-left: 2px;
 }
 
 .header-actions {

@@ -12,6 +12,7 @@ const { confirm } = useConfirm()
 const props = defineProps<{
   step: Step | null
   workflowId: string
+  workflowInputSchema?: object
   readonlyMode?: boolean
   saving?: boolean
   latestRun?: Run | null
@@ -1368,6 +1369,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       <ExecutionTab
         :step="step"
         :workflow-id="workflowId"
+        :workflow-input-schema="workflowInputSchema"
         :latest-run="latestRun || null"
         :is-active="activeTab === 'execution'"
         :steps="steps || []"
