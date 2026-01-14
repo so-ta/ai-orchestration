@@ -164,6 +164,20 @@ func TestBlockDefinition_GetEffectiveConfigDefaults(t *testing.T) {
 		}
 		assert.Equal(t, resolvedDefaults, block.GetEffectiveConfigDefaults())
 	})
+
+	t.Run("returns nil when both are nil", func(t *testing.T) {
+		block := &BlockDefinition{}
+		assert.Nil(t, block.GetEffectiveConfigDefaults())
+	})
+
+	t.Run("returns own defaults when resolved is empty", func(t *testing.T) {
+		ownDefaults := json.RawMessage(`{"key": "value"}`)
+		block := &BlockDefinition{
+			ConfigDefaults:         ownDefaults,
+			ResolvedConfigDefaults: nil,
+		}
+		assert.Equal(t, ownDefaults, block.GetEffectiveConfigDefaults())
+	})
 }
 
 func TestBlockDefinition_IsSystemBlock(t *testing.T) {

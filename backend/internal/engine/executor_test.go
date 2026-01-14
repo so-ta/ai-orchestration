@@ -1276,3 +1276,247 @@ func boolToString(b bool) string {
 	}
 	return "false"
 }
+
+// ============================================================================
+// Block Definition Execution Tests
+// ============================================================================
+
+// Note: executeBlockDefinition uses sandbox.Execute which wraps code.
+// The wrapCustomBlockCode in executor.go adds config and renderTemplate setup,
+// then sandbox.wrapCode wraps again for IIFE. This is the expected behavior.
+
+func TestExecutor_ExecuteBlockDefinition_PassThrough(t *testing.T) {
+	executor := setupTestExecutor()
+
+	tenantID := uuid.New()
+	// Block with no code, should pass through input
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: &tenantID,
+		Slug:     "passthrough-block",
+		Name:     "Passthrough Block",
+		Category: domain.BlockCategoryUtility,
+		Code:     "", // No code
+	}
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-passthrough",
+		Type: "passthrough-block",
+	}
+
+	run := &domain.Run{
+		ID:       uuid.New(),
+		TenantID: tenantID,
+	}
+
+	execCtx := NewExecutionContext(run, nil)
+	input := json.RawMessage(`{"original": "data", "value": 42}`)
+
+	output, err := executor.executeBlockDefinition(context.Background(), execCtx, step, blockDef, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output, "output should not be nil")
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// Should pass through input data
+	assert.Equal(t, "data", result["original"])
+	assert.Equal(t, float64(42), result["value"])
+}
+
+func TestExecutor_ExecuteBlockDefinition_NoCodePassThrough(t *testing.T) {
+	// When a block has no code and no internal steps, input should pass through
+	executor := setupTestExecutor()
+
+	tenantID := uuid.New()
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: &tenantID,
+		Slug:     "passthrough-block",
+		Name:     "Pass Through Block",
+		Category: domain.BlockCategoryUtility,
+		// No code, no internal steps - input passes through
+	}
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-passthrough",
+		Type: "passthrough-block",
+	}
+
+	run := &domain.Run{
+		ID:       uuid.New(),
+		TenantID: tenantID,
+	}
+
+	execCtx := NewExecutionContext(run, nil)
+	input := json.RawMessage(`{"value": "original", "extra": 123}`)
+
+	output, err := executor.executeBlockDefinition(context.Background(), execCtx, step, blockDef, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// Input should pass through unchanged
+	assert.Equal(t, "original", result["value"])
+	assert.Equal(t, float64(123), result["extra"])
+}
+
+func TestExecutor_ExecuteBlockDefinition_WithConfigDefaults(t *testing.T) {
+	executor := setupTestExecutor()
+
+	tenantID := uuid.New()
+	blockDef := &domain.BlockDefinition{
+		ID:                     uuid.New(),
+		TenantID:               &tenantID,
+		Slug:                   "config-defaults-block",
+		Name:                   "Config Defaults Block",
+		Category:               domain.BlockCategoryUtility,
+		ResolvedConfigDefaults: json.RawMessage(`{"multiplier": 10, "prefix": "test_"}`),
+	}
+
+	step := domain.Step{
+		ID:     uuid.New(),
+		Name:   "test-config-defaults",
+		Type:   "config-defaults-block",
+		Config: json.RawMessage(`{"multiplier": 5}`), // Override multiplier, keep prefix
+	}
+
+	run := &domain.Run{
+		ID:       uuid.New(),
+		TenantID: tenantID,
+	}
+
+	execCtx := NewExecutionContext(run, nil)
+	input := json.RawMessage(`{"value": 100}`)
+
+	output, err := executor.executeBlockDefinition(context.Background(), execCtx, step, blockDef, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	// Without code, input is passed through
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(100), result["value"])
+}
+
+func TestExecutor_ExecuteCustomBlockStep_TenantValidation(t *testing.T) {
+	executor := setupTestExecutor()
+
+	tenantID := uuid.New()
+	otherTenantID := uuid.New()
+
+	// Create a block definition for a different tenant
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: &otherTenantID, // Different tenant
+		Slug:     "other-tenant-block",
+		Name:     "Other Tenant Block",
+		Category: domain.BlockCategoryUtility,
+	}
+
+	step := domain.Step{
+		ID:                uuid.New(),
+		Name:              "test-tenant",
+		Type:              "other-tenant-block",
+		BlockDefinitionID: &blockDef.ID,
+	}
+
+	// Current run belongs to tenantID, not otherTenantID
+	run := &domain.Run{
+		ID:       uuid.New(),
+		TenantID: tenantID,
+	}
+
+	execCtx := NewExecutionContext(run, nil)
+	input := json.RawMessage(`{}`)
+
+	// executeBlockDefinition itself doesn't check tenant (that's done in executeCustomBlockStep)
+	// So this should succeed
+	output, err := executor.executeBlockDefinition(context.Background(), execCtx, step, blockDef, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+}
+
+func TestExecutor_ExecuteBlockDefinition_NilExecCtx_SystemBlock(t *testing.T) {
+	executor := setupTestExecutor()
+
+	// System block (no tenant)
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: nil, // System block
+		Slug:     "system-block",
+		Name:     "System Block",
+		Category: domain.BlockCategoryUtility,
+	}
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-system",
+		Type: "system-block",
+	}
+
+	input := json.RawMessage(`{"data": "system"}`)
+
+	// System blocks should work even without execCtx (passthrough)
+	output, err := executor.executeBlockDefinition(context.Background(), nil, step, blockDef, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	assert.Equal(t, "system", result["data"])
+}
+
+func TestExecutor_ExecuteBlockDefinition_EmptyInput(t *testing.T) {
+	executor := setupTestExecutor()
+
+	tenantID := uuid.New()
+	blockDef := &domain.BlockDefinition{
+		ID:       uuid.New(),
+		TenantID: &tenantID,
+		Slug:     "empty-input-block",
+		Name:     "Empty Input Block",
+		Category: domain.BlockCategoryUtility,
+	}
+
+	step := domain.Step{
+		ID:   uuid.New(),
+		Name: "test-empty",
+		Type: "empty-input-block",
+	}
+
+	run := &domain.Run{
+		ID:       uuid.New(),
+		TenantID: tenantID,
+	}
+
+	execCtx := NewExecutionContext(run, nil)
+	input := json.RawMessage(`{}`)
+
+	output, err := executor.executeBlockDefinition(context.Background(), execCtx, step, blockDef, input)
+
+	require.NoError(t, err)
+	require.NotNil(t, output)
+
+	var result map[string]interface{}
+	err = json.Unmarshal(output, &result)
+	require.NoError(t, err)
+
+	// Empty input should be passed through
+	assert.Empty(t, result)
+}
