@@ -10,7 +10,6 @@ const toast = useToast()
 const props = defineProps<{
   step: Step | null
   workflowId: string
-  workflowInputSchema?: object
   latestRun: Run | null
   isActive?: boolean
   steps: Step[]
@@ -330,10 +329,10 @@ const effectiveStep = computed(() => {
 })
 
 // Convert input_schema to ConfigSchema format for workflow execution
-// Uses workflow's input_schema passed from parent (consistent with WorkflowRunModal)
+// Derived from first executable step's block definition (reactive to step changes)
 const workflowInputSchema = computed<ConfigSchema | null>(() => {
-  // Use workflow's input_schema passed from parent
-  const schema = props.workflowInputSchema as Record<string, unknown> | undefined
+  // Use first executable step's block input_schema (reactive to DAG changes)
+  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
   const properties = schema.properties as Record<string, unknown> | undefined
   if (!properties || Object.keys(properties).length === 0) return null
@@ -422,8 +421,8 @@ function getSchemaFields(schema: Record<string, unknown> | undefined | null): Sc
 
 // Get workflow schema fields for preview
 const workflowSchemaFields = computed(() => {
-  // Use workflow's input_schema for consistency
-  const schema = props.workflowInputSchema as Record<string, unknown> | undefined
+  // Use first executable step's block input_schema (reactive to DAG changes)
+  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
   return getSchemaFields(schema)
 })
 

@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -344,4 +345,154 @@ func TestHTTPClient_getHeaders_ReturnsCopy(t *testing.T) {
 	// Original should be unchanged
 	originalHeaders := client.getHeaders()
 	assert.Equal(t, "original", originalHeaders["Key"])
+}
+
+// TestSanitizeError verifies that internal system information is removed from errors
+func TestSanitizeError(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "removes github path",
+			input:    "Embedding failed: error at github.com/souta/ai-orchestration/internal/block/sandbox.(*Sandbox).setupGlobals.func11 (native)",
+			expected: "Embedding failed: error",
+		},
+		{
+			name:     "removes native suffix",
+			input:    "some error (native)",
+			expected: "some error",
+		},
+		{
+			name:     "keeps simple error message",
+			input:    "embedding provider (openai) is not configured",
+			expected: "embedding provider (openai) is not configured",
+		},
+		{
+			name:     "removes multiline stack traces",
+			input:    "Error occurred\n\tat github.com/example/pkg.Function\n\tat github.com/example/pkg.Another",
+			expected: "Error occurred",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := errors.New(tt.input)
+			result := sanitizeError(err)
+			assert.Equal(t, tt.expected, result.Error())
+		})
+	}
+
+	// Test nil error
+	assert.Nil(t, sanitizeError(nil))
+}
+
+// TestSandbox_Execute_AllServicesAccessible verifies that all expected services
+// are accessible from JavaScript when ExecutionContext is fully initialized.
+// This test prevents "undefined" errors when blocks try to access ctx.* properties.
+func TestSandbox_Execute_AllServicesAccessible(t *testing.T) {
+	sb := New(DefaultConfig())
+	ctx := context.Background()
+
+	// Create a fully initialized ExecutionContext (mirrors createSandboxContext in executor.go)
+	execCtx := &ExecutionContext{
+		HTTP:       NewHTTPClient(30 * time.Second),
+		LLM:        NewLLMService(ctx),
+		Embedding:  NewEmbeddingService(ctx),
+		Workflow:   NewWorkflowService(),
+		Human:      NewHumanService(),
+		Adapter:    NewAdapterService(),
+		Logger:     func(args ...interface{}) {},
+	}
+
+	// JavaScript code that checks if all expected services are defined
+	code := `
+function execute(input, context) {
+	var services = {
+		http: typeof context.http !== 'undefined' && typeof context.http.get === 'function',
+		llm: typeof context.llm !== 'undefined' && typeof context.llm.chat === 'function',
+		embedding: typeof context.embedding !== 'undefined' && typeof context.embedding.embed === 'function',
+		workflow: typeof context.workflow !== 'undefined' && typeof context.workflow.run === 'function',
+		human: typeof context.human !== 'undefined' && typeof context.human.requestApproval === 'function',
+		adapter: typeof context.adapter !== 'undefined' && typeof context.adapter.call === 'function',
+		log: typeof context.log === 'function'
+	};
+
+	// Find any missing services
+	var missing = [];
+	for (var name in services) {
+		if (!services[name]) {
+			missing.push(name);
+		}
+	}
+
+	return {
+		services: services,
+		missing: missing,
+		allAccessible: missing.length === 0
+	};
+}
+`
+
+	result, err := sb.Execute(ctx, code, map[string]interface{}{}, execCtx)
+	require.NoError(t, err)
+
+	// Verify all services are accessible
+	assert.True(t, result["allAccessible"].(bool), "Not all services are accessible: %v", result["missing"])
+
+	// If test fails, show which services are missing
+	if !result["allAccessible"].(bool) {
+		missing := result["missing"].([]interface{})
+		t.Errorf("Missing services: %v", missing)
+	}
+}
+
+// TestSandbox_Execute_StubServicesReturnErrors verifies that stub services
+// return appropriate errors when called, rather than silently failing.
+func TestSandbox_Execute_StubServicesReturnErrors(t *testing.T) {
+	sb := New(DefaultConfig())
+	ctx := context.Background()
+
+	// Test WorkflowService stub
+	workflowSvc := NewWorkflowService()
+	_, err := workflowSvc.Run("test-workflow", map[string]interface{}{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not yet implemented")
+
+	// Test HumanService stub
+	humanSvc := NewHumanService()
+	_, err = humanSvc.RequestApproval(map[string]interface{}{"instructions": "test"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not yet implemented")
+
+	// Test AdapterService stub
+	adapterSvc := NewAdapterService()
+	_, err = adapterSvc.Call("test-adapter", map[string]interface{}{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not yet implemented")
+
+	// Test that these errors are surfaced to JavaScript
+	execCtx := &ExecutionContext{
+		Workflow: workflowSvc,
+		Human:    humanSvc,
+		Adapter:  adapterSvc,
+	}
+
+	// Test workflow.run from JavaScript - the error should be thrown and caught
+	code := `
+try {
+	context.workflow.run("test", {});
+	return { error: null, caught: false };
+} catch (e) {
+	return { error: String(e), caught: true };
+}
+`
+	result, err := sb.Execute(ctx, code, map[string]interface{}{}, execCtx)
+	require.NoError(t, err)
+	// Verify the error was caught
+	assert.True(t, result["caught"].(bool), "Error should have been caught")
+	if errStr, ok := result["error"].(string); ok && errStr != "" {
+		assert.Contains(t, errStr, "not yet implemented")
+	}
 }

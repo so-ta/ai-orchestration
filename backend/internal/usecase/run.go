@@ -652,35 +652,22 @@ func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUI
 	return result
 }
 
-// validateWorkflowInput validates workflow input against Start step's input_schema
+// validateWorkflowInput validates workflow input against the workflow's input_schema
+// The input_schema is derived from the first executable step's block definition at save time
 func (u *RunUsecase) validateWorkflowInput(ctx context.Context, tenantID, workflowID uuid.UUID, input json.RawMessage) error {
-	// Get all steps for the workflow
-	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	// Get workflow to access its input_schema
+	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID)
 	if err != nil {
-		return nil // Skip validation if we can't get steps
+		return nil // Skip validation if we can't get workflow
 	}
 
-	// Find the start step
-	var startStep *domain.Step
-	for _, step := range steps {
-		if step.Type == "start" {
-			startStep = step
-			break
-		}
-	}
-
-	if startStep == nil {
-		return nil // No start step, skip validation
-	}
-
-	// Extract input_schema from start step's config
-	inputSchema := extractInputSchemaFromConfig(startStep.Config)
-	if inputSchema == nil {
+	// Use workflow's input_schema (derived from first step's block definition at save time)
+	if workflow.InputSchema == nil || len(workflow.InputSchema) == 0 {
 		return nil // No input_schema defined, skip validation
 	}
 
 	// Validate input against schema
-	return domain.ValidateInputSchema(input, inputSchema)
+	return domain.ValidateInputSchema(input, workflow.InputSchema)
 }
 
 // extractInputSchemaFromConfig extracts the input_schema from a step's config

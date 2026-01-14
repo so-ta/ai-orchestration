@@ -2240,6 +2240,8 @@ func (e *Executor) mergeBlockConfig(stepConfig json.RawMessage, defaults json.Ra
 }
 
 // createSandboxContext creates a sandbox execution context for block execution
+// All services defined in ExecutionContext should be initialized here to prevent
+// "undefined" errors when blocks access ctx.* properties in JavaScript.
 func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionContext, stepID uuid.UUID, blockSlug string) *sandbox.ExecutionContext {
 	sandboxCtx := &sandbox.ExecutionContext{
 		HTTP: sandbox.NewHTTPClient(30 * time.Second),
@@ -2248,10 +2250,24 @@ func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionC
 		},
 	}
 
+	// Initialize LLM service (needed for AI/RAG blocks)
+	sandboxCtx.LLM = sandbox.NewLLMService(ctx)
+
+	// Initialize Embedding service (needed for RAG blocks)
+	embeddingService := sandbox.NewEmbeddingService(ctx)
+	sandboxCtx.Embedding = embeddingService
+
+	// Initialize stub services (return errors if used, but prevent undefined errors)
+	sandboxCtx.Workflow = sandbox.NewWorkflowService()
+	sandboxCtx.Human = sandbox.NewHumanService()
+	sandboxCtx.Adapter = sandbox.NewAdapterService()
+
 	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
 		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Runs = sandbox.NewRunsService(ctx, e.pool, execCtx.Run.TenantID)
+		// Initialize Vector service with tenant isolation (needed for RAG blocks)
+		sandboxCtx.Vector = sandbox.NewVectorService(ctx, execCtx.Run.TenantID, e.pool, embeddingService)
 	}
 
 	return sandboxCtx

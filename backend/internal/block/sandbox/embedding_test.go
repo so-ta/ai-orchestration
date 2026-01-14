@@ -229,17 +229,20 @@ func TestEmbeddingService_MissingAPIKey(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	_, err := service.Embed("openai", "text-embedding-3-small", []string{"test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "OPENAI_API_KEY")
+	assert.Contains(t, err.Error(), "not configured")
+	assert.Contains(t, err.Error(), "openai")
 
 	// Test Cohere
 	t.Setenv("COHERE_API_KEY", "")
 	_, err = service.Embed("cohere", "embed-english-v3.0", []string{"test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "COHERE_API_KEY")
+	assert.Contains(t, err.Error(), "not configured")
+	assert.Contains(t, err.Error(), "cohere")
 
 	// Test Voyage
 	t.Setenv("VOYAGE_API_KEY", "")
 	_, err = service.Embed("voyage", "voyage-3", []string{"test"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "VOYAGE_API_KEY")
+	assert.Contains(t, err.Error(), "not configured")
+	assert.Contains(t, err.Error(), "voyage")
 }

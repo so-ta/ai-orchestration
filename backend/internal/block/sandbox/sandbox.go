@@ -22,6 +22,43 @@ var (
 	ErrInvalidCode = errors.New("invalid or empty code")
 )
 
+// sanitizeError removes internal system information from error messages
+// to prevent leaking implementation details to users.
+func sanitizeError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	errStr := err.Error()
+
+	// Remove Go stack traces (lines starting with "at github.com/...")
+	// These come from goja runtime and expose internal package paths
+	if idx := strings.Index(errStr, " at github.com/"); idx != -1 {
+		errStr = strings.TrimSpace(errStr[:idx])
+	}
+
+	// Remove generic "(native)" suffixes
+	errStr = strings.TrimSuffix(errStr, " (native)")
+
+	// Remove any remaining file paths that look like Go imports
+	// Pattern: github.com/anything/path
+	lines := strings.Split(errStr, "\n")
+	var cleanLines []string
+	for _, line := range lines {
+		// Skip lines that are purely stack traces
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "at ") && strings.Contains(trimmed, "github.com/") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "github.com/") {
+			continue
+		}
+		cleanLines = append(cleanLines, line)
+	}
+
+	return errors.New(strings.TrimSpace(strings.Join(cleanLines, "\n")))
+}
+
 // Config holds sandbox configuration
 type Config struct {
 	Timeout     time.Duration
@@ -154,7 +191,7 @@ func (s *Sandbox) Execute(ctx context.Context, code string, input map[string]int
 	// Compile and run the script
 	program, err := goja.Compile("script", wrappedCode, false)
 	if err != nil {
-		return nil, fmt.Errorf("script compilation error: %w", err)
+		return nil, fmt.Errorf("script compilation error: %v", sanitizeError(err))
 	}
 
 	result, err := vm.RunProgram(program)
@@ -163,7 +200,7 @@ func (s *Sandbox) Execute(ctx context.Context, code string, input map[string]int
 		if ctx.Err() == context.DeadlineExceeded {
 			return nil, ErrTimeout
 		}
-		return nil, fmt.Errorf("script execution error: %w", err)
+		return nil, fmt.Errorf("script execution error: %v", sanitizeError(err))
 	}
 
 	// Convert result to Go map

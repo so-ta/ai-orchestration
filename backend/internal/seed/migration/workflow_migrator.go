@@ -124,6 +124,13 @@ func (m *WorkflowMigrator) upsertWorkflow(ctx context.Context, seedWorkflow *wor
 func (m *WorkflowMigrator) createWorkflow(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID) (string, error) {
 	now := time.Now().UTC()
 
+	// Derive input_schema from first executable step's block definition
+	inputSchema := m.deriveInputSchemaFromSeed(ctx, seedWorkflow)
+	if inputSchema == nil {
+		// Fallback to seed's input_schema if derivation fails
+		inputSchema = seedWorkflow.InputSchema
+	}
+
 	// Create workflow
 	workflow := &domain.Workflow{
 		ID:           workflowID,
@@ -132,7 +139,7 @@ func (m *WorkflowMigrator) createWorkflow(ctx context.Context, seedWorkflow *wor
 		Description:  seedWorkflow.Description,
 		Status:       domain.WorkflowStatusPublished,
 		Version:      seedWorkflow.Version,
-		InputSchema:  seedWorkflow.InputSchema,
+		InputSchema:  inputSchema,
 		OutputSchema: seedWorkflow.OutputSchema,
 		IsSystem:     true,
 		SystemSlug:   &seedWorkflow.SystemSlug,
@@ -255,11 +262,18 @@ func (m *WorkflowMigrator) createEdges(ctx context.Context, seedWorkflow *workfl
 func (m *WorkflowMigrator) updateWorkflow(ctx context.Context, existing *domain.Workflow, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID) (string, error) {
 	now := time.Now().UTC()
 
+	// Derive input_schema from first executable step's block definition
+	inputSchema := m.deriveInputSchemaFromSeed(ctx, seedWorkflow)
+	if inputSchema == nil {
+		// Fallback to seed's input_schema if derivation fails
+		inputSchema = seedWorkflow.InputSchema
+	}
+
 	// Update workflow fields
 	existing.Name = seedWorkflow.Name
 	existing.Description = seedWorkflow.Description
 	existing.Version = seedWorkflow.Version
-	existing.InputSchema = seedWorkflow.InputSchema
+	existing.InputSchema = inputSchema
 	existing.OutputSchema = seedWorkflow.OutputSchema
 	existing.UpdatedAt = now
 
@@ -400,4 +414,59 @@ func (m *WorkflowMigrator) describeChanges(existing *domain.Workflow, seed *work
 		result += ", " + changes[i]
 	}
 	return result
+}
+
+// deriveInputSchemaFromSeed derives input_schema from the first executable step's block definition
+// This ensures workflow.InputSchema always reflects the actual first step's requirements
+func (m *WorkflowMigrator) deriveInputSchemaFromSeed(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition) json.RawMessage {
+	if m.blockRepo == nil {
+		return nil
+	}
+
+	// 1. Find Start step
+	var startStepTempID string
+	for _, step := range seedWorkflow.Steps {
+		if step.Type == "start" {
+			startStepTempID = step.TempID
+			break
+		}
+	}
+	if startStepTempID == "" {
+		return nil
+	}
+
+	// 2. Find first step after Start (via edge)
+	var firstStepTempID string
+	for _, edge := range seedWorkflow.Edges {
+		if edge.SourceTempID == startStepTempID {
+			firstStepTempID = edge.TargetTempID
+			break
+		}
+	}
+	if firstStepTempID == "" {
+		return nil
+	}
+
+	// 3. Get block slug from step
+	var blockSlug string
+	for _, step := range seedWorkflow.Steps {
+		if step.TempID == firstStepTempID {
+			blockSlug = step.BlockSlug
+			if blockSlug == "" {
+				blockSlug = step.Type
+			}
+			break
+		}
+	}
+	if blockSlug == "" || blockSlug == "start" || blockSlug == "end" {
+		return nil
+	}
+
+	// 4. Get block definition from repository
+	block, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
+	if err != nil || block == nil {
+		return nil
+	}
+
+	return block.InputSchema
 }

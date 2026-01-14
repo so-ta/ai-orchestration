@@ -87,7 +87,7 @@ func (s *EmbeddingServiceImpl) Embed(provider, model string, texts []string) (*E
 func (s *EmbeddingServiceImpl) embedOpenAI(model string, texts []string) (*EmbeddingResult, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("OPENAI_API_KEY environment variable is not set")
+		return nil, fmt.Errorf("embedding provider (openai) is not configured")
 	}
 
 	// OpenAI embedding request
@@ -179,7 +179,7 @@ func (s *EmbeddingServiceImpl) embedOpenAI(model string, texts []string) (*Embed
 func (s *EmbeddingServiceImpl) embedCohere(model string, texts []string) (*EmbeddingResult, error) {
 	apiKey := os.Getenv("COHERE_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("COHERE_API_KEY environment variable is not set")
+		return nil, fmt.Errorf("embedding provider (cohere) is not configured")
 	}
 
 	// Default model
@@ -266,7 +266,7 @@ func (s *EmbeddingServiceImpl) embedCohere(model string, texts []string) (*Embed
 func (s *EmbeddingServiceImpl) embedVoyage(model string, texts []string) (*EmbeddingResult, error) {
 	apiKey := os.Getenv("VOYAGE_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("VOYAGE_API_KEY environment variable is not set")
+		return nil, fmt.Errorf("embedding provider (voyage) is not configured")
 	}
 
 	// Default model

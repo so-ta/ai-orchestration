@@ -160,7 +160,7 @@ func TestHasUnconnectedSteps(t *testing.T) {
 }
 
 func TestWorkflowUsecase_ValidateDAG(t *testing.T) {
-	usecase := NewWorkflowUsecase(nil, nil, nil, nil)
+	usecase := NewWorkflowUsecase(nil, nil, nil, nil, nil)
 
 	stepA := domain.Step{ID: uuid.New(), Name: "A"}
 	stepB := domain.Step{ID: uuid.New(), Name: "B"}

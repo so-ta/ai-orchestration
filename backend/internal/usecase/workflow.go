@@ -16,6 +16,7 @@ type WorkflowUsecase struct {
 	stepRepo     repository.StepRepository
 	edgeRepo     repository.EdgeRepository
 	versionRepo  repository.WorkflowVersionRepository
+	blockRepo    repository.BlockDefinitionRepository
 }
 
 // NewWorkflowUsecase creates a new WorkflowUsecase
@@ -24,12 +25,14 @@ func NewWorkflowUsecase(
 	stepRepo repository.StepRepository,
 	edgeRepo repository.EdgeRepository,
 	versionRepo repository.WorkflowVersionRepository,
+	blockRepo repository.BlockDefinitionRepository,
 ) *WorkflowUsecase {
 	return &WorkflowUsecase{
 		workflowRepo: workflowRepo,
 		stepRepo:     stepRepo,
 		edgeRepo:     edgeRepo,
 		versionRepo:  versionRepo,
+		blockRepo:    blockRepo,
 	}
 }
 
@@ -185,9 +188,18 @@ func (u *WorkflowUsecase) Save(ctx context.Context, input SaveWorkflowInput) (*d
 		workflow.Name = input.Name
 	}
 	workflow.Description = input.Description
-	workflow.InputSchema = input.InputSchema
 	workflow.Steps = input.Steps
 	workflow.Edges = input.Edges
+
+	// Derive input_schema from first executable step's block definition
+	// This ensures workflow.InputSchema always reflects the actual first step's requirements
+	derivedSchema, _ := u.deriveInputSchemaFromFirstStep(ctx, input.Steps, input.Edges)
+	if derivedSchema != nil {
+		workflow.InputSchema = derivedSchema
+	} else {
+		// Fallback to provided input_schema if derivation fails
+		workflow.InputSchema = input.InputSchema
+	}
 
 	// Validate DAG before saving
 	if err := u.ValidateDAG(workflow); err != nil {
@@ -262,11 +274,18 @@ func (u *WorkflowUsecase) SaveDraft(ctx context.Context, input SaveDraftInput) (
 		return nil, err
 	}
 
+	// Derive input_schema from first executable step's block definition
+	derivedSchema, _ := u.deriveInputSchemaFromFirstStep(ctx, input.Steps, input.Edges)
+	inputSchema := input.InputSchema
+	if derivedSchema != nil {
+		inputSchema = derivedSchema
+	}
+
 	// Create draft data
 	draft := &domain.WorkflowDraft{
 		Name:         input.Name,
 		Description:  input.Description,
-		InputSchema:  input.InputSchema,
+		InputSchema:  inputSchema,
 		OutputSchema: workflow.OutputSchema,
 		Steps:        input.Steps,
 		Edges:        input.Edges,
@@ -534,4 +553,53 @@ func hasUnconnectedSteps(steps []domain.Step, edges []domain.Edge) bool {
 	}
 
 	return false
+}
+
+// deriveInputSchemaFromFirstStep derives input_schema from the first executable step's block definition
+// This ensures workflow.InputSchema always reflects the actual input requirements of the first step
+func (u *WorkflowUsecase) deriveInputSchemaFromFirstStep(ctx context.Context, steps []domain.Step, edges []domain.Edge) (json.RawMessage, error) {
+	// 1. Find Start step
+	var startStepID uuid.UUID
+	for _, step := range steps {
+		if step.Type == domain.StepTypeStart {
+			startStepID = step.ID
+			break
+		}
+	}
+	if startStepID == uuid.Nil {
+		return nil, nil // No Start step found
+	}
+
+	// 2. Find first step after Start
+	var firstStepID uuid.UUID
+	for _, edge := range edges {
+		if edge.SourceStepID == startStepID {
+			firstStepID = edge.TargetStepID
+			break
+		}
+	}
+	if firstStepID == uuid.Nil {
+		return nil, nil // No step after Start
+	}
+
+	// 3. Get block slug from step
+	var blockSlug domain.StepType
+	for _, step := range steps {
+		if step.ID == firstStepID {
+			blockSlug = step.Type
+			break
+		}
+	}
+	if blockSlug == "" || blockSlug == domain.StepTypeStart {
+		return nil, nil // Not an executable block
+	}
+
+	// 4. Get block definition from repository (nil tenantID for system blocks)
+	block, err := u.blockRepo.GetBySlug(ctx, nil, string(blockSlug))
+	if err != nil {
+		// Block not found - return nil without error
+		return nil, nil
+	}
+
+	return block.InputSchema, nil
 }
