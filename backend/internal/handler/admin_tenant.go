@@ -206,19 +206,31 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Apply custom feature flags if provided
 	if req.FeatureFlags != nil {
-		flagsJSON, _ := json.Marshal(req.FeatureFlags)
+		flagsJSON, err := json.Marshal(req.FeatureFlags)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize feature flags", nil)
+			return
+		}
 		tenant.FeatureFlags = flagsJSON
 	}
 
 	// Apply custom limits if provided
 	if req.Limits != nil {
-		limitsJSON, _ := json.Marshal(req.Limits)
+		limitsJSON, err := json.Marshal(req.Limits)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize limits", nil)
+			return
+		}
 		tenant.Limits = limitsJSON
 	}
 
 	// Apply custom metadata if provided
 	if req.Metadata != nil {
-		metadataJSON, _ := json.Marshal(req.Metadata)
+		metadataJSON, err := json.Marshal(req.Metadata)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize metadata", nil)
+			return
+		}
 		tenant.Metadata = metadataJSON
 	}
 
@@ -304,15 +316,27 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 		tenant.BillingEmail = req.BillingEmail
 	}
 	if req.FeatureFlags != nil {
-		flagsJSON, _ := json.Marshal(req.FeatureFlags)
+		flagsJSON, err := json.Marshal(req.FeatureFlags)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize feature flags", nil)
+			return
+		}
 		tenant.FeatureFlags = flagsJSON
 	}
 	if req.Limits != nil {
-		limitsJSON, _ := json.Marshal(req.Limits)
+		limitsJSON, err := json.Marshal(req.Limits)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize limits", nil)
+			return
+		}
 		tenant.Limits = limitsJSON
 	}
 	if req.Metadata != nil {
-		metadataJSON, _ := json.Marshal(req.Metadata)
+		metadataJSON, err := json.Marshal(req.Metadata)
+		if err != nil {
+			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize metadata", nil)
+			return
+		}
 		tenant.Metadata = metadataJSON
 	}
 
