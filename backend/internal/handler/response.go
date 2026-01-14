@@ -3,7 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/souta/ai-orchestration/internal/domain"
@@ -38,7 +38,11 @@ type ErrorDetail struct {
 func JSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		// WriteHeader has already been called, so we cannot send an error response
+		// Log the error instead
+		slog.Error("failed to encode JSON response", "error", err)
+	}
 }
 
 // JSONData writes a data response
@@ -131,7 +135,7 @@ func HandleError(w http.ResponseWriter, err error) {
 		Error(w, http.StatusForbidden, "FORBIDDEN", err.Error(), nil)
 
 	default:
-		log.Printf("Internal error: %v", err)
+		slog.Error("internal error", "error", err)
 		Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error", nil)
 	}
 }
