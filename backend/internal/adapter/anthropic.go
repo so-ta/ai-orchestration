@@ -26,7 +26,7 @@ type AnthropicConfig struct {
 	Prompt      string   `json:"prompt"`       // User prompt template with {{variable}} placeholders
 	System      string   `json:"system"`       // System message
 	MaxTokens   int      `json:"max_tokens"`   // Maximum tokens to generate (required by Anthropic)
-	Temperature float64  `json:"temperature"`  // 0.0 - 1.0
+	Temperature *float64 `json:"temperature"`  // 0.0 - 1.0 (nil = use default 0.7)
 	TopP        float64  `json:"top_p"`        // Nucleus sampling
 	TopK        int      `json:"top_k"`        // Top-k sampling
 	Stop        []string `json:"stop"`         // Stop sequences
@@ -120,8 +120,11 @@ func (a *AnthropicAdapter) Execute(ctx context.Context, req *Request) (*Response
 	if config.MaxTokens == 0 {
 		config.MaxTokens = 4096
 	}
-	if config.Temperature == 0 {
-		config.Temperature = 0.7
+
+	// Handle temperature: use default 0.7 only if not explicitly set (nil)
+	var temperature float64 = 0.7
+	if config.Temperature != nil {
+		temperature = *config.Temperature
 	}
 
 	// Parse input and substitute variables in prompt
@@ -150,9 +153,8 @@ func (a *AnthropicAdapter) Execute(ctx context.Context, req *Request) (*Response
 	if config.System != "" {
 		apiReq.System = config.System
 	}
-	if config.Temperature > 0 {
-		apiReq.Temperature = config.Temperature
-	}
+	// Always set temperature (use the computed value which is either user-specified or default)
+	apiReq.Temperature = temperature
 	if config.TopP > 0 {
 		apiReq.TopP = config.TopP
 	}
