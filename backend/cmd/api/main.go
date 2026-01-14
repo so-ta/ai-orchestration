@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -29,7 +28,13 @@ import (
 )
 
 func main() {
-	log.Println("Starting AI Orchestration API Server...")
+	// Initialize structured logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	slog.SetDefault(logger)
+
+	logger.Info("Starting AI Orchestration API Server...")
 
 	ctx := context.Background()
 
@@ -43,13 +48,13 @@ func main() {
 	}
 	telemetryProvider, err := telemetry.NewProvider(ctx, telemetryConfig)
 	if err != nil {
-		log.Printf("Warning: Failed to initialize telemetry: %v", err)
+		logger.Warn("Failed to initialize telemetry", "error", err)
 	} else {
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := telemetryProvider.Shutdown(shutdownCtx); err != nil {
-				log.Printf("Error shutting down telemetry: %v", err)
+				logger.Error("Error shutting down telemetry", "error", err)
 			}
 		}()
 	}
@@ -58,26 +63,29 @@ func main() {
 	dbURL := getEnv("DATABASE_URL", "postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable")
 	pool, err := database.NewPool(ctx, database.DefaultConfig(dbURL))
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		logger.Error("Failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
-	log.Println("Connected to database")
+	logger.Info("Connected to database")
 
 	// Redis connection
 	redisURL := getEnv("REDIS_URL", "redis://localhost:6379")
 	redisClient, err := redispkg.NewClient(ctx, &redispkg.Config{URL: redisURL})
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		logger.Error("Failed to connect to Redis", "error", err)
+		os.Exit(1)
 	}
 	defer redisClient.Close()
-	log.Println("Connected to Redis")
+	logger.Info("Connected to Redis")
 
 	// Initialize encryptor for credentials
 	encryptor, err := crypto.NewEncryptor()
 	if err != nil {
-		log.Fatalf("Failed to initialize encryptor: %v", err)
+		logger.Error("Failed to initialize encryptor", "error", err)
+		os.Exit(1)
 	}
-	log.Println("Encryptor initialized")
+	logger.Info("Encryptor initialized")
 
 	// Initialize repositories
 	workflowRepo := postgres.NewWorkflowRepository(pool)
@@ -135,7 +143,7 @@ func main() {
 		DevTenantID: getEnv("DEV_TENANT_ID", "00000000-0000-0000-0000-000000000001"),
 	}
 	authMiddleware := authmw.NewAuthMiddleware(authConfig)
-	log.Printf("Auth middleware enabled: %v", authConfig.Enabled)
+	logger.Info("Auth middleware configured", "enabled", authConfig.Enabled)
 
 	// Initialize rate limiter
 	rateLimitConfig := &authmw.RateLimitConfig{
@@ -148,11 +156,11 @@ func main() {
 		WebhookWindow:  time.Minute,
 	}
 	rateLimiter := authmw.NewRateLimiter(redisClient, rateLimitConfig)
-	log.Printf("Rate limiter enabled: %v (tenant: %d/min, workflow: %d/min, webhook: %d/min)",
-		rateLimitConfig.Enabled,
-		rateLimitConfig.TenantLimit,
-		rateLimitConfig.WorkflowLimit,
-		rateLimitConfig.WebhookLimit)
+	logger.Info("Rate limiter configured",
+		"enabled", rateLimitConfig.Enabled,
+		"tenant_limit_per_min", rateLimitConfig.TenantLimit,
+		"workflow_limit_per_min", rateLimitConfig.WorkflowLimit,
+		"webhook_limit_per_min", rateLimitConfig.WebhookLimit)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -430,9 +438,10 @@ func main() {
 
 	// Graceful shutdown
 	go func() {
-		log.Printf("Server listening on :%s", port)
+		logger.Info("Server listening", "port", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			logger.Error("Server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -440,16 +449,17 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logger.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exited gracefully")
+	logger.Info("Server exited gracefully")
 }
 
 func healthHandler(pool *pgxpool.Pool, redisClient redisPinger) http.HandlerFunc {
