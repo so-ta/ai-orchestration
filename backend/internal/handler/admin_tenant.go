@@ -209,7 +209,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.FeatureFlags != nil {
 		flagsJSON, err := json.Marshal(req.FeatureFlags)
 		if err != nil {
-			slog.Error("failed to marshal feature flags", "error", err)
+			slog.Error("failed to marshal feature flags", "error", err, "tenant_id", tenant.ID)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize feature flags", nil)
 			return
 		}
@@ -220,7 +220,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Limits != nil {
 		limitsJSON, err := json.Marshal(req.Limits)
 		if err != nil {
-			slog.Error("failed to marshal limits", "error", err)
+			slog.Error("failed to marshal limits", "error", err, "tenant_id", tenant.ID)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize limits", nil)
 			return
 		}
@@ -231,7 +231,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Metadata != nil {
 		metadataJSON, err := json.Marshal(req.Metadata)
 		if err != nil {
-			slog.Error("failed to marshal metadata", "error", err)
+			slog.Error("failed to marshal metadata", "error", err, "tenant_id", tenant.ID)
 			Error(w, http.StatusInternalServerError, "MARSHAL_ERROR", "Failed to serialize metadata", nil)
 			return
 		}
