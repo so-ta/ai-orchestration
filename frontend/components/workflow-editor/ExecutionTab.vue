@@ -96,24 +96,6 @@ function validateAgainstSchema(data: Record<string, unknown>, schema: Record<str
   return errors
 }
 
-// Real-time validation on JSON input change
-watch(customInputJson, () => {
-  if (useJsonMode.value || !hasStepInputFields.value) {
-    try {
-      const parsed = JSON.parse(customInputJson.value)
-      const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
-      schemaValidationErrors.value = validateAgainstSchema(parsed, schema)
-      inputError.value = null
-    } catch {
-      schemaValidationErrors.value = []
-      // Only show parse error if they have typed something
-      if (customInputJson.value.trim() !== '' && customInputJson.value.trim() !== '{}') {
-        inputError.value = t('execution.errors.invalidJson')
-      }
-    }
-  }
-}, { immediate: true })
-
 // Input values for DynamicConfigForm
 const workflowInputValues = ref<Record<string, unknown>>({})
 const stepInputValues = ref<Record<string, unknown>>({})
@@ -365,6 +347,24 @@ const hasStepInputFields = computed(() => {
   if (!stepInputSchema.value?.properties) return false
   return Object.keys(stepInputSchema.value.properties).length > 0
 })
+
+// Real-time validation on JSON input change
+watch(customInputJson, () => {
+  if (useJsonMode.value || !hasStepInputFields.value) {
+    try {
+      const parsed = JSON.parse(customInputJson.value)
+      const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
+      schemaValidationErrors.value = validateAgainstSchema(parsed, schema)
+      inputError.value = null
+    } catch {
+      schemaValidationErrors.value = []
+      // Only show parse error if they have typed something
+      if (customInputJson.value.trim() !== '' && customInputJson.value.trim() !== '{}') {
+        inputError.value = t('execution.errors.invalidJson')
+      }
+    }
+  }
+}, { immediate: true })
 
 // Schema preview information for JSON input fallback
 interface SchemaField {
