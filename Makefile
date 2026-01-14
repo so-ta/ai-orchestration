@@ -33,9 +33,14 @@ help:
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-apply        - Apply schema to database"
-	@echo "  make db-seed         - Load seed data"
+	@echo "  make db-seed         - Load seed data (SQL)"
 	@echo "  make db-reset        - Reset database (drop, recreate, seed)"
 	@echo "  make db-export       - Export current schema"
+	@echo ""
+	@echo "Block Seeding (Go programmatic):"
+	@echo "  make seed-blocks          - Migrate block definitions to database (UPSERT)"
+	@echo "  make seed-blocks-validate - Validate block definitions only"
+	@echo "  make seed-blocks-dry-run  - Show what would be changed"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test            - Run all tests"
@@ -224,9 +229,10 @@ test: test-backend test-frontend
 # ============================================================================
 # Database管理
 # ============================================================================
-DB_USER := aio
-DB_NAME := ai_orchestration
-DB_CONTAINER := aio-postgres
+DB_USER ?= aio
+DB_PASSWORD ?= aio_password
+DB_NAME ?= ai_orchestration
+DB_CONTAINER ?= aio-postgres
 
 # Apply schema
 db-apply:
@@ -234,11 +240,27 @@ db-apply:
 	@cat backend/schema/schema.sql | docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME)
 	@echo "Schema applied!"
 
-# Load seed data
+# Load seed data (SQL)
 db-seed:
-	@echo "Loading seed data..."
+	@echo "Loading seed data (SQL)..."
 	@cat backend/schema/seed.sql | docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME)
 	@echo "Seed data loaded!"
+
+# Seed blocks (Go programmatic seeder)
+seed-blocks:
+	@echo "Running block seeder..."
+	@cd backend && DATABASE_URL="postgres://$(DB_USER):$(DB_PASSWORD)@localhost:5432/$(DB_NAME)?sslmode=disable" go run ./cmd/seeder
+	@echo "Block seeding complete!"
+
+# Validate block definitions
+seed-blocks-validate:
+	@echo "Validating block definitions..."
+	@cd backend && go run ./cmd/seeder -validate
+
+# Seed blocks (dry run)
+seed-blocks-dry-run:
+	@echo "Running block seeder (dry run)..."
+	@cd backend && DATABASE_URL="postgres://$(DB_USER):$(DB_PASSWORD)@localhost:5432/$(DB_NAME)?sslmode=disable" go run ./cmd/seeder -dry-run -verbose
 
 # Reset database
 db-reset:

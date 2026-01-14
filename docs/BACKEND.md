@@ -627,12 +627,19 @@ func TestWorkflowE2E(t *testing.T) {
 
 ## Build Commands
 
+以下のコマンドは`backend/`ディレクトリ内で実行します：
+
 ```bash
+cd backend
+
 # Build API
 go build -o bin/api ./cmd/api
 
 # Build Worker
 go build -o bin/worker ./cmd/worker
+
+# Build Seeder
+go build -o bin/seeder ./cmd/seeder
 
 # Run tests
 go test ./...
@@ -643,6 +650,40 @@ go test -race ./...
 # Generate mocks (if using mockgen)
 go generate ./...
 ```
+
+## Block Seeding Commands
+
+プログラム的なブロック定義のマイグレーションコマンドです。
+
+```bash
+# ブロック定義をデータベースにマイグレート（UPSERT）
+make seed-blocks
+
+# バリデーションのみ実行（DBに書き込まない）
+make seed-blocks-validate
+
+# ドライラン（変更内容をプレビュー）
+make seed-blocks-dry-run
+```
+
+CLIを直接実行する場合：
+
+```bash
+cd backend
+
+# マイグレーション実行（DATABASE_URL環境変数が必須）
+DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
+  go run ./cmd/seeder
+
+# バリデーションのみ（DB接続不要）
+go run ./cmd/seeder -validate
+
+# ドライラン（詳細出力）
+DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
+  go run ./cmd/seeder -dry-run -verbose
+```
+
+**Note**: `make seed-blocks` コマンドはMakefile内でDATABASE_URLを自動設定します。
 
 ## Related Documents
 
