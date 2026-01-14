@@ -9,21 +9,55 @@ AIエージェントがPRをpushした後のレビューフロー。
 ```
 1. AIエージェントがコードを変更
    ↓
-2. git push でリモートにプッシュ
+2. ブランチ作成（mainブランチでない場合）
+   - 現在のブランチがmainの場合: 新しいブランチを作成してチェックアウト
+   - 既にfeatureブランチの場合: そのまま継続
    ↓
-3. PRを作成（または既存PRに追加コミット）
+3. git push でリモートにプッシュ（-u でupstream設定）
    ↓
-4. GitHub Actions で Codex Review + CI が自動実行
+4. PRを作成（または既存PRに追加コミット）
    ↓
-5. PRコメントにレビュー結果が投稿される
+5. GitHub Actions で Codex Review + CI が自動実行
    ↓
-6. レビュー結果とCI結果を確認
+6. PRコメントにレビュー結果が投稿される
    ↓
-7a. APPROVE（承認）かつ CI通過 → AIエージェントがMergeを実行
-7b. REQUEST_CHANGES（要修正）またはCI失敗 → 修正して再push
+7. レビュー結果とCI結果を確認
    ↓
-8. 7b の場合、手順 4-7 を繰り返す（承認されるまで）
+8a. APPROVE（承認）かつ CI通過 → AIエージェントがMergeを実行
+8b. REQUEST_CHANGES（要修正）またはCI失敗 → 修正して再push
+   ↓
+9. 8b の場合、手順 5-8 を繰り返す（承認されるまで）
 ```
+
+---
+
+## ブランチ作成ルール
+
+**mainブランチで直接作業している場合は、必ず新しいブランチを作成してからpushすること。**
+
+```bash
+# 現在のブランチを確認
+git branch --show-current
+
+# mainブランチの場合、新しいブランチを作成
+git checkout -b feature/your-feature-name
+
+# または修正の場合
+git checkout -b fix/your-fix-name
+
+# リモートにプッシュ（upstreamを設定）
+git push -u origin feature/your-feature-name
+```
+
+| ブランチ命名規則 | 用途 |
+|-----------------|------|
+| `feature/xxx` | 新機能追加 |
+| `fix/xxx` | バグ修正 |
+| `refactor/xxx` | リファクタリング |
+| `docs/xxx` | ドキュメント更新 |
+| `test/xxx` | テスト追加・修正 |
+
+**重要**: mainブランチに直接pushすることは禁止されています。
 
 ---
 
