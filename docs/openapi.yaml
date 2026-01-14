@@ -21,12 +21,22 @@ tags:
     description: ステップ管理
   - name: Edges
     description: エッジ（ステップ間接続）管理
+  - name: BlockGroups
+    description: ブロックグループ管理
   - name: Runs
     description: 実行管理
   - name: Schedules
     description: スケジュール管理
+  - name: Webhooks
+    description: Webhook管理
   - name: Adapters
     description: アダプタ情報
+  - name: AuditLogs
+    description: 監査ログ
+  - name: Usage
+    description: 使用量・コスト管理
+  - name: AdminBlocks
+    description: 管理者用ブロック管理
   - name: Health
     description: ヘルスチェック
 
@@ -289,6 +299,149 @@ paths:
         '204':
           description: 削除成功
 
+  /workflows/{id}/block-groups:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [BlockGroups]
+      summary: ブロックグループ一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BlockGroup'
+    post:
+      tags: [BlockGroups]
+      summary: ブロックグループ作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockGroupRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BlockGroup'
+
+  /workflows/{id}/block-groups/{groupId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [BlockGroups]
+      summary: ブロックグループ詳細取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BlockGroup'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [BlockGroups]
+      summary: ブロックグループ更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBlockGroupRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/BlockGroup'
+    delete:
+      tags: [BlockGroups]
+      summary: ブロックグループ削除
+      responses:
+        '204':
+          description: 削除成功
+
+  /workflows/{id}/block-groups/{groupId}/steps:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/GroupId'
+    get:
+      tags: [BlockGroups]
+      summary: グループ内のステップ取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Step'
+    post:
+      tags: [BlockGroups]
+      summary: ステップをグループに追加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddStepToGroupRequest'
+      responses:
+        '200':
+          description: 追加成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Step'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+  /workflows/{id}/block-groups/{groupId}/steps/{stepId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+      - $ref: '#/components/parameters/GroupId'
+      - $ref: '#/components/parameters/StepId'
+    delete:
+      tags: [BlockGroups]
+      summary: ステップをグループから削除
+      responses:
+        '200':
+          description: 削除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Step'
+
   /workflows/{id}/runs:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -367,6 +520,212 @@ paths:
         '200':
           description: キャンセル成功
 
+  /runs/{runId}/resume:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    post:
+      tags: [Runs]
+      summary: 特定ステップから実行再開
+      description: 指定したステップから下流のすべてのステップを再実行します
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResumeRunRequest'
+      responses:
+        '202':
+          description: 再開開始
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ResumeRunResponse'
+
+  /runs/{runId}/steps/{stepId}/execute:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/StepId'
+    post:
+      tags: [Runs]
+      summary: 単一ステップを再実行
+      description: 既存の実行から特定のステップのみを再実行します
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteStepRequest'
+      responses:
+        '202':
+          description: 実行開始
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/StepRun'
+
+  /runs/{runId}/steps/{stepId}/history:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - $ref: '#/components/parameters/StepId'
+    get:
+      tags: [Runs]
+      summary: ステップ実行履歴取得
+      description: 特定ステップのすべての実行履歴を取得します
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StepRun'
+
+  /runs/{runId}/usage:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      tags: [Usage]
+      summary: 実行の使用量取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UsageRecord'
+
+  /workflows/{id}/schedules:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    get:
+      tags: [Schedules]
+      summary: スケジュール一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Schedule'
+    post:
+      tags: [Schedules]
+      summary: スケジュール作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScheduleRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Schedule'
+
+  /schedules/{scheduleId}:
+    parameters:
+      - $ref: '#/components/parameters/ScheduleId'
+    put:
+      tags: [Schedules]
+      summary: スケジュール更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateScheduleRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Schedule'
+    delete:
+      tags: [Schedules]
+      summary: スケジュール削除
+      responses:
+        '204':
+          description: 削除成功
+
+  /workflows/{id}/webhooks:
+    parameters:
+      - $ref: '#/components/parameters/WorkflowId'
+    post:
+      tags: [Webhooks]
+      summary: Webhook作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Webhook'
+
+  /webhooks/{webhookId}:
+    parameters:
+      - $ref: '#/components/parameters/WebhookId'
+    post:
+      tags: [Webhooks]
+      summary: Webhookトリガー（外部からの呼び出し）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: トリガー成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+
   /adapters:
     get:
       tags: [Adapters]
@@ -384,10 +743,357 @@ paths:
                     items:
                       $ref: '#/components/schemas/Adapter'
 
+  /audit-logs:
+    get:
+      tags: [AuditLogs]
+      summary: 監査ログ一覧取得
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum: [create, update, delete, publish, execute]
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+            enum: [workflow, run, secret]
+        - name: actor_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /usage/summary:
+    get:
+      tags: [Usage]
+      summary: 使用量サマリー取得
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: month
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UsageSummary'
+
+  /usage/daily:
+    get:
+      tags: [Usage]
+      summary: 日次使用量取得
+      parameters:
+        - name: start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DailyUsage'
+
+  /usage/by-workflow:
+    get:
+      tags: [Usage]
+      summary: ワークフロー別使用量取得
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: month
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WorkflowUsage'
+
+  /usage/by-model:
+    get:
+      tags: [Usage]
+      summary: モデル別使用量取得
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: month
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelUsage'
+
+  /usage/budgets:
+    get:
+      tags: [Usage]
+      summary: 予算一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Budget'
+    post:
+      tags: [Usage]
+      summary: 予算作成
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBudgetRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Budget'
+
+  /usage/budgets/{budgetId}:
+    parameters:
+      - $ref: '#/components/parameters/BudgetId'
+    put:
+      tags: [Usage]
+      summary: 予算更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBudgetRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Budget'
+    delete:
+      tags: [Usage]
+      summary: 予算削除
+      responses:
+        '204':
+          description: 削除成功
+
+  /usage/pricing:
+    get:
+      tags: [Usage]
+      summary: モデル価格一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ModelPricing'
+
+  /admin/blocks:
+    get:
+      tags: [AdminBlocks]
+      summary: システムブロック一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blocks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SystemBlock'
+
+  /admin/blocks/{blockId}:
+    parameters:
+      - $ref: '#/components/parameters/BlockId'
+    get:
+      tags: [AdminBlocks]
+      summary: システムブロック詳細取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBlock'
+    put:
+      tags: [AdminBlocks]
+      summary: システムブロック更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemBlockRequest'
+      responses:
+        '200':
+          description: 更新成功（バージョン番号がインクリメント）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBlock'
+
+  /admin/blocks/{blockId}/versions:
+    parameters:
+      - $ref: '#/components/parameters/BlockId'
+    get:
+      tags: [AdminBlocks]
+      summary: ブロックバージョン一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BlockVersion'
+
+  /admin/blocks/{blockId}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/BlockId'
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      tags: [AdminBlocks]
+      summary: 特定バージョンのブロック取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockVersion'
+
+  /admin/blocks/{blockId}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/BlockId'
+    post:
+      tags: [AdminBlocks]
+      summary: ブロックを指定バージョンにロールバック
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  description: ロールバック先のバージョン番号
+      responses:
+        '200':
+          description: ロールバック成功（新しいバージョンとして作成）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBlock'
+
   /health:
     get:
       tags: [Health]
-      summary: ヘルスチェック
+      summary: ヘルスチェック（Liveness）
       security: []
       responses:
         '200':
@@ -396,6 +1102,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthCheck'
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: レディネスチェック（Readiness）
+      security: []
+      responses:
+        '200':
+          description: 正常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessCheck'
+        '503':
+          description: 異常
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessCheck'
 
 components:
   securitySchemes:
@@ -428,6 +1153,41 @@ components:
         format: uuid
     RunId:
       name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScheduleId:
+      name: scheduleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WebhookId:
+      name: webhookId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BudgetId:
+      name: budgetId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BlockId:
+      name: blockId
       in: path
       required: true
       schema:
@@ -594,7 +1354,7 @@ components:
           format: uuid
         condition:
           type: string
-          description: 条件式（例: $.result == true）
+          description: '条件式（例: $.result == true）'
 
     Run:
       type: object
@@ -738,6 +1498,549 @@ components:
           type: object
           additionalProperties:
             type: string
+
+    ReadinessCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        components:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, error]
+            redis:
+              type: string
+              enum: [ok, error]
+
+    BlockGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [parallel, try_catch, if_else, switch_case, foreach, while]
+        config:
+          type: object
+        parent_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        size:
+          type: object
+          properties:
+            width:
+              type: number
+            height:
+              type: number
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateBlockGroupRequest:
+      type: object
+      required: [name, type]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [parallel, try_catch, if_else, switch_case, foreach, while]
+        config:
+          type: object
+        parent_group_id:
+          type: string
+          format: uuid
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        size:
+          type: object
+          properties:
+            width:
+              type: number
+            height:
+              type: number
+
+    UpdateBlockGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        size:
+          type: object
+          properties:
+            width:
+              type: number
+            height:
+              type: number
+
+    AddStepToGroupRequest:
+      type: object
+      required: [step_id]
+      properties:
+        step_id:
+          type: string
+          format: uuid
+        group_role:
+          type: string
+          enum: [body, try, catch, finally, then, else, case_0, default]
+
+    ResumeRunRequest:
+      type: object
+      required: [from_step_id]
+      properties:
+        from_step_id:
+          type: string
+          format: uuid
+        input_override:
+          type: object
+
+    ResumeRunResponse:
+      type: object
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        from_step_id:
+          type: string
+          format: uuid
+        steps_to_execute:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    ExecuteStepRequest:
+      type: object
+      properties:
+        input:
+          type: object
+
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        cron:
+          type: string
+        timezone:
+          type: string
+        input:
+          type: object
+        enabled:
+          type: boolean
+        next_run_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateScheduleRequest:
+      type: object
+      required: [name, cron]
+      properties:
+        name:
+          type: string
+        cron:
+          type: string
+        timezone:
+          type: string
+          default: UTC
+        input:
+          type: object
+        enabled:
+          type: boolean
+          default: true
+        retry_policy:
+          type: object
+          properties:
+            max_attempts:
+              type: integer
+            delay_seconds:
+              type: integer
+
+    UpdateScheduleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        cron:
+          type: string
+        timezone:
+          type: string
+        input:
+          type: object
+        enabled:
+          type: boolean
+        retry_policy:
+          type: object
+          properties:
+            max_attempts:
+              type: integer
+            delay_seconds:
+              type: integer
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        url:
+          type: string
+        secret:
+          type: string
+        input_mapping:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    CreateWebhookRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        input_mapping:
+          type: object
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [create, update, delete, publish, execute]
+        resource_type:
+          type: string
+          enum: [workflow, run, secret]
+        resource_id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+        actor_email:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    UsageRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        step_run_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        model:
+          type: string
+        operation:
+          type: string
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        input_cost_usd:
+          type: number
+        output_cost_usd:
+          type: number
+        total_cost_usd:
+          type: number
+        latency_ms:
+          type: integer
+        success:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UsageSummary:
+      type: object
+      properties:
+        period:
+          type: string
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        total_requests:
+          type: integer
+        total_input_tokens:
+          type: integer
+        total_output_tokens:
+          type: integer
+        total_cost_usd:
+          type: number
+        success_rate:
+          type: number
+        avg_latency_ms:
+          type: number
+
+    DailyUsage:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        total_requests:
+          type: integer
+        total_input_tokens:
+          type: integer
+        total_output_tokens:
+          type: integer
+        total_cost_usd:
+          type: number
+        provider:
+          type: string
+        model:
+          type: string
+
+    WorkflowUsage:
+      type: object
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        workflow_name:
+          type: string
+        total_requests:
+          type: integer
+        total_tokens:
+          type: integer
+        total_cost_usd:
+          type: number
+
+    ModelUsage:
+      type: object
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        total_requests:
+          type: integer
+        total_input_tokens:
+          type: integer
+        total_output_tokens:
+          type: integer
+        total_cost_usd:
+          type: number
+        avg_latency_ms:
+          type: number
+
+    Budget:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          format: uuid
+          nullable: true
+        budget_type:
+          type: string
+          enum: [monthly, daily]
+        budget_amount_usd:
+          type: number
+        alert_threshold:
+          type: number
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateBudgetRequest:
+      type: object
+      required: [budget_type, budget_amount_usd]
+      properties:
+        workflow_id:
+          type: string
+          format: uuid
+        budget_type:
+          type: string
+          enum: [monthly, daily]
+        budget_amount_usd:
+          type: number
+        alert_threshold:
+          type: number
+          default: 0.8
+
+    UpdateBudgetRequest:
+      type: object
+      properties:
+        budget_amount_usd:
+          type: number
+        alert_threshold:
+          type: number
+        enabled:
+          type: boolean
+
+    ModelPricing:
+      type: object
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        input_cost_per_1k:
+          type: number
+        output_cost_per_1k:
+          type: number
+
+    SystemBlock:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        code:
+          type: string
+        config_schema:
+          type: object
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        ui_config:
+          type: object
+        is_system:
+          type: boolean
+        version:
+          type: integer
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UpdateSystemBlockRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        code:
+          type: string
+        config_schema:
+          type: object
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        ui_config:
+          type: object
+        change_summary:
+          type: string
+          description: 変更内容の要約
+
+    BlockVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        block_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        code:
+          type: string
+        config_schema:
+          type: object
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        ui_config:
+          type: object
+        change_summary:
+          type: string
+        changed_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
 
     Pagination:
       type: object

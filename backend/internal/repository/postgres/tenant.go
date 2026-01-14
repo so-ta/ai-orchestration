@@ -86,7 +86,7 @@ func (r *TenantRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.T
 	)
 
 	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("tenant not found")
+		return nil, domain.ErrTenantNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -128,7 +128,7 @@ func (r *TenantRepository) GetBySlug(ctx context.Context, slug string) (*domain.
 	)
 
 	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("tenant not found")
+		return nil, domain.ErrTenantNotFound
 	}
 	if err != nil {
 		return nil, err
@@ -287,7 +287,7 @@ func (r *TenantRepository) Update(ctx context.Context, tenant *domain.Tenant) er
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("tenant not found")
+		return domain.ErrTenantNotFound
 	}
 
 	return nil
@@ -309,7 +309,7 @@ func (r *TenantRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("tenant not found")
+		return domain.ErrTenantNotFound
 	}
 
 	return nil
@@ -348,7 +348,7 @@ func (r *TenantRepository) UpdateStatus(ctx context.Context, id uuid.UUID, statu
 	}
 
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("tenant not found")
+		return domain.ErrTenantNotFound
 	}
 
 	return nil
