@@ -237,7 +237,9 @@ func (e *BlockGroupExecutor) executeTryCatch(ctx context.Context, bgCtx *BlockGr
 	// Parse config
 	var config domain.TryCatchConfig
 	if bgCtx.Group.Config != nil {
-		json.Unmarshal(bgCtx.Group.Config, &config)
+		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
+			e.logger.Warn("Failed to parse try-catch config, using defaults", "error", err)
+		}
 	}
 
 	// Separate steps by role
@@ -274,10 +276,18 @@ func (e *BlockGroupExecutor) executeTryCatch(ctx context.Context, bgCtx *BlockGr
 			"error":   tryError.Error(),
 			"input":   json.RawMessage(bgCtx.Input),
 		}
-		catchInputJSON, _ := json.Marshal(catchInput)
+		catchInputJSON, err := json.Marshal(catchInput)
+		if err != nil {
+			e.logger.Error("Failed to marshal catch input", "error", err)
+			catchInputJSON = bgCtx.Input
+		}
 
 		for _, step := range catchSteps {
-			output, _ = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, catchInputJSON)
+			var stepErr error
+			output, stepErr = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, catchInputJSON)
+			if stepErr != nil {
+				e.logger.Error("Catch step failed", "step_id", step.ID, "error", stepErr)
+			}
 		}
 	}
 
@@ -285,7 +295,9 @@ func (e *BlockGroupExecutor) executeTryCatch(ctx context.Context, bgCtx *BlockGr
 	if len(finallySteps) > 0 {
 		span.AddEvent("finally_executing")
 		for _, step := range finallySteps {
-			e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input)
+			if _, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input); err != nil {
+				e.logger.Error("Finally step failed", "step_id", step.ID, "error", err)
+			}
 		}
 	}
 
@@ -303,7 +315,9 @@ func (e *BlockGroupExecutor) executeIfElse(ctx context.Context, bgCtx *BlockGrou
 	// Parse config
 	var config domain.IfElseConfig
 	if bgCtx.Group.Config != nil {
-		json.Unmarshal(bgCtx.Group.Config, &config)
+		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
+			e.logger.Warn("Failed to parse if-else config, using defaults", "error", err)
+		}
 	}
 
 	// Evaluate condition
@@ -357,7 +371,9 @@ func (e *BlockGroupExecutor) executeSwitchCase(ctx context.Context, bgCtx *Block
 	// Parse config
 	var config domain.SwitchCaseConfig
 	if bgCtx.Group.Config != nil {
-		json.Unmarshal(bgCtx.Group.Config, &config)
+		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
+			e.logger.Warn("Failed to parse switch-case config, using defaults", "error", err)
+		}
 	}
 
 	// Group steps by role (case_0, case_1, default, etc.)
@@ -414,7 +430,9 @@ func (e *BlockGroupExecutor) executeForeach(ctx context.Context, bgCtx *BlockGro
 	// Parse config
 	var config domain.ForeachConfig
 	if bgCtx.Group.Config != nil {
-		json.Unmarshal(bgCtx.Group.Config, &config)
+		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
+			e.logger.Warn("Failed to parse foreach config, using defaults", "error", err)
+		}
 	}
 
 	// Get items from input
@@ -479,13 +497,27 @@ func (e *BlockGroupExecutor) executeForeach(ctx context.Context, bgCtx *BlockGro
 					"currentItem": itm,
 					"items":       items,
 				}
-				iterInputJSON, _ := json.Marshal(iterInput)
+				iterInputJSON, err := json.Marshal(iterInput)
+				if err != nil {
+					e.logger.Error("Failed to marshal foreach iteration input", "index", idx, "error", err)
+					resultsChan <- struct {
+						index  int
+						result interface{}
+					}{idx, nil}
+					return
+				}
 
 				var lastOutput interface{}
 				for _, step := range bodySteps {
-					output, _ := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, iterInputJSON)
+					output, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, iterInputJSON)
+					if err != nil {
+						e.logger.Error("Foreach step failed", "index", idx, "step_id", step.ID, "error", err)
+						continue
+					}
 					if output != nil {
-						json.Unmarshal(output, &lastOutput)
+						if err := json.Unmarshal(output, &lastOutput); err != nil {
+							e.logger.Warn("Failed to unmarshal foreach step output", "index", idx, "step_id", step.ID, "error", err)
+						}
 					}
 				}
 
@@ -515,13 +547,24 @@ func (e *BlockGroupExecutor) executeForeach(ctx context.Context, bgCtx *BlockGro
 				"currentItem": item,
 				"items":       items,
 			}
-			iterInputJSON, _ := json.Marshal(iterInput)
+			iterInputJSON, err := json.Marshal(iterInput)
+			if err != nil {
+				e.logger.Error("Failed to marshal foreach iteration input", "index", i, "error", err)
+				results = append(results, nil)
+				continue
+			}
 
 			var lastOutput interface{}
 			for _, step := range bodySteps {
-				output, _ := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, iterInputJSON)
+				output, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, iterInputJSON)
+				if err != nil {
+					e.logger.Error("Foreach step failed", "index", i, "step_id", step.ID, "error", err)
+					continue
+				}
 				if output != nil {
-					json.Unmarshal(output, &lastOutput)
+					if err := json.Unmarshal(output, &lastOutput); err != nil {
+						e.logger.Warn("Failed to unmarshal foreach step output", "index", i, "step_id", step.ID, "error", err)
+					}
 				}
 			}
 			results = append(results, lastOutput)
@@ -545,7 +588,9 @@ func (e *BlockGroupExecutor) executeWhile(ctx context.Context, bgCtx *BlockGroup
 	// Parse config
 	var config domain.WhileConfig
 	if bgCtx.Group.Config != nil {
-		json.Unmarshal(bgCtx.Group.Config, &config)
+		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
+			e.logger.Warn("Failed to parse while config, using defaults", "error", err)
+		}
 	}
 
 	maxIterations := config.MaxIterations
@@ -576,7 +621,9 @@ func (e *BlockGroupExecutor) executeWhile(ctx context.Context, bgCtx *BlockGroup
 					return nil, err
 				}
 				if output != nil {
-					json.Unmarshal(output, &lastOutput)
+					if err := json.Unmarshal(output, &lastOutput); err != nil {
+						e.logger.Warn("Failed to unmarshal while step output", "step_id", step.ID, "error", err)
+					}
 					currentInput = output
 				}
 			}
@@ -599,7 +646,9 @@ func (e *BlockGroupExecutor) executeWhile(ctx context.Context, bgCtx *BlockGroup
 					return nil, err
 				}
 				if output != nil {
-					json.Unmarshal(output, &lastOutput)
+					if err := json.Unmarshal(output, &lastOutput); err != nil {
+						e.logger.Warn("Failed to unmarshal while step output", "step_id", step.ID, "error", err)
+					}
 					currentInput = output
 				}
 			}
