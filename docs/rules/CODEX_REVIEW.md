@@ -13,20 +13,26 @@ AIエージェントがPRをpushした後のレビューフロー。
    - 現在のブランチがmainの場合: 新しいブランチを作成してチェックアウト
    - 既にfeatureブランチの場合: そのまま継続
    ↓
-3. git push でリモートにプッシュ（-u でupstream設定）
+3. ローカルCIを実行（必須）
+   - Backend変更: cd backend && go test ./...
+   - Frontend変更: cd frontend && npm run check
    ↓
-4. PRを作成（または既存PRに追加コミット）
+4. ローカルCIが全てパスしたことを確認
    ↓
-5. GitHub Actions で Codex Review + CI が自動実行
+5. git push でリモートにプッシュ（-u でupstream設定）
    ↓
-6. PRコメントにレビュー結果が投稿される
+6. PRを作成（または既存PRに追加コミット）
    ↓
-7. レビュー結果とCI結果を確認
+7. GitHub Actions で Codex Review + CI が自動実行
    ↓
-8a. APPROVE（承認）かつ CI通過 → AIエージェントがMergeを実行
-8b. REQUEST_CHANGES（要修正）またはCI失敗 → 修正して再push
+8. PRコメントにレビュー結果が投稿される
    ↓
-9. 8b の場合、手順 5-8 を繰り返す（承認されるまで）
+9. レビュー結果とCI結果を確認
+   ↓
+10a. APPROVE（承認）かつ CI通過 → AIエージェントがMergeを実行
+10b. REQUEST_CHANGES（要修正）またはCI失敗 → 修正して再push（手順3から）
+   ↓
+11. 10b の場合、手順 3-10 を繰り返す（承認されるまで）
 ```
 
 ---
@@ -58,6 +64,31 @@ git push -u origin feature/your-feature-name
 | `test/xxx` | テスト追加・修正 |
 
 **重要**: mainブランチに直接pushすることは禁止されています。
+
+---
+
+## Push前のローカルCI実行（必須）
+
+**pushする前に、必ずローカルでCI相当のチェックを実行すること。**
+
+詳細は [GIT_RULES.md](./GIT_RULES.md#push前のローカルci実行必須) を参照。
+
+```bash
+# Backend変更がある場合
+cd backend && go test ./...
+
+# Frontend変更がある場合
+cd frontend && npm run check
+
+# 両方変更がある場合
+(cd backend && go test ./...) && (cd frontend && npm run check)
+```
+
+| ルール | 説明 |
+|--------|------|
+| **ローカルCI必須** | pushする前に必ずローカルCIを実行 |
+| **失敗時はpush禁止** | ローカルCIが通らない状態でpushしない |
+| **修正後は再実行** | 修正を加えたら再度ローカルCIを実行 |
 
 ---
 
