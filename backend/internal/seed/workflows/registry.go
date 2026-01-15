@@ -16,6 +16,8 @@ func NewRegistry() *Registry {
 	// Register all system workflows
 	r.registerCopilotWorkflows()
 	r.registerRAGWorkflows()
+	r.registerComprehensiveWorkflows()
+	r.registerDemoWorkflows()
 
 	return r
 }
