@@ -267,10 +267,11 @@ describe('RunDialog', () => {
       expect(wrapper.find('.dynamic-config-form-mock').exists()).toBe(true)
     })
 
-    it('should show no input message when Start step has no input_schema', () => {
+    it('should not show input form when Start step has no input_schema', () => {
       // Use steps without input_schema in Start step's config
       const wrapper = createWrapper({ steps: mockStepsWithoutSchema })
-      expect(wrapper.find('.no-input-message').exists()).toBe(true)
+      // No input section should be shown - user can run directly
+      expect(wrapper.find('.input-section').exists()).toBe(false)
     })
   })
 
@@ -299,14 +300,14 @@ describe('RunDialog', () => {
       const wrapper = createWrapper({ steps: stepsWithoutStart })
       // Should still mount without error
       expect(wrapper.exists()).toBe(true)
-      // Should show no input message when start step is missing
-      expect(wrapper.find('.no-input-message').exists()).toBe(true)
+      // No input section when start step is missing - user can run directly
+      expect(wrapper.find('.input-section').exists()).toBe(false)
     })
 
-    it('should show no input message when Start step has no input_schema', () => {
+    it('should not show input section when Start step has no input_schema', () => {
       const wrapper = createWrapper({ steps: mockStepsWithoutSchema })
-      // Should show no input message when Start step has no input_schema
-      expect(wrapper.find('.no-input-message').exists()).toBe(true)
+      // No input section when Start step has no input_schema - user can run directly
+      expect(wrapper.find('.input-section').exists()).toBe(false)
     })
   })
 

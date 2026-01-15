@@ -92,7 +92,7 @@ function handleClose() {
         <span class="workflow-name">{{ workflowName }}</span>
       </div>
 
-      <!-- Input form -->
+      <!-- Input form (only shown when there are input fields) -->
       <div v-if="hasInputFields" class="input-section">
         <h3 class="input-title">{{ t('workflows.runDialog.inputTitle') }}</h3>
         <p class="input-description">
@@ -105,11 +105,6 @@ function handleClose() {
           :disabled="loading"
           @validation-change="handleValidationChange"
         />
-      </div>
-
-      <!-- No input fields message -->
-      <div v-else class="no-input-message">
-        <p>{{ t('workflows.runDialog.noInputRequired') }}</p>
       </div>
     </div>
 
@@ -171,18 +166,6 @@ function handleClose() {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin: 0;
-}
-
-.no-input-message {
-  padding: 1rem;
-  background: var(--color-bg-secondary);
-  border-radius: 0.375rem;
-  text-align: center;
-}
-
-.no-input-message p {
-  margin: 0;
-  color: var(--color-text-secondary);
 }
 
 .schema-info {
