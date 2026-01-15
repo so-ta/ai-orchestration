@@ -18,8 +18,10 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'drag-start', type: StepType): void
   (e: 'drag-end'): void
-  (e: 'open-search'): void
 }>()
+
+// Search query
+const searchQuery = ref('')
 
 // Block Group definitions for control flow constructs
 const blockGroupTypes: Array<{
@@ -67,16 +69,56 @@ onMounted(async () => {
 // Categories for tabs
 const categories: BlockCategory[] = ['ai', 'flow', 'apps', 'custom']
 
-// Get blocks grouped by subcategory for the active category
+// Get filtered blocks based on search query
+const filteredBlocks = computed(() => {
+  let filtered = blocks.value.filter(b => b.slug !== 'start')
+
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase().trim()
+    filtered = filtered.filter(b =>
+      b.name.toLowerCase().includes(query) ||
+      (b.description?.toLowerCase().includes(query)) ||
+      b.slug.toLowerCase().includes(query)
+    )
+  }
+
+  return filtered
+})
+
+// Check if search is active
+const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
+
+// Get blocks grouped by subcategory for the active category (or all if searching)
 const blocksBySubcategory = computed(() => {
-  return groupBlocksBySubcategory(
-    blocks.value.filter(b => b.slug !== 'start'),
-    activeCategory.value
+  if (isSearchActive.value) {
+    // When searching, group all matching blocks by subcategory
+    return groupBlocksBySubcategory(filteredBlocks.value, null)
+  }
+  return groupBlocksBySubcategory(filteredBlocks.value, activeCategory.value)
+})
+
+// Get filtered block group types
+const filteredBlockGroupTypes = computed(() => {
+  if (!isSearchActive.value) return blockGroupTypes
+  const query = searchQuery.value.toLowerCase().trim()
+  return blockGroupTypes.filter(g =>
+    g.name.toLowerCase().includes(query) ||
+    g.description.toLowerCase().includes(query)
   )
 })
 
-// Get sorted subcategories for the active category
+// Get sorted subcategories for the active category (or all when searching)
 const subcategoriesForActiveCategory = computed(() => {
+  if (isSearchActive.value) {
+    // Return all subcategories that have matching blocks
+    const subcats = new Set<BlockSubcategory>()
+    for (const block of filteredBlocks.value) {
+      if (block.subcategory) {
+        subcats.add(block.subcategory)
+      }
+    }
+    return Array.from(subcats)
+  }
   return getSubcategoriesForCategory(activeCategory.value)
 })
 
@@ -138,11 +180,14 @@ function handleGroupDragEnd() {
   draggingGroupType.value = null
 }
 
-// Keyboard shortcut handler
+// Reference to search input
+const searchInput = ref<HTMLInputElement | null>(null)
+
+// Focus search on Cmd/Ctrl+K
 function handleKeydown(event: KeyboardEvent) {
   if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
     event.preventDefault()
-    emit('open-search')
+    searchInput.value?.focus()
   }
 }
 
@@ -153,33 +198,23 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
+
+// Clear search
+function clearSearch() {
+  searchQuery.value = ''
+}
 </script>
 
 <template>
   <div class="step-palette">
-    <!-- Search Bar -->
-    <div class="palette-header">
-      <button
-        class="search-trigger"
-        @click="emit('open-search')"
-      >
-        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-        <span class="search-text">{{ $t('editor.searchBlocks') }}</span>
-        <kbd class="search-shortcut">⌘K</kbd>
-      </button>
-    </div>
-
-    <!-- Category Tabs -->
+    <!-- Category Tabs (上部) -->
     <div class="category-tabs">
       <button
         v-for="category in categories"
         :key="category"
-        :class="['category-tab', { active: activeCategory === category }]"
-        :style="activeCategory === category ? { borderColor: getCategoryInfo(category).color } : {}"
-        @click="activeCategory = category"
+        :class="['category-tab', { active: activeCategory === category && !isSearchActive }]"
+        :style="activeCategory === category && !isSearchActive ? { borderColor: getCategoryInfo(category).color } : {}"
+        @click="activeCategory = category; clearSearch()"
       >
         <span
           class="tab-indicator"
@@ -187,6 +222,33 @@ onUnmounted(() => {
         />
         <span class="tab-label">{{ getCategoryInfo(category).name }}</span>
       </button>
+    </div>
+
+    <!-- Inline Search Bar -->
+    <div class="palette-search">
+      <div class="search-wrapper">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+        <input
+          ref="searchInput"
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          :placeholder="$t('editor.searchBlocks')"
+        >
+        <button
+          v-if="searchQuery"
+          class="search-clear"
+          @click="clearSearch"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+        <kbd v-else class="search-shortcut">⌘K</kbd>
+      </div>
     </div>
 
     <!-- Loading state -->
@@ -202,8 +264,8 @@ onUnmounted(() => {
 
     <!-- Blocks list -->
     <div v-else class="palette-content">
-      <!-- Control Flow Groups (show only in Flow tab) -->
-      <div v-if="activeCategory === 'flow'" class="subcategory-section">
+      <!-- Control Flow Groups (show in Flow tab or when searching) -->
+      <div v-if="(activeCategory === 'flow' || isSearchActive) && filteredBlockGroupTypes.length > 0" class="subcategory-section">
         <button
           class="subcategory-header"
           @click="toggleSubcategory('__groups__')"
@@ -220,12 +282,12 @@ onUnmounted(() => {
             <path d="m9 18 6-6-6-6" />
           </svg>
           <span class="subcategory-name">Control Flow Groups</span>
-          <span class="subcategory-count">{{ blockGroupTypes.length }}</span>
+          <span class="subcategory-count">{{ filteredBlockGroupTypes.length }}</span>
         </button>
 
         <div v-show="expandedSubcategories.has('__groups__')" class="subcategory-items">
           <div
-            v-for="groupType in blockGroupTypes"
+            v-for="groupType in filteredBlockGroupTypes"
             :key="groupType.type"
             :class="[
               'palette-item',
@@ -372,74 +434,29 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.palette-header {
-  padding: 12px;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.search-trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--color-background-secondary, #f9fafb);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.search-trigger:hover {
-  border-color: var(--color-primary);
-  background: white;
-}
-
-.search-icon {
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
-
-.search-text {
-  flex: 1;
-  text-align: left;
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-}
-
-.search-shortcut {
-  font-size: 0.6875rem;
-  padding: 2px 6px;
-  background: white;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  color: var(--color-text-secondary);
-}
-
-/* Category Tabs */
+/* Category Tabs - 横スクロールなし、均等幅 */
 .category-tabs {
   display: flex;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
-  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .category-tab {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 500;
   color: var(--color-text-secondary);
   transition: all 0.15s;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .category-tab:hover {
@@ -454,11 +471,88 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .tab-label {
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Inline Search */
+.palette-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--color-background-secondary, #f9fafb);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.search-wrapper:focus-within {
+  border-color: var(--color-primary);
+  background: white;
+}
+
+.search-icon {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  outline: none;
+  min-width: 0;
+}
+
+.search-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: var(--color-border);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.search-clear:hover {
+  background: var(--color-text-secondary);
+  color: white;
+}
+
+.search-shortcut {
+  font-size: 0.625rem;
+  padding: 2px 5px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 /* Loading & Error */

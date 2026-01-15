@@ -7,14 +7,10 @@ const { t } = useI18n()
 const route = useRoute()
 const workflowId = route.params.id as string
 
-// Block search modal state
-const showBlockSearch = ref(false)
-
 const workflows = useWorkflows()
 const runs = useRuns()
 const blocksApi = useBlocks()
 const blockGroupsApi = useBlockGroups()
-const blockPreferences = useBlockPreferences()
 const toast = useToast()
 const { confirm } = useConfirm()
 
@@ -775,34 +771,6 @@ function handleRun() {
   showRunDialog.value = true
 }
 
-// Handle block selection from search modal
-function handleBlockSelect(block: BlockDefinition) {
-  if (!workflow.value || isReadonly.value) return
-
-  // Track usage for recent blocks
-  blockPreferences.trackUsage(block.slug)
-
-  // Find a good position for the new block (center of canvas with offset)
-  const existingSteps = workflow.value.steps || []
-  let newX = 300
-  let newY = 200
-
-  // If there are existing steps, place the new one to the right of the rightmost step
-  if (existingSteps.length > 0) {
-    const maxX = Math.max(...existingSteps.map(s => s.position_x))
-    const avgY = existingSteps.reduce((sum, s) => sum + s.position_y, 0) / existingSteps.length
-    newX = maxX + 250
-    newY = avgY
-  }
-
-  // Create the step
-  handleStepDrop({
-    type: block.slug as StepType,
-    name: block.name,
-    position: { x: newX, y: newY },
-  })
-}
-
 // Execute workflow from dialog
 async function handleRunFromDialog(input: Record<string, unknown>) {
   if (!workflow.value) return
@@ -1038,15 +1006,6 @@ useKeyboardShortcuts({
   },
 })
 
-// Cmd/Ctrl+K shortcut for block search
-function handleGlobalKeydown(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-    e.preventDefault()
-    if (!isReadonly.value) {
-      showBlockSearch.value = true
-    }
-  }
-}
 
 
 // Load block definitions for output port information
@@ -1089,11 +1048,6 @@ onMounted(() => {
   loadWorkflow()
   loadBlockDefinitions()
   loadLatestRun()
-  window.addEventListener('keydown', handleGlobalKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 
@@ -1248,7 +1202,7 @@ onUnmounted(() => {
       >
         <!-- Left Sidebar: Step Palette -->
         <template #palette>
-          <StepPalette :readonly="isReadonly" @open-search="showBlockSearch = true" />
+          <StepPalette :readonly="isReadonly" />
         </template>
 
         <!-- Center: DAG Canvas -->
@@ -1315,12 +1269,6 @@ onUnmounted(() => {
       @run="handleRunFromDialog"
     />
 
-    <!-- Block Search Modal -->
-    <BlockSearchModal
-      v-model="showBlockSearch"
-      :blocks="blockDefinitions"
-      @select="handleBlockSelect"
-    />
   </div>
 </template>
 

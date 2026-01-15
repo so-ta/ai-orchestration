@@ -204,12 +204,12 @@ export function groupBlocksByCategory(blocks: BlockDefinition[]): Record<BlockCa
   return result
 }
 
-// Group blocks by subcategory within a category
+// Group blocks by subcategory within a category (or all blocks if category is null)
 export function groupBlocksBySubcategory(
   blocks: BlockDefinition[],
-  category: BlockCategory
+  category: BlockCategory | null
 ): Record<string, BlockDefinition[]> {
-  const categoryBlocks = blocks.filter(b => b.category === category)
+  const categoryBlocks = category ? blocks.filter(b => b.category === category) : blocks
   const result: Record<string, BlockDefinition[]> = {}
 
   for (const block of categoryBlocks) {
