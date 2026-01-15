@@ -83,7 +83,66 @@ jobs:
             # 差分サイズを確認
             DIFF_SIZE=$(wc -c < pr_diff.patch)
             echo "Diff size: $DIFF_SIZE bytes"
+
+            # 変更ファイル一覧を環境変数に保存
+            CHANGED_FILES=$(cat changed_files.txt | tr '\n' ' ')
+            echo "changed_files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+            echo "diff_stats=$DIFF_STATS" >> $GITHUB_OUTPUT
           fi
+
+      - name: Generate dynamic prompt
+        if: steps.diff.outputs.has_changes == 'true'
+        id: prompt
+        run: |
+          # 動的プロンプトを生成（差分情報を直接埋め込む）
+          cat > dynamic_prompt.md << 'PROMPT_HEADER'
+          # PR Review Task
+
+          ## レビュー対象のPR情報
+
+          ### 変更ファイル一覧
+          PROMPT_HEADER
+
+          echo '```' >> dynamic_prompt.md
+          cat changed_files.txt >> dynamic_prompt.md
+          echo '```' >> dynamic_prompt.md
+
+          cat >> dynamic_prompt.md << 'PROMPT_MID'
+
+          ### 差分の詳細（unified diff形式）
+
+          以下がこのPRの全差分です。これをレビューしてください：
+
+          ```diff
+          PROMPT_MID
+
+          # 差分を直接埋め込む（サイズ制限：100KB）
+          DIFF_SIZE=$(wc -c < pr_diff.patch | tr -d ' ')
+          if [ "$DIFF_SIZE" -gt 100000 ]; then
+            echo "... (差分が大きすぎるため省略、各変更ファイルを直接確認してください)" >> dynamic_prompt.md
+            # 代わりにファイルごとの差分概要を出力
+            head -500 pr_diff.patch >> dynamic_prompt.md
+            echo "... (以下省略)" >> dynamic_prompt.md
+          else
+            cat pr_diff.patch >> dynamic_prompt.md
+          fi
+
+          cat >> dynamic_prompt.md << 'PROMPT_FOOTER'
+          ```
+
+          ---
+
+          ## レビューガイドライン
+
+          PROMPT_FOOTER
+
+          # 静的プロンプトを追加
+          cat .github/codex/prompts/review.md >> dynamic_prompt.md
+
+          echo "Dynamic prompt generated"
+          PROMPT_SIZE=$(wc -c < dynamic_prompt.md | tr -d ' ')
+          PROMPT_LINES=$(wc -l < dynamic_prompt.md | tr -d ' ')
+          echo "Prompt size: $PROMPT_SIZE bytes, $PROMPT_LINES lines"
 
       - name: Run Codex Review
         if: steps.diff.outputs.has_changes == 'true'
@@ -91,7 +150,7 @@ jobs:
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          prompt-file: .github/codex/prompts/review.md
+          prompt-file: dynamic_prompt.md
           output-file: codex-review-output.json
           output-schema-file: .github/codex/schemas/review-schema.json
           safety-strategy: drop-sudo
