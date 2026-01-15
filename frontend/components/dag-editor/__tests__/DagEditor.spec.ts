@@ -365,7 +365,7 @@ describe('DagEditor', () => {
   })
 
   describe('block groups', () => {
-    const groupTypes = ['foreach', 'try_catch', 'parallel', 'if_else'] as const
+    const groupTypes = ['foreach', 'try_catch', 'parallel', 'while'] as const
 
     groupTypes.forEach(type => {
       it(`should handle ${type} block group type`, () => {

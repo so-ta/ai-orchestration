@@ -196,8 +196,6 @@ function getGroupColor(type: BlockGroupType): string {
   const colors: Record<BlockGroupType, string> = {
     parallel: '#8b5cf6',    // Purple
     try_catch: '#ef4444',   // Red
-    if_else: '#f59e0b',     // Amber
-    switch_case: '#eab308', // Yellow
     foreach: '#22c55e',     // Green
     while: '#14b8a6',       // Teal
   }
@@ -209,8 +207,6 @@ function getGroupIcon(type: BlockGroupType): string {
   const icons: Record<BlockGroupType, string> = {
     parallel: '⫲',
     try_catch: '⚡',
-    if_else: '◇',
-    switch_case: '⟍',
     foreach: '∀',
     while: '↻',
   }
@@ -222,8 +218,6 @@ function getGroupTypeLabel(type: BlockGroupType): string {
   const labels: Record<BlockGroupType, string> = {
     parallel: 'Parallel',
     try_catch: 'Try-Catch',
-    if_else: 'If-Else',
-    switch_case: 'Switch',
     foreach: 'ForEach',
     while: 'While',
   }
@@ -246,12 +240,6 @@ const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
     { name: 'success', label: 'Success', color: '#22c55e' },
     { name: 'caught', label: 'Caught', color: '#f59e0b' },
     { name: 'uncaught', label: 'Uncaught', color: '#ef4444' },
-  ],
-  if_else: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
-  ],
-  switch_case: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
   ],
   foreach: [
     { name: 'complete', label: 'Complete', color: '#22c55e' },
@@ -281,15 +269,7 @@ interface GroupZone {
 
 const GROUP_ZONES: Record<BlockGroupType, GroupZone[] | null> = {
   parallel: null, // Single body zone
-  try_catch: [
-    { role: 'try', label: 'TRY', top: 0, bottom: 0.55, left: 0, right: 1 },
-    { role: 'catch', label: 'CATCH', top: 0.55, bottom: 1, left: 0, right: 1 },
-  ],
-  if_else: [
-    { role: 'then', label: 'THEN', top: 0, bottom: 1, left: 0, right: 0.48 },
-    { role: 'else', label: 'ELSE', top: 0, bottom: 1, left: 0.52, right: 1 },
-  ],
-  switch_case: null,
+  try_catch: null, // Phase A: simplified to single body zone
   foreach: null,
   while: null,
 }

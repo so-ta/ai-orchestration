@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run } from '~/types/api'
+import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import { calculateLayout } from '~/utils/graph-layout'
 
@@ -226,7 +226,7 @@ async function handleGroupMoveComplete(
     position: { x: number; y: number }
     delta: { x: number; y: number }
     pushedBlocks: Array<{ stepId: string; position: { x: number; y: number } }>
-    addedBlocks: Array<{ stepId: string; position: { x: number; y: number }; role: string }>
+    addedBlocks: Array<{ stepId: string; position: { x: number; y: number }; role: GroupRole }>
     movedGroups: Array<{ groupId: string; position: { x: number; y: number }; delta: { x: number; y: number } }>
   }
 ) {
@@ -373,7 +373,7 @@ async function handleGroupResizeComplete(
     position: { x: number; y: number }
     size: { width: number; height: number }
     pushedBlocks: Array<{ stepId: string; position: { x: number; y: number } }>
-    addedBlocks: Array<{ stepId: string; position: { x: number; y: number }; role: string }>
+    addedBlocks: Array<{ stepId: string; position: { x: number; y: number }; role: GroupRole }>
     movedGroups: Array<{ groupId: string; position: { x: number; y: number }; delta: { x: number; y: number } }>
   }
 ) {
@@ -500,7 +500,7 @@ async function handleStepAssignGroup(
   stepId: string,
   groupId: string | null,
   position: { x: number; y: number },
-  role?: string,
+  role?: GroupRole,
   movedGroups?: Array<{ groupId: string; position: { x: number; y: number }; delta: { x: number; y: number } }>
 ) {
   if (!workflow.value || isReadonly.value) return

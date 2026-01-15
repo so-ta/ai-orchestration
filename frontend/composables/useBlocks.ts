@@ -87,6 +87,7 @@ export const categoryConfig: Record<BlockCategory, {
   integration: { nameKey: 'editor.categories.integration', icon: 'plug', order: 4 },
   control: { nameKey: 'editor.categories.control', icon: 'clock', order: 5 },
   utility: { nameKey: 'editor.categories.utility', icon: 'info', order: 6 },
+  group: { nameKey: 'editor.categories.group', icon: 'layers', order: 7 },
 }
 
 // Block color mapping by slug (for visual consistency)

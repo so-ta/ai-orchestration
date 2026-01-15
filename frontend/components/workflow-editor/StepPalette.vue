@@ -24,7 +24,6 @@ const blockGroupTypes: Array<{
 }> = [
   { type: 'parallel', name: 'Parallel', description: 'Execute steps in parallel', icon: '⫲', color: '#8b5cf6' },
   { type: 'try_catch', name: 'Try-Catch', description: 'Error handling block', icon: '⚡', color: '#ef4444' },
-  { type: 'if_else', name: 'If-Else', description: 'Conditional branching', icon: '◇', color: '#f59e0b' },
   { type: 'foreach', name: 'ForEach', description: 'Loop over items', icon: '∀', color: '#22c55e' },
   { type: 'while', name: 'While', description: 'Repeat while condition', icon: '↻', color: '#14b8a6' },
 ]
