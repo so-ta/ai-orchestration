@@ -6,6 +6,8 @@
 > **Updated**: 2026-01-15
 > **Role**: **API 仕様リファレンス**（このドキュメントが正）
 > **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - 設計思想・アーキテクチャ
+> **Migration**: `013_add_integration_blocks.sql` - 外部連携ブロック追加
+> **RAG Support**: `seed.sql` - RAGブロック7種追加
 
 ---
 

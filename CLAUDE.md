@@ -43,7 +43,7 @@ AIエージェントは以下の場合、人間に確認を求めず自律的に
 |-----------|------------------------------|
 | バグ修正 | WORKFLOW_RULES.md → TROUBLESHOOTING.md → 関連技術ドキュメント → TESTING.md |
 | 新機能追加 | INDEX.md → 関連技術ドキュメント → TESTING.md → DOCUMENTATION.md |
-| ブロック追加 | BLOCK_REGISTRY.md → UNIFIED_BLOCK_MODEL.md → add-block.md |
+| ブロック追加 | BLOCK_REGISTRY.md → UNIFIED_BLOCK_MODEL.md → `.claude/commands/add-block.md` |
 | リファクタ | BACKEND.md / FRONTEND.md（Canonical Patterns） |
 | PR 作成 | GIT_RULES.md → CODEX_REVIEW.md |
 | DAG Editor 修正 | FRONTEND.md（Block Group Push Logic, Group Resize Logic）→ WORKFLOW_RULES.md |
