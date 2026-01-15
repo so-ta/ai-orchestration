@@ -10,6 +10,30 @@ import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
 
+// Constants for group node ID prefix
+const GROUP_NODE_PREFIX = 'group_'
+
+// Helper function to extract plain group UUID from Vue Flow node ID
+function getGroupUuidFromNodeId(nodeId: string): string {
+  if (nodeId.startsWith(GROUP_NODE_PREFIX)) {
+    return nodeId.slice(GROUP_NODE_PREFIX.length)
+  }
+  return nodeId
+}
+
+// Helper function to convert group UUID to Vue Flow node ID
+function getNodeIdFromGroupUuid(groupUuid: string): string {
+  return `${GROUP_NODE_PREFIX}${groupUuid}`
+}
+
+// Grid size constant - must match Vue Flow's snap-grid setting
+const GRID_SIZE = 20
+
+// Helper function to snap a value to the grid
+function snapToGrid(value: number): number {
+  return Math.round(value / GRID_SIZE) * GRID_SIZE
+}
+
 const props = defineProps<{
   steps: Step[]
   edges: Edge[]
@@ -400,22 +424,22 @@ function snapToValidPosition(
   const canFitInside = innerRight >= innerLeft && innerBottom >= innerTop
 
   if (canFitInside) {
-    // Calculate clamped inside position
-    const insideX = Math.max(innerLeft, Math.min(x, innerRight))
-    const insideY = Math.max(innerTop, Math.min(y, innerBottom))
+    // Calculate clamped inside position (snapped to grid)
+    const insideX = snapToGrid(Math.max(innerLeft, Math.min(x, innerRight)))
+    const insideY = snapToGrid(Math.max(innerTop, Math.min(y, innerBottom)))
     const distToInside = Math.sqrt(Math.pow(x - insideX, 2) + Math.pow(y - insideY, 2))
 
-    // Calculate outside positions (block completely outside the group)
-    const outsideGap = 20 // Gap between block and group when outside
+    // Calculate outside positions (block completely outside the group, snapped to grid)
+    const outsideGap = GRID_SIZE // Gap between block and group when outside (aligned to grid)
     const edgeDistances = [
       { edge: 'left', dist: Math.abs(x - (group.position_x - blockWidth - outsideGap)),
-        outX: group.position_x - blockWidth - outsideGap, outY: y },
+        outX: snapToGrid(group.position_x - blockWidth - outsideGap), outY: snapToGrid(y) },
       { edge: 'right', dist: Math.abs(x - (group.position_x + group.width + outsideGap)),
-        outX: group.position_x + group.width + outsideGap, outY: y },
+        outX: snapToGrid(group.position_x + group.width + outsideGap), outY: snapToGrid(y) },
       { edge: 'top', dist: Math.abs(y - (group.position_y - blockHeight - outsideGap)),
-        outX: x, outY: group.position_y - blockHeight - outsideGap },
+        outX: snapToGrid(x), outY: snapToGrid(group.position_y - blockHeight - outsideGap) },
       { edge: 'bottom', dist: Math.abs(y - (group.position_y + group.height + outsideGap)),
-        outX: x, outY: group.position_y + group.height + outsideGap },
+        outX: snapToGrid(x), outY: snapToGrid(group.position_y + group.height + outsideGap) },
     ]
 
     // Find closest outside position
@@ -430,17 +454,17 @@ function snapToValidPosition(
       return { x: closestEdge.outX, y: closestEdge.outY, inside: false }
     }
   } else {
-    // Block doesn't fit inside - must snap to outside
-    const outsideGap = 20
+    // Block doesn't fit inside - must snap to outside (snapped to grid)
+    const outsideGap = GRID_SIZE
     const edgeDistances = [
       { edge: 'left', dist: Math.abs(x - (group.position_x - blockWidth - outsideGap)),
-        outX: group.position_x - blockWidth - outsideGap, outY: y },
+        outX: snapToGrid(group.position_x - blockWidth - outsideGap), outY: snapToGrid(y) },
       { edge: 'right', dist: Math.abs(x - (group.position_x + group.width + outsideGap)),
-        outX: group.position_x + group.width + outsideGap, outY: y },
+        outX: snapToGrid(group.position_x + group.width + outsideGap), outY: snapToGrid(y) },
       { edge: 'top', dist: Math.abs(y - (group.position_y - blockHeight - outsideGap)),
-        outX: x, outY: group.position_y - blockHeight - outsideGap },
+        outX: snapToGrid(x), outY: snapToGrid(group.position_y - blockHeight - outsideGap) },
       { edge: 'bottom', dist: Math.abs(y - (group.position_y + group.height + outsideGap)),
-        outX: x, outY: group.position_y + group.height + outsideGap },
+        outX: snapToGrid(x), outY: snapToGrid(group.position_y + group.height + outsideGap) },
     ]
 
     edgeDistances.sort((a, b) => a.dist - b.dist)
@@ -458,7 +482,7 @@ function pushGroupAwayFromBlock(
   blockWidth: number,
   blockHeight: number
 ): { x: number; y: number; deltaX: number; deltaY: number } {
-  const outsideGap = 20
+  const outsideGap = GRID_SIZE // Use grid-aligned gap
 
   // Calculate how much overlap exists in each direction
   const blockLeft = blockX
@@ -471,12 +495,12 @@ function pushGroupAwayFromBlock(
   const groupTop = group.position_y
   const groupBottom = group.position_y + group.height
 
-  // Calculate minimum push distance for each direction
+  // Calculate minimum push distance for each direction (snapped to grid)
   const pushDistances = [
-    { dir: 'left', dist: groupRight - blockLeft + outsideGap, newX: blockLeft - group.width - outsideGap, newY: group.position_y },
-    { dir: 'right', dist: blockRight - groupLeft + outsideGap, newX: blockRight + outsideGap, newY: group.position_y },
-    { dir: 'up', dist: groupBottom - blockTop + outsideGap, newX: group.position_x, newY: blockTop - group.height - outsideGap },
-    { dir: 'down', dist: blockBottom - groupTop + outsideGap, newX: group.position_x, newY: blockBottom + outsideGap },
+    { dir: 'left', dist: groupRight - blockLeft + outsideGap, newX: snapToGrid(blockLeft - group.width - outsideGap), newY: snapToGrid(group.position_y) },
+    { dir: 'right', dist: blockRight - groupLeft + outsideGap, newX: snapToGrid(blockRight + outsideGap), newY: snapToGrid(group.position_y) },
+    { dir: 'up', dist: groupBottom - blockTop + outsideGap, newX: snapToGrid(group.position_x), newY: snapToGrid(blockTop - group.height - outsideGap) },
+    { dir: 'down', dist: blockBottom - groupTop + outsideGap, newX: snapToGrid(group.position_x), newY: snapToGrid(blockBottom + outsideGap) },
   ]
 
   // Find the direction with minimum push distance
@@ -614,7 +638,7 @@ function calculatePushPosition(
   pusherHeight: number,
   fixedDirection?: PushDirection
 ): { x: number; y: number; deltaX: number; deltaY: number; direction: PushDirection } {
-  const gap = 20  // Gap after pushing
+  const gap = GRID_SIZE  // Gap after pushing (grid-aligned)
 
   // Calculate center points
   const pushedCenterX = pushedX + pushedWidth / 2
@@ -627,22 +651,22 @@ function calculatePushPosition(
     pushedCenterX, pushedCenterY, pusherCenterX, pusherCenterY
   )
 
-  // Calculate new position based on direction
+  // Calculate new position based on direction (snapped to grid)
   let newX = pushedX
   let newY = pushedY
 
   switch (direction) {
     case 'left':
-      newX = pusherX - pushedWidth - gap
+      newX = snapToGrid(pusherX - pushedWidth - gap)
       break
     case 'right':
-      newX = pusherX + pusherWidth + gap
+      newX = snapToGrid(pusherX + pusherWidth + gap)
       break
     case 'up':
-      newY = pusherY - pushedHeight - gap
+      newY = snapToGrid(pusherY - pushedHeight - gap)
       break
     case 'down':
-      newY = pusherY + pusherHeight + gap
+      newY = snapToGrid(pusherY + pusherHeight + gap)
       break
   }
 
@@ -754,8 +778,8 @@ function processCascadeGroupPush(
       delta: { x: pushResult.deltaX, y: pushResult.deltaY },
     })
 
-    // Update Vue Flow's internal state
-    updateNode(collidingGroup.id, { position: { x: pushResult.x, y: pushResult.y } })
+    // Update Vue Flow's internal state (use prefixed ID to match groupNodes)
+    updateNode(`group_${collidingGroup.id}`, { position: { x: pushResult.x, y: pushResult.y } })
 
     // Add the pushed group to the queue for further cascade checks
     pushQueue.push({
@@ -772,11 +796,13 @@ function processCascadeGroupPush(
 }
 
 // Convert block groups to Vue Flow group nodes
+// NOTE: Group node IDs use 'group_' prefix to distinguish from step node IDs
+// This matches the format used in flowEdges for group connections
 const groupNodes = computed<Node[]>(() => {
   if (!props.blockGroups) return []
 
   return props.blockGroups.map(group => ({
-    id: group.id,
+    id: `group_${group.id}`,
     type: 'group',
     position: { x: group.position_x, y: group.position_y },
     style: {
@@ -836,7 +862,7 @@ const stepNodes = computed<Node[]>(() => {
       id: step.id,
       type: 'custom',
       position,
-      parentNode: parentGroupId,
+      parentNode: parentGroupId ? `group_${parentGroupId}` : undefined,
       // Note: expandParent is intentionally NOT set - group should not auto-expand
       data: {
         label: step.name,
@@ -1007,8 +1033,8 @@ onNodeDragStop((event) => {
     // Check if this is a group node
     if (node.type === 'group') {
       const groupData = node.data.group as BlockGroup
-      let newX = Math.round(node.position.x)
-      let newY = Math.round(node.position.y)
+      let newX = snapToGrid(node.position.x)
+      let newY = snapToGrid(node.position.y)
 
       // Calculate delta from original position
       const originalX = groupData.position_x
@@ -1053,7 +1079,8 @@ onNodeDragStop((event) => {
 
       for (const step of props.steps) {
         // Skip steps already in this group
-        if (step.block_group_id === node.id) continue
+        // Note: step.block_group_id is plain UUID, node.id is "group_${uuid}" format
+        if (step.block_group_id === groupData.id) continue
         // Skip start steps - they cannot be added to groups
         if (step.type === 'start') continue
 
@@ -1100,7 +1127,9 @@ onNodeDragStop((event) => {
       // =================================================================
       // STEP 2: Check for collision with other groups and snap if needed
       // =================================================================
-      const dropZone = findDropZone(newX, newY, groupWidth, groupHeight, node.id)
+      // Note: node.id is in format "group_${uuid}", but blockGroups use plain UUID
+      const groupUuid = getGroupUuidFromNodeId(node.id)
+      const dropZone = findDropZone(newX, newY, groupWidth, groupHeight, groupUuid)
 
       let wasGroupPushed = false
       let pushedAwayFromGroupId: string | null = null
@@ -1125,13 +1154,13 @@ onNodeDragStop((event) => {
         // Update Vue Flow's internal position
         updateNode(node.id, { position: { x: newX, y: newY } })
       } else if (dropZone.zone === 'inside' && dropZone.group) {
-        // Groups can't be nested - snap to outside
-        const outsideGap = 20
+        // Groups can't be nested - snap to outside (grid-aligned)
+        const outsideGap = GRID_SIZE
         const edgeDistances = [
-          { outX: dropZone.group.position_x - groupWidth - outsideGap, outY: newY },
-          { outX: dropZone.group.position_x + dropZone.group.width + outsideGap, outY: newY },
-          { outX: newX, outY: dropZone.group.position_y - groupHeight - outsideGap },
-          { outX: newX, outY: dropZone.group.position_y + dropZone.group.height + outsideGap },
+          { outX: snapToGrid(dropZone.group.position_x - groupWidth - outsideGap), outY: snapToGrid(newY) },
+          { outX: snapToGrid(dropZone.group.position_x + dropZone.group.width + outsideGap), outY: snapToGrid(newY) },
+          { outX: snapToGrid(newX), outY: snapToGrid(dropZone.group.position_y - groupHeight - outsideGap) },
+          { outX: snapToGrid(newX), outY: snapToGrid(dropZone.group.position_y + dropZone.group.height + outsideGap) },
         ]
         let minDist = Infinity
         for (const pos of edgeDistances) {
@@ -1178,8 +1207,9 @@ onNodeDragStop((event) => {
       const groupPositions = new Map<string, { x: number; y: number }>()
       const groupSizes = new Map<string, { width: number; height: number }>()
       // Initialize with the moving group's new position and size
-      groupPositions.set(node.id, { x: newX, y: newY })
-      groupSizes.set(node.id, { width: groupWidth, height: groupHeight })
+      // Note: Use plain UUID (groupData.id) for consistency with other code that uses group.id
+      groupPositions.set(groupData.id, { x: newX, y: newY })
+      groupSizes.set(groupData.id, { width: groupWidth, height: groupHeight })
 
       // Create a temporary group object with the new position for boundary checking
       const movedGroup: BlockGroup = {
@@ -1191,7 +1221,8 @@ onNodeDragStop((event) => {
       }
 
       // Set of groups that have been processed (to avoid infinite loops)
-      const processedGroups = new Set<string>([node.id])
+      // Note: Use plain UUID (groupData.id) for consistency with other code that uses group.id
+      const processedGroups = new Set<string>([groupData.id])
       // Also exclude the group we were pushed away from (if any)
       if (pushedAwayFromGroupId) {
         processedGroups.add(pushedAwayFromGroupId)
@@ -1213,7 +1244,8 @@ onNodeDragStop((event) => {
       // =================================================================
       for (const step of props.steps) {
         // Skip steps that are already inside this group
-        if (step.block_group_id === node.id) continue
+        // Note: step.block_group_id is plain UUID, groupData.id is also plain UUID
+        if (step.block_group_id === groupData.id) continue
 
         // Skip steps that were added in STEP 1 (at drop position)
         if (addedStepIds.has(step.id)) continue
@@ -1366,8 +1398,8 @@ onNodeDragStop((event) => {
           delta: { x: pushed.deltaX, y: pushed.deltaY },
         })
 
-        // Update Vue Flow's internal state
-        updateNode(group.id, { position: { x: pushed.x, y: pushed.y } })
+        // Update Vue Flow's internal state (use prefixed ID to match groupNodes)
+        updateNode(`group_${group.id}`, { position: { x: pushed.x, y: pushed.y } })
 
         // Check if the pushed group now causes any block collisions
         // (blocks inside the pushed group will move with it, but we need to check external blocks)
@@ -1491,8 +1523,8 @@ onNodeDragStop((event) => {
       const finalDeltaX = newX - originalX
       const finalDeltaY = newY - originalY
 
-      // Emit the move complete event with all the data
-      emit('group:move-complete', node.id, {
+      // Emit the move complete event with all the data (use plain UUID for parent)
+      emit('group:move-complete', getGroupUuidFromNodeId(node.id), {
         position: { x: newX, y: newY },
         delta: { x: finalDeltaX, y: finalDeltaY },
         pushedBlocks,
@@ -1501,15 +1533,16 @@ onNodeDragStop((event) => {
       })
     } else {
       // For step nodes, calculate absolute position if they have a parent
-      let absoluteX = Math.round(node.position.x)
-      let absoluteY = Math.round(node.position.y)
+      let absoluteX = snapToGrid(node.position.x)
+      let absoluteY = snapToGrid(node.position.y)
 
       // Get actual node dimensions (use defaults if not available)
       const nodeWidth = node.dimensions?.width ?? DEFAULT_STEP_NODE_WIDTH
       const nodeHeight = node.dimensions?.height ?? DEFAULT_STEP_NODE_HEIGHT
 
       if (node.parentNode && props.blockGroups) {
-        const parentGroup = props.blockGroups.find(g => g.id === node.parentNode)
+        const parentGroupUuid = getGroupUuidFromNodeId(node.parentNode)
+        const parentGroup = props.blockGroups.find(g => g.id === parentGroupUuid)
         if (parentGroup) {
           absoluteX += parentGroup.position_x
           absoluteY += parentGroup.position_y
@@ -1538,7 +1571,7 @@ onNodeDragStop((event) => {
         // Update Vue Flow's internal node position to the snapped position
         updateNode(node.id, {
           position: { x: relativeX, y: relativeY },
-          parentNode: snapped.inside ? dropZone.group.id : undefined,
+          parentNode: snapped.inside ? getNodeIdFromGroupUuid(dropZone.group.id) : undefined,
         })
 
         const targetGroupId = snapped.inside ? dropZone.group.id : null
@@ -1573,7 +1606,7 @@ onNodeDragStop((event) => {
           }
           updateNode(node.id, {
             position: { x: relativeX, y: relativeY },
-            parentNode: targetGroupId || undefined,
+            parentNode: targetGroupId ? getNodeIdFromGroupUuid(targetGroupId) : undefined,
           })
           emit('step:assign-group', node.id, targetGroupId, { x: absoluteX, y: absoluteY }, role)
         } else {
@@ -1683,10 +1716,10 @@ function handleDrop(event: DragEvent) {
   const groupName = event.dataTransfer.getData('group-name')
 
   if (groupType) {
-    // Position for group (larger than step nodes)
+    // Position for group (larger than step nodes), snapped to grid
     const position = {
-      x: Math.round(flowPosition.x - 200),
-      y: Math.round(flowPosition.y - 150),
+      x: snapToGrid(flowPosition.x - 200),
+      y: snapToGrid(flowPosition.y - 150),
     }
     emit('group:drop', { type: groupType, name: groupName || 'New Group', position })
     return
@@ -1698,9 +1731,9 @@ function handleDrop(event: DragEvent) {
 
   if (!stepType) return
 
-  // Center the node at the drop position (node width ~150px, height ~60px)
-  let positionX = Math.round(flowPosition.x - 75)
-  let positionY = Math.round(flowPosition.y - 30)
+  // Center the node at the drop position (node width ~150px, height ~60px), snapped to grid
+  let positionX = snapToGrid(flowPosition.x - 75)
+  let positionY = snapToGrid(flowPosition.y - 30)
 
   // Check drop zone with boundary detection
   const dropZone = findDropZone(positionX, positionY)
@@ -1804,13 +1837,15 @@ const resizeState = ref<ResizeState | null>(null)
 function onGroupResizeStart(nodeId: string, _event: OnResizeStart) {
   if (props.readonly) return
 
-  const group = props.blockGroups?.find(g => g.id === nodeId)
+  // Convert Vue Flow node ID to plain group UUID
+  const groupUuid = getGroupUuidFromNodeId(nodeId)
+  const group = props.blockGroups?.find(g => g.id === groupUuid)
   if (!group) return
 
   // Record initial child positions (relative to group)
   const childPositions = new Map<string, { relX: number; relY: number }>()
   for (const step of props.steps) {
-    if (step.block_group_id !== nodeId) continue
+    if (step.block_group_id !== groupUuid) continue
     // Calculate relative position from absolute position
     const relX = step.position_x - group.position_x
     const relY = step.position_y - group.position_y
@@ -1858,16 +1893,19 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   resizeState.value = null
   if (props.readonly) return
 
+  // Convert Vue Flow node ID to plain group UUID for API calls
+  const groupUuid = getGroupUuidFromNodeId(nodeId)
+
   const newX = Math.round(event.params.x)
   const newY = Math.round(event.params.y)
   const newWidth = Math.round(event.params.width)
   const newHeight = Math.round(event.params.height)
 
   // Find the original group data
-  const group = props.blockGroups?.find(g => g.id === nodeId)
+  const group = props.blockGroups?.find(g => g.id === groupUuid)
   if (!group) {
     // Fallback: just emit size update
-    emit('group:update', nodeId, {
+    emit('group:update', groupUuid, {
       size: { width: newWidth, height: newHeight }
     })
     return
@@ -1901,7 +1939,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   //         and check if they need to be pushed out
   // =================================================================
   for (const step of props.steps) {
-    if (step.block_group_id !== nodeId) continue
+    if (step.block_group_id !== groupUuid) continue
     if (step.type === 'start') continue
 
     const stepWidth = DEFAULT_STEP_NODE_WIDTH
@@ -1930,13 +1968,13 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     const onBoundary = !fullyInside && !fullyOutside
 
     if (onBoundary) {
-      // Block overlaps with boundary - push out to nearest outside position
-      const outsideGap = 20
+      // Block overlaps with boundary - push out to nearest outside position (grid-aligned)
+      const outsideGap = GRID_SIZE
       const edgeDistances = [
-        { outX: newX - stepWidth - outsideGap, outY: stepAbsY },
-        { outX: newX + newWidth + outsideGap, outY: stepAbsY },
-        { outX: stepAbsX, outY: newY - stepHeight - outsideGap },
-        { outX: stepAbsX, outY: newY + newHeight + outsideGap },
+        { outX: snapToGrid(newX - stepWidth - outsideGap), outY: snapToGrid(stepAbsY) },
+        { outX: snapToGrid(newX + newWidth + outsideGap), outY: snapToGrid(stepAbsY) },
+        { outX: snapToGrid(stepAbsX), outY: snapToGrid(newY - stepHeight - outsideGap) },
+        { outX: snapToGrid(stepAbsX), outY: snapToGrid(newY + newHeight + outsideGap) },
       ]
 
       // Find closest outside position based on current position
@@ -1988,7 +2026,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   // =================================================================
   for (const step of props.steps) {
     // Skip if already in this group or already processed
-    if (step.block_group_id === nodeId) continue
+    if (step.block_group_id === groupUuid) continue
     if (processedStepIds.has(step.id)) continue
     if (step.type === 'start') continue
 
@@ -2034,14 +2072,14 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   // =================================================================
   // STEP 3: Check for collision with other groups and push them away
   // =================================================================
-  const processedGroups = new Set<string>([nodeId])
+  const processedGroups = new Set<string>([groupUuid])
   const groupPositions = new Map<string, { x: number; y: number }>()
   const groupSizes = new Map<string, { width: number; height: number }>()
 
   // Initialize group positions and sizes
   if (props.blockGroups) {
     for (const g of props.blockGroups) {
-      if (g.id === nodeId) {
+      if (g.id === groupUuid) {
         groupPositions.set(g.id, { x: newX, y: newY })
         groupSizes.set(g.id, { width: newWidth, height: newHeight })
       } else {
@@ -2073,8 +2111,8 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
       delta: { x: pushResult.deltaX, y: pushResult.deltaY },
     })
 
-    // Update Vue Flow state
-    updateNode(collidingGroup.id, { position: { x: pushResult.x, y: pushResult.y } })
+    // Update Vue Flow state (use prefixed ID to match groupNodes)
+    updateNode(`group_${collidingGroup.id}`, { position: { x: pushResult.x, y: pushResult.y } })
 
     // Continue cascade check
     processedGroups.add(collidingGroup.id)
@@ -2111,7 +2149,8 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
         delta: { x: nextPush.deltaX, y: nextPush.deltaY },
       })
 
-      updateNode(nextCollision.id, { position: { x: nextPush.x, y: nextPush.y } })
+      // Use prefixed ID to match groupNodes
+      updateNode(`group_${nextCollision.id}`, { position: { x: nextPush.x, y: nextPush.y } })
       processedGroups.add(nextCollision.id)
       groupPositions.set(nextCollision.id, { x: nextPush.x, y: nextPush.y })
 
@@ -2120,14 +2159,14 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     }
   }
 
-  // First, emit group:update to persist the new size and position
-  emit('group:update', nodeId, {
+  // First, emit group:update to persist the new size and position (use plain UUID)
+  emit('group:update', groupUuid, {
     position: { x: newX, y: newY },
     size: { width: newWidth, height: newHeight },
   })
 
-  // Then emit the resize complete event with all the collision/push changes
-  emit('group:resize-complete', nodeId, {
+  // Then emit the resize complete event with all the collision/push changes (use plain UUID)
+  emit('group:resize-complete', groupUuid, {
     position: { x: newX, y: newY },
     size: { width: newWidth, height: newHeight },
     pushedBlocks,
@@ -2874,6 +2913,8 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   transition: all 0.15s ease;
   z-index: 10;
   opacity: 0;
+  /* Override Vue Flow default positioning */
+  position: absolute !important;
 }
 
 .dag-group:hover .dag-group-handle {
@@ -2882,6 +2923,10 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
 .dag-group-handle-input {
   left: -4px !important;
+  top: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translateY(-50%);
   background: white !important;
   border-color: #d4d4d4 !important;
 }
@@ -2894,9 +2939,11 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
 .dag-group-handle-output {
   right: -4px !important;
+  left: auto !important;
+  bottom: auto !important;
+  transform: translateY(-50%);
   background: var(--handle-color, #22c55e) !important;
   border-color: var(--handle-color, #22c55e) !important;
-  transform: translateY(-50%);
 }
 
 .dag-group-handle-output:hover {

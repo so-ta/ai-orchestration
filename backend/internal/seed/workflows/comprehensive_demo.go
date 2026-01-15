@@ -162,20 +162,6 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					"batch_size": 3
 				}`),
 			},
-			// === Loop for thorough processing ===
-			{
-				TempID:    "batch_loop",
-				Name:      "Batch Loop",
-				Type:      "loop",
-				PositionX: 600,
-				PositionY: 550,
-				BlockSlug: "loop",
-				Config: json.RawMessage(`{
-					"loop_type": "forEach",
-					"input_path": "batches",
-					"max_iterations": 50
-				}`),
-			},
 			// === Join all paths ===
 			{
 				TempID:    "join_results",
@@ -320,10 +306,8 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 			{SourceTempID: "fast_filter", TargetTempID: "join_results", SourcePort: "matched"},
 			// Normal -> Join
 			{SourceTempID: "normal_map", TargetTempID: "join_results", SourcePort: "complete"},
-			// Thorough Split -> Loop
-			{SourceTempID: "thorough_split", TargetTempID: "batch_loop", SourcePort: "output"},
-			// Loop -> Join
-			{SourceTempID: "batch_loop", TargetTempID: "join_results", SourcePort: "complete"},
+			// Thorough Split -> Join
+			{SourceTempID: "thorough_split", TargetTempID: "join_results", SourcePort: "output"},
 			// Join -> Aggregate
 			{SourceTempID: "join_results", TargetTempID: "aggregate_results", SourcePort: "output"},
 			// Aggregate -> Condition
@@ -582,7 +566,8 @@ func AIRoutingBlockDemoWorkflow() *SystemWorkflowDefinition {
 			{SourceTempID: "ai_router", TargetTempID: "technical_llm", SourcePort: "technical"},
 			{SourceTempID: "ai_router", TargetTempID: "general_llm", SourcePort: "general"},
 			{SourceTempID: "ai_router", TargetTempID: "creative_llm", SourcePort: "creative"},
-			{SourceTempID: "ai_router", TargetTempID: "general_llm", SourcePort: "default"},
+			// Note: "default" port is handled by general_llm via the "general" edge
+			// The router block falls back to general when no specific route matches
 			{SourceTempID: "technical_llm", TargetTempID: "join_routes", SourcePort: "output"},
 			{SourceTempID: "general_llm", TargetTempID: "join_routes", SourcePort: "output"},
 			{SourceTempID: "creative_llm", TargetTempID: "join_routes", SourcePort: "output"},
@@ -672,41 +657,15 @@ func ControlFlowBlockDemoWorkflow() *SystemWorkflowDefinition {
 				BlockSlug: "join",
 				Config:    json.RawMessage(`{}`),
 			},
-			// Loop
-			{
-				TempID:    "count_loop",
-				Name:      "Count Loop",
-				Type:      "loop",
-				PositionX: 400,
-				PositionY: 450,
-				BlockSlug: "loop",
-				Config: json.RawMessage(`{
-					"loop_type": "for",
-					"count": 5,
-					"max_iterations": 100
-				}`),
-			},
-			// Process in loop
-			{
-				TempID:    "loop_process",
-				Name:      "Loop Process",
-				Type:      "function",
-				PositionX: 400,
-				PositionY: 550,
-				Config: json.RawMessage(`{
-					"code": "return { iteration: input.index, value: input.index * 2, processed: true };",
-					"language": "javascript"
-				}`),
-			},
 			// Final output
 			{
 				TempID:    "final_result",
 				Name:      "Final Result",
 				Type:      "function",
 				PositionX: 400,
-				PositionY: 650,
+				PositionY: 450,
 				Config: json.RawMessage(`{
-					"code": "return { iterations: input.iterations, results: input.results, completed: true };",
+					"code": "return { message: input.message, require_approval: input.require_approval, completed: true };",
 					"language": "javascript"
 				}`),
 			},
@@ -717,10 +676,7 @@ func ControlFlowBlockDemoWorkflow() *SystemWorkflowDefinition {
 			{SourceTempID: "check_approval", TargetTempID: "wait_step", SourcePort: "false"},
 			{SourceTempID: "human_approval", TargetTempID: "join_approval", SourcePort: "approved"},
 			{SourceTempID: "wait_step", TargetTempID: "join_approval", SourcePort: "output"},
-			{SourceTempID: "join_approval", TargetTempID: "count_loop", SourcePort: "output"},
-			{SourceTempID: "count_loop", TargetTempID: "loop_process", SourcePort: "loop"},
-			{SourceTempID: "loop_process", TargetTempID: "count_loop", SourcePort: "output"},
-			{SourceTempID: "count_loop", TargetTempID: "final_result", SourcePort: "complete"},
+			{SourceTempID: "join_approval", TargetTempID: "final_result", SourcePort: "output"},
 		},
 	}
 }

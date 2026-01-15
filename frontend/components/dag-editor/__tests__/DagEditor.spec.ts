@@ -438,4 +438,148 @@ describe('DagEditor', () => {
       })
     })
   })
+
+  describe('group node ID format', () => {
+    // These tests verify that the group node ID format conversion is consistent
+    // Vue Flow node IDs use "group_${uuid}" format, but block_group_id uses plain UUID
+
+    const GROUP_NODE_PREFIX = 'group_'
+
+    // Helper functions (same as in DagEditor.vue)
+    function getGroupUuidFromNodeId(nodeId: string): string {
+      if (nodeId.startsWith(GROUP_NODE_PREFIX)) {
+        return nodeId.slice(GROUP_NODE_PREFIX.length)
+      }
+      return nodeId
+    }
+
+    function getNodeIdFromGroupUuid(groupUuid: string): string {
+      return `${GROUP_NODE_PREFIX}${groupUuid}`
+    }
+
+    it('should convert node ID to plain UUID', () => {
+      const nodeId = 'group_abc123-def456-ghi789'
+      const uuid = getGroupUuidFromNodeId(nodeId)
+      expect(uuid).toBe('abc123-def456-ghi789')
+    })
+
+    it('should return unchanged if already plain UUID', () => {
+      const uuid = 'abc123-def456-ghi789'
+      const result = getGroupUuidFromNodeId(uuid)
+      expect(result).toBe('abc123-def456-ghi789')
+    })
+
+    it('should convert plain UUID to node ID', () => {
+      const uuid = 'abc123-def456-ghi789'
+      const nodeId = getNodeIdFromGroupUuid(uuid)
+      expect(nodeId).toBe('group_abc123-def456-ghi789')
+    })
+
+    it('should be reversible', () => {
+      const originalUuid = 'abc123-def456-ghi789'
+      const nodeId = getNodeIdFromGroupUuid(originalUuid)
+      const recoveredUuid = getGroupUuidFromNodeId(nodeId)
+      expect(recoveredUuid).toBe(originalUuid)
+    })
+
+    it('should handle real UUID format', () => {
+      const realUuid = 'a0000000-0000-0000-0000-000000000001'
+      const nodeId = getNodeIdFromGroupUuid(realUuid)
+      expect(nodeId).toBe('group_a0000000-0000-0000-0000-000000000001')
+
+      const recovered = getGroupUuidFromNodeId(nodeId)
+      expect(recovered).toBe(realUuid)
+    })
+
+    describe('ID format consistency checks', () => {
+      // These tests document the expected ID formats in different contexts
+
+      it('step.block_group_id should be plain UUID (not prefixed)', () => {
+        const step = {
+          id: 'step-1',
+          block_group_id: 'abc123-def456-ghi789', // Plain UUID
+        }
+
+        // block_group_id should NOT have the group_ prefix
+        expect(step.block_group_id).not.toMatch(/^group_/)
+      })
+
+      it('BlockGroup.id should be plain UUID (not prefixed)', () => {
+        const group: BlockGroup = {
+          id: 'abc123-def456-ghi789', // Plain UUID
+          workflow_id: 'workflow-1',
+          name: 'Test Group',
+          type: 'foreach',
+          config: {},
+          position_x: 100,
+          position_y: 100,
+          width: 300,
+          height: 200,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        }
+
+        // BlockGroup.id should NOT have the group_ prefix
+        expect(group.id).not.toMatch(/^group_/)
+      })
+
+      it('Vue Flow node.id for groups should be prefixed', () => {
+        const groupUuid = 'abc123-def456-ghi789'
+        const vueFlowNodeId = getNodeIdFromGroupUuid(groupUuid)
+
+        // Vue Flow node ID should have the group_ prefix
+        expect(vueFlowNodeId).toMatch(/^group_/)
+      })
+    })
+  })
+
+  describe('group collision logic', () => {
+    // These tests document the expected behavior of group collision detection
+
+    it('should correctly identify when step belongs to a group', () => {
+      const step = {
+        id: 'step-1',
+        block_group_id: 'group-uuid-123',
+      }
+
+      const groupDataId = 'group-uuid-123' // Plain UUID from groupData.id
+      const nodeId = 'group_group-uuid-123' // Vue Flow node ID format
+
+      // Correct comparison: step.block_group_id === groupData.id
+      expect(step.block_group_id === groupDataId).toBe(true)
+
+      // Incorrect comparison: step.block_group_id === node.id (format mismatch!)
+      expect(step.block_group_id === nodeId).toBe(false)
+    })
+
+    it('should use plain UUID for groupPositions map keys', () => {
+      const groupPositions = new Map<string, { x: number; y: number }>()
+      const groupDataId = 'group-uuid-123' // Plain UUID
+
+      // Set position using plain UUID
+      groupPositions.set(groupDataId, { x: 100, y: 200 })
+
+      // Should be retrievable with plain UUID
+      expect(groupPositions.get(groupDataId)).toEqual({ x: 100, y: 200 })
+
+      // Should NOT be retrievable with prefixed node ID
+      const nodeId = 'group_group-uuid-123'
+      expect(groupPositions.get(nodeId)).toBeUndefined()
+    })
+
+    it('should use plain UUID for processedGroups set', () => {
+      const processedGroups = new Set<string>()
+      const groupDataId = 'group-uuid-123' // Plain UUID
+
+      // Add using plain UUID
+      processedGroups.add(groupDataId)
+
+      // Should be found with plain UUID
+      expect(processedGroups.has(groupDataId)).toBe(true)
+
+      // Should NOT be found with prefixed node ID
+      const nodeId = 'group_group-uuid-123'
+      expect(processedGroups.has(nodeId)).toBe(false)
+    })
+  })
 })

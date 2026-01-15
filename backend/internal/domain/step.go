@@ -19,7 +19,6 @@ const (
 	StepTypeMap         StepType = "map"
 	StepTypeJoin        StepType = "join"
 	StepTypeSubflow     StepType = "subflow"
-	StepTypeLoop        StepType = "loop"
 	StepTypeWait        StepType = "wait"
 	StepTypeFunction    StepType = "function"
 	StepTypeRouter      StepType = "router"
@@ -30,6 +29,7 @@ const (
 	StepTypeError       StepType = "error"       // Stop and error (n8n: Stop And Error)
 	StepTypeNote        StepType = "note"        // Documentation/comment node (n8n: NOOP)
 	StepTypeLog         StepType = "log"         // Log output for debugging
+	// Note: "loop" step type has been removed. Use BlockGroupTypeWhile or BlockGroupTypeForeach instead.
 )
 
 // ValidStepTypes returns all valid step types
@@ -43,7 +43,6 @@ func ValidStepTypes() []StepType {
 		StepTypeMap,
 		StepTypeJoin,
 		StepTypeSubflow,
-		StepTypeLoop,
 		StepTypeWait,
 		StepTypeFunction,
 		StepTypeRouter,

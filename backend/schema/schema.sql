@@ -242,7 +242,7 @@ COMMENT ON TABLE public.block_groups IS 'Control flow constructs that group mult
 -- Name: COLUMN block_groups.type; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.block_groups.type IS 'Type of control flow: parallel, try_catch, if_else, switch_case, foreach, while';
+COMMENT ON COLUMN public.block_groups.type IS 'Type of control flow: parallel, try_catch, foreach, while';
 
 
 --
@@ -562,7 +562,7 @@ COMMENT ON COLUMN public.steps.block_group_id IS 'Reference to containing block 
 -- Name: COLUMN steps.group_role; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON COLUMN public.steps.group_role IS 'Role within block group: body, try, catch, finally, then, else, case_N, default';
+COMMENT ON COLUMN public.steps.group_role IS 'Role within block group: body (steps inside the group body)';
 
 
 --
