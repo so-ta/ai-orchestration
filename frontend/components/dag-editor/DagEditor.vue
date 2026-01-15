@@ -8,7 +8,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
-import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType } from '~/types/api'
+import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
 
 const props = defineProps<{
   steps: Step[]
@@ -31,7 +31,7 @@ interface PushedBlock {
 interface AddedBlock {
   stepId: string
   position: { x: number; y: number }
-  role: string
+  role: GroupRole
 }
 
 // Moved group info for groups that were pushed by blocks
@@ -44,8 +44,8 @@ interface MovedGroup {
 const emit = defineEmits<{
   (e: 'step:select', step: Step): void
   (e: 'step:update', stepId: string, position: { x: number; y: number }, movedGroups?: MovedGroup[]): void
-  (e: 'step:drop', data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: string }): void
-  (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: string, movedGroups?: MovedGroup[]): void
+  (e: 'step:drop', data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: GroupRole }): void
+  (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: GroupRole, movedGroups?: MovedGroup[]): void
   (e: 'edge:add', source: string, target: string, sourcePort?: string, targetPort?: string): void
   (e: 'edge:delete', edgeId: string): void
   (e: 'pane:click'): void
