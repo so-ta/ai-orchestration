@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import type { StepType, BlockDefinition, BlockCategory, BlockGroupType } from '~/types/api'
-import { categoryConfig, getBlockColor } from '~/composables/useBlocks'
+import type { StepType, BlockDefinition, BlockCategory, BlockSubcategory, BlockGroupType } from '~/types/api'
+import {
+  categoryConfig,
+  subcategoryConfig,
+  getBlockColor,
+  groupBlocksBySubcategory,
+  getSubcategoriesForCategory,
+} from '~/composables/useBlocks'
 
 const { t } = useI18n()
 const blocksApi = useBlocks()
@@ -12,6 +18,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'drag-start', type: StepType): void
   (e: 'drag-end'): void
+  (e: 'open-search'): void
 }>()
 
 // Block Group definitions for control flow constructs
@@ -33,10 +40,22 @@ const blocks = ref<BlockDefinition[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
+// Active category tab
+const activeCategory = ref<BlockCategory>('ai')
+
+// Expanded subcategories
+const expandedSubcategories = ref<Set<string>>(new Set())
+
 onMounted(async () => {
   try {
     const response = await blocksApi.list({ enabled: true })
     blocks.value = response.blocks
+    // Expand all subcategories by default
+    for (const block of response.blocks) {
+      if (block.subcategory) {
+        expandedSubcategories.value.add(block.subcategory)
+      }
+    }
   } catch (e) {
     console.error('Failed to load blocks:', e)
     error.value = 'Failed to load blocks'
@@ -45,41 +64,44 @@ onMounted(async () => {
   }
 })
 
-// Group blocks by category
-const blocksByCategory = computed(() => {
-  const grouped = new Map<BlockCategory, BlockDefinition[]>()
+// Categories for tabs
+const categories: BlockCategory[] = ['ai', 'flow', 'apps', 'custom']
 
-  for (const block of blocks.value) {
-    // Skip 'start' block as it's auto-created
-    if (block.slug === 'start') continue
+// Get blocks grouped by subcategory for the active category
+const blocksBySubcategory = computed(() => {
+  return groupBlocksBySubcategory(
+    blocks.value.filter(b => b.slug !== 'start'),
+    activeCategory.value
+  )
+})
 
-    const category = block.category
-    if (!grouped.has(category)) {
-      grouped.set(category, [])
-    }
-    grouped.get(category)!.push(block)
+// Get sorted subcategories for the active category
+const subcategoriesForActiveCategory = computed(() => {
+  return getSubcategoriesForCategory(activeCategory.value)
+})
+
+// Toggle subcategory expansion
+function toggleSubcategory(subcategory: string) {
+  if (expandedSubcategories.value.has(subcategory)) {
+    expandedSubcategories.value.delete(subcategory)
+  } else {
+    expandedSubcategories.value.add(subcategory)
   }
+}
 
-  return grouped
-})
-
-// Sorted categories for display
-const sortedCategories = computed(() => {
-  const categories = Array.from(blocksByCategory.value.keys())
-  return categories.sort((a, b) => {
-    const orderA = categoryConfig[a]?.order ?? 99
-    const orderB = categoryConfig[b]?.order ?? 99
-    return orderA - orderB
-  })
-})
-
-// Get category display info
+// Get category info
 function getCategoryInfo(category: BlockCategory) {
   const config = categoryConfig[category]
   return {
     name: t(config?.nameKey || `editor.categories.${category}`),
     icon: config?.icon || 'folder',
+    color: config?.color || '#6b7280',
   }
+}
+
+// Get subcategory label
+function getSubcategoryLabel(subcategory: BlockSubcategory): string {
+  return t(subcategoryConfig[subcategory]?.nameKey || `editor.subcategories.${subcategory}`)
 }
 
 const draggingType = ref<StepType | null>(null)
@@ -115,13 +137,56 @@ function handleGroupDragStart(event: DragEvent, groupType: { type: BlockGroupTyp
 function handleGroupDragEnd() {
   draggingGroupType.value = null
 }
+
+// Keyboard shortcut handler
+function handleKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+    event.preventDefault()
+    emit('open-search')
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
   <div class="step-palette">
+    <!-- Search Bar -->
     <div class="palette-header">
-      <h3 class="palette-title">{{ $t('editor.blocks') }}</h3>
-      <p class="palette-hint">{{ $t('editor.dragToCanvas') }}</p>
+      <button
+        class="search-trigger"
+        @click="emit('open-search')"
+      >
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+        <span class="search-text">{{ $t('editor.searchBlocks') }}</span>
+        <kbd class="search-shortcut">⌘K</kbd>
+      </button>
+    </div>
+
+    <!-- Category Tabs -->
+    <div class="category-tabs">
+      <button
+        v-for="category in categories"
+        :key="category"
+        :class="['category-tab', { active: activeCategory === category }]"
+        :style="activeCategory === category ? { borderColor: getCategoryInfo(category).color } : {}"
+        @click="activeCategory = category"
+      >
+        <span
+          class="tab-indicator"
+          :style="{ backgroundColor: getCategoryInfo(category).color }"
+        />
+        <span class="tab-label">{{ getCategoryInfo(category).name }}</span>
+      </button>
     </div>
 
     <!-- Loading state -->
@@ -137,13 +202,28 @@ function handleGroupDragEnd() {
 
     <!-- Blocks list -->
     <div v-else class="palette-content">
-      <!-- Control Flow Groups Section -->
-      <div class="palette-category">
-        <div class="category-header">
-          <span class="category-name">Control Flow</span>
-        </div>
+      <!-- Control Flow Groups (show only in Flow tab) -->
+      <div v-if="activeCategory === 'flow'" class="subcategory-section">
+        <button
+          class="subcategory-header"
+          @click="toggleSubcategory('__groups__')"
+        >
+          <svg
+            :class="['chevron', { expanded: expandedSubcategories.has('__groups__') }]"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+          <span class="subcategory-name">Control Flow Groups</span>
+          <span class="subcategory-count">{{ blockGroupTypes.length }}</span>
+        </button>
 
-        <div class="category-items">
+        <div v-show="expandedSubcategories.has('__groups__')" class="subcategory-items">
           <div
             v-for="groupType in blockGroupTypes"
             :key="groupType.type"
@@ -173,19 +253,86 @@ function handleGroupDragEnd() {
         </div>
       </div>
 
-      <!-- Block Categories -->
-      <div
-        v-for="category in sortedCategories"
-        :key="category"
-        class="palette-category"
-      >
-        <div class="category-header">
-          <span class="category-name">{{ getCategoryInfo(category).name }}</span>
-        </div>
+      <!-- Subcategory Sections -->
+      <template v-for="subcategory in subcategoriesForActiveCategory" :key="subcategory">
+        <div
+          v-if="blocksBySubcategory[subcategory]?.length"
+          class="subcategory-section"
+        >
+          <button
+            class="subcategory-header"
+            @click="toggleSubcategory(subcategory)"
+          >
+            <svg
+              :class="['chevron', { expanded: expandedSubcategories.has(subcategory) }]"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+            <span class="subcategory-name">{{ getSubcategoryLabel(subcategory) }}</span>
+            <span class="subcategory-count">{{ blocksBySubcategory[subcategory]?.length || 0 }}</span>
+          </button>
 
-        <div class="category-items">
+          <div v-show="expandedSubcategories.has(subcategory)" class="subcategory-items">
+            <div
+              v-for="block in blocksBySubcategory[subcategory]"
+              :key="block.slug"
+              :class="[
+                'palette-item',
+                {
+                  dragging: draggingType === block.slug,
+                  disabled: readonly
+                }
+              ]"
+              :draggable="!readonly"
+              @dragstart="handleDragStart($event, block)"
+              @dragend="handleDragEnd"
+            >
+              <div
+                class="item-color"
+                :style="{ backgroundColor: getBlockColor(block.slug) }"
+              />
+              <div class="item-content">
+                <div class="item-name">{{ block.name }}</div>
+                <div class="item-desc">{{ block.description || '' }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Uncategorized blocks (if any) -->
+      <div
+        v-if="blocksBySubcategory['other']?.length"
+        class="subcategory-section"
+      >
+        <button
+          class="subcategory-header"
+          @click="toggleSubcategory('other')"
+        >
+          <svg
+            :class="['chevron', { expanded: expandedSubcategories.has('other') }]"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+          <span class="subcategory-name">Other</span>
+          <span class="subcategory-count">{{ blocksBySubcategory['other']?.length || 0 }}</span>
+        </button>
+
+        <div v-show="expandedSubcategories.has('other')" class="subcategory-items">
           <div
-            v-for="block in blocksByCategory.get(category)"
+            v-for="block in blocksBySubcategory['other']"
             :key="block.slug"
             :class="[
               'palette-item',
@@ -209,6 +356,11 @@ function handleGroupDragEnd() {
           </div>
         </div>
       </div>
+
+      <!-- Empty state -->
+      <div v-if="Object.keys(blocksBySubcategory).length === 0" class="empty-state">
+        <p>No blocks in this category</p>
+      </div>
     </div>
   </div>
 </template>
@@ -220,6 +372,96 @@ function handleGroupDragEnd() {
   height: 100%;
 }
 
+.palette-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.search-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--color-background-secondary, #f9fafb);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.search-trigger:hover {
+  border-color: var(--color-primary);
+  background: white;
+}
+
+.search-icon {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.search-text {
+  flex: 1;
+  text-align: left;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.search-shortcut {
+  font-size: 0.6875rem;
+  padding: 2px 6px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+}
+
+/* Category Tabs */
+.category-tabs {
+  display: flex;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.category-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.category-tab:hover {
+  color: var(--color-text);
+}
+
+.category-tab.active {
+  color: var(--color-text);
+}
+
+.tab-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.tab-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Loading & Error */
 .palette-loading,
 .palette-error {
   display: flex;
@@ -251,48 +493,48 @@ function handleGroupDragEnd() {
   color: var(--color-error, #ef4444);
 }
 
-.palette-header {
-  padding: 1rem;
-  border-bottom: 1px solid var(--color-border);
-  flex-shrink: 0;
-}
-
-.palette-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--color-text);
-}
-
-.palette-hint {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  margin: 0.25rem 0 0 0;
-}
-
+/* Content */
 .palette-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0.75rem;
+  padding: 8px;
 }
 
-.palette-category {
-  margin-bottom: 1.25rem;
+/* Subcategory Section */
+.subcategory-section {
+  margin-bottom: 4px;
 }
 
-.palette-category:last-child {
-  margin-bottom: 0;
-}
-
-.category-header {
+.subcategory-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-  padding: 0 0.25rem;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
 }
 
-.category-name {
+.subcategory-header:hover {
+  background: var(--color-background-secondary);
+}
+
+.chevron {
+  color: var(--color-text-secondary);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+
+.chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.subcategory-name {
+  flex: 1;
   font-size: 0.6875rem;
   font-weight: 600;
   color: var(--color-text-secondary);
@@ -300,17 +542,27 @@ function handleGroupDragEnd() {
   letter-spacing: 0.05em;
 }
 
-.category-items {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
+.subcategory-count {
+  font-size: 0.625rem;
+  color: var(--color-text-tertiary);
+  background: var(--color-background-secondary);
+  padding: 1px 6px;
+  border-radius: 10px;
 }
 
+.subcategory-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0 8px 18px;
+}
+
+/* Palette Item */
 .palette-item {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.5rem 0.625rem;
+  gap: 10px;
+  padding: 8px 10px;
   background: white;
   border: 1px solid var(--color-border);
   border-radius: 6px;
@@ -341,20 +593,19 @@ function handleGroupDragEnd() {
 
 .item-color {
   width: 4px;
-  height: 32px;
+  height: 28px;
   border-radius: 2px;
   flex-shrink: 0;
 }
 
-/* Block group item icon */
 .item-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: white;
   flex-shrink: 0;
 }
@@ -379,13 +630,21 @@ function handleGroupDragEnd() {
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
   line-height: 1.3;
-  margin-top: 0.125rem;
+  margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Scrollbar styling */
+/* Empty state */
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* Scrollbar */
 .palette-content::-webkit-scrollbar {
   width: 6px;
 }
