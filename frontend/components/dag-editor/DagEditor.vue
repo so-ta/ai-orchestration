@@ -301,34 +301,14 @@ const DEFAULT_GROUP_HEIGHT = 300
 interface DropZoneResult {
   group: BlockGroup | null
   zone: 'inside' | 'boundary' | 'outside'
-  role?: string
+  role?: GroupRole
 }
 
 // Determine role based on position within multi-section group
-function determineRoleInGroup(x: number, y: number, group: BlockGroup): string {
-  const zones = getGroupZones(group.type)
-  if (!zones) return 'body'
-
-  // Calculate content area dimensions
-  const contentLeft = group.position_x + GROUP_PADDING
-  const contentTop = group.position_y + GROUP_HEADER_HEIGHT + GROUP_PADDING
-  const contentWidth = group.width - GROUP_PADDING * 2
-  const contentHeight = group.height - GROUP_HEADER_HEIGHT - GROUP_PADDING * 2
-
-  // Normalize position to content area (0-1)
-  const normalizedX = (x - contentLeft) / contentWidth
-  const normalizedY = (y - contentTop) / contentHeight
-
-  // Find which zone contains this position
-  for (const zone of zones) {
-    if (normalizedX >= zone.left && normalizedX <= zone.right &&
-        normalizedY >= zone.top && normalizedY <= zone.bottom) {
-      return zone.role
-    }
-  }
-
-  // Default to first zone's role
-  return zones[0]?.role || 'body'
+// Phase A: Simplified to always return 'body' since multi-zone was removed
+function determineRoleInGroup(_x: number, _y: number, _group: BlockGroup): GroupRole {
+  // All groups now have a single body zone only
+  return 'body'
 }
 
 // Find which group contains the given position and determine zone
@@ -1704,7 +1684,7 @@ function handleDrop(event: DragEvent) {
   // Check drop zone with boundary detection
   const dropZone = findDropZone(positionX, positionY)
   let targetGroupId: string | undefined
-  let targetRole: string | undefined
+  let targetRole: GroupRole | undefined
 
   if (dropZone.zone === 'boundary' && dropZone.group) {
     // Snap to valid position
