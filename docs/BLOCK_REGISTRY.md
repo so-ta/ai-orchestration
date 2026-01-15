@@ -35,7 +35,7 @@ Block Registryはワークフローのステップタイプを管理するシス
 │  │                   block_definitions テーブル                     │ │
 │  │                                                                   │ │
 │  │  System Blocks (tenant_id = NULL)                                │ │
-│  │  ├── start, llm, condition, loop, map, join, ...                 │ │
+│  │  ├── start, llm, condition, switch, map, join, ...               │ │
 │  │  └── 全ユーザーに提供、管理者のみ編集可                           │ │
 │  │                                                                   │ │
 │  │  Tenant Blocks (tenant_id = UUID)                                │ │
@@ -412,7 +412,6 @@ func (e *BlockError) Error() string {
 | `llm` | LLM | ai | `ctx.llm.chat(...)` |
 | `condition` | Condition | logic | `return {..., __branch: result ? 'then' : 'else'}` |
 | `switch` | Switch | logic | 多分岐ルーティング |
-| `loop` | Loop | logic | for/forEach イテレーション（while は while グループを推奨） |
 | `map` | Map | data | 配列並列処理 |
 | `join` | Join | data | ブランチマージ |
 | `filter` | Filter | data | 配列フィルタリング |

@@ -277,170 +277,7 @@ func TestExecutor_ExecuteJoinStep(t *testing.T) {
 	assert.Contains(t, result, step2ID.String())
 }
 
-// Tests for new step types (Loop, Wait, Function, Router, HumanInLoop)
-
-func TestExecutor_ExecuteLoopStep_ForLoop(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-loop",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "for",
-			"count": 3
-		}`),
-	}
-
-	input := json.RawMessage(`{"value": "test"}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(3), result["iterations"])
-	assert.Equal(t, true, result["completed"])
-	assert.Len(t, result["results"].([]interface{}), 3)
-}
-
-func TestExecutor_ExecuteLoopStep_ForEachLoop(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-foreach",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "forEach",
-			"input_path": "$.items"
-		}`),
-	}
-
-	input := json.RawMessage(`{"items": ["a", "b", "c", "d"]}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(4), result["iterations"])
-	assert.Equal(t, true, result["completed"])
-}
-
-func TestExecutor_ExecuteLoopStep_WhileLoop(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-while",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "while",
-			"condition": "$.index < 3",
-			"max_iterations": 10
-		}`),
-	}
-
-	input := json.RawMessage(`{}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(3), result["iterations"])
-	assert.Equal(t, true, result["completed"])
-}
-
-func TestExecutor_ExecuteLoopStep_DoWhileLoop(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-dowhile",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "doWhile",
-			"condition": "$.index < 2",
-			"max_iterations": 10
-		}`),
-	}
-
-	input := json.RawMessage(`{}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	// DoWhile executes at least once
-	assert.GreaterOrEqual(t, result["iterations"].(float64), float64(1))
-	assert.Equal(t, true, result["completed"])
-}
-
-func TestExecutor_ExecuteLoopStep_MaxIterations(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-max-iter",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "for",
-			"count": 1000,
-			"max_iterations": 5
-		}`),
-	}
-
-	input := json.RawMessage(`{}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	// Should be capped at max_iterations
-	assert.Equal(t, float64(5), result["iterations"])
-}
-
-func TestExecutor_ExecuteLoopStep_WithAdapter(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-loop-adapter",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "for",
-			"count": 2,
-			"adapter_id": "mock"
-		}`),
-	}
-
-	input := json.RawMessage(`{"value": "test"}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(2), result["iterations"])
-	results := result["results"].([]interface{})
-	assert.Len(t, results, 2)
-}
+// Tests for new step types (Wait, Function, Router, HumanInLoop)
 
 func TestExecutor_ExecuteWaitStep_Duration(t *testing.T) {
 	// Save original timeAfter and restore after test
@@ -883,18 +720,7 @@ func TestExecutor_FullWorkflowWithNewSteps(t *testing.T) {
 		Config:     json.RawMessage(`{}`),
 	}
 
-	// Create a workflow with multiple new step types
-	loopStep := domain.Step{
-		ID:         uuid.New(),
-		WorkflowID: workflowID,
-		Name:       "loop-step",
-		Type:       domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "for",
-			"count": 2
-		}`),
-	}
-
+	// Create a workflow with wait step
 	waitStep := domain.Step{
 		ID:         uuid.New(),
 		WorkflowID: workflowID,
@@ -907,18 +733,12 @@ func TestExecutor_FullWorkflowWithNewSteps(t *testing.T) {
 
 	def := &domain.WorkflowDefinition{
 		Name:  "test-workflow",
-		Steps: []domain.Step{startStep, loopStep, waitStep},
+		Steps: []domain.Step{startStep, waitStep},
 		Edges: []domain.Edge{
 			{
 				ID:           uuid.New(),
 				WorkflowID:   workflowID,
 				SourceStepID: &startStep.ID,
-				TargetStepID: &loopStep.ID,
-			},
-			{
-				ID:           uuid.New(),
-				WorkflowID:   workflowID,
-				SourceStepID: &loopStep.ID,
 				TargetStepID: &waitStep.ID,
 			},
 		},
@@ -936,10 +756,9 @@ func TestExecutor_FullWorkflowWithNewSteps(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// All three steps should have been executed (start, loop, wait)
-	assert.Len(t, execCtx.StepRuns, 3)
+	// Both steps should have been executed (start, wait)
+	assert.Len(t, execCtx.StepRuns, 2)
 	assert.Contains(t, execCtx.StepData, startStep.ID)
-	assert.Contains(t, execCtx.StepData, loopStep.ID)
 	assert.Contains(t, execCtx.StepData, waitStep.ID)
 }
 
@@ -1067,76 +886,6 @@ func TestExecutor_ExecuteMapStep_MarshalUnmarshalFallbacks(t *testing.T) {
 	}
 }
 
-func TestExecutor_ExecuteLoopStep_WhileDoWhileMarshalPaths(t *testing.T) {
-	// Tests while and do-while loop paths that involve Marshal operations
-	// This tests the branches at lines 1091-1094 (while) and 1133-1136 (do-while)
-	executor := setupTestExecutor()
-
-	tests := []struct {
-		name              string
-		loopType          string
-		condition         string
-		expectedMinIter   float64
-		expectedCompleted bool
-	}{
-		{
-			name:              "while loop executes while condition is true",
-			loopType:          "while",
-			condition:         "$.index < 2",
-			expectedMinIter:   2,
-			expectedCompleted: true,
-		},
-		{
-			name:              "do-while loop executes at least once",
-			loopType:          "doWhile",
-			condition:         "$.index < 1",
-			expectedMinIter:   1,
-			expectedCompleted: true,
-		},
-		{
-			name:              "while loop with false condition executes zero times",
-			loopType:          "while",
-			condition:         "$.index < 0",
-			expectedMinIter:   0,
-			expectedCompleted: true,
-		},
-		{
-			name:              "do-while loop with false condition still executes once",
-			loopType:          "doWhile",
-			condition:         "$.index < 0",
-			expectedMinIter:   1,
-			expectedCompleted: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			step := domain.Step{
-				ID:   uuid.New(),
-				Name: "test-loop",
-				Type: domain.StepTypeLoop,
-				Config: json.RawMessage(`{
-					"loop_type": "` + tt.loopType + `",
-					"condition": "` + tt.condition + `",
-					"max_iterations": 5
-				}`),
-			}
-
-			input := json.RawMessage(`{}`)
-			output, err := executor.executeLoopStep(context.Background(), step, input)
-
-			require.NoError(t, err)
-
-			var result map[string]interface{}
-			err = json.Unmarshal(output, &result)
-			require.NoError(t, err)
-
-			assert.GreaterOrEqual(t, result["iterations"].(float64), tt.expectedMinIter)
-			assert.Equal(t, tt.expectedCompleted, result["completed"])
-		})
-	}
-}
-
 func TestExecutor_ExecuteRouterStep_UnmarshalFallback(t *testing.T) {
 	// Test that executeRouterStep falls back to empty map when LLM response is invalid JSON
 	// This tests the branch at line 1389-1392
@@ -1235,38 +984,6 @@ func TestExecutor_ExecuteFilterStep_ErrorHandling(t *testing.T) {
 			assert.Equal(t, tt.expectedFilteredCount, result["filtered_count"])
 		})
 	}
-}
-
-func TestExecutor_ExecuteLoopIteration_UnmarshalFallback(t *testing.T) {
-	// Test that loop iteration falls back to raw string when unmarshal fails
-	// This tests the branch at line 1182-1185
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-loop-iteration",
-		Type: domain.StepTypeLoop,
-		Config: json.RawMessage(`{
-			"loop_type": "for",
-			"count": 2,
-			"adapter_id": "mock"
-		}`),
-	}
-
-	input := json.RawMessage(`{"value": "test"}`)
-	output, err := executor.executeLoopStep(context.Background(), step, input)
-
-	require.NoError(t, err)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	assert.Equal(t, float64(2), result["iterations"])
-	assert.Equal(t, true, result["completed"])
-	// Results should be present
-	results := result["results"].([]interface{})
-	assert.Len(t, results, 2)
 }
 
 // Helper function

@@ -21,7 +21,6 @@ func (r *Registry) registerIntegrationBlocks() {
 	r.register(WebSearchBlock())
 	r.register(LinearCreateIssueBlock())
 	r.register(EmailSendGridBlock())
-	r.register(LoopBlock())
 	r.register(EmbeddingBlock())
 	r.register(VectorUpsertBlock())
 	r.register(VectorSearchBlock())
@@ -855,68 +854,6 @@ return {
 			{Code: "EMAIL_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
 			{Code: "EMAIL_002", Name: "SEND_FAILED", Description: "メール送信に失敗しました", Retryable: true},
 			{Code: "EMAIL_003", Name: "INVALID_EMAIL", Description: "メールアドレスが無効です", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
-
-func LoopBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:        "loop",
-		Version:     1,
-		Name:        "Loop",
-		Description: "Iterate with for/forEach/while",
-		Category:    domain.BlockCategoryLogic,
-		Icon:        "repeat",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"count": {"type": "integer"},
-				"condition": {"type": "string"},
-				"loop_type": {"enum": ["for", "forEach", "while", "doWhile"], "type": "string"},
-				"input_path": {"type": "string"},
-				"max_iterations": {"type": "integer"}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"data": {"type": "object", "description": "ループ内で参照可能なデータ"},
-				"items": {"type": "array", "description": "forEach時のループ対象配列"}
-			},
-			"description": "ループ処理に使用するデータ"
-		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: true, Description: "Initial value or array to iterate"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "loop", Label: "Loop Body", IsDefault: true, Description: "Each iteration"},
-			{Name: "complete", Label: "Complete", IsDefault: false, Description: "When loop finishes"},
-		},
-		Code: `
-const results = [];
-const maxIter = config.max_iterations || 100;
-if (config.loop_type === 'for') {
-    for (let i = 0; i < (config.count || 0) && i < maxIter; i++) {
-        results.push({ index: i, ...input });
-    }
-} else if (config.loop_type === 'forEach') {
-    const items = getPath(input, config.input_path) || [];
-    for (let i = 0; i < items.length && i < maxIter; i++) {
-        results.push({ item: items[i], index: i, ...input });
-    }
-} else if (config.loop_type === 'while') {
-    let i = 0;
-    while (evaluate(config.condition, input) && i < maxIter) {
-        results.push({ index: i, ...input });
-        i++;
-    }
-}
-return { ...input, results, iterations: results.length };
-`,
-		UIConfig: json.RawMessage(`{"icon": "repeat", "color": "#F59E0B"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "LOOP_001", Name: "MAX_ITERATIONS", Description: "Maximum iterations exceeded", Retryable: false},
 		},
 		Enabled: true,
 	}

@@ -111,10 +111,15 @@ Unique: (workflow_id, version)
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
+| tenant_id | UUID | FK tenants(id), NOT NULL | |
 | workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | |
-| type | VARCHAR(50) | NOT NULL | llm, tool, condition, map, join, subflow |
+| type | VARCHAR(50) | NOT NULL | start, llm, tool, condition, switch, map, join, subflow, wait, function, router, human_in_loop, filter, split, aggregate, error, note, log |
 | config | JSONB | NOT NULL DEFAULT '{}' | Type-specific config |
+| block_group_id | UUID | FK block_groups(id) ON DELETE SET NULL | Parent block group |
+| group_role | VARCHAR(50) | | Role within block group (body only) |
+| block_definition_id | UUID | FK block_definitions(id) | Registry block reference |
+| credential_bindings | JSONB | DEFAULT '{}' | Mapping of credential names to tenant credential IDs |
 | position_x | INTEGER | DEFAULT 0 | UI position |
 | position_y | INTEGER | DEFAULT 0 | UI position |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
@@ -122,16 +127,22 @@ Unique: (workflow_id, version)
 
 ### edges
 
+Connects steps and/or block groups. Either source/target can be a step or a block group.
+
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
-| source_step_id | UUID | FK steps(id) ON DELETE CASCADE, NOT NULL | |
-| target_step_id | UUID | FK steps(id) ON DELETE CASCADE, NOT NULL | |
+| source_step_id | UUID | FK steps(id) ON DELETE CASCADE | Nullable if source is a group |
+| target_step_id | UUID | FK steps(id) ON DELETE CASCADE | Nullable if target is a group |
+| source_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | Nullable if source is a step |
+| target_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | Nullable if target is a step |
+| source_port | VARCHAR(100) | DEFAULT 'output' | Output port name |
+| target_port | VARCHAR(100) | DEFAULT 'input' | Input port name |
 | condition | TEXT | | Expression for conditional routing |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (source_step_id, target_step_id)
+Unique: edges_unique_connection (one source/target pair)
 
 ### block_groups
 

@@ -466,7 +466,6 @@ func buildSuggestPrompt(workflow *domain.Workflow, currentStepID *uuid.UUID, con
 	sb.WriteString("- condition: Conditional branching (true/false)\n")
 	sb.WriteString("- switch: Multi-way branching based on expression\n")
 	sb.WriteString("- map: Parallel array processing\n")
-	sb.WriteString("- loop: Iteration (for, forEach, while)\n")
 	sb.WriteString("- wait: Delay/timer\n")
 	sb.WriteString("- human_in_loop: Human approval gate\n")
 	sb.WriteString("- router: AI-based dynamic routing\n")
@@ -943,7 +942,6 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 	sb.WriteString("- map: Parallel array processing (config: input_path, parallel)\n")
 	sb.WriteString("- join: Merge parallel branches (config: join_mode)\n")
 	sb.WriteString("- subflow: Nested workflow (config: workflow_id)\n")
-	sb.WriteString("- loop: Iteration (config: loop_type, count, condition)\n")
 	sb.WriteString("- wait: Delay/timer (config: duration_ms)\n")
 	sb.WriteString("- function: Custom code execution (config: code, language)\n")
 	sb.WriteString("- router: AI-based dynamic routing (config: routes, provider, model)\n")
@@ -968,7 +966,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
     {
       "temp_id": "step_1",
       "name": "Step Name",
-      "type": "start|llm|tool|condition|switch|map|join|subflow|loop|wait|function|router|human_in_loop|filter|split|aggregate|error|note|log",
+      "type": "start|llm|tool|condition|switch|map|join|subflow|wait|function|router|human_in_loop|filter|split|aggregate|error|note|log",
       "description": "What this step does",
       "config": { ... },
       "position_x": 400,
@@ -1028,7 +1026,6 @@ func filterInvalidSteps(output GenerateWorkflowOutput) GenerateWorkflowOutput {
 		"map":           true,
 		"join":          true,
 		"subflow":       true,
-		"loop":          true,
 		"wait":          true,
 		"function":      true,
 		"router":        true,
