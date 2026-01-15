@@ -375,11 +375,7 @@ func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
 
 **対策:**
 - コード変更と同時にドキュメントを更新
-<<<<<<< HEAD
 - [DOCUMENTATION.md](../DOCUMENTATION.md) の更新マッピングを参照
-=======
-- [DOCUMENTATION_SYNC.md](./DOCUMENTATION_SYNC.md) の更新マッピングを参照
->>>>>>> origin/main
 
 ---
 

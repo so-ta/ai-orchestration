@@ -4,11 +4,7 @@
 
 > **Status**: Active
 > **Updated**: 2026-01-15
-<<<<<<< HEAD
 > **Related**: [INDEX.md](./INDEX.md)
-=======
-> **Replaces**: DOCUMENTATION_RULES.md, DOCUMENTATION_SYNC.md
->>>>>>> origin/main
 
 ---
 

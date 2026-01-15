@@ -4,11 +4,7 @@
 
 > **Status**: Active
 > **Updated**: 2026-01-15
-<<<<<<< HEAD
 > **Related**: [BACKEND_TESTING.md](./BACKEND_TESTING.md), [frontend/docs/TESTING.md](../frontend/docs/TESTING.md)
-=======
-> **Replaces**: TESTING_RULES.md, TEST_PLAN.md
->>>>>>> origin/main
 
 ---
 
