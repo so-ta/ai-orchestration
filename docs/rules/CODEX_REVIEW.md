@@ -14,8 +14,8 @@ AIエージェントがPRをpushした後のレビューフロー。
    - 既にfeatureブランチの場合: そのまま継続
    ↓
 3. ローカルCIを実行（必須）
-   - Backend変更: go test ./...
-   - Frontend変更: npm run check
+   - Backend変更: cd backend && go test ./...
+   - Frontend変更: cd frontend && npm run check
    ↓
 4. ローカルCIが全てパスしたことを確認
    ↓
