@@ -762,9 +762,319 @@ DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmod
 
 **Note**: `make seed-blocks` コマンドはMakefile内でDATABASE_URLを自動設定します。
 
+## Canonical Code Patterns (必須)
+
+Claude Code はこのセクションのパターンに従ってコードを書くこと。
+既存コードが異なるパターンを使っていても、このパターンを優先する。
+
+### Handler パターン
+
+```go
+// ✅ 正しいパターン
+func (h *WorkflowHandler) Create(c echo.Context) error {
+    ctx := c.Request().Context()
+    tenantID := middleware.GetTenantID(ctx)
+
+    var req CreateWorkflowRequest
+    if err := c.Bind(&req); err != nil {
+        return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+    }
+    if err := c.Validate(&req); err != nil {
+        return err // validation middleware handles response
+    }
+
+    result, err := h.usecase.Create(ctx, tenantID, req.ToInput())
+    if err != nil {
+        return h.mapError(err)
+    }
+
+    return c.JSON(http.StatusCreated, NewWorkflowResponse(result))
+}
+
+// ❌ 禁止パターン
+func (h *WorkflowHandler) Create(c echo.Context) error {
+    var req CreateWorkflowRequest
+    c.Bind(&req)  // エラー無視 → NG
+
+    tenantID, _ := uuid.Parse(c.Request().Header.Get("X-Tenant-ID"))  // middleware 未使用 → NG
+
+    // ctx を作成 → NG（c.Request().Context() を使う）
+    ctx := context.Background()
+
+    result, _ := h.usecase.Create(ctx, tenantID, &req)  // エラー無視 → NG
+    return c.JSON(200, result)
+}
+```
+
+**Why**:
+- `c.Bind()` のエラーを無視すると不正リクエストが処理される
+- `middleware.GetTenantID()` を使わないとテナント分離が壊れる
+- `c.Request().Context()` を使わないと OpenTelemetry トレースが途切れる
+
+---
+
+### Usecase パターン
+
+```go
+// ✅ 正しいパターン
+func (u *WorkflowUsecase) Create(ctx context.Context, tenantID uuid.UUID, input *CreateWorkflowInput) (*domain.Workflow, error) {
+    // 1. バリデーション
+    if input.Name == "" {
+        return nil, domain.ErrValidation
+    }
+
+    // 2. ビジネスロジック
+    workflow := &domain.Workflow{
+        ID:        uuid.New(),
+        TenantID:  tenantID,
+        Name:      input.Name,
+        Status:    domain.WorkflowStatusDraft,
+        CreatedAt: time.Now(),
+        UpdatedAt: time.Now(),
+    }
+
+    // 3. 永続化
+    if err := u.repo.Create(ctx, workflow); err != nil {
+        return nil, fmt.Errorf("create workflow: %w", err)
+    }
+
+    return workflow, nil
+}
+
+// ❌ 禁止パターン
+func (u *WorkflowUsecase) Create(ctx context.Context, input *CreateWorkflowInput) (*domain.Workflow, error) {
+    // tenantID が引数にない → NG
+    // ID を外部から受け取る → NG（Usecase 内で生成）
+    // time.Now() を外部から受け取る → NG
+    workflow := &domain.Workflow{
+        ID: input.ID,  // NG
+    }
+    return u.repo.Create(ctx, workflow)
+}
+```
+
+**Why**:
+- tenantID は必ず Usecase の引数で受け取る（マルチテナント分離）
+- ID は Usecase 内で生成（外部からの ID 注入は禁止）
+- エラーは `fmt.Errorf("context: %w", err)` でラップ
+
+---
+
+### Repository パターン
+
+```go
+// ✅ 正しいパターン
+func (r *WorkflowRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error) {
+    query := `
+        SELECT id, tenant_id, name, status, created_at, updated_at
+        FROM workflows
+        WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+    `
+
+    var w domain.Workflow
+    err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
+        &w.ID, &w.TenantID, &w.Name, &w.Status, &w.CreatedAt, &w.UpdatedAt,
+    )
+    if err != nil {
+        if errors.Is(err, pgx.ErrNoRows) {
+            return nil, domain.ErrNotFound
+        }
+        return nil, fmt.Errorf("query workflow: %w", err)
+    }
+
+    return &w, nil
+}
+
+// ❌ 禁止パターン
+func (r *WorkflowRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Workflow, error) {
+    // tenant_id フィルタなし → NG（テナント分離違反）
+    query := `SELECT * FROM workflows WHERE id = $1`
+
+    // deleted_at チェックなし → NG（論理削除違反）
+    // SELECT * 使用 → NG（カラム明示）
+
+    return r.db.Query(ctx, query, id)  // Scan 漏れ → NG
+}
+```
+
+**Why**:
+- すべてのクエリに `tenant_id` フィルタ必須
+- すべてのクエリに `deleted_at IS NULL` 必須（soft delete 対応テーブル）
+- `SELECT *` 禁止（カラムを明示）
+
+---
+
+### Domain Error パターン
+
+```go
+// ✅ 正しいパターン
+func (u *WorkflowUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) error {
+    workflow, err := u.repo.GetByID(ctx, tenantID, id)
+    if err != nil {
+        return err  // domain.ErrNotFound がそのまま返る
+    }
+
+    if workflow.Status == domain.WorkflowStatusPublished {
+        return domain.ErrConflict  // 既に公開済み
+    }
+
+    steps, err := u.stepRepo.GetByWorkflowID(ctx, workflow.ID)
+    if err != nil {
+        return fmt.Errorf("get steps: %w", err)
+    }
+
+    if len(steps) == 0 {
+        return fmt.Errorf("%w: workflow has no steps", domain.ErrValidation)
+    }
+
+    // ...
+}
+```
+
+**標準 Domain Error**:
+| Error | HTTP Status | 用途 |
+|-------|-------------|------|
+| `domain.ErrNotFound` | 404 | リソースが存在しない |
+| `domain.ErrValidation` | 400 | 入力値が不正 |
+| `domain.ErrUnauthorized` | 401 | 認証が必要 |
+| `domain.ErrForbidden` | 403 | 権限がない |
+| `domain.ErrConflict` | 409 | 状態の競合 |
+
+---
+
+### テストパターン
+
+```go
+// ✅ 正しいパターン: Table-Driven Tests
+func TestWorkflowUsecase_Create(t *testing.T) {
+    tests := []struct {
+        name    string
+        input   *CreateWorkflowInput
+        want    *domain.Workflow
+        wantErr error
+    }{
+        // 正常系
+        {
+            name:  "valid input creates workflow",
+            input: &CreateWorkflowInput{Name: "Test Workflow"},
+            want:  &domain.Workflow{Name: "Test Workflow", Status: domain.WorkflowStatusDraft},
+        },
+        // 異常系 - 必須
+        {
+            name:    "empty name returns validation error",
+            input:   &CreateWorkflowInput{Name: ""},
+            wantErr: domain.ErrValidation,
+        },
+        // 境界値
+        {
+            name:  "max length name succeeds",
+            input: &CreateWorkflowInput{Name: strings.Repeat("a", 255)},
+            want:  &domain.Workflow{Status: domain.WorkflowStatusDraft},
+        },
+        {
+            name:    "over max length name fails",
+            input:   &CreateWorkflowInput{Name: strings.Repeat("a", 256)},
+            wantErr: domain.ErrValidation,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            repo := &mockWorkflowRepo{}
+            uc := usecase.NewWorkflowUsecase(repo)
+
+            got, err := uc.Create(ctx, tenantID, tt.input)
+
+            if tt.wantErr != nil {
+                assert.ErrorIs(t, err, tt.wantErr)
+                return
+            }
+
+            assert.NoError(t, err)
+            assert.Equal(t, tt.want.Status, got.Status)
+        })
+    }
+}
+```
+
+**テストカバレッジ必須項目**:
+1. 正常系（最低1ケース）
+2. 必須フィールド欠落
+3. 不正な値（型違い、範囲外）
+4. 境界値（最小値、最大値、空）
+5. 存在しないリソース（404）
+6. 権限エラー（403）
+
+---
+
+### JSON 処理パターン
+
+```go
+// ✅ 正しいパターン
+func (s *Step) GetConfig() (*LLMConfig, error) {
+    var cfg LLMConfig
+    if err := json.Unmarshal(s.Config, &cfg); err != nil {
+        return nil, fmt.Errorf("unmarshal config: %w", err)
+    }
+    return &cfg, nil
+}
+
+func (s *Step) SetConfig(cfg *LLMConfig) error {
+    data, err := json.Marshal(cfg)
+    if err != nil {
+        return fmt.Errorf("marshal config: %w", err)
+    }
+    s.Config = data
+    return nil
+}
+
+// ❌ 禁止パターン
+func (s *Step) GetConfig() *LLMConfig {
+    var cfg LLMConfig
+    json.Unmarshal(s.Config, &cfg)  // エラー無視 → NG
+    return &cfg
+}
+```
+
+---
+
+### Context 伝播パターン
+
+```go
+// ✅ 正しいパターン
+func (u *WorkflowUsecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
+    ctx, span := telemetry.StartSpan(ctx, "WorkflowUsecase.Execute")
+    defer span.End()
+
+    span.SetAttributes(
+        attribute.String("tenant_id", tenantID.String()),
+        attribute.String("workflow_id", id.String()),
+    )
+
+    // ctx を全ての呼び出しに伝播
+    workflow, err := u.repo.GetByID(ctx, tenantID, id)
+    if err != nil {
+        span.RecordError(err)
+        return err
+    }
+
+    // ...
+}
+
+// ❌ 禁止パターン
+func (u *WorkflowUsecase) Execute(tenantID, id uuid.UUID) error {
+    // ctx 引数なし → NG
+    ctx := context.Background()  // 新規 ctx 作成 → NG（トレース途切れ）
+    // ...
+}
+```
+
+---
+
 ## Related Documents
 
 - [API.md](./API.md) - REST API endpoints and schemas
 - [DATABASE.md](./DATABASE.md) - Database schema and queries
 - [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definitions and error codes
 - [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - Block execution architecture
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - エラー対処法

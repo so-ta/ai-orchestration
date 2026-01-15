@@ -25,6 +25,7 @@
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | Docker, Kubernetes, environment config | DevOps, deployment |
 | [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) | Block definitions, error codes | **新規ブロック追加時** |
 | [INTEGRATIONS.md](./INTEGRATIONS.md) | 外部サービス連携一覧 | 連携ブロック追加・利用時 |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | エラー対処法 | エラー発生時 |
 
 ## Development Rules
 
@@ -32,18 +33,17 @@
 
 | Rule Document | Purpose | When to Read |
 |---------------|---------|--------------|
-| [WORKFLOW_RULES](./rules/WORKFLOW_RULES.md) | 開発ワークフロー全般 | すべての開発作業 |
+| [WORKFLOW_RULES](./rules/WORKFLOW_RULES.md) | 開発ワークフロー全般（Why/過去の失敗例あり） | すべての開発作業 |
 | [GIT_RULES](./rules/GIT_RULES.md) | コミット、PR、コンフリクト解消 | コミット・PR作成時 |
-| [TESTING_RULES](./rules/TESTING_RULES.md) | テスト作成・実行 | テスト作成・実行時 |
-| [DOCUMENTATION_SYNC](./rules/DOCUMENTATION_SYNC.md) | ドキュメント同期 | ドキュメント更新時 |
+| [TESTING](./TESTING.md) | テスト作成・実行（統合ガイド） | テスト作成・実行時 |
+| [DOCUMENTATION](./DOCUMENTATION.md) | ドキュメント作成・同期（統合ガイド） | ドキュメント更新時 |
 | [CODEX_REVIEW](./rules/CODEX_REVIEW.md) | PRレビューフロー | PR push後 |
-| [DOCUMENTATION_RULES.md](./DOCUMENTATION_RULES.md) | ドキュメント作成ルール | 新規ドキュメント作成時 |
 
 ## Testing Documentation
 
 | Document | Purpose | When to Read |
 |----------|---------|--------------|
-| [TEST_PLAN.md](./TEST_PLAN.md) | Test plan, coverage rules | Adding tests, coverage review |
+| [TESTING.md](./TESTING.md) | テスト統合ガイド（優先度マトリックス含む） | テスト作成・実行時 |
 | [BACKEND_TESTING.md](./BACKEND_TESTING.md) | Go backend testing patterns | Backend test implementation |
 | [frontend/docs/TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules | Frontend code changes |
 
@@ -56,17 +56,29 @@
 | Unified Block Model | ブロック実行の統一モデル | ✅ 実装済み | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) |
 | Block Config Improvement | ブロック設定UI改善 | 📋 設計中 | [BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md) |
 
-## Feature Implementation Plans
+## Implementation Status (Single Source of Truth)
 
-| Phase | Feature | Status | Plan Document |
-|-------|---------|--------|---------------|
-| 6 | Guardrails | 📋 未実装 | [PHASE6_GUARDRAILS.md](./plans/PHASE6_GUARDRAILS.md) |
-| 7 | Evaluator | 📋 未実装 | [PHASE7_EVALUATOR.md](./plans/PHASE7_EVALUATOR.md) |
-| 8 | Variables System | 📋 未実装 | [PHASE8_VARIABLES.md](./plans/PHASE8_VARIABLES.md) |
-| 9 | Cost Tracking | 📋 未実装 | [PHASE9_COST_TRACKING.md](./plans/PHASE9_COST_TRACKING.md) |
-| 10 | Copilot | 📋 未実装 | [PHASE10_COPILOT.md](./plans/PHASE10_COPILOT.md) |
+> この表が実装状態の正（Source of Truth）です。各計画書内の記載は補助情報です。
 
-**推奨実装順序**: Phase 8 → 9 → 6 → 7 → 10
+| Phase | Feature | Status | Document | Related PR/Commit |
+|-------|---------|--------|----------|-------------------|
+| Core | Unified Block Model | ✅ Complete | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) | - |
+| Core | Block Group Redesign | ✅ Complete | [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md) | - |
+| Core | Block Config Improvement | 🚧 Phase 3 Done | [BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md) | - |
+| Core | Rich View Output | ✅ Complete | [RICH_VIEW_OUTPUT.md](./designs/RICH_VIEW_OUTPUT.md) | - |
+| 6 | Guardrails | 📋 Not Started | [PHASE6_GUARDRAILS.md](./plans/PHASE6_GUARDRAILS.md) | - |
+| 7 | Evaluator | 📋 Not Started | [PHASE7_EVALUATOR.md](./plans/PHASE7_EVALUATOR.md) | - |
+| 8 | Variables System | ✅ Complete | [PHASE8_VARIABLES.md](./plans/PHASE8_VARIABLES.md) | - |
+| 9 | Cost Tracking | ✅ Complete | [PHASE9_COST_TRACKING.md](./plans/PHASE9_COST_TRACKING.md) | - |
+| 10 | Copilot | 📋 Not Started | [PHASE10_COPILOT.md](./plans/PHASE10_COPILOT.md) | - |
+| Special | RAG Implementation | 🚧 In Progress | [RAG_IMPLEMENTATION_PLAN.md](./plans/RAG_IMPLEMENTATION_PLAN.md) | - |
+
+**ステータス凡例**:
+- ✅ Complete: 実装完了
+- 🚧 In Progress / Phase X Done: 実装中（フェーズ完了）
+- 📋 Not Started: 未実装
+
+**推奨実装順序**: Phase 6 → 7 → 10
 
 ---
 

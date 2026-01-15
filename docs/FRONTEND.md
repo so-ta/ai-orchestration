@@ -569,9 +569,368 @@ npm run typecheck
 | `NUXT_PUBLIC_KEYCLOAK_REALM` | Keycloak realm |
 | `NUXT_PUBLIC_KEYCLOAK_CLIENT_ID` | Keycloak client ID |
 
+## Canonical Code Patterns (必須)
+
+Claude Code はこのセクションのパターンに従ってコードを書くこと。
+既存コードが異なるパターンを使っていても、このパターンを優先する。
+
+### Composable パターン
+
+```typescript
+// ✅ 正しいパターン
+export function useWorkflows() {
+  const workflows = ref<Workflow[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+  const { get, post, put, del } = useApi()
+
+  async function fetchWorkflows() {
+    loading.value = true
+    error.value = null
+    try {
+      const data = await get<{ workflows: Workflow[] }>('/api/v1/workflows')
+      workflows.value = data.workflows
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Unknown error'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  return {
+    workflows: readonly(workflows),
+    loading: readonly(loading),
+    error: readonly(error),
+    fetchWorkflows,
+  }
+}
+
+// ❌ 禁止パターン
+export function useWorkflows() {
+  const workflows = ref<Workflow[]>([])
+  const { get } = useApi()
+
+  async function fetchWorkflows() {
+    // loading 状態なし → NG
+    // error ハンドリングなし → NG
+    const data = await get('/api/v1/workflows')
+    workflows.value = data.workflows  // 型チェックなし → NG
+  }
+
+  return {
+    workflows,  // readonly でない → NG（外部から変更可能）
+    fetchWorkflows,
+  }
+}
+```
+
+**Why**:
+- `loading` / `error` 状態は UI に必須（ローディング表示、エラー表示）
+- `readonly()` で外部からの直接変更を防ぐ
+- try-catch で予期せぬエラーをキャッチ
+
+---
+
+### コンポーネントパターン (Vue 3 script setup)
+
+```vue
+<!-- ✅ 正しいパターン -->
+<script setup lang="ts">
+interface Props {
+  workflowId: string
+  readonly?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  readonly: false
+})
+
+const emit = defineEmits<{
+  'step-updated': [step: Step]
+  'error': [message: string]
+}>()
+
+const { workflows, fetchWorkflows, loading, error } = useWorkflows()
+
+// 初期化は onMounted で
+onMounted(async () => {
+  await fetchWorkflows()
+})
+
+// イベントハンドラは明示的な関数で
+function handleStepUpdate(step: Step) {
+  emit('step-updated', step)
+}
+</script>
+
+<!-- ❌ 禁止パターン -->
+<script setup>
+// TypeScript なし → NG
+// Props の型定義なし → NG
+const props = defineProps(['workflowId'])
+
+// トップレベルで await → NG（SSR で問題）
+await fetchWorkflows()
+
+// インライン関数 → NG（再レンダリングで再生成）
+</script>
+```
+
+**Why**:
+- TypeScript で型安全性を確保
+- `onMounted` で SSR 対応
+- 明示的な関数でパフォーマンス最適化
+
+---
+
+### API呼び出しパターン
+
+```typescript
+// ✅ 正しいパターン
+async function createWorkflow(input: CreateWorkflowInput): Promise<Workflow> {
+  const { post } = useApi()
+
+  try {
+    const result = await post<Workflow>('/api/v1/workflows', input)
+    return result
+  } catch (e) {
+    if (e instanceof ApiError) {
+      // API エラーは具体的に処理
+      if (e.status === 400) {
+        throw new Error(`Validation error: ${e.message}`)
+      }
+      if (e.status === 409) {
+        throw new Error('Workflow already exists')
+      }
+    }
+    throw e
+  }
+}
+
+// ❌ 禁止パターン
+async function createWorkflow(input) {
+  // 型なし → NG
+  const result = await fetch('/api/v1/workflows', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  // ステータスチェックなし → NG
+  // useApi 未使用 → NG（認証ヘッダー欠落）
+  return result.json()
+}
+```
+
+**Why**:
+- `useApi` は認証ヘッダー (`Authorization`, `X-Tenant-ID`) を自動付与
+- 直接 `fetch` を使うと認証が欠落する
+
+---
+
+### リアクティブパターン
+
+```typescript
+// ✅ 正しいパターン
+const workflowId = computed(() => props.workflowId)
+const selectedStep = ref<Step | null>(null)
+
+// computed で派生状態を管理
+const isValid = computed(() => {
+  return selectedStep.value !== null &&
+         selectedStep.value.name.length > 0
+})
+
+// watch は最小限に
+watch(workflowId, async (newId) => {
+  if (newId) {
+    await fetchWorkflow(newId)
+  }
+}, { immediate: true })
+
+// ❌ 禁止パターン
+let workflowId = props.workflowId  // ref/computed なし → NG（リアクティブでない）
+
+const isValid = ref(false)  // 派生状態を ref で管理 → NG
+watch(selectedStep, () => {
+  isValid.value = selectedStep.value !== null  // 手動同期 → NG
+})
+```
+
+**Why**:
+- `computed` は自動的に依存関係を追跡
+- 手動同期は同期漏れのリスクがある
+
+---
+
+### SSR 対応パターン
+
+```typescript
+// ✅ 正しいパターン
+// ブラウザ専用 API は onMounted で
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
+
+// または ClientOnly でラップ
+```
+
+```vue
+<template>
+  <ClientOnly>
+    <DagEditor :workflow-id="id" />
+  </ClientOnly>
+</template>
+```
+
+```typescript
+// ❌ 禁止パターン
+// トップレベルでブラウザ API → NG
+const width = window.innerWidth  // SSR でエラー
+
+// alert/confirm/prompt → NG
+if (confirm('Delete?')) { ... }
+```
+
+**禁止: ブラウザダイアログ**
+
+```typescript
+// ❌ 禁止: alert, confirm, prompt
+alert('Error occurred')
+confirm('Are you sure?')
+prompt('Enter name')
+
+// ✅ 代わりに使う: Toast / Modal
+const toast = useToast()
+toast.add({ title: 'Error', description: 'Operation failed', color: 'red' })
+
+// ✅ 確認ダイアログ
+const { open } = useConfirmDialog()
+const confirmed = await open({
+  title: 'Delete Workflow',
+  message: 'This action cannot be undone.',
+})
+```
+
+---
+
+### イベントハンドリングパターン
+
+```typescript
+// ✅ 正しいパターン
+function handleNodeDragStop(event: NodeDragEvent) {
+  const { node } = event
+  const position = { x: node.position.x, y: node.position.y }
+
+  // 即座に API 更新
+  updateStepPosition(node.id, position)
+}
+
+// debounce が必要な場合
+const debouncedSave = useDebounceFn(async (value: string) => {
+  await saveConfig(value)
+}, 300)
+
+// ❌ 禁止パターン
+function handleNodeDragStop(event) {
+  // 型なし → NG
+  // setTimeout で遅延 → NG（useDebounceFn を使う）
+  setTimeout(() => {
+    updateStepPosition(event.node.id, event.node.position)
+  }, 300)
+}
+```
+
+---
+
+### DAG Editor 特別ルール
+
+```typescript
+// ✅ 座標計算は毎回再計算
+function getCurrentBounds(node: Node): Bounds {
+  return calculateBounds(node)  // キャッシュしない
+}
+
+// ❌ 座標をキャッシュ → NG
+const cachedBounds = computed(() => calculateBounds(node))
+// グループリサイズ時に古い座標が使われる
+
+// ✅ グループ内ノードの位置は相対座標で管理
+function getAbsolutePosition(node: Node): Position {
+  if (node.parentNode) {
+    const parent = findNode(node.parentNode)
+    return {
+      x: parent.position.x + node.position.x,
+      y: parent.position.y + node.position.y,
+    }
+  }
+  return node.position
+}
+
+// ❌ 絶対座標と相対座標を混同 → NG
+```
+
+**DAG Editor 修正時のチェックリスト**:
+1. [ ] 座標計算をキャッシュしていないか
+2. [ ] 親子関係の座標変換を正しく行っているか
+3. [ ] リサイズ中のリアルタイム補正があるか
+4. [ ] `onMounted` でイベントリスナーを設定しているか
+5. [ ] `onUnmounted` でクリーンアップしているか
+
+---
+
+### テストパターン
+
+```typescript
+// ✅ 正しいパターン
+describe('useWorkflows', () => {
+  it('fetches workflows successfully', async () => {
+    // Arrange
+    const mockWorkflows = [{ id: '1', name: 'Test' }]
+    vi.mocked(useApi).mockReturnValue({
+      get: vi.fn().mockResolvedValue({ workflows: mockWorkflows }),
+    })
+
+    // Act
+    const { workflows, fetchWorkflows, loading, error } = useWorkflows()
+    await fetchWorkflows()
+
+    // Assert
+    expect(workflows.value).toEqual(mockWorkflows)
+    expect(loading.value).toBe(false)
+    expect(error.value).toBeNull()
+  })
+
+  it('handles API error', async () => {
+    // Arrange
+    vi.mocked(useApi).mockReturnValue({
+      get: vi.fn().mockRejectedValue(new Error('Network error')),
+    })
+
+    // Act
+    const { error, fetchWorkflows } = useWorkflows()
+    await fetchWorkflows()
+
+    // Assert
+    expect(error.value).toBe('Network error')
+  })
+})
+```
+
+**テストカバレッジ必須項目**:
+1. 正常系（データ取得成功）
+2. API エラー（ネットワークエラー、400、500）
+3. ローディング状態の遷移
+4. 空データ
+
+---
+
 ## Related Documents
 
 - [API.md](./API.md) - REST API endpoints and schemas
 - [TESTING.md](../frontend/docs/TESTING.md) - Frontend testing rules
 - [BACKEND.md](./BACKEND.md) - Backend architecture
 - [DEPLOYMENT.md](./DEPLOYMENT.md) - Docker and Kubernetes deployment
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - エラー対処法

@@ -188,6 +188,197 @@
 
 ---
 
+## Rules with Context (Why and Past Failures)
+
+各ルールの背景と過去の失敗例を記載。Claude Code がルールの重要性を理解するため。
+
+### Rule 1: バックエンドコード変更後の再起動必須
+
+**Why:**
+Docker コンテナは起動時にバイナリをロードする。コード変更してもコンテナ内の古いバイナリが動作し続ける。
+
+**過去の失敗例:**
+```
+症状: バグ修正のコードを書いたのに、動作確認で修正前の挙動が再現
+原因: `docker compose restart api worker` を実行していなかった
+結果: 「修正したのに直っていない」と誤認し、さらに不要な修正を重ねた
+```
+
+**対策:**
+- コード変更後、テスト実行前に必ず再起動
+- ローカル開発（air使用）の場合は自動リロードされるが、Docker 環境では手動再起動が必須
+
+---
+
+### Rule 2: 座標計算のキャッシュ禁止（DAG Editor）
+
+**Why:**
+グループのリサイズやドラッグ時、内部要素の座標は親の変更に連動して再計算される必要がある。
+`computed` でキャッシュすると、依存関係が正しく追跡されず古い座標が返される。
+
+**過去の失敗例:**
+```
+症状: BlockGroup をドラッグした時、内部ブロックが正しく追従しない
+原因: `getBoundingBox()` の結果を `computed` でキャッシュしていた
+結果: グループリサイズ後も古い座標を返し、ドラッグ時に位置がずれた
+```
+
+**対策:**
+```typescript
+// ❌ 禁止
+const cachedBounds = computed(() => getBoundingBox(node))
+
+// ✅ 正しい
+function getCurrentBounds(node: Node) {
+  return getBoundingBox(node) // 毎回再計算
+}
+```
+
+---
+
+### Rule 3: テナント分離の徹底
+
+**Why:**
+マルチテナント SaaS では、テナント A のデータをテナント B が参照できてはならない。
+`tenant_id` フィルタを忘れると、セキュリティ違反となる。
+
+**過去の失敗例:**
+```
+症状: ワークフロー一覧で他テナントのワークフローが表示された
+原因: Repository クエリで `WHERE tenant_id = $2` を忘れていた
+結果: セキュリティインシデント（データ漏洩）
+```
+
+**対策:**
+```go
+// ❌ 禁止
+query := `SELECT * FROM workflows WHERE id = $1`
+
+// ✅ 正しい
+query := `SELECT * FROM workflows WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`
+```
+
+---
+
+### Rule 4: 論理削除（Soft Delete）の一貫性
+
+**Why:**
+`deleted_at` カラムを持つテーブルは論理削除方式。物理削除すると外部キー制約や監査ログに問題が発生する。
+
+**過去の失敗例:**
+```
+症状: 削除したはずのワークフローが復活した
+原因: DELETE 文で物理削除したが、関連テーブルに参照が残っていた
+結果: データ不整合、エラー発生
+```
+
+**対策:**
+```sql
+-- ❌ 禁止
+DELETE FROM workflows WHERE id = $1
+
+-- ✅ 正しい
+UPDATE workflows SET deleted_at = NOW() WHERE id = $1 AND tenant_id = $2
+```
+
+---
+
+### Rule 5: ブラウザダイアログ（alert/confirm/prompt）の禁止
+
+**Why:**
+1. SSR 環境（Nuxt）ではブラウザ API が存在しない
+2. ブロッキングダイアログは UX が悪い
+3. スタイリングができない
+
+**過去の失敗例:**
+```
+症状: ページロード時に「ReferenceError: confirm is not defined」エラー
+原因: <script setup> のトップレベルで confirm() を呼び出していた
+結果: SSR 時にサーバーサイドでエラー発生、ページが表示されない
+```
+
+**対策:**
+```typescript
+// ❌ 禁止
+if (confirm('Delete?')) { ... }
+
+// ✅ 正しい
+const toast = useToast()
+toast.add({ title: 'Deleted', color: 'green' })
+```
+
+---
+
+### Rule 6: Context 伝播の徹底
+
+**Why:**
+OpenTelemetry トレースは `context.Context` を通じて親子関係を追跡する。
+`context.Background()` で新しいコンテキストを作ると、トレースが途切れて問題の追跡が困難になる。
+
+**過去の失敗例:**
+```
+症状: Jaeger でワークフロー実行のトレースを見ると、途中で途切れている
+原因: Usecase 内で ctx := context.Background() を使っていた
+結果: エラー発生時にどこで問題が起きたか特定できない
+```
+
+**対策:**
+```go
+// ❌ 禁止
+func (u *Usecase) Execute(tenantID, id uuid.UUID) error {
+    ctx := context.Background()  // トレース途切れ
+    // ...
+}
+
+// ✅ 正しい
+func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
+    ctx, span := telemetry.StartSpan(ctx, "Usecase.Execute")
+    defer span.End()
+    // ...
+}
+```
+
+---
+
+### Rule 7: 既存パターンの踏襲
+
+**Why:**
+コードベースの一貫性を保つため。異なるパターンが混在すると、読み手の認知負荷が増加し、バグが発生しやすくなる。
+
+**過去の失敗例:**
+```
+症状: 新しい Handler でエラーハンドリングが他と異なる
+原因: 既存の Handler を参照せずに独自実装した
+結果: エラーレスポンスの形式が不統一、フロントエンドでエラー処理に失敗
+```
+
+**対策:**
+```
+1. 実装前に類似機能の既存コードを検索
+2. パターンを踏襲
+3. 独自実装は最小限に
+```
+
+---
+
+### Rule 8: ドキュメント更新の同期
+
+**Why:**
+コードとドキュメントが乖離すると、次の開発者（または AI エージェント）が誤った情報に基づいて作業する。
+
+**過去の失敗例:**
+```
+症状: 新しい API エンドポイントを追加したが、フロントエンドから呼び出せない
+原因: API.md と openapi.yaml を更新していなかったため、フロントエンド開発者が存在を知らなかった
+結果: 重複実装、後からの統合作業が発生
+```
+
+**対策:**
+- コード変更と同時にドキュメントを更新
+- [DOCUMENTATION_SYNC.md](./DOCUMENTATION_SYNC.md) の更新マッピングを参照
+
+---
+
 ## Related Documents
 
 - [GIT_RULES.md](./GIT_RULES.md) - Git操作ルール
