@@ -262,8 +262,7 @@ const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
   ],
   try_catch: [
     { name: 'success', label: 'Success', color: '#22c55e' },
-    { name: 'caught', label: 'Caught', color: '#f59e0b' },
-    { name: 'uncaught', label: 'Uncaught', color: '#ef4444' },
+    { name: 'error', label: 'Error', color: '#ef4444' },
   ],
   foreach: [
     { name: 'complete', label: 'Complete', color: '#22c55e' },
@@ -271,7 +270,6 @@ const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
   ],
   while: [
     { name: 'complete', label: 'Complete', color: '#22c55e' },
-    { name: 'max_iterations', label: 'Max Reached', color: '#f59e0b' },
   ],
 }
 
