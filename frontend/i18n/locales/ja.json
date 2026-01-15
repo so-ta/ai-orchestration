@@ -176,11 +176,26 @@
     "stepsCount": "{count} ステップ",
     "categories": {
       "ai": "AI",
-      "logic": "ロジック",
+      "flow": "フロー",
+      "apps": "アプリ",
+      "custom": "カスタム"
+    },
+    "subcategories": {
+      "chat": "チャット",
+      "rag": "RAG",
+      "routing": "ルーティング",
+      "branching": "分岐",
       "data": "データ",
-      "integration": "統合",
       "control": "制御",
-      "utility": "ユーティリティ"
+      "utility": "ユーティリティ",
+      "slack": "Slack",
+      "discord": "Discord",
+      "notion": "Notion",
+      "github": "GitHub",
+      "google": "Google",
+      "linear": "Linear",
+      "email": "メール",
+      "web": "Web"
     },
     "autoLayout": "自動整形",
     "groupDeleted": "グループを削除しました",

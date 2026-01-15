@@ -141,7 +141,25 @@ export interface StepRun {
 export type StepRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
 // Block Registry Types
-export type BlockCategory = 'ai' | 'logic' | 'integration' | 'data' | 'control' | 'utility' | 'group'
+export type BlockCategory = 'ai' | 'flow' | 'apps' | 'custom'
+
+// Block Subcategories for better organization
+export type BlockSubcategory =
+  | 'chat'       // AI: chat/conversation
+  | 'rag'        // AI: RAG (retrieval augmented generation)
+  | 'routing'    // AI: routing/classification
+  | 'branching'  // Flow: conditional branching
+  | 'data'       // Flow: data transformation
+  | 'control'    // Flow: control flow
+  | 'utility'    // Flow: utilities
+  | 'slack'      // Apps: Slack
+  | 'discord'    // Apps: Discord
+  | 'notion'     // Apps: Notion
+  | 'github'     // Apps: GitHub
+  | 'google'     // Apps: Google (Sheets, etc)
+  | 'linear'     // Apps: Linear
+  | 'email'      // Apps: Email providers
+  | 'web'        // Apps: Web/HTTP
 
 export interface ErrorCodeDef {
   code: string
@@ -185,6 +203,7 @@ export interface BlockDefinition {
   name: string
   description?: string
   category: BlockCategory
+  subcategory?: BlockSubcategory
   icon?: string
   config_schema: object
   input_schema?: object

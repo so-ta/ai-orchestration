@@ -224,11 +224,9 @@ func TestBlockCategory_IsValid(t *testing.T) {
 		expected bool
 	}{
 		{BlockCategoryAI, true},
-		{BlockCategoryLogic, true},
-		{BlockCategoryIntegration, true},
-		{BlockCategoryData, true},
-		{BlockCategoryControl, true},
-		{BlockCategoryUtility, true},
+		{BlockCategoryFlow, true},
+		{BlockCategoryApps, true},
+		{BlockCategoryCustom, true},
 		{BlockCategory("invalid"), false},
 		{BlockCategory(""), false},
 	}

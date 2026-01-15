@@ -20,7 +20,8 @@ func SplitBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Split",
 		Description: "Split into batches",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryData,
 		Icon:        "scissors",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -88,7 +89,8 @@ func FilterBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Filter",
 		Description: "Filter items by condition",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryData,
 		Icon:        "filter",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -136,7 +138,8 @@ func JoinBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Join",
 		Description: "Merge multiple branches",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryData,
 		Icon:        "git-merge",
 		ConfigSchema: json.RawMessage(`{}`),
 		InputSchema: json.RawMessage(`{
@@ -168,7 +171,8 @@ func MapBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Map",
 		Description: "Process array items in parallel",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryData,
 		Icon:        "layers",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -226,7 +230,8 @@ func AggregateBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Aggregate",
 		Description: "Aggregate data operations",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryData,
 		Icon:        "database",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

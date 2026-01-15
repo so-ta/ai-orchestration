@@ -176,11 +176,26 @@
     "stepsCount": "{count} steps",
     "categories": {
       "ai": "AI",
-      "logic": "Logic",
+      "flow": "Flow",
+      "apps": "Apps",
+      "custom": "Custom"
+    },
+    "subcategories": {
+      "chat": "Chat",
+      "rag": "RAG",
+      "routing": "Routing",
+      "branching": "Branching",
       "data": "Data",
-      "integration": "Integration",
       "control": "Control",
-      "utility": "Utility"
+      "utility": "Utility",
+      "slack": "Slack",
+      "discord": "Discord",
+      "notion": "Notion",
+      "github": "GitHub",
+      "google": "Google",
+      "linear": "Linear",
+      "email": "Email",
+      "web": "Web"
     },
     "autoLayout": "Auto Layout",
     "groupDeleted": "Group deleted",

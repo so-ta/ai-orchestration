@@ -68,7 +68,7 @@ const filteredBlocks = computed(() => {
   })
 })
 
-const categories: BlockCategory[] = ['ai', 'logic', 'data', 'integration', 'control', 'utility']
+const categories: BlockCategory[] = ['ai', 'flow', 'apps', 'custom']
 
 // Functions
 function showMessageToast(type: 'success' | 'error', text: string) {
@@ -101,7 +101,7 @@ function resetCreateForm() {
   createForm.slug = ''
   createForm.name = ''
   createForm.description = ''
-  createForm.category = 'integration'
+  createForm.category = 'apps'
   createForm.icon = ''
 }
 

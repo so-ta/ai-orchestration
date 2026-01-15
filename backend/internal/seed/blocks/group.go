@@ -21,7 +21,8 @@ func parallelBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Parallel",
 		Description: "Execute multiple independent flows concurrently within the group",
-		Category:    domain.BlockCategoryGroup,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "git-branch",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -70,7 +71,8 @@ func tryCatchBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Try-Catch",
 		Description: "Execute body with error handling and retry support",
-		Category:    domain.BlockCategoryGroup,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "shield",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -122,7 +124,8 @@ func foreachBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "For Each",
 		Description: "Iterate over array elements, executing the same process for each",
-		Category:    domain.BlockCategoryGroup,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "repeat",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -188,7 +191,8 @@ func whileBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "While",
 		Description: "Repeat body execution while condition is true",
-		Category:    domain.BlockCategoryGroup,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "rotate-cw",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

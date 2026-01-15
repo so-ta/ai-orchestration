@@ -19,7 +19,8 @@ func StartBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Start",
 		Description: "Workflow entry point",
-		Category:    domain.BlockCategoryControl,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "play",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -61,7 +62,8 @@ func WaitBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Wait",
 		Description: "Pause execution",
-		Category:    domain.BlockCategoryControl,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "clock",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -101,7 +103,8 @@ func ErrorBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Error",
 		Description: "Stop workflow with error",
-		Category:    domain.BlockCategoryControl,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "alert-circle",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -137,7 +140,8 @@ func HumanInLoopBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Human in Loop",
 		Description: "Wait for human approval",
-		Category:    domain.BlockCategoryControl,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "user-check",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

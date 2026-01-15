@@ -18,7 +18,8 @@ func DocLoaderBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Document Loader",
 		Description: "Load documents from URL, text, or JSON",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "file-text",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -108,7 +109,8 @@ func TextSplitterBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Text Splitter",
 		Description: "Split documents into smaller chunks",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "scissors",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -185,6 +187,7 @@ func RAGQueryBlock() *SystemBlockDefinition {
 		Name:        "RAG Query",
 		Description: "Search documents and generate answer with LLM",
 		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "message-square",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

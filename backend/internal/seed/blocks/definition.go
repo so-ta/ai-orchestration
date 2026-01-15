@@ -23,10 +23,11 @@ type SystemBlockDefinition struct {
 	Version int    `json:"version"` // Explicit version (increment when IN/OUT schema changes)
 
 	// Basic info
-	Name        string               `json:"name"`
-	Description string               `json:"description"`
-	Category    domain.BlockCategory `json:"category"`
-	Icon        string               `json:"icon"`
+	Name        string                  `json:"name"`
+	Description string                  `json:"description"`
+	Category    domain.BlockCategory    `json:"category"`
+	Subcategory domain.BlockSubcategory `json:"subcategory,omitempty"`
+	Icon        string                  `json:"icon"`
 
 	// Schema definitions
 	ConfigSchema json.RawMessage     `json:"config_schema"`

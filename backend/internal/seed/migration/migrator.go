@@ -121,6 +121,7 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 		Name:                seedBlock.Name,
 		Description:         seedBlock.Description,
 		Category:            seedBlock.Category,
+		Subcategory:         seedBlock.Subcategory,
 		Icon:                seedBlock.Icon,
 		ConfigSchema:        seedBlock.ConfigSchema,
 		InputSchema:         seedBlock.InputSchema,
@@ -171,6 +172,7 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 	existing.Name = seedBlock.Name
 	existing.Description = seedBlock.Description
 	existing.Category = seedBlock.Category
+	existing.Subcategory = seedBlock.Subcategory
 	existing.Icon = seedBlock.Icon
 	existing.ConfigSchema = seedBlock.ConfigSchema
 	existing.InputSchema = seedBlock.InputSchema
@@ -209,6 +211,9 @@ func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.Sys
 		return true
 	}
 	if existing.Category != seed.Category {
+		return true
+	}
+	if existing.Subcategory != seed.Subcategory {
 		return true
 	}
 	if existing.Icon != seed.Icon {
