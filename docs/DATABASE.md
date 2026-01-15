@@ -317,7 +317,8 @@ Indexes:
 | slug | VARCHAR(100) | NOT NULL | Unique identifier |
 | name | VARCHAR(255) | NOT NULL | Display name |
 | description | TEXT | | |
-| category | VARCHAR(50) | NOT NULL, CHECK | ai, logic, integration, data, control, utility, **group** |
+| category | VARCHAR(50) | NOT NULL, CHECK | ai, flow, apps, custom, **group** |
+| subcategory | VARCHAR(50) | CHECK | chat, rag, routing, branching, data, control, utility, slack, discord, notion, github, google, linear, email, web |
 | icon | VARCHAR(50) | | Icon identifier |
 | config_schema | JSONB | NOT NULL DEFAULT '{}' | Config JSON Schema |
 | input_schema | JSONB | | Input JSON Schema |
@@ -341,7 +342,8 @@ Indexes:
 - `idx_block_definitions_enabled` ON (enabled)
 
 **Constraints**:
-- `valid_block_category`: category IN ('ai', 'logic', 'integration', 'data', 'control', 'utility', 'group')
+- `valid_block_category`: category IN ('ai', 'flow', 'apps', 'custom', 'group')
+- `valid_block_subcategory`: subcategory IS NULL OR subcategory IN ('chat', 'rag', 'routing', 'branching', 'data', 'control', 'utility', 'slack', 'discord', 'notion', 'github', 'google', 'linear', 'email', 'web')
 - `valid_group_kind`: group_kind IS NULL OR group_kind IN ('parallel', 'try_catch', 'foreach', 'while')
 
 **Group Blocks (Phase B)**:

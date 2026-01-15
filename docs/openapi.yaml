@@ -749,7 +749,12 @@ paths:
           in: query
           schema:
             type: string
-            enum: [ai, logic, integration, data, control, utility]
+            enum: [ai, flow, apps, custom]
+        - name: subcategory
+          in: query
+          schema:
+            type: string
+            enum: [chat, rag, routing, branching, data, control, utility, slack, discord, notion, github, google, linear, email, web]
         - name: enabled
           in: query
           schema:
@@ -2112,7 +2117,11 @@ components:
           type: string
         category:
           type: string
-          enum: [ai, logic, integration, data, control, utility]
+          enum: [ai, flow, apps, custom]
+        subcategory:
+          type: string
+          enum: [chat, rag, routing, branching, data, control, utility, slack, discord, notion, github, google, linear, email, web]
+          nullable: true
         icon:
           type: string
         code:
@@ -2199,7 +2208,11 @@ components:
           type: string
         category:
           type: string
-          enum: [ai, logic, integration, data, control, utility]
+          enum: [ai, flow, apps, custom]
+        subcategory:
+          type: string
+          enum: [chat, rag, routing, branching, data, control, utility, slack, discord, notion, github, google, linear, email, web]
+          nullable: true
         icon:
           type: string
         code:
