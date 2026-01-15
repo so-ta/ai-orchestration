@@ -51,6 +51,12 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 	userID := getUserID(r)
 
+	// Only set CreatedBy if we have a valid user ID
+	var createdBy *uuid.UUID
+	if userID != uuid.Nil {
+		createdBy = &userID
+	}
+
 	schedule, err := h.usecase.Create(r.Context(), usecase.CreateScheduleInput{
 		TenantID:       tenantID,
 		WorkflowID:     workflowID,
@@ -59,7 +65,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CronExpression: req.CronExpression,
 		Timezone:       req.Timezone,
 		Input:          req.Input,
-		CreatedBy:      &userID,
+		CreatedBy:      createdBy,
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -73,7 +79,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"cron":        schedule.CronExpression,
 	})
 
-	JSON(w, http.StatusCreated, schedule)
+	JSONData(w, http.StatusCreated, schedule)
 }
 
 // Get retrieves a schedule by ID
@@ -93,7 +99,7 @@ func (h *ScheduleHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	JSON(w, http.StatusOK, schedule)
+	JSONData(w, http.StatusOK, schedule)
 }
 
 // List lists schedules
@@ -173,7 +179,7 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		"name": schedule.Name,
 	})
 
-	JSON(w, http.StatusOK, schedule)
+	JSONData(w, http.StatusOK, schedule)
 }
 
 // Delete deletes a schedule
@@ -218,7 +224,7 @@ func (h *ScheduleHandler) Pause(w http.ResponseWriter, r *http.Request) {
 	// Log audit event
 	logAudit(r.Context(), h.auditService, r, domain.AuditActionSchedulePause, domain.AuditResourceSchedule, &schedule.ID, nil)
 
-	JSON(w, http.StatusOK, schedule)
+	JSONData(w, http.StatusOK, schedule)
 }
 
 // Resume resumes a paused schedule
@@ -241,7 +247,7 @@ func (h *ScheduleHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	// Log audit event
 	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleResume, domain.AuditResourceSchedule, &schedule.ID, nil)
 
-	JSON(w, http.StatusOK, schedule)
+	JSONData(w, http.StatusOK, schedule)
 }
 
 // Trigger manually triggers a schedule
@@ -266,5 +272,5 @@ func (h *ScheduleHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 		"run_id": run.ID,
 	})
 
-	JSON(w, http.StatusOK, run)
+	JSONData(w, http.StatusOK, run)
 }

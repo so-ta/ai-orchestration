@@ -112,10 +112,12 @@ func TestRunListPagination(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var listResp struct {
-		Data  []Run `json:"data"`
-		Total int   `json:"total"`
-		Page  int   `json:"page"`
-		Limit int   `json:"limit"`
+		Data []Run `json:"data"`
+		Meta struct {
+			Total int `json:"total"`
+			Page  int `json:"page"`
+			Limit int `json:"limit"`
+		} `json:"meta"`
 	}
 	err := json.Unmarshal(body, &listResp)
 	require.NoError(t, err)
@@ -128,8 +130,8 @@ func TestRunListPagination(t *testing.T) {
 	err = json.Unmarshal(body, &listResp)
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(listResp.Data))
-	assert.Equal(t, 1, listResp.Page)
-	assert.Equal(t, 2, listResp.Limit)
+	assert.Equal(t, 1, listResp.Meta.Page)
+	assert.Equal(t, 2, listResp.Meta.Limit)
 }
 
 func TestRunGetByID(t *testing.T) {
