@@ -220,9 +220,11 @@ CREATE TABLE public.block_groups (
     position_y integer DEFAULT 0,
     width integer DEFAULT 400,
     height integer DEFAULT 300,
+    pre_process text,
+    post_process text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT valid_block_group_type CHECK (((type)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'if_else'::character varying, 'switch_case'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])))
+    CONSTRAINT valid_block_group_type CHECK (((type)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])))
 );
 
 
