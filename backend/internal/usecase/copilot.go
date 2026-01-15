@@ -1024,7 +1024,6 @@ func filterInvalidSteps(output GenerateWorkflowOutput) GenerateWorkflowOutput {
 		"condition":     true,
 		"switch":        true,
 		"map":           true,
-		"join":          true,
 		"subflow":       true,
 		"wait":          true,
 		"function":      true,

@@ -53,7 +53,6 @@ export type StepType =
   | 'condition'
   | 'switch'
   | 'map'
-  | 'join'
   | 'subflow'
   | 'loop'
   | 'wait'

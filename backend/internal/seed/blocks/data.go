@@ -9,7 +9,6 @@ import (
 func (r *Registry) registerDataBlocks() {
 	r.register(SplitBlock())
 	r.register(FilterBlock())
-	r.register(JoinBlock())
 	r.register(MapBlock())
 	r.register(AggregateBlock())
 }
@@ -129,39 +128,6 @@ return {
 			{Code: "FILTER_001", Name: "INVALID_EXPR", Description: "Invalid filter expression", Retryable: false},
 		},
 		Enabled: true,
-	}
-}
-
-func JoinBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:        "join",
-		Version:     1,
-		Name:        "Join",
-		Description: "Merge multiple branches",
-		Category:    domain.BlockCategoryFlow,
-		Subcategory: domain.BlockSubcategoryData,
-		Icon:        "git-merge",
-		ConfigSchema: json.RawMessage(`{}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"data": {"type": "object", "description": "マージするデータ"}
-			},
-			"description": "マージするデータ"
-		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input_1", Label: "Input 1", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "First branch result"},
-			{Name: "input_2", Label: "Input 2", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Second branch result"},
-			{Name: "input_3", Label: "Input 3", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Third branch result"},
-			{Name: "input_4", Label: "Input 4", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Fourth branch result"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Merged data"},
-		},
-		Code:       `return input;`,
-		UIConfig:   json.RawMessage(`{"icon": "git-merge", "color": "#06B6D4"}`),
-		ErrorCodes: []domain.ErrorCodeDef{},
-		Enabled:    true,
 	}
 }
 

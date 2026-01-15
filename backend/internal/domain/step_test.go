@@ -17,7 +17,6 @@ func TestStepType_IsValid(t *testing.T) {
 		{StepTypeTool, true},
 		{StepTypeCondition, true},
 		{StepTypeMap, true},
-		{StepTypeJoin, true},
 		{StepTypeSubflow, true},
 		{StepType("invalid"), false},
 		{StepType(""), false},
@@ -32,14 +31,13 @@ func TestStepType_IsValid(t *testing.T) {
 
 func TestValidStepTypes(t *testing.T) {
 	types := ValidStepTypes()
-	assert.Len(t, types, 18)
+	assert.Len(t, types, 17) // join has been removed
 	assert.Contains(t, types, StepTypeStart)
 	assert.Contains(t, types, StepTypeLLM)
 	assert.Contains(t, types, StepTypeTool)
 	assert.Contains(t, types, StepTypeCondition)
 	assert.Contains(t, types, StepTypeSwitch)
 	assert.Contains(t, types, StepTypeMap)
-	assert.Contains(t, types, StepTypeJoin)
 	assert.Contains(t, types, StepTypeSubflow)
 	assert.Contains(t, types, StepTypeWait)
 	assert.Contains(t, types, StepTypeFunction)

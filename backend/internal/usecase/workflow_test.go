@@ -250,7 +250,9 @@ func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
 	groupID := uuid.New()
 	branchA := domain.Step{ID: uuid.New(), Name: "Branch A", Type: domain.StepTypeFunction, BlockGroupID: &groupID}
 	branchB := domain.Step{ID: uuid.New(), Name: "Branch B", Type: domain.StepTypeFunction, BlockGroupID: &groupID}
-	mergeStep := domain.Step{ID: uuid.New(), Name: "Merge", Type: domain.StepTypeJoin}
+	// Note: join step has been removed as it is no longer supported.
+	// Block Group outputs are already aggregated, so we use a function step to process results.
+	processStep := domain.Step{ID: uuid.New(), Name: "Process Results", Type: domain.StepTypeFunction}
 
 	usecase := &WorkflowUsecase{}
 
@@ -263,14 +265,14 @@ func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
 		{
 			name: "workflow with block group - all steps connected via step edges",
 			workflow: &domain.Workflow{
-				Steps: []domain.Step{startStep, initStep, branchA, branchB, mergeStep},
+				Steps: []domain.Step{startStep, initStep, branchA, branchB, processStep},
 				Edges: []domain.Edge{
 					// All connections via step-to-step edges
 					{SourceStepID: &startStep.ID, TargetStepID: &initStep.ID},
 					{SourceStepID: &initStep.ID, TargetStepID: &branchA.ID},
 					{SourceStepID: &initStep.ID, TargetStepID: &branchB.ID},
-					{SourceStepID: &branchA.ID, TargetStepID: &mergeStep.ID},
-					{SourceStepID: &branchB.ID, TargetStepID: &mergeStep.ID},
+					{SourceStepID: &branchA.ID, TargetStepID: &processStep.ID},
+					{SourceStepID: &branchB.ID, TargetStepID: &processStep.ID},
 				},
 				BlockGroups: []domain.BlockGroup{
 					{

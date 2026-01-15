@@ -543,6 +543,11 @@ func (u *WorkflowUsecase) ValidateDAG(workflow *domain.Workflow) error {
 		}
 	}
 
+	// Check for branching blocks (condition/switch) with multiple outputs outside Block Groups
+	if err := validateBranchingBlocksInGroups(workflow.Steps, workflow.Edges); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -609,6 +614,39 @@ func hasUnconnectedSteps(steps []domain.Step, edges []domain.Edge) bool {
 	}
 
 	return false
+}
+
+// validateBranchingBlocksInGroups checks that branching blocks (condition/switch) with multiple output edges
+// are contained within a Block Group. This prevents complex parallel flows outside of managed group contexts.
+func validateBranchingBlocksInGroups(steps []domain.Step, edges []domain.Edge) error {
+	// Build step map for quick lookup
+	stepMap := make(map[uuid.UUID]*domain.Step)
+	for i := range steps {
+		stepMap[steps[i].ID] = &steps[i]
+	}
+
+	// Count outgoing edges per step (only step-to-step edges)
+	outgoingEdgeCount := make(map[uuid.UUID]int)
+	for _, edge := range edges {
+		if edge.SourceStepID != nil {
+			outgoingEdgeCount[*edge.SourceStepID]++
+		}
+	}
+
+	// Check each branching block
+	for _, step := range steps {
+		// Only check condition and switch blocks
+		if step.Type != domain.StepTypeCondition && step.Type != domain.StepTypeSwitch {
+			continue
+		}
+
+		// If this branching block has multiple outgoing edges, it must be in a Block Group
+		if outgoingEdgeCount[step.ID] > 1 && step.BlockGroupID == nil {
+			return domain.ErrWorkflowBranchOutsideGroup
+		}
+	}
+
+	return nil
 }
 
 // deriveInputSchemaFromFirstStep derives input_schema from the first executable step's block definition

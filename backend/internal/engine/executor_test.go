@@ -240,42 +240,8 @@ func TestExecutor_ExecuteConditionStep(t *testing.T) {
 	}
 }
 
-func TestExecutor_ExecuteJoinStep(t *testing.T) {
-	executor := setupTestExecutor()
-
-	run := &domain.Run{
-		ID:         uuid.New(),
-		WorkflowID: uuid.New(),
-	}
-	def := &domain.WorkflowDefinition{Name: "test"}
-	execCtx := NewExecutionContext(run, def)
-
-	// Add some step data
-	step1ID := uuid.New()
-	step2ID := uuid.New()
-	execCtx.StepData[step1ID] = json.RawMessage(`{"a": 1}`)
-	execCtx.StepData[step2ID] = json.RawMessage(`{"b": 2}`)
-
-	joinStep := domain.Step{
-		ID:     uuid.New(),
-		Name:   "join-test",
-		Type:   domain.StepTypeJoin,
-		Config: json.RawMessage(`{}`),
-	}
-
-	output, err := executor.executeJoinStep(context.Background(), execCtx, joinStep)
-
-	require.NoError(t, err)
-	require.NotNil(t, output)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	// Should have both step outputs
-	assert.Contains(t, result, step1ID.String())
-	assert.Contains(t, result, step2ID.String())
-}
+// Note: TestExecutor_ExecuteJoinStep has been removed because join step type
+// is no longer supported. Branching outside Block Groups is prohibited.
 
 // Tests for new step types (Wait, Function, Router, HumanInLoop)
 
@@ -801,46 +767,8 @@ func TestExecutor_PrepareStepInput_UnmarshalFallback(t *testing.T) {
 	assert.Equal(t, "not valid json", result[step1ID.String()])
 }
 
-func TestExecutor_ExecuteJoinStep_UnmarshalFallback(t *testing.T) {
-	// Test that executeJoinStep falls back to raw string when unmarshal fails
-	executor := setupTestExecutor()
-
-	run := &domain.Run{
-		ID:         uuid.New(),
-		WorkflowID: uuid.New(),
-	}
-	def := &domain.WorkflowDefinition{Name: "test"}
-	execCtx := NewExecutionContext(run, def)
-
-	// Add both valid and invalid JSON as step data
-	step1ID := uuid.New()
-	step2ID := uuid.New()
-	execCtx.StepData[step1ID] = json.RawMessage(`{"valid": "json"}`)
-	execCtx.StepData[step2ID] = json.RawMessage(`invalid json data`)
-
-	joinStep := domain.Step{
-		ID:     uuid.New(),
-		Name:   "join-test",
-		Type:   domain.StepTypeJoin,
-		Config: json.RawMessage(`{}`),
-	}
-
-	output, err := executor.executeJoinStep(context.Background(), execCtx, joinStep)
-
-	require.NoError(t, err)
-	require.NotNil(t, output)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-
-	// Valid JSON should be parsed correctly
-	validData := result[step1ID.String()].(map[string]interface{})
-	assert.Equal(t, "json", validData["valid"])
-
-	// Invalid JSON should fall back to raw string
-	assert.Equal(t, "invalid json data", result[step2ID.String()])
-}
+// Note: TestExecutor_ExecuteJoinStep_UnmarshalFallback has been removed because
+// join step type is no longer supported. Branching outside Block Groups is prohibited.
 
 func TestExecutor_ExecuteMapStep_MarshalUnmarshalFallbacks(t *testing.T) {
 	executor := setupTestExecutor()

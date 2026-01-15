@@ -187,15 +187,17 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 
-			// === Merge Parallel Results (outside groups) ===
+			// === Process Parallel Results (outside groups) ===
 			{
 				TempID:    "merge_parallel",
-				Name:      "Merge Results",
-				Type:      "join",
+				Name:      "Process Results",
+				Type:      "function",
 				PositionX: 740,
 				PositionY: 180,
-				BlockSlug: "join",
-				Config:    json.RawMessage(`{}`),
+				Config: json.RawMessage(`{
+					"code": "return { ...input, parallel_completed: true };",
+					"language": "javascript"
+				}`),
 			},
 
 			// === Parallel Error Handler (handles parallel group error) ===
@@ -305,16 +307,9 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 
-			// === Error Aggregator (collects all error paths) ===
-			{
-				TempID:    "error_aggregator",
-				Name:      "Error Summary",
-				Type:      "join",
-				PositionX: 1800,
-				PositionY: 420,
-				BlockSlug: "join",
-				Config:    json.RawMessage(`{}`),
-			},
+			// Note: Error paths now terminate at their respective error handlers.
+			// Previously there was an error_aggregator (join) step, but join has been removed
+			// as branching outside Block Groups is no longer supported.
 		},
 
 		Edges: []SystemEdgeDefinition{
@@ -352,11 +347,9 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 			// While Group MAX_ITERATIONS -> Max Handler (using 'error' output port)
 			{SourceGroupTempID: "while_group", TargetTempID: "max_iterations_handler", SourcePort: "error"},
 
-			// === Error Paths converge to Error Summary ===
-			{SourceTempID: "parallel_error", TargetTempID: "error_aggregator", SourcePort: "output"},
-			{SourceTempID: "catch_handler", TargetTempID: "error_aggregator", SourcePort: "output"},
-			{SourceTempID: "foreach_error", TargetTempID: "error_aggregator", SourcePort: "output"},
-			{SourceTempID: "max_iterations_handler", TargetTempID: "error_aggregator", SourcePort: "output"},
+			// Note: Error paths now terminate at their respective error handlers.
+			// Previously error paths converged to an error_aggregator (join) step,
+			// but join has been removed as branching outside Block Groups is no longer supported.
 		},
 	}
 }

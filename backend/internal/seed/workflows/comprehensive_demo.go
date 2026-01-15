@@ -8,8 +8,9 @@ func (r *Registry) registerComprehensiveWorkflows() {
 
 func (r *Registry) registerDemoWorkflows() {
 	r.register(DataPipelineBlockDemoWorkflow())
-	r.register(AIRoutingBlockDemoWorkflow())
-	r.register(ControlFlowBlockDemoWorkflow())
+	// Note: AIRoutingBlockDemoWorkflow and ControlFlowBlockDemoWorkflow were removed
+	// because they use branching (router/condition) with multiple output edges outside Block Groups,
+	// which is no longer supported. Use Block Groups for parallel/branching flows.
 }
 
 // ComprehensiveBlockDemoWorkflow demonstrates all non-external-integration blocks
@@ -36,13 +37,6 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					"title": "アイテム",
 					"description": "処理対象のアイテム配列",
 					"items": {"type": "object"}
-				},
-				"mode": {
-					"type": "string",
-					"title": "モード",
-					"description": "処理モード (fast/normal/thorough)",
-					"enum": ["fast", "normal", "thorough"],
-					"default": "normal"
 				}
 			}
 		}`),
@@ -68,8 +62,7 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 						"required": ["message", "items"],
 						"properties": {
 							"message": {"type": "string"},
-							"items": {"type": "array"},
-							"mode": {"type": "string", "enum": ["fast", "normal", "thorough"], "default": "normal"}
+							"items": {"type": "array"}
 						}
 					}
 				}`),
@@ -106,71 +99,44 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					}
 				}`),
 			},
-			// === Logic: Switch (multi-branch based on mode) ===
+			// === Data: Filter (filter items based on criteria) ===
 			{
-				TempID:    "mode_switch",
-				Name:      "Mode Switch",
-				Type:      "switch",
+				TempID:    "filter_items",
+				Name:      "Filter Items",
+				Type:      "filter",
 				PositionX: 400,
 				PositionY: 350,
-				BlockSlug: "switch",
-				Config: json.RawMessage(`{
-					"mode": "rules",
-					"cases": [
-						{"name": "fast", "expression": "$.mode === 'fast'"},
-						{"name": "thorough", "expression": "$.mode === 'thorough'"},
-						{"name": "normal", "is_default": true}
-					]
-				}`),
-			},
-			// === Fast path: Simple filter ===
-			{
-				TempID:    "fast_filter",
-				Name:      "Fast Filter",
-				Type:      "filter",
-				PositionX: 200,
-				PositionY: 450,
 				BlockSlug: "filter",
 				Config: json.RawMessage(`{
-					"expression": "$.index < 5"
+					"expression": "$.index < 10"
 				}`),
 			},
-			// === Normal path: Map processing ===
+			// === Data: Map processing ===
 			{
-				TempID:    "normal_map",
-				Name:      "Normal Map",
+				TempID:    "map_items",
+				Name:      "Map Items",
 				Type:      "map",
 				PositionX: 400,
 				PositionY: 450,
 				BlockSlug: "map",
 				Config: json.RawMessage(`{
-					"input_path": "enhanced_items",
+					"input_path": "items",
 					"parallel": false,
 					"max_workers": 5
 				}`),
 			},
-			// === Thorough path: Split into batches ===
+			// === Data: Split into batches ===
 			{
-				TempID:    "thorough_split",
-				Name:      "Thorough Split",
+				TempID:    "split_batches",
+				Name:      "Split Batches",
 				Type:      "split",
-				PositionX: 600,
-				PositionY: 450,
+				PositionX: 400,
+				PositionY: 550,
 				BlockSlug: "split",
 				Config: json.RawMessage(`{
-					"input_path": "enhanced_items",
+					"input_path": "items",
 					"batch_size": 3
 				}`),
-			},
-			// === Join all paths ===
-			{
-				TempID:    "join_results",
-				Name:      "Join Results",
-				Type:      "join",
-				PositionX: 400,
-				PositionY: 650,
-				BlockSlug: "join",
-				Config:    json.RawMessage(`{}`),
 			},
 			// === Aggregate results ===
 			{
@@ -178,7 +144,7 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 				Name:      "Aggregate Results",
 				Type:      "aggregate",
 				PositionX: 400,
-				PositionY: 750,
+				PositionY: 650,
 				BlockSlug: "aggregate",
 				Config: json.RawMessage(`{
 					"operations": [
@@ -187,25 +153,13 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					]
 				}`),
 			},
-			// === Logic: Condition (check if enough items) ===
-			{
-				TempID:    "check_count",
-				Name:      "Check Count",
-				Type:      "condition",
-				PositionX: 400,
-				PositionY: 850,
-				BlockSlug: "condition",
-				Config: json.RawMessage(`{
-					"expression": "$.total_count > 0"
-				}`),
-			},
-			// === AI: LLM for processing (true branch) ===
+			// === AI: LLM for processing ===
 			{
 				TempID:    "llm_process",
 				Name:      "LLM Process",
 				Type:      "llm",
-				PositionX: 300,
-				PositionY: 950,
+				PositionX: 400,
+				PositionY: 750,
 				BlockSlug: "llm",
 				Config: json.RawMessage(`{
 					"provider": "mock",
@@ -216,27 +170,13 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					"max_tokens": 500
 				}`),
 			},
-			// === Control: Error (false branch - no items) ===
-			{
-				TempID:    "error_no_items",
-				Name:      "Error: No Items",
-				Type:      "error",
-				PositionX: 500,
-				PositionY: 950,
-				BlockSlug: "error",
-				Config: json.RawMessage(`{
-					"error_code": "NO_ITEMS",
-					"error_type": "validation",
-					"error_message": "No items to process after filtering"
-				}`),
-			},
 			// === Utility: Code block (final processing) ===
 			{
 				TempID:    "final_code",
 				Name:      "Final Processing",
 				Type:      "code",
-				PositionX: 300,
-				PositionY: 1050,
+				PositionX: 400,
+				PositionY: 850,
 				BlockSlug: "code",
 				Config: json.RawMessage(`{
 					"code": "const result = { status: 'completed', llm_summary: input.content || 'No summary', total_processed: input.total_count || 0, timestamp: new Date().toISOString() }; return result;",
@@ -256,8 +196,8 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 				TempID:    "wait_brief",
 				Name:      "Brief Wait",
 				Type:      "wait",
-				PositionX: 300,
-				PositionY: 1150,
+				PositionX: 400,
+				PositionY: 950,
 				BlockSlug: "wait",
 				Config: json.RawMessage(`{
 					"duration_ms": 100
@@ -269,7 +209,7 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 				Name:      "End Note",
 				Type:      "note",
 				PositionX: 100,
-				PositionY: 1250,
+				PositionY: 1050,
 				BlockSlug: "note",
 				Config: json.RawMessage(`{
 					"content": "This workflow demonstrates all core block types",
@@ -281,8 +221,8 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 				TempID:    "final_output",
 				Name:      "Final Output",
 				Type:      "function",
-				PositionX: 300,
-				PositionY: 1250,
+				PositionX: 400,
+				PositionY: 1050,
 				Config: json.RawMessage(`{
 					"code": "return { result: input, processed_count: input.total_processed || 0, llm_response: input.llm_summary || '', completed_at: new Date().toISOString() };",
 					"language": "javascript"
@@ -294,28 +234,16 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 			{SourceTempID: "start", TargetTempID: "log_input", SourcePort: "output"},
 			// Log -> Prepare
 			{SourceTempID: "log_input", TargetTempID: "prepare_data", SourcePort: "output"},
-			// Prepare -> Switch
-			{SourceTempID: "prepare_data", TargetTempID: "mode_switch", SourcePort: "output"},
-			// Switch -> Fast (fast mode)
-			{SourceTempID: "mode_switch", TargetTempID: "fast_filter", SourcePort: "fast"},
-			// Switch -> Normal (normal/default mode)
-			{SourceTempID: "mode_switch", TargetTempID: "normal_map", SourcePort: "normal"},
-			// Switch -> Thorough (thorough mode)
-			{SourceTempID: "mode_switch", TargetTempID: "thorough_split", SourcePort: "thorough"},
-			// Fast -> Join
-			{SourceTempID: "fast_filter", TargetTempID: "join_results", SourcePort: "matched"},
-			// Normal -> Join
-			{SourceTempID: "normal_map", TargetTempID: "join_results", SourcePort: "complete"},
-			// Thorough Split -> Join
-			{SourceTempID: "thorough_split", TargetTempID: "join_results", SourcePort: "output"},
-			// Join -> Aggregate
-			{SourceTempID: "join_results", TargetTempID: "aggregate_results", SourcePort: "output"},
-			// Aggregate -> Condition
-			{SourceTempID: "aggregate_results", TargetTempID: "check_count", SourcePort: "output"},
-			// Condition (true) -> LLM
-			{SourceTempID: "check_count", TargetTempID: "llm_process", SourcePort: "true"},
-			// Condition (false) -> Error
-			{SourceTempID: "check_count", TargetTempID: "error_no_items", SourcePort: "false"},
+			// Prepare -> Filter
+			{SourceTempID: "prepare_data", TargetTempID: "filter_items", SourcePort: "output"},
+			// Filter -> Map
+			{SourceTempID: "filter_items", TargetTempID: "map_items", SourcePort: "matched"},
+			// Map -> Split
+			{SourceTempID: "map_items", TargetTempID: "split_batches", SourcePort: "complete"},
+			// Split -> Aggregate
+			{SourceTempID: "split_batches", TargetTempID: "aggregate_results", SourcePort: "output"},
+			// Aggregate -> LLM
+			{SourceTempID: "aggregate_results", TargetTempID: "llm_process", SourcePort: "output"},
 			// LLM -> Final Code
 			{SourceTempID: "llm_process", TargetTempID: "final_code", SourcePort: "output"},
 			// Final Code -> Wait
@@ -332,7 +260,7 @@ func DataPipelineBlockDemoWorkflow() *SystemWorkflowDefinition {
 		ID:          "a0000000-0000-0000-0000-000000000201",
 		SystemSlug:  "data-pipeline-block-demo",
 		Name:        "Data Pipeline Block Demo",
-		Description: "Demonstrates data processing blocks: split, filter, map, aggregate, and join",
+		Description: "Demonstrates data processing blocks: split, filter, map, and aggregate",
 		Version:     1,
 		IsSystem:    true,
 		InputSchema: json.RawMessage(`{
