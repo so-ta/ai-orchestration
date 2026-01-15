@@ -29,34 +29,24 @@ const inputValues = ref<Record<string, unknown>>({})
 const isValid = ref(true)
 const loading = ref(false)
 
-// Find the start step and its next step
+// Find the start step
 const startStep = computed(() => props.steps.find(s => s.type === 'start'))
 
-const firstExecutableStep = computed(() => {
-  if (!startStep.value) return null
-
-  // Find edge from start step
-  const edge = props.edges.find(e => e.source_step_id === startStep.value!.id)
-  if (!edge) return null
-
-  // Find target step
-  return props.steps.find(s => s.id === edge.target_step_id) || null
-})
-
-// Get the block definition for the first executable step
-const firstStepBlock = computed(() => {
-  if (!firstExecutableStep.value) return null
-  return props.blocks.find(b => b.slug === firstExecutableStep.value!.type) || null
-})
-
-// Convert input_schema to ConfigSchema format
+// Get the workflow input schema from Start step's config.input_schema
+// This is the user-defined schema for workflow inputs, not the block's default input_schema
 const inputSchema = computed<ConfigSchema | null>(() => {
-  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  if (!startStep.value?.config) return null
+
+  const config = startStep.value.config as Record<string, unknown>
+  const schema = config.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
+
+  const properties = schema.properties as Record<string, unknown> | undefined
+  if (!properties || Object.keys(properties).length === 0) return null
 
   return {
     type: 'object',
-    properties: (schema.properties as Record<string, unknown>) || {},
+    properties: properties,
     required: (schema.required as string[]) || [],
   } as ConfigSchema
 })
@@ -106,7 +96,7 @@ function handleClose() {
       <div v-if="hasInputFields" class="input-section">
         <h3 class="input-title">{{ t('workflows.runDialog.inputTitle') }}</h3>
         <p class="input-description">
-          {{ t('workflows.runDialog.inputDescription', { stepName: firstExecutableStep?.name }) }}
+          {{ t('workflows.runDialog.inputDescription', { stepName: workflowName }) }}
         </p>
 
         <DynamicConfigForm
@@ -120,14 +110,6 @@ function handleClose() {
       <!-- No input fields message -->
       <div v-else class="no-input-message">
         <p>{{ t('workflows.runDialog.noInputRequired') }}</p>
-      </div>
-
-      <!-- Schema info (for debugging) -->
-      <div v-if="firstStepBlock?.input_schema" class="schema-info">
-        <details>
-          <summary>{{ t('workflows.runDialog.schemaDetails') }}</summary>
-          <pre>{{ JSON.stringify(firstStepBlock.input_schema, null, 2) }}</pre>
-        </details>
       </div>
     </div>
 

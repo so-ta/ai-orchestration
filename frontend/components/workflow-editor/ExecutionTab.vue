@@ -329,16 +329,21 @@ const effectiveStep = computed(() => {
 })
 
 // Convert input_schema to ConfigSchema format for workflow execution
-// Derived from first executable step's block definition (reactive to step changes)
+// Derived from Start step's config.input_schema (user-defined workflow input schema)
 const workflowInputSchema = computed<ConfigSchema | null>(() => {
-  // Use first executable step's block input_schema (reactive to DAG changes)
-  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  // Use Start step's config.input_schema (user-defined workflow inputs)
+  if (!startStep.value?.config) return null
+
+  const config = startStep.value.config as Record<string, unknown>
+  const schema = config.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
+
   const properties = schema.properties as Record<string, unknown> | undefined
   if (!properties || Object.keys(properties).length === 0) return null
+
   return {
     type: 'object',
-    properties: properties || {},
+    properties: properties,
     required: (schema.required as string[]) || [],
   } as ConfigSchema
 })
@@ -421,8 +426,11 @@ function getSchemaFields(schema: Record<string, unknown> | undefined | null): Sc
 
 // Get workflow schema fields for preview
 const workflowSchemaFields = computed(() => {
-  // Use first executable step's block input_schema (reactive to DAG changes)
-  const schema = firstStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  // Use Start step's config.input_schema (user-defined workflow inputs)
+  if (!startStep.value?.config) return []
+
+  const config = startStep.value.config as Record<string, unknown>
+  const schema = config.input_schema as Record<string, unknown> | undefined
   return getSchemaFields(schema)
 })
 

@@ -40,9 +40,13 @@ const isValid = ref(true)
 const inputSchema = computed<ConfigSchema | null>(() => {
   const schema = workflow.value?.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
+
+  const properties = schema.properties as Record<string, unknown> | undefined
+  if (!properties || Object.keys(properties).length === 0) return null
+
   return {
     type: 'object',
-    properties: (schema.properties as Record<string, unknown>) || {},
+    properties: properties,
     required: (schema.required as string[]) || [],
   } as ConfigSchema
 })
