@@ -12,11 +12,12 @@ import (
 
 // WorkflowUsecase handles workflow business logic
 type WorkflowUsecase struct {
-	workflowRepo repository.WorkflowRepository
-	stepRepo     repository.StepRepository
-	edgeRepo     repository.EdgeRepository
-	versionRepo  repository.WorkflowVersionRepository
-	blockRepo    repository.BlockDefinitionRepository
+	workflowRepo   repository.WorkflowRepository
+	stepRepo       repository.StepRepository
+	edgeRepo       repository.EdgeRepository
+	versionRepo    repository.WorkflowVersionRepository
+	blockRepo      repository.BlockDefinitionRepository
+	blockGroupRepo repository.BlockGroupRepository
 }
 
 // NewWorkflowUsecase creates a new WorkflowUsecase
@@ -34,6 +35,12 @@ func NewWorkflowUsecase(
 		versionRepo:  versionRepo,
 		blockRepo:    blockRepo,
 	}
+}
+
+// WithBlockGroupRepo sets the block group repository for port validation
+func (u *WorkflowUsecase) WithBlockGroupRepo(repo repository.BlockGroupRepository) *WorkflowUsecase {
+	u.blockGroupRepo = repo
+	return u
 }
 
 // CreateWorkflowInput represents input for creating a workflow
@@ -207,6 +214,22 @@ func (u *WorkflowUsecase) Save(ctx context.Context, input SaveWorkflowInput) (*d
 		return nil, err
 	}
 
+	// Validate edge ports if block group repository is available
+	if u.blockGroupRepo != nil {
+		// Get block groups from database for validation
+		blockGroups, err := u.blockGroupRepo.ListByWorkflow(ctx, input.TenantID, input.ID)
+		if err != nil {
+			return nil, err
+		}
+		blockGroupSlice := make([]domain.BlockGroup, len(blockGroups))
+		for i, bg := range blockGroups {
+			blockGroupSlice[i] = *bg
+		}
+		if err := u.validateEdgePorts(ctx, input.Steps, input.Edges, blockGroupSlice); err != nil {
+			return nil, err
+		}
+	}
+
 	// Delete existing steps and edges, then recreate
 	if err := u.deleteAndRecreateStepsEdges(ctx, input.TenantID, workflow.ID, input.Steps, input.Edges); err != nil {
 		return nil, err
@@ -287,6 +310,22 @@ func (u *WorkflowUsecase) SaveDraft(ctx context.Context, input SaveDraftInput) (
 	inputSchema := input.InputSchema
 	if derivedSchema != nil {
 		inputSchema = derivedSchema
+	}
+
+	// Validate edge ports if block group repository is available
+	if u.blockGroupRepo != nil {
+		// Get block groups from database for validation
+		blockGroups, err := u.blockGroupRepo.ListByWorkflow(ctx, input.TenantID, input.ID)
+		if err != nil {
+			return nil, err
+		}
+		blockGroupSlice := make([]domain.BlockGroup, len(blockGroups))
+		for i, bg := range blockGroups {
+			blockGroupSlice[i] = *bg
+		}
+		if err := u.validateEdgePorts(ctx, input.Steps, input.Edges, blockGroupSlice); err != nil {
+			return nil, err
+		}
 	}
 
 	// Create draft data
@@ -619,4 +658,131 @@ func (u *WorkflowUsecase) deriveInputSchemaFromFirstStep(ctx context.Context, st
 	}
 
 	return block.InputSchema, nil
+}
+
+// validateEdgePorts validates that all edges reference valid ports
+func (u *WorkflowUsecase) validateEdgePorts(ctx context.Context, steps []domain.Step, edges []domain.Edge, blockGroups []domain.BlockGroup) error {
+	// Build step map for quick lookup
+	stepMap := make(map[uuid.UUID]*domain.Step)
+	for i := range steps {
+		stepMap[steps[i].ID] = &steps[i]
+	}
+
+	// Build block group map for quick lookup
+	groupMap := make(map[uuid.UUID]*domain.BlockGroup)
+	for i := range blockGroups {
+		groupMap[blockGroups[i].ID] = &blockGroups[i]
+	}
+
+	for _, edge := range edges {
+		// Validate source port
+		if edge.SourcePort != "" {
+			if err := u.validateSourcePort(ctx, edge.SourcePort, edge.SourceStepID, edge.SourceBlockGroupID, stepMap, groupMap); err != nil {
+				return err
+			}
+		}
+
+		// Validate target port
+		if edge.TargetPort != "" {
+			if err := u.validateTargetPort(ctx, edge.TargetPort, edge.TargetStepID, edge.TargetBlockGroupID, stepMap, groupMap); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateSourcePort validates that the source port exists in the block definition
+func (u *WorkflowUsecase) validateSourcePort(ctx context.Context, sourcePort string, sourceStepID, sourceGroupID *uuid.UUID, stepMap map[uuid.UUID]*domain.Step, groupMap map[uuid.UUID]*domain.BlockGroup) error {
+	var blockDef *domain.BlockDefinition
+	var err error
+
+	if sourceStepID != nil {
+		if step, ok := stepMap[*sourceStepID]; ok {
+			blockDef, err = u.getBlockDefinitionForStep(ctx, step)
+		}
+	} else if sourceGroupID != nil {
+		if group, ok := groupMap[*sourceGroupID]; ok {
+			blockDef, err = u.getBlockDefinitionForGroup(ctx, group)
+		}
+	}
+
+	if err != nil {
+		// If block definition not found, skip validation (legacy blocks)
+		if err == domain.ErrBlockDefinitionNotFound {
+			return nil
+		}
+		return err
+	}
+
+	if blockDef == nil {
+		return nil
+	}
+
+	// Check if the source port exists in output ports
+	for _, port := range blockDef.OutputPorts {
+		if port.Name == sourcePort {
+			return nil
+		}
+	}
+
+	return domain.ErrSourcePortNotFound
+}
+
+// validateTargetPort validates that the target port exists in the block definition
+func (u *WorkflowUsecase) validateTargetPort(ctx context.Context, targetPort string, targetStepID, targetGroupID *uuid.UUID, stepMap map[uuid.UUID]*domain.Step, groupMap map[uuid.UUID]*domain.BlockGroup) error {
+	// Special case: "group-input" is a virtual port for block groups
+	if targetGroupID != nil && targetPort == "group-input" {
+		return nil
+	}
+
+	var blockDef *domain.BlockDefinition
+	var err error
+
+	if targetStepID != nil {
+		if step, ok := stepMap[*targetStepID]; ok {
+			blockDef, err = u.getBlockDefinitionForStep(ctx, step)
+		}
+	} else if targetGroupID != nil {
+		if group, ok := groupMap[*targetGroupID]; ok {
+			blockDef, err = u.getBlockDefinitionForGroup(ctx, group)
+		}
+	}
+
+	if err != nil {
+		// If block definition not found, skip validation (legacy blocks)
+		if err == domain.ErrBlockDefinitionNotFound {
+			return nil
+		}
+		return err
+	}
+
+	if blockDef == nil {
+		return nil
+	}
+
+	// Check if the target port exists in input ports
+	for _, port := range blockDef.InputPorts {
+		if port.Name == targetPort {
+			return nil
+		}
+	}
+
+	return domain.ErrTargetPortNotFound
+}
+
+// getBlockDefinitionForStep retrieves the block definition for a step
+func (u *WorkflowUsecase) getBlockDefinitionForStep(ctx context.Context, step *domain.Step) (*domain.BlockDefinition, error) {
+	if step.BlockDefinitionID != nil {
+		return u.blockRepo.GetByID(ctx, *step.BlockDefinitionID)
+	}
+	// Use step type as slug for legacy steps
+	return u.blockRepo.GetBySlug(ctx, nil, string(step.Type))
+}
+
+// getBlockDefinitionForGroup retrieves the block definition for a block group
+func (u *WorkflowUsecase) getBlockDefinitionForGroup(ctx context.Context, group *domain.BlockGroup) (*domain.BlockDefinition, error) {
+	// Use group type as slug
+	return u.blockRepo.GetBySlug(ctx, nil, string(group.Type))
 }

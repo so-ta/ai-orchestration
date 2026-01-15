@@ -331,6 +331,18 @@ func (m *WorkflowMigrator) createEdges(ctx context.Context, seedWorkflow *workfl
 func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, stepIDMap map[string]uuid.UUID, groupIDMap map[string]uuid.UUID) error {
 	now := time.Now().UTC()
 
+	// Build step type map for port validation
+	stepTypeMap := make(map[string]string) // tempID -> type
+	for _, step := range seedWorkflow.Steps {
+		stepTypeMap[step.TempID] = step.Type
+	}
+
+	// Build group type map for port validation
+	groupTypeMap := make(map[string]string) // tempID -> type
+	for _, group := range seedWorkflow.BlockGroups {
+		groupTypeMap[group.TempID] = group.Type
+	}
+
 	for _, seedEdge := range seedWorkflow.Edges {
 		var sourceStepID, targetStepID *uuid.UUID
 		var sourceGroupID, targetGroupID *uuid.UUID
@@ -365,6 +377,36 @@ func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWork
 			targetGroupID = &id
 		}
 
+		// Validate source port if block repo is available
+		if m.blockRepo != nil && seedEdge.SourcePort != "" {
+			var blockSlug string
+			if seedEdge.SourceTempID != "" {
+				blockSlug = stepTypeMap[seedEdge.SourceTempID]
+			} else if seedEdge.SourceGroupTempID != "" {
+				blockSlug = groupTypeMap[seedEdge.SourceGroupTempID]
+			}
+			if blockSlug != "" {
+				if err := m.validateSourcePort(ctx, seedEdge.SourcePort, blockSlug); err != nil {
+					return fmt.Errorf("edge source port validation failed for %s->%s: %w", seedEdge.SourceTempID+seedEdge.SourceGroupTempID, seedEdge.TargetTempID+seedEdge.TargetGroupTempID, err)
+				}
+			}
+		}
+
+		// Validate target port if block repo is available
+		if m.blockRepo != nil && seedEdge.TargetPort != "" && seedEdge.TargetPort != "group-input" {
+			var blockSlug string
+			if seedEdge.TargetTempID != "" {
+				blockSlug = stepTypeMap[seedEdge.TargetTempID]
+			} else if seedEdge.TargetGroupTempID != "" {
+				blockSlug = groupTypeMap[seedEdge.TargetGroupTempID]
+			}
+			if blockSlug != "" {
+				if err := m.validateTargetPort(ctx, seedEdge.TargetPort, blockSlug); err != nil {
+					return fmt.Errorf("edge target port validation failed for %s->%s: %w", seedEdge.SourceTempID+seedEdge.SourceGroupTempID, seedEdge.TargetTempID+seedEdge.TargetGroupTempID, err)
+				}
+			}
+		}
+
 		var condition *string
 		if seedEdge.Condition != "" {
 			condition = &seedEdge.Condition
@@ -390,6 +432,64 @@ func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWork
 	}
 
 	return nil
+}
+
+// validateSourcePort validates that the source port exists in the block definition
+func (m *WorkflowMigrator) validateSourcePort(ctx context.Context, sourcePort, blockSlug string) error {
+	blockDef, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
+	if err != nil {
+		// If block definition not found, skip validation (legacy blocks)
+		if errors.Is(err, domain.ErrBlockDefinitionNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	for _, port := range blockDef.OutputPorts {
+		if port.Name == sourcePort {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("source port '%s' not found in block '%s' output ports (available: %v)", sourcePort, blockSlug, getPortNames(blockDef.OutputPorts))
+}
+
+// validateTargetPort validates that the target port exists in the block definition
+func (m *WorkflowMigrator) validateTargetPort(ctx context.Context, targetPort, blockSlug string) error {
+	blockDef, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
+	if err != nil {
+		// If block definition not found, skip validation (legacy blocks)
+		if errors.Is(err, domain.ErrBlockDefinitionNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	for _, port := range blockDef.InputPorts {
+		if port.Name == targetPort {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("target port '%s' not found in block '%s' input ports (available: %v)", targetPort, blockSlug, getInputPortNames(blockDef.InputPorts))
+}
+
+// getPortNames extracts port names from output ports for error messages
+func getPortNames(ports []domain.OutputPort) []string {
+	names := make([]string, len(ports))
+	for i, p := range ports {
+		names[i] = p.Name
+	}
+	return names
+}
+
+// getInputPortNames extracts port names from input ports for error messages
+func getInputPortNames(ports []domain.InputPort) []string {
+	names := make([]string, len(ports))
+	for i, p := range ports {
+		names[i] = p.Name
+	}
+	return names
 }
 
 // updateWorkflow updates an existing system workflow

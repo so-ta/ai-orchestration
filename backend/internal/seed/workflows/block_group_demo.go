@@ -54,13 +54,13 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 
 		// Block Groups define the control flow constructs
 		// Each group type has specific output ports:
-		// - parallel: complete, error
-		// - try_catch: success, caught, uncaught
-		// - foreach: complete, error
-		// - while: complete, max_iterations
+		// - parallel: out (complete), error
+		// - try_catch: out (success), error
+		// - foreach: out (complete), error
+		// - while: out (done), error
 		BlockGroups: []SystemBlockGroupDefinition{
 			// Parallel group: executes multiple branches concurrently
-			// Output ports: complete (all succeeded), error (any failed)
+			// Output ports: out (all succeeded), error (any failed)
 			{
 				TempID:    "parallel_group",
 				Name:      "Parallel Processing",
@@ -75,7 +75,7 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			// Try-Catch group: handles errors gracefully
-			// Output ports: success (no error), caught (error handled), uncaught (unhandled error)
+			// Output ports: out (success), error (caught)
 			{
 				TempID:    "try_catch_group",
 				Name:      "Error Handling",
@@ -90,7 +90,7 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			// ForEach group: iterates over array items
-			// Output ports: complete (all items processed), error (iteration failed)
+			// Output ports: out (all items processed), error (iteration failed)
 			{
 				TempID:    "foreach_group",
 				Name:      "Item Iterator",
@@ -106,7 +106,7 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			// While group: repeats until condition is false
-			// Output ports: complete (condition became false), max_iterations (limit reached)
+			// Output ports: out (condition became false), error (limit reached)
 			{
 				TempID:    "while_group",
 				Name:      "Counter Loop",
@@ -325,8 +325,8 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 			// Init -> Parallel Group (input to group)
 			{SourceTempID: "init", TargetGroupTempID: "parallel_group", SourcePort: "output", TargetPort: "group-input"},
 
-			// Parallel Group SUCCESS -> Merge (using 'complete' output port)
-			{SourceGroupTempID: "parallel_group", TargetTempID: "merge_parallel", SourcePort: "complete"},
+			// Parallel Group SUCCESS -> Merge (using 'out' output port)
+			{SourceGroupTempID: "parallel_group", TargetTempID: "merge_parallel", SourcePort: "out"},
 
 			// Parallel Group ERROR -> Parallel Error Handler (using 'error' output port)
 			{SourceGroupTempID: "parallel_group", TargetTempID: "parallel_error", SourcePort: "error"},
@@ -334,23 +334,23 @@ func BlockGroupDemoWorkflow() *SystemWorkflowDefinition {
 			// Merge -> Try-Catch Group
 			{SourceTempID: "merge_parallel", TargetGroupTempID: "try_catch_group", SourcePort: "output", TargetPort: "group-input"},
 
-			// Try-Catch Group SUCCESS -> ForEach Group (using 'success' output port)
-			{SourceGroupTempID: "try_catch_group", TargetGroupTempID: "foreach_group", SourcePort: "success", TargetPort: "group-input"},
+			// Try-Catch Group SUCCESS -> ForEach Group (using 'out' output port)
+			{SourceGroupTempID: "try_catch_group", TargetGroupTempID: "foreach_group", SourcePort: "out", TargetPort: "group-input"},
 
-			// Try-Catch Group CAUGHT -> Catch Handler (using 'caught' output port)
-			{SourceGroupTempID: "try_catch_group", TargetTempID: "catch_handler", SourcePort: "caught"},
+			// Try-Catch Group ERROR -> Catch Handler (using 'error' output port)
+			{SourceGroupTempID: "try_catch_group", TargetTempID: "catch_handler", SourcePort: "error"},
 
-			// ForEach Group COMPLETE -> While Group (using 'complete' output port)
-			{SourceGroupTempID: "foreach_group", TargetGroupTempID: "while_group", SourcePort: "complete", TargetPort: "group-input"},
+			// ForEach Group COMPLETE -> While Group (using 'out' output port)
+			{SourceGroupTempID: "foreach_group", TargetGroupTempID: "while_group", SourcePort: "out", TargetPort: "group-input"},
 
 			// ForEach Group ERROR -> ForEach Error Handler (using 'error' output port)
 			{SourceGroupTempID: "foreach_group", TargetTempID: "foreach_error", SourcePort: "error"},
 
-			// While Group COMPLETE -> Final Output (using 'complete' output port)
-			{SourceGroupTempID: "while_group", TargetTempID: "final_output", SourcePort: "complete"},
+			// While Group COMPLETE -> Final Output (using 'out' output port)
+			{SourceGroupTempID: "while_group", TargetTempID: "final_output", SourcePort: "out"},
 
-			// While Group MAX_ITERATIONS -> Max Handler (using 'max_iterations' output port)
-			{SourceGroupTempID: "while_group", TargetTempID: "max_iterations_handler", SourcePort: "max_iterations"},
+			// While Group MAX_ITERATIONS -> Max Handler (using 'error' output port)
+			{SourceGroupTempID: "while_group", TargetTempID: "max_iterations_handler", SourcePort: "error"},
 
 			// === Error Paths converge to Error Summary ===
 			{SourceTempID: "parallel_error", TargetTempID: "error_aggregator", SourcePort: "output"},

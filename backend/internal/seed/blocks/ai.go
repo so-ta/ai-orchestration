@@ -148,6 +148,12 @@ func RouterBlock() *SystemBlockDefinition {
 		},
 		OutputPorts: []domain.OutputPort{
 			{Name: "default", Label: "Default", IsDefault: true, Description: "Default route when no match"},
+			// Dynamic route ports - common route names for AI routing scenarios
+			{Name: "technical", Label: "Technical", Description: "Technical/code-related content"},
+			{Name: "general", Label: "General", Description: "General knowledge content"},
+			{Name: "creative", Label: "Creative", Description: "Creative/brainstorming content"},
+			{Name: "support", Label: "Support", Description: "Customer support content"},
+			{Name: "sales", Label: "Sales", Description: "Sales-related content"},
 		},
 		Code: `
 const routeDescriptions = (config.routes || []).map(r =>
@@ -160,6 +166,7 @@ const response = ctx.llm.chat(config.provider || 'openai', config.model || 'gpt-
 const selectedRoute = response.content.trim();
 return {
     ...input,
+    __port: selectedRoute,
     __branch: selectedRoute
 };
 `,

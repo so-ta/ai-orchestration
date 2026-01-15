@@ -107,9 +107,12 @@ func main() {
 	tenantRepo := postgres.NewTenantRepository(pool)
 
 	// Initialize usecases
-	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo, blockRepo)
+	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo, blockRepo).
+		WithBlockGroupRepo(blockGroupRepo)
 	stepUsecase := usecase.NewStepUsecase(workflowRepo, stepRepo, blockRepo)
-	edgeUsecase := usecase.NewEdgeUsecase(workflowRepo, stepRepo, edgeRepo)
+	edgeUsecase := usecase.NewEdgeUsecase(workflowRepo, stepRepo, edgeRepo).
+		WithBlockGroupRepo(blockGroupRepo).
+		WithBlockDefinitionRepo(blockRepo)
 	runUsecase := usecase.NewRunUsecase(workflowRepo, runRepo, versionRepo, stepRepo, edgeRepo, stepRunRepo, redisClient)
 	scheduleUsecase := usecase.NewScheduleUsecase(scheduleRepo, workflowRepo, runRepo)
 	webhookUsecase := usecase.NewWebhookUsecase(webhookRepo, workflowRepo, runRepo, stepRepo)

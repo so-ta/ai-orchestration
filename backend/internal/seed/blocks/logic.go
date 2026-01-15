@@ -94,6 +94,14 @@ func SwitchBlock() *SystemBlockDefinition {
 		},
 		OutputPorts: []domain.OutputPort{
 			{Name: "default", Label: "Default", IsDefault: true, Description: "When no case matches"},
+			// Common case names for multi-branch routing scenarios
+			{Name: "fast", Label: "Fast", Description: "Fast processing path"},
+			{Name: "normal", Label: "Normal", Description: "Normal processing path"},
+			{Name: "thorough", Label: "Thorough", Description: "Thorough processing path"},
+			{Name: "case_1", Label: "Case 1", Description: "First case branch"},
+			{Name: "case_2", Label: "Case 2", Description: "Second case branch"},
+			{Name: "case_3", Label: "Case 3", Description: "Third case branch"},
+			{Name: "case_4", Label: "Case 4", Description: "Fourth case branch"},
 		},
 		Code: `
 let matchedCase = null;
