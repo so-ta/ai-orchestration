@@ -3,8 +3,10 @@ package handler
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
@@ -66,14 +68,24 @@ func parseIntFromString(str string, defaultValue int) int {
 func getClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header first (for reverse proxies)
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return xff
+		// X-Forwarded-For may contain multiple IPs, take the first one
+		if idx := strings.Index(xff, ","); idx != -1 {
+			xff = xff[:idx]
+		}
+		return strings.TrimSpace(xff)
 	}
 	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return xri
 	}
-	// Fall back to RemoteAddr
-	return r.RemoteAddr
+	// Fall back to RemoteAddr, stripping port number
+	// RemoteAddr format is "IP:port" for IPv4 or "[IP]:port" for IPv6
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		// If SplitHostPort fails, return as-is (might already be just an IP)
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // logAudit is a helper function to log audit events asynchronously
