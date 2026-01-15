@@ -576,7 +576,8 @@ func (e *Executor) executeBlockGroup(ctx context.Context, execCtx *ExecutionCont
 	}
 
 	// Determine output port based on output content
-	outputPort := "complete"
+	// Default to "out" which matches the default output port in block definitions
+	outputPort := "out"
 	var outputMap map[string]interface{}
 	if err := json.Unmarshal(output, &outputMap); err == nil {
 		if port, ok := outputMap["__port"].(string); ok {

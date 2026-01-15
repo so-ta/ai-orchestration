@@ -69,8 +69,12 @@ func CodeBlock() *SystemBlockDefinition {
 			},
 			"description": "コード内で自由に参照可能なデータ"
 		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
+		InputPorts: []domain.InputPort{
+			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for code execution"},
+		},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Code execution result"},
+		},
 		Code:        "// User code is dynamically injected\nreturn input;",
 		UIConfig:    json.RawMessage(`{"icon": "terminal", "color": "#6366F1"}`),
 		ErrorCodes: []domain.ErrorCodeDef{
@@ -173,10 +177,21 @@ func LogBlock() *SystemBlockDefinition {
 			},
 			"description": "ログ出力に使用するデータ"
 		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		UIConfig:    json.RawMessage(`{}`),
-		ErrorCodes:  []domain.ErrorCodeDef{},
-		Enabled:     true,
+		InputPorts: []domain.InputPort{
+			{Name: "input", Label: "Input", Description: "Data to log"},
+		},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Pass-through output"},
+		},
+		Code: `
+// Log block: outputs to console and passes input through
+const level = config.level || 'info';
+const message = config.message || JSON.stringify(input);
+ctx.log(level, message, input);
+return input;
+`,
+		UIConfig:   json.RawMessage(`{"icon": "terminal", "color": "#6B7280"}`),
+		ErrorCodes: []domain.ErrorCodeDef{},
+		Enabled:    true,
 	}
 }

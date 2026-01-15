@@ -10,10 +10,11 @@ import (
 
 // EdgeUsecase handles edge business logic
 type EdgeUsecase struct {
-	workflowRepo   repository.WorkflowRepository
-	stepRepo       repository.StepRepository
-	edgeRepo       repository.EdgeRepository
-	blockGroupRepo repository.BlockGroupRepository
+	workflowRepo        repository.WorkflowRepository
+	stepRepo            repository.StepRepository
+	edgeRepo            repository.EdgeRepository
+	blockGroupRepo      repository.BlockGroupRepository
+	blockDefinitionRepo repository.BlockDefinitionRepository
 }
 
 // NewEdgeUsecase creates a new EdgeUsecase
@@ -32,6 +33,12 @@ func NewEdgeUsecase(
 // WithBlockGroupRepo sets the block group repository for the edge usecase
 func (u *EdgeUsecase) WithBlockGroupRepo(repo repository.BlockGroupRepository) *EdgeUsecase {
 	u.blockGroupRepo = repo
+	return u
+}
+
+// WithBlockDefinitionRepo sets the block definition repository for port validation
+func (u *EdgeUsecase) WithBlockDefinitionRepo(repo repository.BlockDefinitionRepository) *EdgeUsecase {
+	u.blockDefinitionRepo = repo
 	return u
 }
 
@@ -71,24 +78,46 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 		return nil, domain.ErrEdgeSelfLoop
 	}
 
-	// Verify source exists (step or group)
+	// Verify source exists (step or group) and validate source port
+	var sourceStep *domain.Step
+	var sourceBlockGroup *domain.BlockGroup
 	if input.SourceStepID != nil {
-		if _, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, *input.SourceStepID); err != nil {
+		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, *input.SourceStepID)
+		if err != nil {
 			return nil, err
 		}
+		sourceStep = step
 	} else if input.SourceBlockGroupID != nil && u.blockGroupRepo != nil {
-		if _, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.SourceBlockGroupID); err != nil {
+		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.SourceBlockGroupID)
+		if err != nil {
 			return nil, err
 		}
+		sourceBlockGroup = group
 	}
 
-	// Verify target exists (step or group)
+	// Verify target exists (step or group) and validate target port
+	var targetStep *domain.Step
+	var targetBlockGroup *domain.BlockGroup
 	if input.TargetStepID != nil {
-		if _, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, *input.TargetStepID); err != nil {
+		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, *input.TargetStepID)
+		if err != nil {
 			return nil, err
 		}
+		targetStep = step
 	} else if input.TargetBlockGroupID != nil && u.blockGroupRepo != nil {
-		if _, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.TargetBlockGroupID); err != nil {
+		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.TargetBlockGroupID)
+		if err != nil {
+			return nil, err
+		}
+		targetBlockGroup = group
+	}
+
+	// Validate ports if block definition repository is available
+	if u.blockDefinitionRepo != nil {
+		if err := u.validateSourcePort(ctx, input.SourcePort, sourceStep, sourceBlockGroup); err != nil {
+			return nil, err
+		}
+		if err := u.validateTargetPort(ctx, input.TargetPort, targetStep, targetBlockGroup); err != nil {
 			return nil, err
 		}
 	}
@@ -198,4 +227,100 @@ func (u *EdgeUsecase) Delete(ctx context.Context, tenantID, workflowID, edgeID u
 	}
 
 	return u.edgeRepo.Delete(ctx, tenantID, workflowID, edgeID)
+}
+
+// validateSourcePort validates that the source port exists in the block definition
+func (u *EdgeUsecase) validateSourcePort(ctx context.Context, sourcePort string, step *domain.Step, group *domain.BlockGroup) error {
+	// Skip validation if port is empty (default port will be used)
+	if sourcePort == "" {
+		return nil
+	}
+
+	var blockDef *domain.BlockDefinition
+	var err error
+
+	if step != nil {
+		blockDef, err = u.getBlockDefinitionForStep(ctx, step)
+	} else if group != nil {
+		blockDef, err = u.getBlockDefinitionForGroup(ctx, group)
+	}
+
+	if err != nil {
+		// If block definition not found, skip validation (legacy blocks)
+		if err == domain.ErrBlockDefinitionNotFound {
+			return nil
+		}
+		return err
+	}
+
+	if blockDef == nil {
+		return nil
+	}
+
+	// Check if the source port exists in output ports
+	for _, port := range blockDef.OutputPorts {
+		if port.Name == sourcePort {
+			return nil
+		}
+	}
+
+	return domain.ErrSourcePortNotFound
+}
+
+// validateTargetPort validates that the target port exists in the block definition
+func (u *EdgeUsecase) validateTargetPort(ctx context.Context, targetPort string, step *domain.Step, group *domain.BlockGroup) error {
+	// Skip validation if port is empty (default port will be used)
+	if targetPort == "" {
+		return nil
+	}
+
+	// Special case: "group-input" is a virtual port for block groups
+	if group != nil && targetPort == "group-input" {
+		return nil
+	}
+
+	var blockDef *domain.BlockDefinition
+	var err error
+
+	if step != nil {
+		blockDef, err = u.getBlockDefinitionForStep(ctx, step)
+	} else if group != nil {
+		blockDef, err = u.getBlockDefinitionForGroup(ctx, group)
+	}
+
+	if err != nil {
+		// If block definition not found, skip validation (legacy blocks)
+		if err == domain.ErrBlockDefinitionNotFound {
+			return nil
+		}
+		return err
+	}
+
+	if blockDef == nil {
+		return nil
+	}
+
+	// Check if the target port exists in input ports
+	for _, port := range blockDef.InputPorts {
+		if port.Name == targetPort {
+			return nil
+		}
+	}
+
+	return domain.ErrTargetPortNotFound
+}
+
+// getBlockDefinitionForStep retrieves the block definition for a step
+func (u *EdgeUsecase) getBlockDefinitionForStep(ctx context.Context, step *domain.Step) (*domain.BlockDefinition, error) {
+	if step.BlockDefinitionID != nil {
+		return u.blockDefinitionRepo.GetByID(ctx, *step.BlockDefinitionID)
+	}
+	// Use step type as slug for legacy steps
+	return u.blockDefinitionRepo.GetBySlug(ctx, nil, string(step.Type))
+}
+
+// getBlockDefinitionForGroup retrieves the block definition for a block group
+func (u *EdgeUsecase) getBlockDefinitionForGroup(ctx context.Context, group *domain.BlockGroup) (*domain.BlockDefinition, error) {
+	// Use group type as slug
+	return u.blockDefinitionRepo.GetBySlug(ctx, nil, string(group.Type))
 }

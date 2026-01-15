@@ -20,10 +20,13 @@ var (
 	ErrStepConfigInvalid = errors.New("step configuration is invalid")
 
 	// Edge errors
-	ErrEdgeNotFound    = errors.New("edge not found")
-	ErrEdgeDuplicate   = errors.New("edge already exists")
-	ErrEdgeSelfLoop    = errors.New("edge cannot connect step to itself")
-	ErrEdgeCreatesCycle = errors.New("edge would create a cycle")
+	ErrEdgeNotFound        = errors.New("edge not found")
+	ErrEdgeDuplicate       = errors.New("edge already exists")
+	ErrEdgeSelfLoop        = errors.New("edge cannot connect step to itself")
+	ErrEdgeCreatesCycle    = errors.New("edge would create a cycle")
+	ErrEdgeInvalidPort     = errors.New("invalid port specified")
+	ErrSourcePortNotFound  = errors.New("source port not found in block definition")
+	ErrTargetPortNotFound  = errors.New("target port not found in block definition")
 
 	// Run errors
 	ErrRunNotFound      = errors.New("run not found")

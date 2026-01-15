@@ -95,7 +95,7 @@ func TestExecutor_Integration_StepToGroupConnection(t *testing.T) {
 			// init → parallel_group (step to group edge)
 			{ID: uuid.New(), SourceStepID: &initStepID, TargetBlockGroupID: &parallelGroupID, TargetPort: "group-input"},
 			// parallel_group → merge (group to step edge)
-			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &mergeStepID, SourcePort: "complete"},
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &mergeStepID, SourcePort: "out"},
 		},
 		BlockGroups: []domain.BlockGroup{
 			{
@@ -169,8 +169,8 @@ func TestExecutor_Integration_GroupToStepConnection(t *testing.T) {
 		Edges: []domain.Edge{
 			// start → parallel_group
 			{ID: uuid.New(), SourceStepID: &startStepID, TargetBlockGroupID: &parallelGroupID, TargetPort: "group-input"},
-			// parallel_group (complete) → output
-			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &outputStepID, SourcePort: "complete"},
+			// parallel_group (out) → output
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &outputStepID, SourcePort: "out"},
 		},
 		BlockGroups: []domain.BlockGroup{
 			{
@@ -244,9 +244,9 @@ func TestExecutor_Integration_GroupToGroupConnection(t *testing.T) {
 			// start → parallel_group
 			{ID: uuid.New(), SourceStepID: &startStepID, TargetBlockGroupID: &parallelGroupID, TargetPort: "group-input"},
 			// parallel_group → foreach_group (group to group)
-			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetBlockGroupID: &foreachGroupID, SourcePort: "complete", TargetPort: "group-input"},
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetBlockGroupID: &foreachGroupID, SourcePort: "out", TargetPort: "group-input"},
 			// foreach_group → final
-			{ID: uuid.New(), SourceBlockGroupID: &foreachGroupID, TargetStepID: &finalStepID, SourcePort: "complete"},
+			{ID: uuid.New(), SourceBlockGroupID: &foreachGroupID, TargetStepID: &finalStepID, SourcePort: "out"},
 		},
 		BlockGroups: []domain.BlockGroup{
 			{
@@ -288,7 +288,7 @@ func TestExecutor_Integration_GroupToGroupConnection(t *testing.T) {
 // Phase 1.2: Output Port Routing Tests
 // =============================================================================
 
-// TestExecutor_Integration_GroupOutputPort_Complete tests complete port routing
+// TestExecutor_Integration_GroupOutputPort_Out tests out port routing
 func TestExecutor_Integration_GroupOutputPort_Complete(t *testing.T) {
 	executor := newTestExecutor()
 	ctx := context.Background()
@@ -325,7 +325,7 @@ func TestExecutor_Integration_GroupOutputPort_Complete(t *testing.T) {
 		},
 		Edges: []domain.Edge{
 			{ID: uuid.New(), SourceStepID: &startStepID, TargetBlockGroupID: &parallelGroupID, TargetPort: "group-input"},
-			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &successStepID, SourcePort: "complete"},
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &successStepID, SourcePort: "out"},
 			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &errorStepID, SourcePort: "error"},
 		},
 		BlockGroups: []domain.BlockGroup{
@@ -341,9 +341,9 @@ func TestExecutor_Integration_GroupOutputPort_Complete(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Success handler should be executed (complete port)
+	// Success handler should be executed (out port)
 	_, successOk := execCtx.StepData[successStepID]
-	assert.True(t, successOk, "Success handler should have executed via complete port")
+	assert.True(t, successOk, "Success handler should have executed via out port")
 
 	// Error handler should NOT be executed
 	_, errorOk := execCtx.StepData[errorStepID]
@@ -463,7 +463,7 @@ func TestExecutor_Integration_GroupOutputPort_MaxIterations(t *testing.T) {
 		},
 		Edges: []domain.Edge{
 			{ID: uuid.New(), SourceStepID: &startStepID, TargetBlockGroupID: &whileGroupID, TargetPort: "group-input"},
-			{ID: uuid.New(), SourceBlockGroupID: &whileGroupID, TargetStepID: &completeStepID, SourcePort: "complete"},
+			{ID: uuid.New(), SourceBlockGroupID: &whileGroupID, TargetStepID: &completeStepID, SourcePort: "out"},
 			{ID: uuid.New(), SourceBlockGroupID: &whileGroupID, TargetStepID: &maxIterStepID, SourcePort: "max_iterations"},
 		},
 		BlockGroups: []domain.BlockGroup{
@@ -556,7 +556,7 @@ func TestExecutor_Integration_BlockGroupDemo_SuccessPath(t *testing.T) {
 		Edges: []domain.Edge{
 			{ID: uuid.New(), SourceStepID: &startID, TargetStepID: &initID},
 			{ID: uuid.New(), SourceStepID: &initID, TargetBlockGroupID: &parallelGroupID, TargetPort: "group-input"},
-			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &mergeID, SourcePort: "complete"},
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &mergeID, SourcePort: "out"},
 			{ID: uuid.New(), SourceStepID: &mergeID, TargetStepID: &finalID},
 		},
 		BlockGroups: []domain.BlockGroup{
@@ -633,7 +633,7 @@ func TestExecutor_Integration_BlockGroupDemo_ParallelBranches(t *testing.T) {
 		},
 		Edges: []domain.Edge{
 			{ID: uuid.New(), SourceStepID: &startID, TargetBlockGroupID: &parallelGroupID, TargetPort: "group-input"},
-			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &outputID, SourcePort: "complete"},
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &outputID, SourcePort: "out"},
 		},
 		BlockGroups: []domain.BlockGroup{
 			{
@@ -750,4 +750,129 @@ func TestExecutor_Integration_BlockGroupDemo_ErrorPath(t *testing.T) {
 // Helper function
 func strPtr(s string) *string {
 	return &s
+}
+
+// TestExecutor_Integration_BlockGroupDemo_FullParallelFlow tests the exact flow of Block Group Demo
+// This mimics: start -> init -> parallel_group -> merge -> try_catch_group -> ...
+func TestExecutor_Integration_BlockGroupDemo_FullParallelFlow(t *testing.T) {
+	executor := newTestExecutor()
+	ctx := context.Background()
+
+	// Create IDs matching Block Group Demo structure
+	startID := uuid.New()
+	initID := uuid.New()
+	parallelGroupID := uuid.New()
+	branchAID := uuid.New()
+	branchBID := uuid.New()
+	branchCID := uuid.New()
+	mergeID := uuid.New()
+
+	def := &domain.WorkflowDefinition{
+		Name: "Block Group Demo Parallel Flow Test",
+		Steps: []domain.Step{
+			// Start step
+			{ID: startID, Name: "Start", Type: domain.StepTypeStart},
+
+			// Init step (outside group)
+			{
+				ID:     initID,
+				Name:   "Initialize",
+				Type:   domain.StepTypeFunction,
+				Config: json.RawMessage(`{"code": "return { ...input, counter: 0, max_iterations: 5, results: [] };", "language": "javascript"}`),
+			},
+
+			// Parallel branches (inside group)
+			{
+				ID:           branchAID,
+				Name:         "Branch A",
+				Type:         domain.StepTypeFunction,
+				BlockGroupID: &parallelGroupID,
+				GroupRole:    "body",
+				Config:       json.RawMessage(`{"code": "const items = input.items || []; const half = Math.floor(items.length / 2); return { branch: 'A', processed: half };", "language": "javascript"}`),
+			},
+			{
+				ID:           branchBID,
+				Name:         "Branch B",
+				Type:         domain.StepTypeFunction,
+				BlockGroupID: &parallelGroupID,
+				GroupRole:    "body",
+				Config:       json.RawMessage(`{"code": "const items = input.items || []; return { branch: 'B', processed: items.length };", "language": "javascript"}`),
+			},
+			{
+				ID:           branchCID,
+				Name:         "Branch C",
+				Type:         domain.StepTypeFunction,
+				BlockGroupID: &parallelGroupID,
+				GroupRole:    "body",
+				Config:       json.RawMessage(`{"code": "const items = input.items || []; const sum = items.reduce((a, i) => a + (i.value || 0), 0); return { branch: 'C', sum: sum };", "language": "javascript"}`),
+			},
+
+			// Merge step (outside group)
+			{
+				ID:     mergeID,
+				Name:   "Merge Results",
+				Type:   domain.StepTypeJoin,
+				Config: json.RawMessage(`{}`),
+			},
+		},
+		Edges: []domain.Edge{
+			// start -> init (step to step)
+			{ID: uuid.New(), SourceStepID: &startID, TargetStepID: &initID, SourcePort: "output"},
+
+			// init -> parallel_group (step to group)
+			{ID: uuid.New(), SourceStepID: &initID, TargetBlockGroupID: &parallelGroupID, SourcePort: "output", TargetPort: "group-input"},
+
+			// parallel_group -> merge (group to step with port "out")
+			{ID: uuid.New(), SourceBlockGroupID: &parallelGroupID, TargetStepID: &mergeID, SourcePort: "out"},
+		},
+		BlockGroups: []domain.BlockGroup{
+			{
+				ID:     parallelGroupID,
+				Name:   "Parallel Processing",
+				Type:   domain.BlockGroupTypeParallel,
+				Config: json.RawMessage(`{"max_concurrent": 3, "fail_fast": false}`),
+			},
+		},
+	}
+
+	input := json.RawMessage(`{"items": [{"id": 1, "value": 10}, {"id": 2, "value": 20}, {"id": 3, "value": 30}]}`)
+	run := newTestRun(uuid.New(), input)
+	execCtx := NewExecutionContext(run, def)
+
+	err := executor.Execute(ctx, execCtx)
+	require.NoError(t, err, "Workflow execution should not fail")
+
+	// Verify start step executed
+	_, startOk := execCtx.StepData[startID]
+	assert.True(t, startOk, "Start step should have executed")
+
+	// Verify init step executed
+	initOutput, initOk := execCtx.StepData[initID]
+	assert.True(t, initOk, "Init step should have executed")
+	t.Logf("Init output: %s", string(initOutput))
+
+	// Verify parallel group executed
+	groupOutput, groupOk := execCtx.GroupData[parallelGroupID]
+	assert.True(t, groupOk, "Parallel group should have executed")
+	t.Logf("Group output: %s", string(groupOutput))
+
+	// Parse group output
+	var groupData map[string]interface{}
+	require.NoError(t, json.Unmarshal(groupOutput, &groupData))
+
+	// Check results contain all 3 branches
+	results, resultsOk := groupData["results"].(map[string]interface{})
+	assert.True(t, resultsOk, "Group output should have results map")
+	assert.Len(t, results, 3, "Should have 3 branch results")
+	assert.True(t, groupData["completed"].(bool), "Group should be completed")
+
+	// CRITICAL: Verify merge step executed (this is the key test)
+	mergeOutput, mergeOk := execCtx.StepData[mergeID]
+	assert.True(t, mergeOk, "Merge step should have executed after parallel group completes")
+	if mergeOk {
+		t.Logf("Merge output: %s", string(mergeOutput))
+	} else {
+		t.Log("ERROR: Merge step did not execute - this is the bug!")
+		t.Logf("GroupOutEdges for parallel group: checking if edge exists...")
+	}
 }
