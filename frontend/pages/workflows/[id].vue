@@ -207,13 +207,16 @@ async function handleUpdateGroupPosition(groupId: string, updates: { position?: 
 async function handleGroupDrop(data: { type: BlockGroupType; name: string; position: { x: number; y: number } }) {
   if (!workflow.value || isReadonly.value) return
   try {
-    await blockGroupsApi.create(workflowId, {
+    const response = await blockGroupsApi.create(workflowId, {
       name: data.name,
       type: data.type,
       position: data.position,
       size: { width: 400, height: 300 },
     })
-    await loadWorkflow()
+    // Add group to local state instead of reloading
+    if (response?.data) {
+      blockGroups.value = [...blockGroups.value, response.data]
+    }
   } catch (e) {
     toast.error('Failed to create group', e instanceof Error ? e.message : undefined)
   }
@@ -716,8 +719,15 @@ async function handleSave() {
 
   try {
     saving.value = true
-    await workflows.save(workflowId, data)
-    await loadWorkflow()
+    const response = await workflows.save(workflowId, data)
+    // Update local state with response data instead of reloading
+    if (response?.data && workflow.value) {
+      workflow.value.version = response.data.version
+      workflow.value.status = response.data.status
+      workflow.value.has_draft = response.data.has_draft
+      workflow.value.updated_at = response.data.updated_at
+    }
+    toast.success(t('workflows.saved'))
   } catch (e) {
     toast.error('Failed to save workflow', e instanceof Error ? e.message : undefined)
   } finally {
@@ -732,8 +742,13 @@ async function handleSaveDraft() {
 
   try {
     saving.value = true
-    await workflows.saveDraft(workflowId, data)
-    await loadWorkflow()
+    const response = await workflows.saveDraft(workflowId, data)
+    // Update local state with response data instead of reloading
+    if (response?.data && workflow.value) {
+      workflow.value.has_draft = true
+      workflow.value.updated_at = response.data.updated_at
+    }
+    toast.success(t('workflows.draftSaved'))
   } catch (e) {
     toast.error('Failed to save draft', e instanceof Error ? e.message : undefined)
   } finally {
@@ -756,8 +771,19 @@ async function handleDiscardDraft() {
 
   try {
     saving.value = true
-    await workflows.discardDraft(workflowId)
-    await loadWorkflow()
+    const response = await workflows.discardDraft(workflowId)
+    // Update local state with response data instead of reloading
+    // discardDraft returns the published version, so we need to update steps and edges
+    if (response?.data && workflow.value) {
+      workflow.value.has_draft = false
+      workflow.value.steps = response.data.steps || []
+      workflow.value.edges = response.data.edges || []
+      workflow.value.name = response.data.name
+      workflow.value.description = response.data.description
+      workflow.value.input_schema = response.data.input_schema
+      workflow.value.updated_at = response.data.updated_at
+    }
+    toast.success(t('workflows.draftDiscarded'))
   } catch (e) {
     toast.error('Failed to discard draft', e instanceof Error ? e.message : undefined)
   } finally {
@@ -885,14 +911,30 @@ async function handleAutoLayout() {
       // Use layout with groups support
       const layoutResults = calculateLayoutWithGroups(steps, edges, blockGroups.value)
 
-      // Update all step positions
+      // Update local state immediately (optimistic update)
+      for (const result of layoutResults.steps) {
+        const step = workflow.value.steps?.find(s => s.id === result.stepId)
+        if (step) {
+          step.position_x = result.x
+          step.position_y = result.y
+        }
+      }
+      for (const result of layoutResults.groups) {
+        const group = blockGroups.value.find(g => g.id === result.groupId)
+        if (group) {
+          group.position_x = result.x
+          group.position_y = result.y
+          group.width = result.width
+          group.height = result.height
+        }
+      }
+
+      // Save to API
       const stepUpdatePromises = layoutResults.steps.map(result =>
         workflows.updateStep(workflowId, result.stepId, {
           position: { x: result.x, y: result.y },
         })
       )
-
-      // Update all group positions and sizes
       const groupUpdatePromises = layoutResults.groups.map(result =>
         blockGroupsApi.update(workflowId, result.groupId, {
           position: { x: result.x, y: result.y },
@@ -905,7 +947,16 @@ async function handleAutoLayout() {
       // Use simple layout without groups
       const layoutResults = calculateLayout(steps, edges)
 
-      // Update all step positions
+      // Update local state immediately (optimistic update)
+      for (const result of layoutResults) {
+        const step = workflow.value.steps?.find(s => s.id === result.stepId)
+        if (step) {
+          step.position_x = result.x
+          step.position_y = result.y
+        }
+      }
+
+      // Save to API
       const updatePromises = layoutResults.map(result =>
         workflows.updateStep(workflowId, result.stepId, {
           position: { x: result.x, y: result.y },
@@ -914,8 +965,6 @@ async function handleAutoLayout() {
 
       await Promise.all(updatePromises)
     }
-
-    await loadWorkflow()
   } catch (e) {
     toast.error('Failed to auto-layout', e instanceof Error ? e.message : undefined)
   } finally {
@@ -935,6 +984,8 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
 
     // Map temp_id to actual step id
     const idMapping: Record<string, string> = {}
+    const newSteps: Step[] = []
+    const newEdges: typeof workflow.value.edges = []
 
     // Create all steps first
     for (const genStep of generatedWorkflow.steps) {
@@ -954,6 +1005,7 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
         position: { x: genStep.position_x, y: genStep.position_y },
       })
       idMapping[genStep.temp_id] = response.data.id
+      newSteps.push(response.data)
     }
 
     // Debug: Log ID mapping
@@ -969,19 +1021,25 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
       console.log(`  Resolved: ${sourceId} -> ${targetId}`)
 
       if (sourceId && targetId) {
-        await workflows.createEdge(workflowId, {
+        const edgeResponse = await workflows.createEdge(workflowId, {
           source_step_id: sourceId,
           target_step_id: targetId,
           source_port: genEdge.source_port,
         })
+        if (edgeResponse?.data) {
+          newEdges.push(edgeResponse.data)
+        }
         console.log('  Edge created successfully')
       } else {
         console.warn(`  Edge skipped: sourceId=${sourceId}, targetId=${targetId}`)
       }
     }
 
-    // Reload workflow to see the new steps
-    await loadWorkflow()
+    // Update local state instead of reloading
+    if (workflow.value) {
+      workflow.value.steps = [...(workflow.value.steps || []), ...newSteps]
+      workflow.value.edges = [...(workflow.value.edges || []), ...newEdges]
+    }
     toast.success(t('copilot.workflowGenerated'))
   } catch (e) {
     toast.error(t('copilot.errors.generateFailed'), e instanceof Error ? e.message : undefined)
