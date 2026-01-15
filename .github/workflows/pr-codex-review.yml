@@ -98,6 +98,17 @@ jobs:
           cat > dynamic_prompt.md << 'PROMPT_HEADER'
           # PR Review Task
 
+          ## レビュー方針
+
+          **厳しくレビューしてください。問題があれば遠慮なく指摘してください。**
+
+          ただし、以下の「見当違いな指摘」は避けてください：
+          - 「○○の実装がありません」→ 別ファイルに定義されている可能性が高い
+          - 存在しないファイルパスへの指摘 → ファイルの存在を確認してから
+          - 差分外のファイルへの指摘 → ファイルの存在を確認してから
+
+          ---
+
           ## レビュー対象のPR情報
 
           ### 変更ファイル一覧
@@ -107,11 +118,43 @@ jobs:
           cat changed_files.txt >> dynamic_prompt.md
           echo '```' >> dynamic_prompt.md
 
+          # プロジェクト構造情報を追加
+          cat >> dynamic_prompt.md << 'PROMPT_STRUCTURE'
+
+          ### プロジェクト構造（参考情報）
+
+          このプロジェクトは以下の構造を持っています。関数やインターフェースが見つからないと思っても、別ファイルに定義されている可能性が高いです：
+
+          ```
+          backend/
+          ├── cmd/api/           # APIサーバーエントリポイント
+          ├── cmd/worker/        # Workerエントリポイント
+          └── internal/
+              ├── domain/        # ドメインモデル、インターフェース定義
+              ├── usecase/       # ビジネスロジック
+              ├── handler/       # HTTPハンドラ
+              ├── repository/    # データアクセス（interface + impl）
+              ├── adapter/       # 外部サービス連携
+              └── engine/        # ワークフロー実行エンジン
+
+          frontend/
+          ├── pages/             # Nuxtページ
+          ├── components/        # Vueコンポーネント
+          ├── composables/       # Composition API composables
+          └── types/             # TypeScript型定義
+          ```
+
+          **注意**: Go言語では同一パッケージ内の別ファイルで関数やメソッドが定義されることが一般的です。
+          「この関数の実装がない」という指摘は見当違いの可能性があります。
+          PROMPT_STRUCTURE
+
           cat >> dynamic_prompt.md << 'PROMPT_MID'
+
+          ---
 
           ### 差分の詳細（unified diff形式）
 
-          以下がこのPRの全差分です。これをレビューしてください：
+          以下がこのPRの全差分です。**この差分に含まれるコードのみ**をレビューしてください：
 
           ```diff
           PROMPT_MID
