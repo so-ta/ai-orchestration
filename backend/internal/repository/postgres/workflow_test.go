@@ -619,6 +619,16 @@ func TestWorkflowRepository_GetWithStepsAndEdges(t *testing.T) {
 				mock.ExpectQuery("SELECT .+ FROM edges WHERE workflow_id").
 					WithArgs(workflowID).
 					WillReturnRows(edgesRows)
+
+				// Block groups query (empty result for this test)
+				blockGroupsRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "workflow_id", "name", "type", "parent_group_id",
+					"position_x", "position_y", "width", "height",
+					"pre_process", "post_process", "config", "created_at", "updated_at",
+				})
+				mock.ExpectQuery("SELECT .+ FROM block_groups WHERE workflow_id").
+					WithArgs(workflowID).
+					WillReturnRows(blockGroupsRows)
 			},
 			wantErr:   nil,
 			wantSteps: 2,

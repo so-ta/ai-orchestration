@@ -246,6 +246,33 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 		w.Edges = append(w.Edges, e)
 	}
 
+	// Get block groups from database
+	blockGroupsQuery := `
+		SELECT id, tenant_id, workflow_id, name, type, parent_group_id, position_x, position_y, width, height,
+		       pre_process, post_process, config, created_at, updated_at
+		FROM block_groups
+		WHERE workflow_id = $1
+		ORDER BY created_at
+	`
+	rows, err = r.db.Query(ctx, blockGroupsQuery, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var bg domain.BlockGroup
+		if err := rows.Scan(
+			&bg.ID, &bg.TenantID, &bg.WorkflowID, &bg.Name, &bg.Type,
+			&bg.ParentGroupID, &bg.PositionX, &bg.PositionY, &bg.Width, &bg.Height,
+			&bg.PreProcess, &bg.PostProcess, &bg.Config,
+			&bg.CreatedAt, &bg.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		w.BlockGroups = append(w.BlockGroups, bg)
+	}
+
 	return w, nil
 }
 

@@ -50,8 +50,9 @@ type Workflow struct {
 	SystemSlug *string `json:"system_slug,omitempty"` // Unique slug for system workflows (e.g., "copilot-generate")
 
 	// Loaded relations
-	Steps []Step `json:"steps,omitempty"`
-	Edges []Edge `json:"edges,omitempty"`
+	Steps       []Step      `json:"steps,omitempty"`
+	Edges       []Edge      `json:"edges,omitempty"`
+	BlockGroups []BlockGroup `json:"block_groups,omitempty"`
 
 	// Indicates if current state is from draft
 	HasDraft bool `json:"has_draft"`
