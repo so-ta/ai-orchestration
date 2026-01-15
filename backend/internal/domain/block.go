@@ -12,13 +12,36 @@ import (
 type BlockCategory string
 
 const (
-	BlockCategoryAI          BlockCategory = "ai"
-	BlockCategoryLogic       BlockCategory = "logic"
-	BlockCategoryIntegration BlockCategory = "integration"
-	BlockCategoryData        BlockCategory = "data"
-	BlockCategoryControl     BlockCategory = "control"
-	BlockCategoryUtility     BlockCategory = "utility"
-	BlockCategoryGroup       BlockCategory = "group" // Group blocks (parallel, try_catch, foreach, while)
+	BlockCategoryAI     BlockCategory = "ai"     // AI-related blocks (LLM, RAG, Router)
+	BlockCategoryFlow   BlockCategory = "flow"   // Flow control and data manipulation
+	BlockCategoryApps   BlockCategory = "apps"   // External app integrations (Slack, Notion, etc.)
+	BlockCategoryCustom BlockCategory = "custom" // User-created custom blocks
+)
+
+// BlockSubcategory represents the subcategory of a block
+type BlockSubcategory string
+
+const (
+	// AI subcategories
+	BlockSubcategoryChat    BlockSubcategory = "chat"    // Chat/LLM blocks
+	BlockSubcategoryRAG     BlockSubcategory = "rag"     // RAG-related blocks
+	BlockSubcategoryRouting BlockSubcategory = "routing" // AI routing blocks
+
+	// Flow subcategories
+	BlockSubcategoryBranching BlockSubcategory = "branching" // Condition, switch
+	BlockSubcategoryData      BlockSubcategory = "data"      // Map, filter, join, split, aggregate
+	BlockSubcategoryControl   BlockSubcategory = "control"   // Parallel, try-catch, foreach, while, wait, subflow
+	BlockSubcategoryUtility   BlockSubcategory = "utility"   // Note, code, error, human-in-loop
+
+	// Apps subcategories (provider names)
+	BlockSubcategorySlack   BlockSubcategory = "slack"
+	BlockSubcategoryDiscord BlockSubcategory = "discord"
+	BlockSubcategoryNotion  BlockSubcategory = "notion"
+	BlockSubcategoryGitHub  BlockSubcategory = "github"
+	BlockSubcategoryGoogle  BlockSubcategory = "google"
+	BlockSubcategoryLinear  BlockSubcategory = "linear"
+	BlockSubcategoryEmail   BlockSubcategory = "email"
+	BlockSubcategoryWeb     BlockSubcategory = "web" // HTTP, web search
 )
 
 // BlockGroupKind represents the kind of group block
@@ -36,12 +59,9 @@ const (
 func ValidBlockCategories() []BlockCategory {
 	return []BlockCategory{
 		BlockCategoryAI,
-		BlockCategoryLogic,
-		BlockCategoryIntegration,
-		BlockCategoryData,
-		BlockCategoryControl,
-		BlockCategoryUtility,
-		BlockCategoryGroup,
+		BlockCategoryFlow,
+		BlockCategoryApps,
+		BlockCategoryCustom,
 	}
 }
 
@@ -129,13 +149,14 @@ type InternalStep struct {
 
 // BlockDefinition represents a block type definition
 type BlockDefinition struct {
-	ID          uuid.UUID       `json:"id"`
-	TenantID    *uuid.UUID      `json:"tenant_id,omitempty"` // NULL = system block
-	Slug        string          `json:"slug"`                // Unique identifier
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
-	Category    BlockCategory   `json:"category"`
-	Icon        string          `json:"icon,omitempty"`
+	ID          uuid.UUID        `json:"id"`
+	TenantID    *uuid.UUID       `json:"tenant_id,omitempty"` // NULL = system block
+	Slug        string           `json:"slug"`                // Unique identifier
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Category    BlockCategory    `json:"category"`
+	Subcategory BlockSubcategory `json:"subcategory,omitempty"` // e.g., "chat", "slack", "branching"
+	Icon        string           `json:"icon,omitempty"`
 
 	// Schemas (JSON Schema format)
 	ConfigSchema json.RawMessage `json:"config_schema"`

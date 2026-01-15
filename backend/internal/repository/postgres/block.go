@@ -55,16 +55,23 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		groupKind = &gk
 	}
 
+	// Convert empty Subcategory to nil for database
+	var subcategory *string
+	if block.Subcategory != "" {
+		sc := string(block.Subcategory)
+		subcategory = &sc
+	}
+
 	query := `
 		INSERT INTO block_definitions (
-			id, tenant_id, slug, name, description, category, icon,
+			id, tenant_id, slug, name, description, category, subcategory, icon,
 			config_schema, input_schema, output_schema, input_ports, output_ports,
 			error_codes, required_credentials, is_public,
 			code, ui_config, is_system, version,
 			parent_block_id, config_defaults, pre_process, post_process, internal_steps,
 			group_kind, is_container,
 			enabled, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
 	`
 
 	_, err = r.pool.Exec(ctx, query,
@@ -74,6 +81,7 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		block.Name,
 		block.Description,
 		block.Category,
+		subcategory,
 		block.Icon,
 		block.ConfigSchema,
 		block.InputSchema,
@@ -130,7 +138,7 @@ func (r *BlockDefinitionRepository) GetByIDRaw(ctx context.Context, id uuid.UUID
 // getByIDRaw is the internal method that reads raw block data without inheritance resolution
 func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error) {
 	query := `
-		SELECT id, tenant_id, slug, name, description, category, icon,
+		SELECT id, tenant_id, slug, name, description, category, subcategory, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
@@ -147,6 +155,7 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
 	var groupKind *string
+	var subcategory *string
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&block.ID,
@@ -155,6 +164,7 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 		&block.Name,
 		&block.Description,
 		&block.Category,
+		&subcategory,
 		&block.Icon,
 		&block.ConfigSchema,
 		&block.InputSchema,
@@ -181,6 +191,9 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 	)
 	if groupKind != nil {
 		block.GroupKind = domain.BlockGroupKind(*groupKind)
+	}
+	if subcategory != nil {
+		block.Subcategory = domain.BlockSubcategory(*subcategory)
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -238,7 +251,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	// First try to find tenant-specific block, then fall back to system block
 	// Use proper NULL comparison: (tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL)
 	query := `
-		SELECT id, tenant_id, slug, name, description, category, icon,
+		SELECT id, tenant_id, slug, name, description, category, subcategory, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
@@ -257,6 +270,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
 	var groupKind *string
+	var subcategory *string
 
 	err := r.pool.QueryRow(ctx, query, slug, tenantID).Scan(
 		&block.ID,
@@ -265,6 +279,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 		&block.Name,
 		&block.Description,
 		&block.Category,
+		&subcategory,
 		&block.Icon,
 		&block.ConfigSchema,
 		&block.InputSchema,
@@ -298,6 +313,9 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 
 	if groupKind != nil {
 		block.GroupKind = domain.BlockGroupKind(*groupKind)
+	}
+	if subcategory != nil {
+		block.Subcategory = domain.BlockSubcategory(*subcategory)
 	}
 
 	if len(errorCodesJSON) > 0 {
@@ -365,7 +383,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, tenant_id, slug, name, description, category, icon,
+		SELECT id, tenant_id, slug, name, description, category, subcategory, icon,
 			   config_schema, input_schema, output_schema, input_ports, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
@@ -374,7 +392,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		%s
-		ORDER BY category, name
+		ORDER BY category, subcategory, name
 	`, whereClause)
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -391,6 +409,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		var outputPortsJSON []byte
 		var internalStepsJSON []byte
 		var groupKind *string
+		var subcategory *string
 
 		err := rows.Scan(
 			&block.ID,
@@ -399,6 +418,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			&block.Name,
 			&block.Description,
 			&block.Category,
+			&subcategory,
 			&block.Icon,
 			&block.ConfigSchema,
 			&block.InputSchema,
@@ -429,6 +449,9 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 
 		if groupKind != nil {
 			block.GroupKind = domain.BlockGroupKind(*groupKind)
+		}
+		if subcategory != nil {
+			block.Subcategory = domain.BlockSubcategory(*subcategory)
 		}
 
 		if len(errorCodesJSON) > 0 {
@@ -493,15 +516,22 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		groupKind = &gk
 	}
 
+	// Convert empty Subcategory to nil for database
+	var subcategory *string
+	if block.Subcategory != "" {
+		sc := string(block.Subcategory)
+		subcategory = &sc
+	}
+
 	query := `
 		UPDATE block_definitions
-		SET name = $2, description = $3, category = $4, icon = $5,
-			config_schema = $6, input_schema = $7, output_schema = $8, input_ports = $9, output_ports = $10,
-			error_codes = $11, required_credentials = $12, is_public = $13,
-			code = $14, ui_config = $15, is_system = $16, version = $17,
-			parent_block_id = $18, config_defaults = $19, pre_process = $20, post_process = $21, internal_steps = $22,
-			group_kind = $23, is_container = $24,
-			enabled = $25, updated_at = NOW()
+		SET name = $2, description = $3, category = $4, subcategory = $5, icon = $6,
+			config_schema = $7, input_schema = $8, output_schema = $9, input_ports = $10, output_ports = $11,
+			error_codes = $12, required_credentials = $13, is_public = $14,
+			code = $15, ui_config = $16, is_system = $17, version = $18,
+			parent_block_id = $19, config_defaults = $20, pre_process = $21, post_process = $22, internal_steps = $23,
+			group_kind = $24, is_container = $25,
+			enabled = $26, updated_at = NOW()
 		WHERE id = $1
 	`
 
@@ -510,6 +540,7 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		block.Name,
 		block.Description,
 		block.Category,
+		subcategory,
 		block.Icon,
 		block.ConfigSchema,
 		block.InputSchema,
@@ -614,6 +645,7 @@ func (r *BlockDefinitionRepository) resolveInheritance(ctx context.Context, bloc
 		Name:        block.Name,
 		Description: block.Description,
 		Category:    block.Category,
+		Subcategory: block.Subcategory,
 		Icon:        block.Icon,
 		IsPublic:    block.IsPublic,
 		IsSystem:    block.IsSystem,

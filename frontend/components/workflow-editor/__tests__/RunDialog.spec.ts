@@ -140,7 +140,7 @@ describe('RunDialog', () => {
       id: 'block-start',
       slug: 'start',
       name: 'Start',
-      category: 'control',
+      category: 'flow',
       description: 'Start block',
       is_system: true,
       config_schema: {},

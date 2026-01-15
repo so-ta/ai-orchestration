@@ -1012,7 +1012,7 @@ func TestExecutor_ExecuteBlockDefinition_PassThrough(t *testing.T) {
 		TenantID: &tenantID,
 		Slug:     "passthrough-block",
 		Name:     "Passthrough Block",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 		Code:     "", // No code
 	}
 
@@ -1054,7 +1054,7 @@ func TestExecutor_ExecuteBlockDefinition_NoCodePassThrough(t *testing.T) {
 		TenantID: &tenantID,
 		Slug:     "passthrough-block",
 		Name:     "Pass Through Block",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 		// No code, no internal steps - input passes through
 	}
 
@@ -1095,7 +1095,7 @@ func TestExecutor_ExecuteBlockDefinition_WithConfigDefaults(t *testing.T) {
 		TenantID:               &tenantID,
 		Slug:                   "config-defaults-block",
 		Name:                   "Config Defaults Block",
-		Category:               domain.BlockCategoryUtility,
+		Category:               domain.BlockCategoryFlow,
 		ResolvedConfigDefaults: json.RawMessage(`{"multiplier": 10, "prefix": "test_"}`),
 	}
 
@@ -1139,7 +1139,7 @@ func TestExecutor_ExecuteCustomBlockStep_TenantValidation(t *testing.T) {
 		TenantID: &otherTenantID, // Different tenant
 		Slug:     "other-tenant-block",
 		Name:     "Other Tenant Block",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 	}
 
 	step := domain.Step{
@@ -1175,7 +1175,7 @@ func TestExecutor_ExecuteBlockDefinition_NilExecCtx_SystemBlock(t *testing.T) {
 		TenantID: nil, // System block
 		Slug:     "system-block",
 		Name:     "System Block",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 	}
 
 	step := domain.Step{
@@ -1208,7 +1208,7 @@ func TestExecutor_ExecuteBlockDefinition_EmptyInput(t *testing.T) {
 		TenantID: &tenantID,
 		Slug:     "empty-input-block",
 		Name:     "Empty Input Block",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 	}
 
 	step := domain.Step{
@@ -1286,7 +1286,7 @@ func TestExecutor_ExecuteCustomBlockStep_NilExecCtx_TenantBlock_Error(t *testing
 		TenantID: &tenantID, // Tenant-specific block
 		Slug:     "tenant-block",
 		Name:     "Tenant Block",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 	}
 	mockRepo.Add(blockDef)
 
@@ -1320,7 +1320,7 @@ func TestExecutor_ExecuteCustomBlockStep_NilRun_TenantBlock_Error(t *testing.T) 
 		TenantID: &tenantID, // Tenant-specific block
 		Slug:     "tenant-block-nil-run",
 		Name:     "Tenant Block Nil Run",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 	}
 	mockRepo.Add(blockDef)
 
@@ -1357,7 +1357,7 @@ func TestExecutor_ExecuteCustomBlockStep_SystemBlock_NilExecCtx_Success(t *testi
 		TenantID: nil, // System block (no tenant)
 		Slug:     "system-block-test",
 		Name:     "System Block Test",
-		Category: domain.BlockCategoryUtility,
+		Category: domain.BlockCategoryFlow,
 	}
 	mockRepo.Add(blockDef)
 

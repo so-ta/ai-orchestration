@@ -18,6 +18,7 @@ func LLMBlock() *SystemBlockDefinition {
 		Name:        "LLM",
 		Description: "Execute LLM prompts with various providers",
 		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryChat,
 		Icon:        "brain",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -116,6 +117,7 @@ func RouterBlock() *SystemBlockDefinition {
 		Name:        "Router",
 		Description: "AI-driven dynamic routing",
 		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRouting,
 		Icon:        "git-branch",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

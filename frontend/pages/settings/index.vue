@@ -45,7 +45,7 @@ const blockFormData = reactive({
   slug: '',
   name: '',
   description: '',
-  category: 'integration' as BlockCategory,
+  category: 'custom' as BlockCategory,
   icon: '',
   config_schema: '{}',
   input_schema: '{}',
@@ -72,7 +72,7 @@ function openAddBlockModal() {
   blockFormData.slug = ''
   blockFormData.name = ''
   blockFormData.description = ''
-  blockFormData.category = 'integration'
+  blockFormData.category = 'custom'
   blockFormData.icon = ''
   blockFormData.config_schema = '{}'
   blockFormData.input_schema = '{}'
@@ -494,11 +494,9 @@ const tabs = computed(() => [
 
 const categoryOptions = [
   { value: 'ai', label: 'AI' },
-  { value: 'logic', label: 'Logic' },
-  { value: 'data', label: 'Data' },
-  { value: 'integration', label: 'Integration' },
-  { value: 'control', label: 'Control' },
-  { value: 'utility', label: 'Utility' },
+  { value: 'flow', label: 'Flow' },
+  { value: 'apps', label: 'Apps' },
+  { value: 'custom', label: 'Custom' },
 ]
 
 const credentialTypes = [

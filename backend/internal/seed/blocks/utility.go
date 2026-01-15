@@ -19,7 +19,8 @@ func NoteBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Note",
 		Description: "Documentation/comment",
-		Category:    domain.BlockCategoryUtility,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "file-text",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -43,7 +44,8 @@ func CodeBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Code",
 		Description: "Execute custom JavaScript code",
-		Category:    domain.BlockCategoryUtility,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "terminal",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -91,7 +93,8 @@ func FunctionBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Function",
 		Description: "Execute custom JavaScript",
-		Category:    domain.BlockCategoryUtility,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "code",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -148,7 +151,8 @@ func LogBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Log",
 		Description: "Output log messages for debugging",
-		Category:    domain.BlockCategoryUtility,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "terminal",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

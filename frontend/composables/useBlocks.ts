@@ -1,5 +1,5 @@
 // Block Registry API composable
-import type { BlockDefinition, BlockListResponse, BlockCategory, ApiResponse } from '~/types/api'
+import type { BlockDefinition, BlockListResponse, BlockCategory, BlockSubcategory, ApiResponse } from '~/types/api'
 
 // Response wrapper for block list (API wraps responses in data field)
 interface BlockListApiResponse {
@@ -75,19 +75,62 @@ export function useBlocks() {
   }
 }
 
-// Category display configuration
+// Category display configuration (simplified to 4 categories)
 export const categoryConfig: Record<BlockCategory, {
   nameKey: string
   icon: string
   order: number
+  color: string
 }> = {
-  ai: { nameKey: 'editor.categories.ai', icon: 'sparkles', order: 1 },
-  logic: { nameKey: 'editor.categories.logic', icon: 'git-branch', order: 2 },
-  data: { nameKey: 'editor.categories.data', icon: 'database', order: 3 },
-  integration: { nameKey: 'editor.categories.integration', icon: 'plug', order: 4 },
-  control: { nameKey: 'editor.categories.control', icon: 'clock', order: 5 },
-  utility: { nameKey: 'editor.categories.utility', icon: 'info', order: 6 },
-  group: { nameKey: 'editor.categories.group', icon: 'layers', order: 7 },
+  ai: { nameKey: 'editor.categories.ai', icon: 'sparkles', order: 1, color: '#8B5CF6' },
+  flow: { nameKey: 'editor.categories.flow', icon: 'git-branch', order: 2, color: '#3B82F6' },
+  apps: { nameKey: 'editor.categories.apps', icon: 'plug', order: 3, color: '#10B981' },
+  custom: { nameKey: 'editor.categories.custom', icon: 'code', order: 4, color: '#F59E0B' },
+}
+
+// Subcategory display configuration
+export const subcategoryConfig: Record<BlockSubcategory, {
+  nameKey: string
+  icon: string
+  order: number
+}> = {
+  // AI subcategories
+  chat: { nameKey: 'editor.subcategories.chat', icon: 'message-square', order: 1 },
+  rag: { nameKey: 'editor.subcategories.rag', icon: 'book-open', order: 2 },
+  routing: { nameKey: 'editor.subcategories.routing', icon: 'route', order: 3 },
+  // Flow subcategories
+  branching: { nameKey: 'editor.subcategories.branching', icon: 'git-branch', order: 1 },
+  data: { nameKey: 'editor.subcategories.data', icon: 'database', order: 2 },
+  control: { nameKey: 'editor.subcategories.control', icon: 'settings', order: 3 },
+  utility: { nameKey: 'editor.subcategories.utility', icon: 'tool', order: 4 },
+  // Apps subcategories
+  slack: { nameKey: 'editor.subcategories.slack', icon: 'message-circle', order: 1 },
+  discord: { nameKey: 'editor.subcategories.discord', icon: 'message-circle', order: 2 },
+  notion: { nameKey: 'editor.subcategories.notion', icon: 'file-text', order: 3 },
+  github: { nameKey: 'editor.subcategories.github', icon: 'github', order: 4 },
+  google: { nameKey: 'editor.subcategories.google', icon: 'table', order: 5 },
+  linear: { nameKey: 'editor.subcategories.linear', icon: 'check-square', order: 6 },
+  email: { nameKey: 'editor.subcategories.email', icon: 'mail', order: 7 },
+  web: { nameKey: 'editor.subcategories.web', icon: 'globe', order: 8 },
+}
+
+// Mapping of subcategories to their parent categories
+export const subcategoryToCategory: Record<BlockSubcategory, BlockCategory> = {
+  chat: 'ai',
+  rag: 'ai',
+  routing: 'ai',
+  branching: 'flow',
+  data: 'flow',
+  control: 'flow',
+  utility: 'flow',
+  slack: 'apps',
+  discord: 'apps',
+  notion: 'apps',
+  github: 'apps',
+  google: 'apps',
+  linear: 'apps',
+  email: 'apps',
+  web: 'apps',
 }
 
 // Block color mapping by slug (for visual consistency)
@@ -127,6 +170,86 @@ export const defaultBlockColor = '#6b7280'
 // Get color for a block
 export function getBlockColor(slug: string): string {
   return blockColors[slug] || defaultBlockColor
+}
+
+// ============================================================================
+// Block Grouping Utilities
+// ============================================================================
+
+// Group blocks by category
+export function groupBlocksByCategory(blocks: BlockDefinition[]): Record<BlockCategory, BlockDefinition[]> {
+  const result: Record<BlockCategory, BlockDefinition[]> = {
+    ai: [],
+    flow: [],
+    apps: [],
+    custom: [],
+  }
+
+  for (const block of blocks) {
+    if (result[block.category]) {
+      result[block.category].push(block)
+    }
+  }
+
+  // Sort each category by subcategory order, then name
+  for (const category of Object.keys(result) as BlockCategory[]) {
+    result[category].sort((a, b) => {
+      const aSubOrder = a.subcategory ? subcategoryConfig[a.subcategory]?.order || 999 : 999
+      const bSubOrder = b.subcategory ? subcategoryConfig[b.subcategory]?.order || 999 : 999
+      if (aSubOrder !== bSubOrder) return aSubOrder - bSubOrder
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  return result
+}
+
+// Group blocks by subcategory within a category
+export function groupBlocksBySubcategory(
+  blocks: BlockDefinition[],
+  category: BlockCategory
+): Record<string, BlockDefinition[]> {
+  const categoryBlocks = blocks.filter(b => b.category === category)
+  const result: Record<string, BlockDefinition[]> = {}
+
+  for (const block of categoryBlocks) {
+    const key = block.subcategory || 'other'
+    if (!result[key]) {
+      result[key] = []
+    }
+    result[key].push(block)
+  }
+
+  // Sort blocks within each subcategory by name
+  for (const key of Object.keys(result)) {
+    result[key].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  return result
+}
+
+// Get sorted subcategories for a category
+export function getSubcategoriesForCategory(category: BlockCategory): BlockSubcategory[] {
+  const subcategories = Object.entries(subcategoryToCategory)
+    .filter(([_, cat]) => cat === category)
+    .map(([sub]) => sub as BlockSubcategory)
+    .sort((a, b) => (subcategoryConfig[a]?.order || 999) - (subcategoryConfig[b]?.order || 999))
+
+  return subcategories
+}
+
+// Search blocks by query (name, description, slug)
+export function searchBlocks(blocks: BlockDefinition[], query: string): BlockDefinition[] {
+  const lowerQuery = query.toLowerCase().trim()
+  if (!lowerQuery) return blocks
+
+  return blocks.filter(block => {
+    return (
+      block.name.toLowerCase().includes(lowerQuery) ||
+      block.slug.toLowerCase().includes(lowerQuery) ||
+      block.description?.toLowerCase().includes(lowerQuery)
+    )
+  })
 }
 
 // ============================================================================

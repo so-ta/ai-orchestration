@@ -80,6 +80,7 @@ CREATE TABLE public.block_definitions (
     name character varying(255) NOT NULL,
     description text,
     category character varying(50) NOT NULL,
+    subcategory character varying(50),
     icon character varying(50),
     config_schema jsonb DEFAULT '{}'::jsonb NOT NULL,
     input_schema jsonb,
@@ -103,7 +104,8 @@ CREATE TABLE public.block_definitions (
     internal_steps jsonb DEFAULT '[]'::jsonb,
     group_kind character varying(50),
     is_container boolean DEFAULT false NOT NULL,
-    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'group'::character varying])::text[]))),
+    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'flow'::character varying, 'apps'::character varying, 'custom'::character varying])::text[]))),
+    CONSTRAINT valid_block_subcategory CHECK (subcategory IS NULL OR (subcategory)::text = ANY ((ARRAY['chat'::character varying, 'rag'::character varying, 'routing'::character varying, 'branching'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'slack'::character varying, 'discord'::character varying, 'notion'::character varying, 'github'::character varying, 'google'::character varying, 'linear'::character varying, 'email'::character varying, 'web'::character varying])::text[])),
     CONSTRAINT valid_group_kind CHECK (group_kind IS NULL OR (group_kind)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])),
     CONSTRAINT no_self_reference CHECK (parent_block_id IS NULL OR parent_block_id != id)
 );
@@ -1222,6 +1224,13 @@ CREATE INDEX idx_audit_logs_tenant ON public.audit_logs USING btree (tenant_id);
 --
 
 CREATE INDEX idx_block_definitions_category ON public.block_definitions USING btree (category);
+
+
+--
+-- Name: idx_block_definitions_subcategory; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_block_definitions_subcategory ON public.block_definitions USING btree (subcategory) WHERE (subcategory IS NOT NULL);
 
 
 --

@@ -17,7 +17,8 @@ func ConditionBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Condition",
 		Description: "Branch based on expression",
-		Category:    domain.BlockCategoryLogic,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryBranching,
 		Icon:        "git-branch",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -61,7 +62,8 @@ func SwitchBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Switch",
 		Description: "Multi-branch routing",
-		Category:    domain.BlockCategoryLogic,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryBranching,
 		Icon:        "shuffle",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

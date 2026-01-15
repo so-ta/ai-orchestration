@@ -33,7 +33,8 @@ func HTTPBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "HTTP Request",
 		Description: "Make HTTP API calls",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryWeb,
 		Icon:        "globe",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -79,7 +80,8 @@ func SubflowBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Subflow",
 		Description: "Execute another workflow",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "workflow",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -117,7 +119,8 @@ func ToolBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Tool",
 		Description: "Execute external tool/adapter",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryWeb,
 		Icon:        "wrench",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -154,7 +157,8 @@ func SlackBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Slack",
 		Description: "Slackチャンネルにメッセージを送信",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategorySlack,
 		Icon:        "message-square",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -213,7 +217,8 @@ func DiscordBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Discord",
 		Description: "Discord Webhookにメッセージを送信",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryDiscord,
 		Icon:        "message-circle",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -273,7 +278,8 @@ func NotionQueryDBBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Notion: DB検索",
 		Description: "Notionデータベースを検索",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryNotion,
 		Icon:        "database",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -341,7 +347,8 @@ func NotionCreatePageBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Notion: ページ作成",
 		Description: "Notionにページを作成",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryNotion,
 		Icon:        "file-text",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -427,7 +434,8 @@ func GSheetsAppendBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Google Sheets: 行追加",
 		Description: "Google Sheetsに行を追加",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryGoogle,
 		Icon:        "table",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -489,7 +497,8 @@ func GSheetsReadBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Google Sheets: 読み取り",
 		Description: "Google Sheetsから範囲を読み取り",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryGoogle,
 		Icon:        "table",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -543,7 +552,8 @@ func GitHubCreateIssueBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "GitHub: Issue作成",
 		Description: "GitHubリポジトリにIssueを作成",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryGitHub,
 		Icon:        "git-pull-request",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -609,7 +619,8 @@ func GitHubAddCommentBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "GitHub: コメント追加",
 		Description: "GitHub IssueまたはPRにコメントを追加",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryGitHub,
 		Icon:        "message-square",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -665,7 +676,8 @@ func WebSearchBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Web検索",
 		Description: "Tavily APIでWeb検索を実行",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryWeb,
 		Icon:        "search",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -726,7 +738,8 @@ func LinearCreateIssueBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Linear: Issue作成",
 		Description: "LinearにIssueを作成",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryLinear,
 		Icon:        "check-square",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -794,7 +807,8 @@ func EmailSendGridBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Email (SendGrid)",
 		Description: "SendGrid APIでメールを送信",
-		Category:    domain.BlockCategoryIntegration,
+		Category:    domain.BlockCategoryApps,
+		Subcategory: domain.BlockSubcategoryEmail,
 		Icon:        "mail",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -866,6 +880,7 @@ func EmbeddingBlock() *SystemBlockDefinition {
 		Name:        "Embedding",
 		Description: "Convert text to vector embeddings",
 		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "hash",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -905,7 +920,8 @@ func VectorUpsertBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Vector Upsert",
 		Description: "Store documents in vector database",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "database",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -945,7 +961,8 @@ func VectorSearchBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Vector Search",
 		Description: "Search for similar documents in vector database",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "search",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
@@ -994,7 +1011,8 @@ func VectorDeleteBlock() *SystemBlockDefinition {
 		Version:     1,
 		Name:        "Vector Delete",
 		Description: "Delete documents from vector database",
-		Category:    domain.BlockCategoryData,
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "trash-2",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",

@@ -23,7 +23,7 @@ func TestHasChanges(t *testing.T) {
 				Version:     1,
 				Name:        "Test Block",
 				Description: "A test block",
-				Category:    domain.BlockCategoryUtility,
+				Category:    domain.BlockCategoryFlow,
 				Icon:        "test",
 				Code:        "return {};",
 				Enabled:     true,
@@ -32,7 +32,7 @@ func TestHasChanges(t *testing.T) {
 				Version:     1,
 				Name:        "Test Block",
 				Description: "A test block",
-				Category:    domain.BlockCategoryUtility,
+				Category:    domain.BlockCategoryFlow,
 				Icon:        "test",
 				Code:        "return {};",
 				Enabled:     true,
@@ -86,6 +86,54 @@ func TestHasChanges(t *testing.T) {
 				ConfigSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
 			},
 			want: true,
+		},
+		{
+			name: "subcategory changed",
+			existing: &domain.BlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			seed: &blocks.SystemBlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryRAG,
+			},
+			want: true,
+		},
+		{
+			name: "subcategory added",
+			existing: &domain.BlockDefinition{
+				Version:  1,
+				Name:     "Test Block",
+				Category: domain.BlockCategoryAI,
+				// No subcategory
+			},
+			seed: &blocks.SystemBlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			want: true,
+		},
+		{
+			name: "subcategory same",
+			existing: &domain.BlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			seed: &blocks.SystemBlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			want: false,
 		},
 	}
 
