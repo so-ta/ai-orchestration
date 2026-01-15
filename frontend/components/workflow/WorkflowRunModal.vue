@@ -40,9 +40,13 @@ const isValid = ref(true)
 const inputSchema = computed<ConfigSchema | null>(() => {
   const schema = workflow.value?.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
+
+  const properties = schema.properties as Record<string, unknown> | undefined
+  if (!properties || Object.keys(properties).length === 0) return null
+
   return {
     type: 'object',
-    properties: (schema.properties as Record<string, unknown>) || {},
+    properties: properties,
     required: (schema.required as string[]) || [],
   } as ConfigSchema
 })
@@ -159,16 +163,6 @@ function handleClose() {
             @validation-change="handleValidationChange"
           />
         </div>
-
-        <!-- No input fields message -->
-        <div v-else class="no-input-message">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M12 16v-4"></path>
-            <path d="M12 8h.01"></path>
-          </svg>
-          <p>{{ t('workflows.runDialog.noInputRequired') }}</p>
-        </div>
       </template>
     </div>
 
@@ -258,27 +252,6 @@ function handleClose() {
   font-size: 0.8125rem;
   color: var(--color-text-secondary);
   margin: 0;
-}
-
-.no-input-message {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1.5rem;
-  background: var(--color-bg-secondary);
-  border-radius: 0.375rem;
-  text-align: center;
-}
-
-.no-input-message svg {
-  color: var(--color-text-tertiary);
-}
-
-.no-input-message p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
 }
 
 .btn {
