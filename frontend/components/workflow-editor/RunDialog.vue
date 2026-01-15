@@ -96,7 +96,7 @@ function handleClose() {
       <div v-if="hasInputFields" class="input-section">
         <h3 class="input-title">{{ t('workflows.runDialog.inputTitle') }}</h3>
         <p class="input-description">
-          {{ t('workflows.runDialog.inputDescription', { stepName: workflowName }) }}
+          {{ t('workflows.runDialog.inputDescription') }}
         </p>
 
         <DynamicConfigForm

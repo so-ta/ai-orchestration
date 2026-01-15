@@ -12,10 +12,9 @@ const i18n = createI18n({
       workflows: {
         runDialog: {
           title: 'Run Workflow',
-          inputTitle: 'Input',
-          inputDescription: 'Input for {stepName}',
-          noInputRequired: 'No input required',
-          schemaDetails: 'Schema Details',
+          inputTitle: 'Input Data',
+          inputDescription: 'Enter the required input data for this workflow',
+          schemaDetails: 'Input Schema Details',
           run: 'Run',
         },
       },
@@ -27,10 +26,9 @@ const i18n = createI18n({
       workflows: {
         runDialog: {
           title: 'ワークフロー実行',
-          inputTitle: '入力',
-          inputDescription: '{stepName}への入力',
-          noInputRequired: '入力は不要です',
-          schemaDetails: 'スキーマ詳細',
+          inputTitle: '入力データ',
+          inputDescription: 'ワークフローの実行に必要な入力データを入力してください',
+          schemaDetails: '入力スキーマ詳細',
           run: '実行',
         },
       },
