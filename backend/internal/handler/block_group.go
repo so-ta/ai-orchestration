@@ -21,11 +21,14 @@ func NewBlockGroupHandler(blockGroupUsecase *usecase.BlockGroupUsecase) *BlockGr
 }
 
 // CreateBlockGroupRequest represents a create block group request
+// Supports 4 types: parallel, try_catch, foreach, while
 type CreateBlockGroupRequest struct {
 	Name          string          `json:"name"`
-	Type          string          `json:"type"`
+	Type          string          `json:"type"` // parallel, try_catch, foreach, while
 	Config        json.RawMessage `json:"config"`
 	ParentGroupID *string         `json:"parent_group_id,omitempty"`
+	PreProcess    *string         `json:"pre_process,omitempty"`  // JS: external IN -> internal IN
+	PostProcess   *string         `json:"post_process,omitempty"` // JS: internal OUT -> external OUT
 	Position      struct {
 		X int `json:"x"`
 		Y int `json:"y"`
@@ -68,6 +71,8 @@ func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Type:          domain.BlockGroupType(req.Type),
 		Config:        req.Config,
 		ParentGroupID: parentGroupID,
+		PreProcess:    req.PreProcess,
+		PostProcess:   req.PostProcess,
 		PositionX:     req.Position.X,
 		PositionY:     req.Position.Y,
 		Width:         req.Size.Width,
@@ -127,6 +132,8 @@ type UpdateBlockGroupRequest struct {
 	Name          string          `json:"name,omitempty"`
 	Config        json.RawMessage `json:"config,omitempty"`
 	ParentGroupID *string         `json:"parent_group_id,omitempty"`
+	PreProcess    *string         `json:"pre_process,omitempty"`  // JS: external IN -> internal IN
+	PostProcess   *string         `json:"post_process,omitempty"` // JS: internal OUT -> external OUT
 	Position      *struct {
 		X int `json:"x"`
 		Y int `json:"y"`
@@ -158,11 +165,13 @@ func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := usecase.UpdateBlockGroupInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		GroupID:    groupID,
-		Name:       req.Name,
-		Config:     req.Config,
+		TenantID:    tenantID,
+		WorkflowID:  workflowID,
+		GroupID:     groupID,
+		Name:        req.Name,
+		Config:      req.Config,
+		PreProcess:  req.PreProcess,
+		PostProcess: req.PostProcess,
 	}
 
 	if req.ParentGroupID != nil {

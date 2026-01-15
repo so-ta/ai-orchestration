@@ -137,14 +137,18 @@ Unique: (source_step_id, target_step_id)
 
 Control flow constructs that group multiple steps.
 
+> **Updated**: 2026-01-15 - Simplified to 4 types, added pre_process/post_process
+
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | Display name |
-| type | VARCHAR(50) | NOT NULL | parallel, try_catch, if_else, switch_case, foreach, while |
+| type | VARCHAR(50) | NOT NULL, CHECK | **4 types only**: parallel, try_catch, foreach, while |
 | config | JSONB | NOT NULL DEFAULT '{}' | Type-specific configuration |
 | parent_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | For nested groups |
+| pre_process | TEXT | | JS code: external IN → internal IN |
+| post_process | TEXT | | JS code: internal OUT → external OUT |
 | position_x | INT | DEFAULT 0 | UI position X |
 | position_y | INT | DEFAULT 0 | UI position Y |
 | width | INT | DEFAULT 400 | UI width |
@@ -156,7 +160,11 @@ Indexes:
 - `idx_block_groups_workflow` ON (workflow_id)
 - `idx_block_groups_parent` ON (parent_group_id)
 
-**Note**: Steps can belong to a block group via `steps.block_group_id` and `steps.group_role`.
+**Type CHECK constraint**: `type IN ('parallel', 'try_catch', 'foreach', 'while')`
+
+**Removed types**: `if_else` (use condition block), `switch_case` (use switch block)
+
+**Note**: Steps can belong to a block group via `steps.block_group_id` and `steps.group_role` (body only).
 
 ### block_group_runs
 

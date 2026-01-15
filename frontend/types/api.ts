@@ -215,23 +215,18 @@ export interface BlockListResponse {
 }
 
 // Block Group Types (Control Flow Constructs)
+// Redesigned to 4 types only: parallel, try_catch, foreach, while
+// Removed: if_else (use condition block), switch_case (use switch block)
 export type BlockGroupType =
-  | 'parallel'     // Parallel execution group
-  | 'try_catch'    // Try-catch-finally error handling
-  | 'if_else'      // Conditional branching
-  | 'switch_case'  // Multi-branch routing
-  | 'foreach'      // Array iteration loop
+  | 'parallel'     // Parallel execution of different flows
+  | 'try_catch'    // Error handling with retry support
+  | 'foreach'      // Array iteration (same process for each element)
   | 'while'        // Condition-based loop
 
-export type GroupRole =
-  | 'body'         // Main execution body (parallel, foreach, while)
-  | 'try'          // Try block (try_catch)
-  | 'catch'        // Catch block (try_catch)
-  | 'finally'      // Finally block (try_catch)
-  | 'then'         // Then branch (if_else)
-  | 'else'         // Else branch (if_else)
-  | 'default'      // Default case (switch_case)
-  | string         // Dynamic case roles like 'case_0', 'case_1', etc.
+// Simplified: all groups now only have "body" role
+// Removed: try, catch, finally, then, else, default, case_N
+// Error handling is done via output ports (out, error)
+export type GroupRole = 'body'
 
 export interface BlockGroup {
   id: string
@@ -240,6 +235,8 @@ export interface BlockGroup {
   type: BlockGroupType
   config: BlockGroupConfig
   parent_group_id?: string      // For nested groups
+  pre_process?: string          // JS: external IN -> internal IN
+  post_process?: string         // JS: internal OUT -> external OUT
   position_x: number
   position_y: number
   width: number
@@ -254,21 +251,14 @@ export interface ParallelConfig {
   fail_fast?: boolean           // Stop all on first failure
 }
 
+// Simplified: catch logic is handled via error output port to external blocks
 export interface TryCatchConfig {
-  error_types?: string[]        // Error types to catch ("*" = all)
-  retry_count?: number          // Number of retries before catch
+  retry_count?: number          // Number of retries before error (default: 0)
   retry_delay_ms?: number       // Delay between retries in ms
 }
 
-export interface IfElseConfig {
-  condition: string             // Condition expression (e.g., "$.status == 'active'")
-}
-
-export interface SwitchCaseConfig {
-  expression: string            // Expression to evaluate
-  cases: string[]               // Case values
-  has_default?: boolean         // Whether default case exists
-}
+// NOTE: IfElseConfig removed - use 'condition' system block instead
+// NOTE: SwitchCaseConfig removed - use 'switch' system block instead
 
 export interface ForeachConfig {
   input_path: string            // Path to array (e.g., "$.items")
@@ -282,11 +272,10 @@ export interface WhileConfig {
   do_while?: boolean            // Execute at least once (do-while)
 }
 
+// 4 types only: parallel, try_catch, foreach, while
 export type BlockGroupConfig =
   | ParallelConfig
   | TryCatchConfig
-  | IfElseConfig
-  | SwitchCaseConfig
   | ForeachConfig
   | WhileConfig
   | object
@@ -311,6 +300,8 @@ export interface CreateBlockGroupRequest {
   type: BlockGroupType
   config?: BlockGroupConfig
   parent_group_id?: string
+  pre_process?: string          // JS: external IN -> internal IN
+  post_process?: string         // JS: internal OUT -> external OUT
   position: { x: number; y: number }
   size: { width: number; height: number }
 }
@@ -319,6 +310,8 @@ export interface UpdateBlockGroupRequest {
   name?: string
   config?: BlockGroupConfig
   parent_group_id?: string
+  pre_process?: string          // JS: external IN -> internal IN
+  post_process?: string         // JS: internal OUT -> external OUT
   position?: { x: number; y: number }
   size?: { width: number; height: number }
 }

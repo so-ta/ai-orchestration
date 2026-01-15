@@ -412,7 +412,7 @@ func (e *BlockError) Error() string {
 | `llm` | LLM | ai | `ctx.llm.chat(...)` |
 | `condition` | Condition | logic | `return {..., __branch: result ? 'then' : 'else'}` |
 | `switch` | Switch | logic | 多分岐ルーティング |
-| `loop` | Loop | logic | for/forEach/while イテレーション |
+| `loop` | Loop | logic | for/forEach イテレーション（while は while グループを推奨） |
 | `map` | Map | data | 配列並列処理 |
 | `join` | Join | data | ブランチマージ |
 | `filter` | Filter | data | 配列フィルタリング |
@@ -891,6 +891,75 @@ Block config formはJSON Schemaから動的に生成:
 | Sandbox (ctx) | ✅ 完了 | http, llm, workflow, human, adapter, embedding, vector |
 | Admin API | ✅ 完了 | バージョン管理、ロールバック |
 | Frontend | ✅ 完了 | StepPalette, PropertiesPanel |
+
+## Block Groups (Control Flow Constructs)
+
+> **Updated**: 2026-01-15
+> **See also**: [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md)
+
+Block Groups are container constructs that manage control flow for multiple steps. They provide similar functionality to blocks with `pre_process`/`post_process` for input/output transformation.
+
+### Block Group Types (4 types only)
+
+| Type | Description | Config Properties |
+|------|-------------|-------------------|
+| `parallel` | Execute multiple independent flows concurrently | `max_concurrent`, `fail_fast` |
+| `try_catch` | Error handling with retry support | `retry_count`, `retry_delay_ms` |
+| `foreach` | Iterate same process over array elements | `input_path`, `parallel`, `max_workers` |
+| `while` | Condition-based loop | `condition`, `max_iterations`, `do_while` |
+
+### Removed Types
+
+| Type | Alternative |
+|------|-------------|
+| `if_else` | Use `condition` system block |
+| `switch_case` | Use `switch` system block |
+
+### Group Role
+
+All groups now use **`body` role only**. Previous roles (`try`, `catch`, `finally`, `then`, `else`, `default`, `case_N`) have been removed.
+
+Error handling is now done via output ports:
+- `out` - Normal output
+- `error` - Error output (connects to external error handling blocks)
+
+### Pre/Post Process
+
+Similar to regular blocks, groups support JavaScript transformation:
+
+```javascript
+// pre_process: external IN → internal IN
+return { ...input, timestamp: Date.now() };
+
+// post_process: internal OUT → external OUT
+return { result: output.data, processed: true };
+```
+
+### Nesting
+
+Groups can be nested (e.g., while inside parallel):
+
+```
+parallel
+├── body
+│   ├── step1
+│   └── while (nested)
+│       └── body
+│           ├── step2
+│           └── step3
+└── body
+    └── step4
+```
+
+### Block Group vs System Blocks
+
+| Feature | Block Group | condition/switch Block |
+|---------|-------------|----------------------|
+| Contains steps | Yes (body) | No |
+| Pre/Post Process | Yes | No (inline logic) |
+| Output Ports | out, error | then/else, case_N |
+| Nesting | Yes | N/A |
+| Use Case | Complex control flow | Simple branching |
 
 ## Related Documents
 

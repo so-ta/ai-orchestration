@@ -1,4 +1,6 @@
 // Block Groups API composable
+// Supports 4 group types: parallel, try_catch, foreach, while
+// Removed: if_else (use condition block), switch_case (use switch block)
 import type {
   BlockGroup,
   Step,
@@ -72,39 +74,28 @@ export function useBlockGroups() {
   }
 
   // Helper: Create a try-catch block group
+  // Simplified: body only, error handling via output port
   async function createTryCatch(
     workflowId: string,
     name: string,
     position: { x: number; y: number },
-    options?: { errorTypes?: string[]; retryCount?: number }
+    options?: { retryCount?: number; retryDelayMs?: number; preProcess?: string; postProcess?: string }
   ) {
     return create(workflowId, {
       name,
       type: 'try_catch',
       config: {
-        error_types: options?.errorTypes || ['*'],
-        retry_count: options?.retryCount || 0
+        retry_count: options?.retryCount || 0,
+        retry_delay_ms: options?.retryDelayMs || 0
       },
-      position,
-      size: { width: 400, height: 400 }
-    })
-  }
-
-  // Helper: Create an if-else block group
-  async function createIfElse(
-    workflowId: string,
-    name: string,
-    position: { x: number; y: number },
-    condition: string
-  ) {
-    return create(workflowId, {
-      name,
-      type: 'if_else',
-      config: { condition },
+      pre_process: options?.preProcess,
+      post_process: options?.postProcess,
       position,
       size: { width: 400, height: 300 }
     })
   }
+
+  // NOTE: if_else group has been removed. Use the 'condition' system block instead.
 
   // Helper: Create a foreach block group
   async function createForeach(
@@ -161,11 +152,12 @@ export function useBlockGroups() {
     addStep,
     removeStep,
 
-    // Convenience helpers
+    // Convenience helpers (4 types only: parallel, try_catch, foreach, while)
     createParallel,
     createTryCatch,
-    createIfElse,
     createForeach,
     createWhile
+    // NOTE: createIfElse removed - use 'condition' system block instead
+    // NOTE: switch_case group never existed as helper - use 'switch' system block
   }
 }
