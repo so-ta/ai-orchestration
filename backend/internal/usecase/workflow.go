@@ -385,6 +385,7 @@ func (u *WorkflowUsecase) deleteAndRecreateStepsEdges(ctx context.Context, tenan
 
 	// Create new steps
 	for i := range steps {
+		steps[i].TenantID = tenantID
 		steps[i].WorkflowID = workflowID
 		if err := u.stepRepo.Create(ctx, &steps[i]); err != nil {
 			return err
@@ -393,6 +394,7 @@ func (u *WorkflowUsecase) deleteAndRecreateStepsEdges(ctx context.Context, tenan
 
 	// Create new edges
 	for i := range edges {
+		edges[i].TenantID = tenantID
 		edges[i].WorkflowID = workflowID
 		if err := u.edgeRepo.Create(ctx, &edges[i]); err != nil {
 			return err

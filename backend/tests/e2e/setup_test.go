@@ -31,7 +31,7 @@ func SetupTestEnvironment(t *testing.T) {
 }
 
 func doSetup() error {
-	dbURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/orchestration?sslmode=disable")
+	dbURL := getEnv("DATABASE_URL", "postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable")
 
 	var err error
 	db, err = sql.Open("postgres", dbURL)
