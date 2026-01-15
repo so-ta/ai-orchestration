@@ -1,9 +1,18 @@
 # Block Group Redesign - グループブロック再設計
 
-> **Status**: ✅ Implemented (Phase A Complete)
+> **Status**: ✅ Implemented (Phase A + B Complete)
 > **Created**: 2025-01-15
 > **Updated**: 2026-01-15
 > **Author**: AI Agent
+
+---
+
+## 実装ステータス
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **Phase A** | ✅ Complete | グループ統廃合（4種類）、pre/post_process対応、bodyロールのみ |
+| **Phase B** | ✅ Complete | BlockDefinitionへの統合（group_kind, is_container） |
 
 ---
 
@@ -15,6 +24,7 @@
 2. **IN/OUT で制御** - 分岐・エラー処理は外部ポートで表現
 3. **統廃合** - 6種類 → 4種類に整理
 4. **pre_process / post_process** - 通常ブロックと同じ仕組みで入出力変換
+5. **BlockDefinition統合** - グループブロックをblock_definitionsテーブルで管理（Phase B）
 
 ---
 

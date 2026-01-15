@@ -135,6 +135,8 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 		IsPublic:            false,
 		Version:             seedBlock.Version, // Use explicit version from seed
 		Enabled:             seedBlock.Enabled,
+		GroupKind:           seedBlock.GroupKind,
+		IsContainer:         seedBlock.IsContainer,
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}
@@ -181,6 +183,8 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 	existing.RequiredCredentials = seedBlock.RequiredCredentials
 	existing.Enabled = seedBlock.Enabled
 	existing.Version = seedBlock.Version // Use explicit version from seed (no auto-increment)
+	existing.GroupKind = seedBlock.GroupKind
+	existing.IsContainer = seedBlock.IsContainer
 	existing.UpdatedAt = time.Now().UTC()
 
 	if err := m.blockRepo.Update(ctx, existing); err != nil {
@@ -214,6 +218,12 @@ func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.Sys
 		return true
 	}
 	if existing.Enabled != seed.Enabled {
+		return true
+	}
+	if existing.GroupKind != seed.GroupKind {
+		return true
+	}
+	if existing.IsContainer != seed.IsContainer {
 		return true
 	}
 

@@ -48,6 +48,13 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal internal steps: %w", err)
 	}
 
+	// Convert empty GroupKind to nil for database
+	var groupKind *string
+	if block.GroupKind != "" {
+		gk := string(block.GroupKind)
+		groupKind = &gk
+	}
+
 	query := `
 		INSERT INTO block_definitions (
 			id, tenant_id, slug, name, description, category, icon,
@@ -55,8 +62,9 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 			error_codes, required_credentials, is_public,
 			code, ui_config, is_system, version,
 			parent_block_id, config_defaults, pre_process, post_process, internal_steps,
+			group_kind, is_container,
 			enabled, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
 	`
 
 	_, err = r.pool.Exec(ctx, query,
@@ -84,6 +92,8 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		block.PreProcess,
 		block.PostProcess,
 		internalStepsJSON,
+		groupKind,
+		block.IsContainer,
 		block.Enabled,
 		block.CreatedAt,
 		block.UpdatedAt,
@@ -125,6 +135,7 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
+			   group_kind, COALESCE(is_container, false),
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		WHERE id = $1
@@ -135,6 +146,7 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 	var inputPortsJSON []byte
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
+	var groupKind *string
 
 	err := r.pool.QueryRow(ctx, query, id).Scan(
 		&block.ID,
@@ -161,10 +173,15 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 		&block.PreProcess,
 		&block.PostProcess,
 		&internalStepsJSON,
+		&groupKind,
+		&block.IsContainer,
 		&block.Enabled,
 		&block.CreatedAt,
 		&block.UpdatedAt,
 	)
+	if groupKind != nil {
+		block.GroupKind = domain.BlockGroupKind(*groupKind)
+	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -226,6 +243,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
+			   group_kind, COALESCE(is_container, false),
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		WHERE slug = $1 AND ((tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL) OR tenant_id IS NULL)
@@ -238,6 +256,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	var inputPortsJSON []byte
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
+	var groupKind *string
 
 	err := r.pool.QueryRow(ctx, query, slug, tenantID).Scan(
 		&block.ID,
@@ -264,6 +283,8 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 		&block.PreProcess,
 		&block.PostProcess,
 		&internalStepsJSON,
+		&groupKind,
+		&block.IsContainer,
 		&block.Enabled,
 		&block.CreatedAt,
 		&block.UpdatedAt,
@@ -273,6 +294,10 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get block definition by slug: %w", err)
+	}
+
+	if groupKind != nil {
+		block.GroupKind = domain.BlockGroupKind(*groupKind)
 	}
 
 	if len(errorCodesJSON) > 0 {
@@ -345,6 +370,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
+			   group_kind, COALESCE(is_container, false),
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		%s
@@ -364,6 +390,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		var inputPortsJSON []byte
 		var outputPortsJSON []byte
 		var internalStepsJSON []byte
+		var groupKind *string
 
 		err := rows.Scan(
 			&block.ID,
@@ -390,12 +417,18 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			&block.PreProcess,
 			&block.PostProcess,
 			&internalStepsJSON,
+			&groupKind,
+			&block.IsContainer,
 			&block.Enabled,
 			&block.CreatedAt,
 			&block.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan block definition: %w", err)
+		}
+
+		if groupKind != nil {
+			block.GroupKind = domain.BlockGroupKind(*groupKind)
 		}
 
 		if len(errorCodesJSON) > 0 {
@@ -453,6 +486,13 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal internal steps: %w", err)
 	}
 
+	// Convert empty GroupKind to nil for database
+	var groupKind *string
+	if block.GroupKind != "" {
+		gk := string(block.GroupKind)
+		groupKind = &gk
+	}
+
 	query := `
 		UPDATE block_definitions
 		SET name = $2, description = $3, category = $4, icon = $5,
@@ -460,7 +500,8 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 			error_codes = $11, required_credentials = $12, is_public = $13,
 			code = $14, ui_config = $15, is_system = $16, version = $17,
 			parent_block_id = $18, config_defaults = $19, pre_process = $20, post_process = $21, internal_steps = $22,
-			enabled = $23, updated_at = NOW()
+			group_kind = $23, is_container = $24,
+			enabled = $25, updated_at = NOW()
 		WHERE id = $1
 	`
 
@@ -487,6 +528,8 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		block.PreProcess,
 		block.PostProcess,
 		internalStepsJSON,
+		groupKind,
+		block.IsContainer,
 		block.Enabled,
 	)
 	if err != nil {

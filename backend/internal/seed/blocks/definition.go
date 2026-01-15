@@ -48,6 +48,10 @@ type SystemBlockDefinition struct {
 	// Flags
 	Enabled bool `json:"enabled"`
 
+	// Group block fields (Phase B: unified block model for groups)
+	GroupKind   domain.BlockGroupKind `json:"group_kind,omitempty"`
+	IsContainer bool                  `json:"is_container,omitempty"`
+
 	// Test cases (for testing only, not stored in DB)
 	TestCases []BlockTestCase `json:"-"`
 }

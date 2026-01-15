@@ -101,7 +101,10 @@ CREATE TABLE public.block_definitions (
     pre_process text,
     post_process text,
     internal_steps jsonb DEFAULT '[]'::jsonb,
-    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying])::text[]))),
+    group_kind character varying(50),
+    is_container boolean DEFAULT false NOT NULL,
+    CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'logic'::character varying, 'integration'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'group'::character varying])::text[]))),
+    CONSTRAINT valid_group_kind CHECK (group_kind IS NULL OR (group_kind)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])),
     CONSTRAINT no_self_reference CHECK (parent_block_id IS NULL OR parent_block_id != id)
 );
 

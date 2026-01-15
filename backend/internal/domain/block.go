@@ -18,6 +18,18 @@ const (
 	BlockCategoryData        BlockCategory = "data"
 	BlockCategoryControl     BlockCategory = "control"
 	BlockCategoryUtility     BlockCategory = "utility"
+	BlockCategoryGroup       BlockCategory = "group" // Group blocks (parallel, try_catch, foreach, while)
+)
+
+// BlockGroupKind represents the kind of group block
+type BlockGroupKind string
+
+const (
+	BlockGroupKindNone     BlockGroupKind = ""          // Not a group block
+	BlockGroupKindParallel BlockGroupKind = "parallel"  // Parallel execution
+	BlockGroupKindTryCatch BlockGroupKind = "try_catch" // Error handling with retry
+	BlockGroupKindForeach  BlockGroupKind = "foreach"   // Array iteration
+	BlockGroupKindWhile    BlockGroupKind = "while"     // Condition loop
 )
 
 // ValidBlockCategories returns all valid block categories
@@ -29,7 +41,31 @@ func ValidBlockCategories() []BlockCategory {
 		BlockCategoryData,
 		BlockCategoryControl,
 		BlockCategoryUtility,
+		BlockCategoryGroup,
 	}
+}
+
+// ValidBlockGroupKinds returns all valid group block kinds
+func ValidBlockGroupKinds() []BlockGroupKind {
+	return []BlockGroupKind{
+		BlockGroupKindParallel,
+		BlockGroupKindTryCatch,
+		BlockGroupKindForeach,
+		BlockGroupKindWhile,
+	}
+}
+
+// IsValid checks if the group kind is valid
+func (k BlockGroupKind) IsValid() bool {
+	if k == BlockGroupKindNone {
+		return true // Not a group block
+	}
+	for _, valid := range ValidBlockGroupKinds() {
+		if k == valid {
+			return true
+		}
+	}
+	return false
 }
 
 // IsValid checks if the category is valid
@@ -144,6 +180,12 @@ type BlockDefinition struct {
 	// InternalSteps: Array of steps to execute sequentially inside the block
 	InternalSteps []InternalStep `json:"internal_steps,omitempty"`
 
+	// === Group Block fields (Phase B: unified block model for groups) ===
+	// GroupKind: Type of group block (parallel, try_catch, foreach, while). Empty for non-group blocks.
+	GroupKind BlockGroupKind `json:"group_kind,omitempty"`
+	// IsContainer: Whether this block can contain other steps (group blocks are containers)
+	IsContainer bool `json:"is_container,omitempty"`
+
 	// Resolved fields (populated by resolveInheritance, not stored in DB)
 	// PreProcessChain: Chain of preProcess code from child to root (child -> ... -> root)
 	PreProcessChain []string `json:"pre_process_chain,omitempty"`
@@ -203,6 +245,11 @@ func (b *BlockDefinition) HasInheritance() bool {
 // HasInternalSteps returns true if this block has internal steps
 func (b *BlockDefinition) HasInternalSteps() bool {
 	return len(b.InternalSteps) > 0
+}
+
+// IsGroupBlock returns true if this block is a group block (container)
+func (b *BlockDefinition) IsGroupBlock() bool {
+	return b.GroupKind != BlockGroupKindNone && b.GroupKind != ""
 }
 
 // GetEffectiveCode returns the code to execute (resolved code for inherited blocks, own code otherwise)

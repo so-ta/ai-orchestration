@@ -21,6 +21,7 @@ func NewRegistry() *Registry {
 	r.registerIntegrationBlocks()
 	r.registerUtilityBlocks()
 	r.registerRAGBlocks()
+	r.registerGroupBlocks()
 
 	return r
 }

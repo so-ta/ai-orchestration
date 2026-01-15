@@ -138,7 +138,7 @@ export interface StepRun {
 export type StepRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
 // Block Registry Types
-export type BlockCategory = 'ai' | 'logic' | 'integration' | 'data' | 'control' | 'utility'
+export type BlockCategory = 'ai' | 'logic' | 'integration' | 'data' | 'control' | 'utility' | 'group'
 
 export interface ErrorCodeDef {
   code: string
@@ -172,6 +172,9 @@ export interface InternalStep {
   output_key: string // Key to store this step's output
 }
 
+// Group block kind (for container blocks)
+export type BlockGroupKind = 'parallel' | 'try_catch' | 'foreach' | 'while'
+
 export interface BlockDefinition {
   id: string
   tenant_id?: string
@@ -204,6 +207,10 @@ export interface BlockDefinition {
   post_process_chain?: string[]        // Chain of postProcess code (root -> child)
   resolved_code?: string               // Code from root ancestor
   resolved_config_defaults?: object    // Merged config defaults from inheritance chain
+
+  // Group block fields (Phase B: unified model for groups)
+  group_kind?: BlockGroupKind  // Type of group block (parallel, try_catch, foreach, while)
+  is_container?: boolean       // Whether this block can contain other steps
 
   enabled: boolean
   created_at: string

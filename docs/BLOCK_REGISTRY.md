@@ -895,9 +895,19 @@ Block config formはJSON Schemaから動的に生成:
 ## Block Groups (Control Flow Constructs)
 
 > **Updated**: 2026-01-15
+> **Phase A + B Complete**: グループブロックはBlockDefinitionに統合されました
 > **See also**: [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md)
 
 Block Groups are container constructs that manage control flow for multiple steps. They provide similar functionality to blocks with `pre_process`/`post_process` for input/output transformation.
+
+**Phase B: BlockDefinition統合**
+
+グループブロックは `block_definitions` テーブルで管理され、以下のフィールドで区別されます：
+- `category`: `"group"`
+- `group_kind`: `parallel` | `try_catch` | `foreach` | `while`
+- `is_container`: `true`
+
+これにより、グループブロックも通常のブロックと同様にBlock Paletteから選択・配置できます。
 
 ### Block Group Types (4 types only)
 
