@@ -53,7 +53,7 @@ Block Registryはワークフローのステップタイプを管理するシス
 │  │                   block_definitions テーブル                     │ │
 │  │                                                                   │ │
 │  │  System Blocks (tenant_id = NULL)                                │ │
-│  │  ├── start, llm, condition, switch, map, join, ...               │ │
+│  │  ├── start, llm, condition, switch, map, function, ...           │ │
 │  │  └── 全ユーザーに提供、管理者のみ編集可                           │ │
 │  │                                                                   │ │
 │  │  Tenant Blocks (tenant_id = UUID)                                │ │
@@ -431,7 +431,6 @@ func (e *BlockError) Error() string {
 | `condition` | Condition | logic | `return {..., __branch: result ? 'then' : 'else'}` |
 | `switch` | Switch | logic | 多分岐ルーティング |
 | `map` | Map | data | 配列並列処理 |
-| `join` | Join | data | ブランチマージ |
 | `filter` | Filter | data | 配列フィルタリング |
 | `split` | Split | data | バッチ分割 |
 | `aggregate` | Aggregate | data | データ集約 |
@@ -444,6 +443,8 @@ func (e *BlockError) Error() string {
 | `router` | Router | ai | AI分類ルーティング |
 | `note` | Note | utility | ドキュメント用（`return input;`） |
 | `code` | Code | utility | ユーザー定義JavaScript |
+
+> **Note**: `join`ブロックは廃止されました。Block Group外での分岐ブロック（Condition/Switch）の複数出力は禁止されており、Block Group内では出力が自動的に集約されるため、joinブロックは不要になりました。
 
 ### 外部連携ブロック一覧
 

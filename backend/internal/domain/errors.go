@@ -9,9 +9,10 @@ var (
 	ErrWorkflowAlreadyPublished = errors.New("workflow is already published")
 	ErrWorkflowNotPublished     = errors.New("workflow is not published")
 	ErrWorkflowNotEditable      = errors.New("published workflow cannot be edited")
-	ErrWorkflowHasCycle         = errors.New("workflow contains a cycle")
-	ErrWorkflowHasUnconnected   = errors.New("workflow has unconnected steps")
-	ErrWorkflowHasUnreachable   = errors.New("workflow has unreachable steps")
+	ErrWorkflowHasCycle             = errors.New("workflow contains a cycle")
+	ErrWorkflowHasUnconnected       = errors.New("workflow has unconnected steps")
+	ErrWorkflowHasUnreachable       = errors.New("workflow has unreachable steps")
+	ErrWorkflowBranchOutsideGroup   = errors.New("branching blocks (condition/switch) with multiple outputs must be inside a Block Group")
 	ErrWorkflowVersionNotFound  = errors.New("workflow version not found")
 
 	// Step errors

@@ -281,8 +281,6 @@ func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionC
 		return e.executeConditionStep(ctx, execCtx, step, input)
 	case domain.StepTypeMap:
 		return e.executeMapStep(ctx, step, input)
-	case domain.StepTypeJoin:
-		return e.executeJoinStep(ctx, execCtx, step)
 	case domain.StepTypeWait:
 		return e.executeWaitStep(ctx, step, input)
 	case domain.StepTypeFunction:
@@ -792,8 +790,6 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		output, err = e.executeConditionStep(ctx, execCtx, step, input)
 	case domain.StepTypeMap:
 		output, err = e.executeMapStep(ctx, step, input)
-	case domain.StepTypeJoin:
-		output, err = e.executeJoinStep(ctx, execCtx, step)
 	case domain.StepTypeWait:
 		output, err = e.executeWaitStep(ctx, step, input)
 	case domain.StepTypeFunction:
@@ -1263,24 +1259,6 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 	}
 
 	return json.Marshal(result)
-}
-
-func (e *Executor) executeJoinStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step) (json.RawMessage, error) {
-	// Merge all incoming step outputs
-	execCtx.mu.RLock()
-	defer execCtx.mu.RUnlock()
-
-	merged := make(map[string]interface{})
-	for stepID, data := range execCtx.StepData {
-		var output interface{}
-		if err := json.Unmarshal(data, &output); err != nil {
-			e.logger.Warn("Failed to unmarshal step data in join", "step_id", stepID, "error", err)
-			output = string(data)
-		}
-		merged[stepID.String()] = output
-	}
-
-	return json.Marshal(merged)
 }
 
 func (e *Executor) executeWaitStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {

@@ -17,8 +17,10 @@ func TestRegistry_AllWorkflowsValid(t *testing.T) {
 func TestRegistry_WorkflowCount(t *testing.T) {
 	registry := NewRegistry()
 
-	// Expect at least 12 workflows (4 copilot + 3 RAG + 4 demo + 1 block-group-demo)
-	minExpected := 12
+	// Expect at least 10 workflows (4 copilot + 3 RAG + 2 demo + 1 block-group-demo)
+	// Note: ai-routing-block-demo and control-flow-block-demo were removed
+	// because they used join blocks which are no longer supported
+	minExpected := 10
 	actual := registry.Count()
 	if actual < minExpected {
 		t.Errorf("Expected at least %d workflows, got %d", minExpected, actual)
@@ -29,6 +31,8 @@ func TestRegistry_GetBySlug(t *testing.T) {
 	registry := NewRegistry()
 
 	// Test known workflows exist
+	// Note: ai-routing-block-demo and control-flow-block-demo were removed
+	// because they used join blocks which are no longer supported
 	knownSlugs := []string{
 		"copilot-generate",
 		"copilot-suggest",
@@ -39,8 +43,6 @@ func TestRegistry_GetBySlug(t *testing.T) {
 		"rag-knowledge-base-chat",
 		"comprehensive-block-demo",
 		"data-pipeline-block-demo",
-		"ai-routing-block-demo",
-		"control-flow-block-demo",
 		"block-group-demo",
 	}
 

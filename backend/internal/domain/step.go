@@ -17,7 +17,6 @@ const (
 	StepTypeCondition   StepType = "condition"
 	StepTypeSwitch      StepType = "switch"      // Multi-branch routing (n8n: Switch)
 	StepTypeMap         StepType = "map"
-	StepTypeJoin        StepType = "join"
 	StepTypeSubflow     StepType = "subflow"
 	StepTypeWait        StepType = "wait"
 	StepTypeFunction    StepType = "function"
@@ -41,7 +40,6 @@ func ValidStepTypes() []StepType {
 		StepTypeCondition,
 		StepTypeSwitch,
 		StepTypeMap,
-		StepTypeJoin,
 		StepTypeSubflow,
 		StepTypeWait,
 		StepTypeFunction,

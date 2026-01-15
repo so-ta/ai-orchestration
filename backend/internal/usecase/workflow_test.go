@@ -250,7 +250,16 @@ func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
 	groupID := uuid.New()
 	branchA := domain.Step{ID: uuid.New(), Name: "Branch A", Type: domain.StepTypeFunction, BlockGroupID: &groupID}
 	branchB := domain.Step{ID: uuid.New(), Name: "Branch B", Type: domain.StepTypeFunction, BlockGroupID: &groupID}
-	mergeStep := domain.Step{ID: uuid.New(), Name: "Merge", Type: domain.StepTypeJoin}
+	// Note: join step has been removed as it is no longer supported.
+	// Block Group outputs are already aggregated, so we use a function step to process results.
+	processStep := domain.Step{ID: uuid.New(), Name: "Process Results", Type: domain.StepTypeFunction}
+
+	// Steps for branching block tests
+	conditionStepOutsideGroup := domain.Step{ID: uuid.New(), Name: "Condition Outside", Type: domain.StepTypeCondition}
+	switchStepOutsideGroup := domain.Step{ID: uuid.New(), Name: "Switch Outside", Type: domain.StepTypeSwitch}
+	conditionStepInGroup := domain.Step{ID: uuid.New(), Name: "Condition In Group", Type: domain.StepTypeCondition, BlockGroupID: &groupID}
+	targetA := domain.Step{ID: uuid.New(), Name: "Target A", Type: domain.StepTypeFunction}
+	targetB := domain.Step{ID: uuid.New(), Name: "Target B", Type: domain.StepTypeFunction}
 
 	usecase := &WorkflowUsecase{}
 
@@ -258,19 +267,20 @@ func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
 		name        string
 		workflow    *domain.Workflow
 		expectError bool
+		errorType   error
 		description string
 	}{
 		{
 			name: "workflow with block group - all steps connected via step edges",
 			workflow: &domain.Workflow{
-				Steps: []domain.Step{startStep, initStep, branchA, branchB, mergeStep},
+				Steps: []domain.Step{startStep, initStep, branchA, branchB, processStep},
 				Edges: []domain.Edge{
 					// All connections via step-to-step edges
 					{SourceStepID: &startStep.ID, TargetStepID: &initStep.ID},
 					{SourceStepID: &initStep.ID, TargetStepID: &branchA.ID},
 					{SourceStepID: &initStep.ID, TargetStepID: &branchB.ID},
-					{SourceStepID: &branchA.ID, TargetStepID: &mergeStep.ID},
-					{SourceStepID: &branchB.ID, TargetStepID: &mergeStep.ID},
+					{SourceStepID: &branchA.ID, TargetStepID: &processStep.ID},
+					{SourceStepID: &branchB.ID, TargetStepID: &processStep.ID},
 				},
 				BlockGroups: []domain.BlockGroup{
 					{
@@ -305,6 +315,71 @@ func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
 			expectError: false,
 			description: "Steps with direct step-to-step edges are connected",
 		},
+		// Branching block validation tests
+		{
+			name: "condition block with multiple outputs outside group - should fail",
+			workflow: &domain.Workflow{
+				Steps: []domain.Step{startStep, conditionStepOutsideGroup, targetA, targetB},
+				Edges: []domain.Edge{
+					{SourceStepID: &startStep.ID, TargetStepID: &conditionStepOutsideGroup.ID},
+					// Condition block has 2 outgoing edges outside any Block Group
+					{SourceStepID: &conditionStepOutsideGroup.ID, TargetStepID: &targetA.ID},
+					{SourceStepID: &conditionStepOutsideGroup.ID, TargetStepID: &targetB.ID},
+				},
+			},
+			expectError: true,
+			errorType:   domain.ErrWorkflowBranchOutsideGroup,
+			description: "Condition block with multiple outputs outside Block Group should fail",
+		},
+		{
+			name: "switch block with multiple outputs outside group - should fail",
+			workflow: &domain.Workflow{
+				Steps: []domain.Step{startStep, switchStepOutsideGroup, targetA, targetB},
+				Edges: []domain.Edge{
+					{SourceStepID: &startStep.ID, TargetStepID: &switchStepOutsideGroup.ID},
+					// Switch block has 2 outgoing edges outside any Block Group
+					{SourceStepID: &switchStepOutsideGroup.ID, TargetStepID: &targetA.ID},
+					{SourceStepID: &switchStepOutsideGroup.ID, TargetStepID: &targetB.ID},
+				},
+			},
+			expectError: true,
+			errorType:   domain.ErrWorkflowBranchOutsideGroup,
+			description: "Switch block with multiple outputs outside Block Group should fail",
+		},
+		{
+			name: "condition block with single output outside group - should pass",
+			workflow: &domain.Workflow{
+				Steps: []domain.Step{startStep, conditionStepOutsideGroup, targetA},
+				Edges: []domain.Edge{
+					{SourceStepID: &startStep.ID, TargetStepID: &conditionStepOutsideGroup.ID},
+					// Only 1 outgoing edge, so it's valid
+					{SourceStepID: &conditionStepOutsideGroup.ID, TargetStepID: &targetA.ID},
+				},
+			},
+			expectError: false,
+			description: "Condition block with single output outside Block Group should pass",
+		},
+		{
+			name: "condition block with multiple outputs inside group - should pass",
+			workflow: &domain.Workflow{
+				Steps: []domain.Step{startStep, conditionStepInGroup, branchA, branchB},
+				Edges: []domain.Edge{
+					{SourceStepID: &startStep.ID, TargetStepID: &conditionStepInGroup.ID},
+					// Condition block has 2 outgoing edges but it's inside a Block Group
+					{SourceStepID: &conditionStepInGroup.ID, TargetStepID: &branchA.ID},
+					{SourceStepID: &conditionStepInGroup.ID, TargetStepID: &branchB.ID},
+				},
+				BlockGroups: []domain.BlockGroup{
+					{
+						ID:   groupID,
+						Name: "Parallel Group",
+						Type: domain.BlockGroupTypeParallel,
+					},
+				},
+			},
+			expectError: false,
+			description: "Condition block with multiple outputs inside Block Group should pass",
+		},
 	}
 
 	for _, tt := range tests {
@@ -312,6 +387,9 @@ func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
 			err := usecase.ValidateDAG(tt.workflow)
 			if tt.expectError {
 				assert.Error(t, err)
+				if tt.errorType != nil {
+					assert.ErrorIs(t, err, tt.errorType, tt.description)
+				}
 			} else {
 				assert.NoError(t, err, tt.description)
 			}

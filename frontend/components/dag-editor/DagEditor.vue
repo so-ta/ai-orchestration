@@ -97,6 +97,7 @@ const emit = defineEmits<{
 }>()
 
 const { onConnect, onNodeDragStop, onPaneClick, project, updateNode } = useVueFlow()
+const toast = useToast()
 
 // Drag state
 const isDragOver = ref(false)
@@ -1013,9 +1014,45 @@ const flowEdges = computed<FlowEdge[]>(() => {
   return result
 })
 
+// Check if a branching block (condition/switch) is inside a Block Group
+function isBranchingBlockInGroup(stepId: string): boolean {
+  const step = props.steps.find(s => s.id === stepId)
+  if (!step) return false
+
+  // Only check condition and switch blocks
+  if (step.type !== 'condition' && step.type !== 'switch') {
+    return true // Non-branching blocks are always allowed
+  }
+
+  // Branching blocks must be in a Block Group if they have multiple outputs
+  return !!step.block_group_id
+}
+
+// Count existing outgoing edges from a step
+function countOutgoingEdges(stepId: string): number {
+  return props.edges.filter(e => e.source_step_id === stepId).length
+}
+
 // Handle new connection
 onConnect((params) => {
   if (!props.readonly) {
+    const sourceStepId = params.source
+    const sourceStep = props.steps.find(s => s.id === sourceStepId)
+
+    // Check if this is a branching block (condition/switch) trying to create multiple outputs outside a Block Group
+    if (sourceStep && (sourceStep.type === 'condition' || sourceStep.type === 'switch')) {
+      const existingOutgoingEdges = countOutgoingEdges(sourceStepId)
+
+      // If this branching block is not in a Block Group and already has an outgoing edge, block the connection
+      if (!sourceStep.block_group_id && existingOutgoingEdges > 0) {
+        toast.error(
+          'Connection blocked',
+          'Branching blocks (Condition/Switch) with multiple outputs must be inside a Block Group'
+        )
+        return
+      }
+    }
+
     // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
     const sourcePort = params.sourceHandle || undefined
     const targetPort = params.targetHandle || undefined

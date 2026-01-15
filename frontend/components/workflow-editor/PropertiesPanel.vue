@@ -90,7 +90,6 @@ const stepTypeColors: Record<StepType, string> = {
   condition: '#f59e0b',
   switch: '#eab308',
   map: '#8b5cf6',
-  join: '#6366f1',
   subflow: '#ec4899',
   loop: '#14b8a6',
   wait: '#64748b',
@@ -1220,12 +1219,6 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               :disabled="readonlyMode"
             >
           </div>
-        </div>
-
-        <!-- Join Configuration (Always shown - no config needed) -->
-        <div v-if="!hasConfigSchema && formType === 'join'" class="form-section">
-          <h4 class="section-title">{{ t('stepConfig.join.title') }}</h4>
-          <p class="form-hint">{{ t('stepConfig.join.description') }}</p>
         </div>
 
         <!-- Start Configuration (Always shown - no config needed) -->
