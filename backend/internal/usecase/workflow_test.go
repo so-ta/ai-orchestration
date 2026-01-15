@@ -239,3 +239,121 @@ func TestWorkflowUsecase_ValidateDAG(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// BlockGroups Tests
+// =============================================================================
+
+func TestWorkflowUsecase_ValidateDAG_WithBlockGroups(t *testing.T) {
+	startStep := domain.Step{ID: uuid.New(), Name: "Start", Type: domain.StepTypeStart}
+	initStep := domain.Step{ID: uuid.New(), Name: "Init", Type: domain.StepTypeFunction}
+	groupID := uuid.New()
+	branchA := domain.Step{ID: uuid.New(), Name: "Branch A", Type: domain.StepTypeFunction, BlockGroupID: &groupID}
+	branchB := domain.Step{ID: uuid.New(), Name: "Branch B", Type: domain.StepTypeFunction, BlockGroupID: &groupID}
+	mergeStep := domain.Step{ID: uuid.New(), Name: "Merge", Type: domain.StepTypeJoin}
+
+	usecase := &WorkflowUsecase{}
+
+	tests := []struct {
+		name        string
+		workflow    *domain.Workflow
+		expectError bool
+		description string
+	}{
+		{
+			name: "workflow with block group - all steps connected via step edges",
+			workflow: &domain.Workflow{
+				Steps: []domain.Step{startStep, initStep, branchA, branchB, mergeStep},
+				Edges: []domain.Edge{
+					// All connections via step-to-step edges
+					{SourceStepID: &startStep.ID, TargetStepID: &initStep.ID},
+					{SourceStepID: &initStep.ID, TargetStepID: &branchA.ID},
+					{SourceStepID: &initStep.ID, TargetStepID: &branchB.ID},
+					{SourceStepID: &branchA.ID, TargetStepID: &mergeStep.ID},
+					{SourceStepID: &branchB.ID, TargetStepID: &mergeStep.ID},
+				},
+				BlockGroups: []domain.BlockGroup{
+					{
+						ID:     groupID,
+						Name:   "Parallel Group",
+						Type:   domain.BlockGroupTypeParallel,
+					},
+				},
+			},
+			expectError: false,
+			description: "ValidateDAG checks step-to-step connectivity only",
+		},
+		{
+			name: "workflow with block group edges - steps in group treated as connected",
+			workflow: &domain.Workflow{
+				// Steps in a group are considered connected if there's at least
+				// one edge going into or out of the group
+				Steps: []domain.Step{startStep, branchA, branchB},
+				Edges: []domain.Edge{
+					// start connects to both branches
+					{SourceStepID: &startStep.ID, TargetStepID: &branchA.ID},
+					{SourceStepID: &startStep.ID, TargetStepID: &branchB.ID},
+				},
+				BlockGroups: []domain.BlockGroup{
+					{
+						ID:   groupID,
+						Name: "Parallel Group",
+						Type: domain.BlockGroupTypeParallel,
+					},
+				},
+			},
+			expectError: false,
+			description: "Steps with direct step-to-step edges are connected",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := usecase.ValidateDAG(tt.workflow)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err, tt.description)
+			}
+		})
+	}
+}
+
+func TestWorkflowDefinition_WithBlockGroups(t *testing.T) {
+	groupID := uuid.New()
+	stepID := uuid.New()
+
+	def := domain.WorkflowDefinition{
+		Name:        "Test Workflow",
+		Description: "Test Description",
+		Steps: []domain.Step{
+			{ID: stepID, Name: "Step 1", Type: domain.StepTypeFunction, BlockGroupID: &groupID},
+		},
+		Edges: []domain.Edge{
+			{SourceBlockGroupID: &groupID, TargetStepID: &stepID},
+		},
+		BlockGroups: []domain.BlockGroup{
+			{
+				ID:     groupID,
+				Name:   "Parallel Group",
+				Type:   domain.BlockGroupTypeParallel,
+			},
+			{
+				ID:     uuid.New(),
+				Name:   "ForEach Group",
+				Type:   domain.BlockGroupTypeForeach,
+			},
+		},
+	}
+
+	// Verify BlockGroups field is properly set
+	assert.Len(t, def.BlockGroups, 2)
+	assert.Equal(t, "Parallel Group", def.BlockGroups[0].Name)
+	assert.Equal(t, domain.BlockGroupTypeParallel, def.BlockGroups[0].Type)
+	assert.Equal(t, "ForEach Group", def.BlockGroups[1].Name)
+	assert.Equal(t, domain.BlockGroupTypeForeach, def.BlockGroups[1].Type)
+
+	// Verify step references group
+	assert.NotNil(t, def.Steps[0].BlockGroupID)
+	assert.Equal(t, groupID, *def.Steps[0].BlockGroupID)
+}

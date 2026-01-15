@@ -151,27 +151,15 @@ func (u *RunUsecase) GetWithDetailsAndDefinition(ctx context.Context, tenantID, 
 
 	// Fallback: If version snapshot not found, fetch current workflow definition
 	// This handles runs created before version snapshots were implemented
-	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, run.WorkflowID)
+	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, tenantID, run.WorkflowID)
 	if err == nil && workflow != nil {
-		stepPtrs, _ := u.stepRepo.ListByWorkflow(ctx, tenantID, run.WorkflowID)
-		edgePtrs, _ := u.edgeRepo.ListByWorkflow(ctx, tenantID, run.WorkflowID)
-
-		// Convert pointer slices to value slices
-		steps := make([]domain.Step, len(stepPtrs))
-		for i, s := range stepPtrs {
-			steps[i] = *s
-		}
-		edges := make([]domain.Edge, len(edgePtrs))
-		for i, e := range edgePtrs {
-			edges[i] = *e
-		}
-
 		output.WorkflowDefinition = &domain.WorkflowDefinition{
 			Name:        workflow.Name,
 			Description: workflow.Description,
 			InputSchema: workflow.InputSchema,
-			Steps:       steps,
-			Edges:       edges,
+			Steps:       workflow.Steps,
+			Edges:       workflow.Edges,
+			BlockGroups: workflow.BlockGroups,
 		}
 	}
 

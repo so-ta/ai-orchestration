@@ -708,3 +708,211 @@ func TestNewWorkflowRepository(t *testing.T) {
 	repo := NewWorkflowRepositoryWithDB(nil)
 	assert.NotNil(t, repo)
 }
+
+// =============================================================================
+// BlockGroups Tests
+// =============================================================================
+
+func TestWorkflowRepository_GetWithStepsAndEdges_BlockGroups(t *testing.T) {
+	tenantID := uuid.New()
+	workflowID := uuid.New()
+	groupID := uuid.New()
+	stepID := uuid.New()
+
+	tests := []struct {
+		name           string
+		mockSetup      func(mock pgxmock.PgxPoolIface)
+		wantBlockGroups int
+		wantErr        error
+	}{
+		{
+			name: "with block groups",
+			mockSetup: func(mock pgxmock.PgxPoolIface) {
+				// Workflow query
+				workflowRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "name", "description", "status", "version",
+					"input_schema", "output_schema", "draft", "created_by",
+					"published_at", "created_at", "updated_at", "deleted_at",
+					"is_system", "system_slug",
+				}).AddRow(
+					workflowID, tenantID, "Test", "", domain.WorkflowStatusPublished, 1,
+					nil, nil, nil, nil, nil, time.Now(), time.Now(), nil, false, nil,
+				)
+				mock.ExpectQuery("SELECT id, tenant_id, name").
+					WithArgs(workflowID, tenantID).
+					WillReturnRows(workflowRows)
+
+				// Steps query
+				stepRows := pgxmock.NewRows([]string{
+					"id", "workflow_id", "name", "type", "config",
+					"block_group_id", "group_role", "position_x", "position_y",
+					"created_at", "updated_at",
+				}).AddRow(
+					stepID, workflowID, "Step1", domain.StepTypeFunction, json.RawMessage(`{}`),
+					&groupID, nil, 0.0, 0.0, time.Now(), time.Now(),
+				)
+				mock.ExpectQuery("SELECT id, workflow_id, name").
+					WithArgs(workflowID).
+					WillReturnRows(stepRows)
+
+				// Edges query
+				edgeRows := pgxmock.NewRows([]string{
+					"id", "workflow_id", "source_step_id", "target_step_id",
+					"source_block_group_id", "target_block_group_id",
+					"source_port", "target_port", "condition", "created_at",
+				})
+				mock.ExpectQuery("SELECT id, workflow_id, source_step_id").
+					WithArgs(workflowID).
+					WillReturnRows(edgeRows)
+
+				// Block groups query
+				groupRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "workflow_id", "name", "type",
+					"parent_group_id", "position_x", "position_y", "width", "height",
+					"pre_process", "post_process", "config", "created_at", "updated_at",
+				}).AddRow(
+					groupID, tenantID, workflowID, "Parallel Group", domain.BlockGroupTypeParallel,
+					nil, 100, 100, 200, 150, nil, nil, json.RawMessage(`{}`),
+					time.Now(), time.Now(),
+				)
+				mock.ExpectQuery("SELECT id, tenant_id, workflow_id").
+					WithArgs(workflowID).
+					WillReturnRows(groupRows)
+			},
+			wantBlockGroups: 1,
+			wantErr:         nil,
+		},
+		{
+			name: "with multiple block groups",
+			mockSetup: func(mock pgxmock.PgxPoolIface) {
+				group2ID := uuid.New()
+
+				// Workflow query
+				workflowRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "name", "description", "status", "version",
+					"input_schema", "output_schema", "draft", "created_by",
+					"published_at", "created_at", "updated_at", "deleted_at",
+					"is_system", "system_slug",
+				}).AddRow(
+					workflowID, tenantID, "Test", "", domain.WorkflowStatusPublished, 1,
+					nil, nil, nil, nil, nil, time.Now(), time.Now(), nil, false, nil,
+				)
+				mock.ExpectQuery("SELECT id, tenant_id, name").
+					WithArgs(workflowID, tenantID).
+					WillReturnRows(workflowRows)
+
+				// Steps query
+				stepRows := pgxmock.NewRows([]string{
+					"id", "workflow_id", "name", "type", "config",
+					"block_group_id", "group_role", "position_x", "position_y",
+					"created_at", "updated_at",
+				})
+				mock.ExpectQuery("SELECT id, workflow_id, name").
+					WithArgs(workflowID).
+					WillReturnRows(stepRows)
+
+				// Edges query
+				edgeRows := pgxmock.NewRows([]string{
+					"id", "workflow_id", "source_step_id", "target_step_id",
+					"source_block_group_id", "target_block_group_id",
+					"source_port", "target_port", "condition", "created_at",
+				})
+				mock.ExpectQuery("SELECT id, workflow_id, source_step_id").
+					WithArgs(workflowID).
+					WillReturnRows(edgeRows)
+
+				// Block groups query - 2 groups
+				groupRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "workflow_id", "name", "type",
+					"parent_group_id", "position_x", "position_y", "width", "height",
+					"pre_process", "post_process", "config", "created_at", "updated_at",
+				}).AddRow(
+					groupID, tenantID, workflowID, "Parallel Group", domain.BlockGroupTypeParallel,
+					nil, 100, 100, 200, 150, nil, nil, json.RawMessage(`{}`),
+					time.Now(), time.Now(),
+				).AddRow(
+					group2ID, tenantID, workflowID, "ForEach Group", domain.BlockGroupTypeForeach,
+					nil, 400, 100, 200, 150, nil, nil, json.RawMessage(`{"parallel": true}`),
+					time.Now(), time.Now(),
+				)
+				mock.ExpectQuery("SELECT id, tenant_id, workflow_id").
+					WithArgs(workflowID).
+					WillReturnRows(groupRows)
+			},
+			wantBlockGroups: 2,
+			wantErr:         nil,
+		},
+		{
+			name: "with empty block groups",
+			mockSetup: func(mock pgxmock.PgxPoolIface) {
+				// Workflow query
+				workflowRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "name", "description", "status", "version",
+					"input_schema", "output_schema", "draft", "created_by",
+					"published_at", "created_at", "updated_at", "deleted_at",
+					"is_system", "system_slug",
+				}).AddRow(
+					workflowID, tenantID, "Test", "", domain.WorkflowStatusPublished, 1,
+					nil, nil, nil, nil, nil, time.Now(), time.Now(), nil, false, nil,
+				)
+				mock.ExpectQuery("SELECT id, tenant_id, name").
+					WithArgs(workflowID, tenantID).
+					WillReturnRows(workflowRows)
+
+				// Steps query
+				stepRows := pgxmock.NewRows([]string{
+					"id", "workflow_id", "name", "type", "config",
+					"block_group_id", "group_role", "position_x", "position_y",
+					"created_at", "updated_at",
+				})
+				mock.ExpectQuery("SELECT id, workflow_id, name").
+					WithArgs(workflowID).
+					WillReturnRows(stepRows)
+
+				// Edges query
+				edgeRows := pgxmock.NewRows([]string{
+					"id", "workflow_id", "source_step_id", "target_step_id",
+					"source_block_group_id", "target_block_group_id",
+					"source_port", "target_port", "condition", "created_at",
+				})
+				mock.ExpectQuery("SELECT id, workflow_id, source_step_id").
+					WithArgs(workflowID).
+					WillReturnRows(edgeRows)
+
+				// Block groups query - empty
+				groupRows := pgxmock.NewRows([]string{
+					"id", "tenant_id", "workflow_id", "name", "type",
+					"parent_group_id", "position_x", "position_y", "width", "height",
+					"pre_process", "post_process", "config", "created_at", "updated_at",
+				})
+				mock.ExpectQuery("SELECT id, tenant_id, workflow_id").
+					WithArgs(workflowID).
+					WillReturnRows(groupRows)
+			},
+			wantBlockGroups: 0,
+			wantErr:         nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock, err := pgxmock.NewPool()
+			require.NoError(t, err)
+			defer mock.Close()
+
+			tt.mockSetup(mock)
+
+			repo := NewWorkflowRepositoryWithDB(mock)
+			result, err := repo.GetWithStepsAndEdges(context.Background(), tenantID, workflowID)
+
+			if tt.wantErr != nil {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, result.BlockGroups, tt.wantBlockGroups)
+			}
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}

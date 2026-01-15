@@ -173,6 +173,7 @@ type SaveWorkflowInput struct {
 	InputSchema json.RawMessage
 	Steps       []domain.Step
 	Edges       []domain.Edge
+	BlockGroups []domain.BlockGroup
 }
 
 // Save saves a workflow and creates a new version snapshot
@@ -217,6 +218,12 @@ func (u *WorkflowUsecase) Save(ctx context.Context, input SaveWorkflowInput) (*d
 	// Clear any existing draft
 	workflow.ClearDraft()
 
+	// Reload block groups from database for version snapshot
+	reloadedWorkflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create workflow definition snapshot
 	definition := domain.WorkflowDefinition{
 		Name:         workflow.Name,
@@ -225,6 +232,7 @@ func (u *WorkflowUsecase) Save(ctx context.Context, input SaveWorkflowInput) (*d
 		OutputSchema: workflow.OutputSchema,
 		Steps:        input.Steps,
 		Edges:        input.Edges,
+		BlockGroups:  reloadedWorkflow.BlockGroups,
 	}
 
 	definitionJSON, err := json.Marshal(definition)
@@ -443,7 +451,7 @@ func (u *WorkflowUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) (
 		return nil, err
 	}
 
-	// Use Save with current data
+	// Use Save with current data (including BlockGroups)
 	return u.Save(ctx, SaveWorkflowInput{
 		TenantID:    tenantID,
 		ID:          id,
@@ -452,6 +460,7 @@ func (u *WorkflowUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) (
 		InputSchema: workflow.InputSchema,
 		Steps:       workflow.Steps,
 		Edges:       workflow.Edges,
+		BlockGroups: workflow.BlockGroups,
 	})
 }
 

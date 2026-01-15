@@ -15,8 +15,9 @@ import (
 // Mock implementations
 
 type mockWorkflowRepo struct {
-	getByIDFunc       func(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
-	getSystemBySlugFn func(ctx context.Context, slug string) (*domain.Workflow, error)
+	getByIDFunc              func(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
+	getWithStepsAndEdgesFunc func(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
+	getSystemBySlugFn        func(ctx context.Context, slug string) (*domain.Workflow, error)
 }
 
 func (m *mockWorkflowRepo) Create(ctx context.Context, workflow *domain.Workflow) error { return nil }
@@ -32,6 +33,13 @@ func (m *mockWorkflowRepo) List(ctx context.Context, tenantID uuid.UUID, filter 
 func (m *mockWorkflowRepo) Update(ctx context.Context, workflow *domain.Workflow) error { return nil }
 func (m *mockWorkflowRepo) Delete(ctx context.Context, tenantID, id uuid.UUID) error   { return nil }
 func (m *mockWorkflowRepo) GetWithStepsAndEdges(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error) {
+	if m.getWithStepsAndEdgesFunc != nil {
+		return m.getWithStepsAndEdgesFunc(ctx, tenantID, id)
+	}
+	// Fallback to getByIDFunc if getWithStepsAndEdgesFunc is not set
+	if m.getByIDFunc != nil {
+		return m.getByIDFunc(ctx, tenantID, id)
+	}
 	return nil, nil
 }
 func (m *mockWorkflowRepo) GetSystemBySlug(ctx context.Context, slug string) (*domain.Workflow, error) {
@@ -658,4 +666,137 @@ func TestCollectDownstreamSteps(t *testing.T) {
 			assert.Equal(t, tt.startStepID, result[0])
 		})
 	}
+}
+
+// =============================================================================
+// BlockGroups Tests
+// =============================================================================
+
+func TestRunUsecase_GetWithDetailsAndDefinition_WithBlockGroups(t *testing.T) {
+	ctx := context.Background()
+	tenantID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	stepID := uuid.New()
+	groupID := uuid.New()
+
+	run := &domain.Run{
+		ID:              runID,
+		TenantID:        tenantID,
+		WorkflowID:      workflowID,
+		WorkflowVersion: 1,
+		Status:          domain.RunStatusCompleted,
+	}
+
+	// WorkflowDefinition with BlockGroups
+	definition := domain.WorkflowDefinition{
+		Name:        "Test Workflow with Groups",
+		Description: "Test Description",
+		Steps: []domain.Step{
+			{ID: stepID, Name: "Step 1", Type: domain.StepTypeTool, BlockGroupID: &groupID},
+		},
+		Edges: []domain.Edge{},
+		BlockGroups: []domain.BlockGroup{
+			{
+				ID:     groupID,
+				Name:   "Parallel Group",
+				Type:   domain.BlockGroupTypeParallel,
+				Config: json.RawMessage(`{"max_concurrent": 3}`),
+			},
+		},
+	}
+	definitionJSON, _ := json.Marshal(definition)
+
+	runRepo := &mockRunRepo{
+		getWithStepRunsFn: func(ctx context.Context, tid, id uuid.UUID) (*domain.Run, error) {
+			return run, nil
+		},
+	}
+
+	versionRepo := &mockVersionRepo{
+		getByWorkflowAndVersionFn: func(ctx context.Context, wid uuid.UUID, version int) (*domain.WorkflowVersion, error) {
+			return &domain.WorkflowVersion{
+				WorkflowID: workflowID,
+				Version:    1,
+				Definition: definitionJSON,
+			}, nil
+		},
+	}
+
+	uc := newTestRunUsecase(nil, runRepo, versionRepo, nil, nil, nil)
+
+	output, err := uc.GetWithDetailsAndDefinition(ctx, tenantID, runID)
+
+	require.NoError(t, err)
+	assert.NotNil(t, output.WorkflowDefinition)
+	assert.Equal(t, "Test Workflow with Groups", output.WorkflowDefinition.Name)
+	assert.Len(t, output.WorkflowDefinition.BlockGroups, 1, "Should have 1 block group")
+	assert.Equal(t, "Parallel Group", output.WorkflowDefinition.BlockGroups[0].Name)
+	assert.Equal(t, domain.BlockGroupTypeParallel, output.WorkflowDefinition.BlockGroups[0].Type)
+}
+
+func TestRunUsecase_GetWithDetailsAndDefinition_FallbackBlockGroups(t *testing.T) {
+	ctx := context.Background()
+	tenantID := uuid.New()
+	workflowID := uuid.New()
+	runID := uuid.New()
+	stepID := uuid.New()
+	groupID := uuid.New()
+
+	run := &domain.Run{
+		ID:              runID,
+		TenantID:        tenantID,
+		WorkflowID:      workflowID,
+		WorkflowVersion: 1,
+		Status:          domain.RunStatusCompleted,
+	}
+
+	// Workflow with BlockGroups
+	workflow := &domain.Workflow{
+		ID:       workflowID,
+		TenantID: tenantID,
+		Name:     "Fallback Workflow with Groups",
+		Steps: []domain.Step{
+			{ID: stepID, Name: "Step 1", Type: domain.StepTypeFunction, BlockGroupID: &groupID},
+		},
+		Edges: []domain.Edge{},
+		BlockGroups: []domain.BlockGroup{
+			{
+				ID:     groupID,
+				Name:   "ForEach Group",
+				Type:   domain.BlockGroupTypeForeach,
+				Config: json.RawMessage(`{"parallel": true}`),
+			},
+		},
+	}
+
+	runRepo := &mockRunRepo{
+		getWithStepRunsFn: func(ctx context.Context, tid, id uuid.UUID) (*domain.Run, error) {
+			return run, nil
+		},
+	}
+
+	// Version not found - will fallback to current workflow
+	versionRepo := &mockVersionRepo{
+		getByWorkflowAndVersionFn: func(ctx context.Context, wid uuid.UUID, version int) (*domain.WorkflowVersion, error) {
+			return nil, domain.ErrWorkflowNotFound
+		},
+	}
+
+	workflowRepo := &mockWorkflowRepo{
+		getWithStepsAndEdgesFunc: func(ctx context.Context, tid, id uuid.UUID) (*domain.Workflow, error) {
+			return workflow, nil
+		},
+	}
+
+	uc := newTestRunUsecase(workflowRepo, runRepo, versionRepo, nil, nil, nil)
+
+	output, err := uc.GetWithDetailsAndDefinition(ctx, tenantID, runID)
+
+	require.NoError(t, err)
+	assert.NotNil(t, output.WorkflowDefinition)
+	assert.Equal(t, "Fallback Workflow with Groups", output.WorkflowDefinition.Name)
+	assert.Len(t, output.WorkflowDefinition.BlockGroups, 1, "Should have 1 block group from fallback")
+	assert.Equal(t, "ForEach Group", output.WorkflowDefinition.BlockGroups[0].Name)
+	assert.Equal(t, domain.BlockGroupTypeForeach, output.WorkflowDefinition.BlockGroups[0].Type)
 }

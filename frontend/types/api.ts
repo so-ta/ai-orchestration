@@ -117,6 +117,7 @@ export interface WorkflowDefinition {
   output_schema?: object
   steps: Step[]
   edges: Edge[]
+  block_groups?: BlockGroup[]
 }
 
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
