@@ -271,6 +271,14 @@ func processJob(
 		}
 		newAttempt := maxAttempt + 1
 
+		// Get max sequence number for the run and set counter
+		maxSeq, err := stepRunRepo.GetMaxSequenceNumberForRun(ctx, run.TenantID, job.RunID)
+		if err != nil {
+			logger.Warn("Failed to get max sequence number, defaulting to 0", "error", err)
+			maxSeq = 0
+		}
+		execCtx.SetSequenceCounter(maxSeq)
+
 		// Execute the single step
 		stepRun, err := executor.ExecuteSingleStep(ctx, execCtx, *job.TargetStepID, job.StepInput)
 		if err != nil {
@@ -311,6 +319,14 @@ func processJob(
 			maxAttempt = 0
 		}
 		newAttempt := maxAttempt + 1
+
+		// Get max sequence number for the run and set counter
+		maxSeq, err := stepRunRepo.GetMaxSequenceNumberForRun(ctx, run.TenantID, job.RunID)
+		if err != nil {
+			logger.Warn("Failed to get max sequence number, defaulting to 0", "error", err)
+			maxSeq = 0
+		}
+		execCtx.SetSequenceCounter(maxSeq)
 
 		// Execute from step
 		execErr = executor.ExecuteFromStep(ctx, execCtx, *job.TargetStepID, job.StepInput)

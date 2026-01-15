@@ -335,7 +335,8 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 	}
 
 	// 8. Return new StepRun (note: actual execution happens async in worker)
-	return domain.NewStepRunWithAttempt(input.TenantID, input.RunID, input.StepID, targetStep.Name, newAttempt), nil
+	// SequenceNumber will be assigned by the executor during actual execution
+	return domain.NewStepRunWithAttempt(input.TenantID, input.RunID, input.StepID, targetStep.Name, newAttempt, 0), nil
 }
 
 // ResumeFromStepInput represents input for resuming execution from a step

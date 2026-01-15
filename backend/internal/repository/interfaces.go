@@ -74,6 +74,8 @@ type StepRunRepository interface {
 	GetMaxAttempt(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error)
 	// GetMaxAttemptForRun returns the highest attempt number across all steps in a run
 	GetMaxAttemptForRun(ctx context.Context, tenantID, runID uuid.UUID) (int, error)
+	// GetMaxSequenceNumberForRun returns the highest sequence number across all steps in a run
+	GetMaxSequenceNumberForRun(ctx context.Context, tenantID, runID uuid.UUID) (int, error)
 	// GetLatestByStep returns the most recent StepRun for a step in a run
 	GetLatestByStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) (*domain.StepRun, error)
 	// ListCompletedByRun returns the latest completed StepRun for each step in a run

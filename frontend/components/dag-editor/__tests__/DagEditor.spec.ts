@@ -253,6 +253,7 @@ describe('DagEditor', () => {
           step_name: 'Start Step',
           status: 'completed' as const,
           attempt: 1,
+          sequence_number: 1,
           created_at: '2024-01-01T00:00:00Z',
         },
       ]
@@ -417,6 +418,7 @@ describe('DagEditor', () => {
             step_name: 'Start Step',
             status: status,
             attempt: 1,
+            sequence_number: 1,
             created_at: '2024-01-01T00:00:00Z',
           },
         ]

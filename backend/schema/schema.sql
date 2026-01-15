@@ -519,6 +519,7 @@ CREATE TABLE public.step_runs (
     step_name character varying(255) NOT NULL,
     status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
     attempt integer DEFAULT 1 NOT NULL,
+    sequence_number integer DEFAULT 0 NOT NULL,
     input jsonb,
     output jsonb,
     error text,
@@ -527,6 +528,13 @@ CREATE TABLE public.step_runs (
     duration_ms integer,
     created_at timestamp with time zone DEFAULT now()
 );
+
+
+--
+-- Name: COLUMN step_runs.sequence_number; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.step_runs.sequence_number IS 'Execution order within the same run and attempt (1-indexed)';
 
 
 --

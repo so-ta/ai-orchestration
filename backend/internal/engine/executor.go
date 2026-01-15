@@ -85,6 +85,7 @@ type ExecutionContext struct {
 	StepData        map[uuid.UUID]json.RawMessage // step outputs
 	GroupData       map[uuid.UUID]json.RawMessage // block group outputs
 	InjectedOutputs map[string]json.RawMessage    // pre-injected outputs for partial execution
+	sequenceCounter int                           // counter for step execution order within an attempt
 	mu              sync.RWMutex
 }
 
@@ -98,6 +99,21 @@ func NewExecutionContext(run *domain.Run, def *domain.WorkflowDefinition) *Execu
 		GroupData:       make(map[uuid.UUID]json.RawMessage),
 		InjectedOutputs: make(map[string]json.RawMessage),
 	}
+}
+
+// NextSequenceNumber returns the next sequence number for step execution order
+func (ec *ExecutionContext) NextSequenceNumber() int {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+	ec.sequenceCounter++
+	return ec.sequenceCounter
+}
+
+// SetSequenceCounter sets the sequence counter (used for resuming execution)
+func (ec *ExecutionContext) SetSequenceCounter(value int) {
+	ec.mu.Lock()
+	defer ec.mu.Unlock()
+	ec.sequenceCounter = value
 }
 
 // InjectPreviousOutputs injects outputs from a previous run for partial execution
@@ -145,8 +161,9 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 		"step_name", targetStep.Name,
 	)
 
-	// Create step run
-	stepRun := domain.NewStepRun(execCtx.Run.TenantID, execCtx.Run.ID, targetStep.ID, targetStep.Name)
+	// Create step run with sequence number
+	seqNum := execCtx.NextSequenceNumber()
+	stepRun := domain.NewStepRun(execCtx.Run.TenantID, execCtx.Run.ID, targetStep.ID, targetStep.Name, seqNum)
 
 	execCtx.mu.Lock()
 	execCtx.StepRuns[targetStep.ID] = stepRun
@@ -743,8 +760,9 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		"step_type", step.Type,
 	)
 
-	// Create step run
-	stepRun := domain.NewStepRun(execCtx.Run.TenantID, execCtx.Run.ID, step.ID, step.Name)
+	// Create step run with sequence number
+	seqNum := execCtx.NextSequenceNumber()
+	stepRun := domain.NewStepRun(execCtx.Run.TenantID, execCtx.Run.ID, step.ID, step.Name, seqNum)
 
 	execCtx.mu.Lock()
 	execCtx.StepRuns[step.ID] = stepRun

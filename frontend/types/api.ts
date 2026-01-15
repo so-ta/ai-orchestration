@@ -129,6 +129,7 @@ export interface StepRun {
   step_name: string
   status: StepRunStatus
   attempt: number
+  sequence_number: number
   input?: object
   output?: object
   error?: string

@@ -20,47 +20,50 @@ const (
 
 // StepRun represents a single step execution within a run
 type StepRun struct {
-	ID          uuid.UUID       `json:"id"`
-	TenantID    uuid.UUID       `json:"tenant_id"`
-	RunID       uuid.UUID       `json:"run_id"`
-	StepID      uuid.UUID       `json:"step_id"`
-	StepName    string          `json:"step_name"`
-	Status      StepRunStatus   `json:"status"`
-	Attempt     int             `json:"attempt"`
-	Input       json.RawMessage `json:"input,omitempty"`
-	Output      json.RawMessage `json:"output,omitempty"`
-	Error       string          `json:"error,omitempty"`
-	StartedAt   *time.Time      `json:"started_at,omitempty"`
-	CompletedAt *time.Time      `json:"completed_at,omitempty"`
-	DurationMs  *int            `json:"duration_ms,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
+	ID             uuid.UUID       `json:"id"`
+	TenantID       uuid.UUID       `json:"tenant_id"`
+	RunID          uuid.UUID       `json:"run_id"`
+	StepID         uuid.UUID       `json:"step_id"`
+	StepName       string          `json:"step_name"`
+	Status         StepRunStatus   `json:"status"`
+	Attempt        int             `json:"attempt"`
+	SequenceNumber int             `json:"sequence_number"`
+	Input          json.RawMessage `json:"input,omitempty"`
+	Output         json.RawMessage `json:"output,omitempty"`
+	Error          string          `json:"error,omitempty"`
+	StartedAt      *time.Time      `json:"started_at,omitempty"`
+	CompletedAt    *time.Time      `json:"completed_at,omitempty"`
+	DurationMs     *int            `json:"duration_ms,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 // NewStepRun creates a new step run
-func NewStepRun(tenantID, runID, stepID uuid.UUID, stepName string) *StepRun {
+func NewStepRun(tenantID, runID, stepID uuid.UUID, stepName string, sequenceNumber int) *StepRun {
 	return &StepRun{
-		ID:        uuid.New(),
-		TenantID:  tenantID,
-		RunID:     runID,
-		StepID:    stepID,
-		StepName:  stepName,
-		Status:    StepRunStatusPending,
-		Attempt:   1,
-		CreatedAt: time.Now().UTC(),
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		RunID:          runID,
+		StepID:         stepID,
+		StepName:       stepName,
+		Status:         StepRunStatusPending,
+		Attempt:        1,
+		SequenceNumber: sequenceNumber,
+		CreatedAt:      time.Now().UTC(),
 	}
 }
 
 // NewStepRunWithAttempt creates a new step run with a specific attempt number (for re-execution)
-func NewStepRunWithAttempt(tenantID, runID, stepID uuid.UUID, stepName string, attempt int) *StepRun {
+func NewStepRunWithAttempt(tenantID, runID, stepID uuid.UUID, stepName string, attempt, sequenceNumber int) *StepRun {
 	return &StepRun{
-		ID:        uuid.New(),
-		TenantID:  tenantID,
-		RunID:     runID,
-		StepID:    stepID,
-		StepName:  stepName,
-		Status:    StepRunStatusPending,
-		Attempt:   attempt,
-		CreatedAt: time.Now().UTC(),
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		RunID:          runID,
+		StepID:         stepID,
+		StepName:       stepName,
+		Status:         StepRunStatusPending,
+		Attempt:        attempt,
+		SequenceNumber: sequenceNumber,
+		CreatedAt:      time.Now().UTC(),
 	}
 }
 
