@@ -30,6 +30,7 @@ func NewBlockGroupUsecase(
 }
 
 // CreateBlockGroupInput represents input for creating a block group
+// Supports 4 types: parallel, try_catch, foreach, while
 type CreateBlockGroupInput struct {
 	TenantID      uuid.UUID
 	WorkflowID    uuid.UUID
@@ -37,6 +38,8 @@ type CreateBlockGroupInput struct {
 	Type          domain.BlockGroupType
 	Config        json.RawMessage
 	ParentGroupID *uuid.UUID
+	PreProcess    *string // JS: external IN -> internal IN
+	PostProcess   *string // JS: internal OUT -> external OUT
 	PositionX     int
 	PositionY     int
 	Width         int
@@ -78,6 +81,8 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 		group.Config = input.Config
 	}
 	group.ParentGroupID = input.ParentGroupID
+	group.PreProcess = input.PreProcess
+	group.PostProcess = input.PostProcess
 	group.SetPosition(input.PositionX, input.PositionY)
 	if input.Width > 0 {
 		group.Width = input.Width
@@ -130,6 +135,8 @@ type UpdateBlockGroupInput struct {
 	Name          string
 	Config        json.RawMessage
 	ParentGroupID *uuid.UUID
+	PreProcess    *string // JS: external IN -> internal IN
+	PostProcess   *string // JS: internal OUT -> external OUT
 	PositionX     *int
 	PositionY     *int
 	Width         *int
@@ -169,6 +176,12 @@ func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupIn
 			return nil, domain.NewValidationError("parent_group_id", "block group cannot be its own parent")
 		}
 		group.ParentGroupID = input.ParentGroupID
+	}
+	if input.PreProcess != nil {
+		group.PreProcess = input.PreProcess
+	}
+	if input.PostProcess != nil {
+		group.PostProcess = input.PostProcess
 	}
 	if input.PositionX != nil {
 		group.PositionX = *input.PositionX

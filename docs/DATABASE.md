@@ -137,14 +137,18 @@ Unique: (source_step_id, target_step_id)
 
 Control flow constructs that group multiple steps.
 
+> **Updated**: 2026-01-15 - Simplified to 4 types, added pre_process/post_process
+
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | Display name |
-| type | VARCHAR(50) | NOT NULL | parallel, try_catch, if_else, switch_case, foreach, while |
+| type | VARCHAR(50) | NOT NULL, CHECK | **4 types only**: parallel, try_catch, foreach, while |
 | config | JSONB | NOT NULL DEFAULT '{}' | Type-specific configuration |
 | parent_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | For nested groups |
+| pre_process | TEXT | | JS code: external IN → internal IN |
+| post_process | TEXT | | JS code: internal OUT → external OUT |
 | position_x | INT | DEFAULT 0 | UI position X |
 | position_y | INT | DEFAULT 0 | UI position Y |
 | width | INT | DEFAULT 400 | UI width |
@@ -156,7 +160,11 @@ Indexes:
 - `idx_block_groups_workflow` ON (workflow_id)
 - `idx_block_groups_parent` ON (parent_group_id)
 
-**Note**: Steps can belong to a block group via `steps.block_group_id` and `steps.group_role`.
+**Type CHECK constraint**: `type IN ('parallel', 'try_catch', 'foreach', 'while')`
+
+**Removed types**: `if_else` (use condition block), `switch_case` (use switch block)
+
+**Note**: Steps can belong to a block group via `steps.block_group_id` and `steps.group_role` (body only).
 
 ### block_group_runs
 
@@ -289,6 +297,8 @@ Indexes:
 
 ブロック定義（Unified Block Model）。システムブロックとテナントカスタムブロックを管理。
 
+> **Updated**: 2026-01-15 - Phase B: グループブロック統合（group_kind, is_container 追加）
+
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT gen_random_uuid() | |
@@ -296,7 +306,7 @@ Indexes:
 | slug | VARCHAR(100) | NOT NULL | Unique identifier |
 | name | VARCHAR(255) | NOT NULL | Display name |
 | description | TEXT | | |
-| category | VARCHAR(50) | NOT NULL | ai, logic, integration, data, control, utility |
+| category | VARCHAR(50) | NOT NULL, CHECK | ai, logic, integration, data, control, utility, **group** |
 | icon | VARCHAR(50) | | Icon identifier |
 | config_schema | JSONB | NOT NULL DEFAULT '{}' | Config JSON Schema |
 | input_schema | JSONB | | Input JSON Schema |
@@ -306,6 +316,8 @@ Indexes:
 | is_system | BOOLEAN | NOT NULL DEFAULT FALSE | System block = admin only |
 | version | INTEGER | NOT NULL DEFAULT 1 | Version number |
 | error_codes | JSONB | DEFAULT '[]' | Error code definitions |
+| group_kind | VARCHAR(50) | CHECK | **Phase B**: parallel, try_catch, foreach, while (グループブロック用) |
+| is_container | BOOLEAN | NOT NULL DEFAULT FALSE | **Phase B**: TRUE = 他のステップを含むことができる |
 | enabled | BOOLEAN | DEFAULT true | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
@@ -317,7 +329,16 @@ Indexes:
 - `idx_block_definitions_category` ON (category)
 - `idx_block_definitions_enabled` ON (enabled)
 
-**See**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
+**Constraints**:
+- `valid_block_category`: category IN ('ai', 'logic', 'integration', 'data', 'control', 'utility', 'group')
+- `valid_group_kind`: group_kind IS NULL OR group_kind IN ('parallel', 'try_catch', 'foreach', 'while')
+
+**Group Blocks (Phase B)**:
+- `category = 'group'` かつ `is_container = TRUE` のブロックはグループブロック
+- Block Palette からドラッグ＆ドロップで配置可能
+- システムブロック: parallel, try_catch, foreach, while
+
+**See**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md), [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md)
 
 ### block_versions
 

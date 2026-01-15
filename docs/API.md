@@ -393,6 +393,20 @@ Response `204`: No content
 
 Block groups are control flow constructs that group multiple steps.
 
+> **Updated**: 2026-01-15
+> Simplified to 4 types only: `parallel`, `try_catch`, `foreach`, `while`
+> Removed: `if_else` (use `condition` block), `switch_case` (use `switch` block)
+> All groups now use `body` role only with `pre_process`/`post_process` for transformation.
+
+### Group Types
+
+| Type | Description | Config |
+|------|-------------|--------|
+| `parallel` | Execute multiple flows concurrently | `max_concurrent`, `fail_fast` |
+| `try_catch` | Error handling with retry support | `retry_count`, `retry_delay_ms` |
+| `foreach` | Iterate over array elements | `input_path`, `parallel`, `max_workers` |
+| `while` | Condition-based loop | `condition`, `max_iterations`, `do_while` |
+
 ### List
 ```
 GET /workflows/{workflow_id}/block-groups
@@ -407,8 +421,10 @@ Response `200`:
       "workflow_id": "uuid",
       "name": "Parallel Tasks",
       "type": "parallel",
-      "config": { "max_concurrent": 10 },
+      "config": { "max_concurrent": 10, "fail_fast": false },
       "parent_group_id": null,
+      "pre_process": "return { ...input, timestamp: Date.now() };",
+      "post_process": "return { result: output.data };",
       "position": { "x": 100, "y": 200 },
       "size": { "width": 400, "height": 300 }
     }
@@ -425,13 +441,26 @@ Request:
 ```json
 {
   "name": "Parallel Tasks",
-  "type": "parallel|try_catch|if_else|switch_case|foreach|while",
+  "type": "parallel|try_catch|foreach|while",
   "config": {},
   "parent_group_id": null,
+  "pre_process": "return input;",
+  "post_process": "return output;",
   "position": { "x": 100, "y": 200 },
   "size": { "width": 400, "height": 300 }
 }
 ```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Display name |
+| `type` | string | Yes | One of: `parallel`, `try_catch`, `foreach`, `while` |
+| `config` | object | No | Type-specific configuration |
+| `parent_group_id` | uuid | No | For nested groups |
+| `pre_process` | string | No | JS code: external IN → internal IN |
+| `post_process` | string | No | JS code: internal OUT → external OUT |
+| `position` | object | Yes | `{ x, y }` coordinates |
+| `size` | object | Yes | `{ width, height }` dimensions |
 
 Response `201`: Created block group
 
@@ -452,6 +481,8 @@ Request:
 {
   "name": "Updated Name",
   "config": { "max_concurrent": 5 },
+  "pre_process": "return { ...input, modified: true };",
+  "post_process": "return output;",
   "position": { "x": 150, "y": 250 },
   "size": { "width": 500, "height": 400 }
 }
@@ -475,9 +506,11 @@ Request:
 ```json
 {
   "step_id": "uuid",
-  "group_role": "body|try|catch|finally|then|else|case_0|default"
+  "group_role": "body"
 }
 ```
+
+> **Note**: Only `body` role is supported. All other roles have been removed.
 
 Response `200`: Updated step
 
@@ -489,7 +522,7 @@ Response `200`: Updated step
 | Code | Message | Description |
 |------|---------|-------------|
 | VALIDATION_ERROR | this step type cannot be added to a block group | Start nodes cannot be in groups |
-| VALIDATION_ERROR | invalid group role | Invalid group_role for the block group type |
+| VALIDATION_ERROR | invalid group role | Only `body` role is valid |
 | NOT_FOUND | block group not found | Block group does not exist |
 | CONFLICT | published workflow cannot be edited | Workflow is published |
 

@@ -8,7 +8,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
-import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType } from '~/types/api'
+import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
 
 const props = defineProps<{
   steps: Step[]
@@ -31,7 +31,7 @@ interface PushedBlock {
 interface AddedBlock {
   stepId: string
   position: { x: number; y: number }
-  role: string
+  role: GroupRole
 }
 
 // Moved group info for groups that were pushed by blocks
@@ -44,8 +44,8 @@ interface MovedGroup {
 const emit = defineEmits<{
   (e: 'step:select', step: Step): void
   (e: 'step:update', stepId: string, position: { x: number; y: number }, movedGroups?: MovedGroup[]): void
-  (e: 'step:drop', data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: string }): void
-  (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: string, movedGroups?: MovedGroup[]): void
+  (e: 'step:drop', data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: GroupRole }): void
+  (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: GroupRole, movedGroups?: MovedGroup[]): void
   (e: 'edge:add', source: string, target: string, sourcePort?: string, targetPort?: string): void
   (e: 'edge:delete', edgeId: string): void
   (e: 'pane:click'): void
@@ -196,8 +196,6 @@ function getGroupColor(type: BlockGroupType): string {
   const colors: Record<BlockGroupType, string> = {
     parallel: '#8b5cf6',    // Purple
     try_catch: '#ef4444',   // Red
-    if_else: '#f59e0b',     // Amber
-    switch_case: '#eab308', // Yellow
     foreach: '#22c55e',     // Green
     while: '#14b8a6',       // Teal
   }
@@ -209,8 +207,6 @@ function getGroupIcon(type: BlockGroupType): string {
   const icons: Record<BlockGroupType, string> = {
     parallel: '⫲',
     try_catch: '⚡',
-    if_else: '◇',
-    switch_case: '⟍',
     foreach: '∀',
     while: '↻',
   }
@@ -222,8 +218,6 @@ function getGroupTypeLabel(type: BlockGroupType): string {
   const labels: Record<BlockGroupType, string> = {
     parallel: 'Parallel',
     try_catch: 'Try-Catch',
-    if_else: 'If-Else',
-    switch_case: 'Switch',
     foreach: 'ForEach',
     while: 'While',
   }
@@ -246,12 +240,6 @@ const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
     { name: 'success', label: 'Success', color: '#22c55e' },
     { name: 'caught', label: 'Caught', color: '#f59e0b' },
     { name: 'uncaught', label: 'Uncaught', color: '#ef4444' },
-  ],
-  if_else: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
-  ],
-  switch_case: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
   ],
   foreach: [
     { name: 'complete', label: 'Complete', color: '#22c55e' },
@@ -281,15 +269,7 @@ interface GroupZone {
 
 const GROUP_ZONES: Record<BlockGroupType, GroupZone[] | null> = {
   parallel: null, // Single body zone
-  try_catch: [
-    { role: 'try', label: 'TRY', top: 0, bottom: 0.55, left: 0, right: 1 },
-    { role: 'catch', label: 'CATCH', top: 0.55, bottom: 1, left: 0, right: 1 },
-  ],
-  if_else: [
-    { role: 'then', label: 'THEN', top: 0, bottom: 1, left: 0, right: 0.48 },
-    { role: 'else', label: 'ELSE', top: 0, bottom: 1, left: 0.52, right: 1 },
-  ],
-  switch_case: null,
+  try_catch: null, // Phase A: simplified to single body zone
   foreach: null,
   while: null,
 }
@@ -321,34 +301,14 @@ const DEFAULT_GROUP_HEIGHT = 300
 interface DropZoneResult {
   group: BlockGroup | null
   zone: 'inside' | 'boundary' | 'outside'
-  role?: string
+  role?: GroupRole
 }
 
 // Determine role based on position within multi-section group
-function determineRoleInGroup(x: number, y: number, group: BlockGroup): string {
-  const zones = getGroupZones(group.type)
-  if (!zones) return 'body'
-
-  // Calculate content area dimensions
-  const contentLeft = group.position_x + GROUP_PADDING
-  const contentTop = group.position_y + GROUP_HEADER_HEIGHT + GROUP_PADDING
-  const contentWidth = group.width - GROUP_PADDING * 2
-  const contentHeight = group.height - GROUP_HEADER_HEIGHT - GROUP_PADDING * 2
-
-  // Normalize position to content area (0-1)
-  const normalizedX = (x - contentLeft) / contentWidth
-  const normalizedY = (y - contentTop) / contentHeight
-
-  // Find which zone contains this position
-  for (const zone of zones) {
-    if (normalizedX >= zone.left && normalizedX <= zone.right &&
-        normalizedY >= zone.top && normalizedY <= zone.bottom) {
-      return zone.role
-    }
-  }
-
-  // Default to first zone's role
-  return zones[0]?.role || 'body'
+// Phase A: Simplified to always return 'body' since multi-zone was removed
+function determineRoleInGroup(_x: number, _y: number, _group: BlockGroup): GroupRole {
+  // All groups now have a single body zone only
+  return 'body'
 }
 
 // Find which group contains the given position and determine zone
@@ -1724,7 +1684,7 @@ function handleDrop(event: DragEvent) {
   // Check drop zone with boundary detection
   const dropZone = findDropZone(positionX, positionY)
   let targetGroupId: string | undefined
-  let targetRole: string | undefined
+  let targetRole: GroupRole | undefined
 
   if (dropZone.zone === 'boundary' && dropZone.group) {
     // Snap to valid position

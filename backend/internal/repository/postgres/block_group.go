@@ -24,12 +24,13 @@ func NewBlockGroupRepository(pool *pgxpool.Pool) *BlockGroupRepository {
 // Create creates a new block group
 func (r *BlockGroupRepository) Create(ctx context.Context, g *domain.BlockGroup) error {
 	query := `
-		INSERT INTO block_groups (id, tenant_id, workflow_id, name, type, config, parent_group_id, position_x, position_y, width, height, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO block_groups (id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	_, err := r.pool.Exec(ctx, query,
 		g.ID, g.TenantID, g.WorkflowID, g.Name, g.Type, g.Config,
-		g.ParentGroupID, g.PositionX, g.PositionY, g.Width, g.Height,
+		g.ParentGroupID, g.PreProcess, g.PostProcess,
+		g.PositionX, g.PositionY, g.Width, g.Height,
 		g.CreatedAt, g.UpdatedAt,
 	)
 	return err
@@ -38,14 +39,15 @@ func (r *BlockGroupRepository) Create(ctx context.Context, g *domain.BlockGroup)
 // GetByID retrieves a block group by ID
 func (r *BlockGroupRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroup, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, position_x, position_y, width, height, created_at, updated_at
+		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
 		WHERE id = $1 AND tenant_id = $2
 	`
 	var g domain.BlockGroup
 	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
 		&g.ID, &g.TenantID, &g.WorkflowID, &g.Name, &g.Type, &g.Config,
-		&g.ParentGroupID, &g.PositionX, &g.PositionY, &g.Width, &g.Height,
+		&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
+		&g.PositionX, &g.PositionY, &g.Width, &g.Height,
 		&g.CreatedAt, &g.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -60,7 +62,7 @@ func (r *BlockGroupRepository) GetByID(ctx context.Context, tenantID, id uuid.UU
 // ListByWorkflow retrieves all block groups for a workflow
 func (r *BlockGroupRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.BlockGroup, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, position_x, position_y, width, height, created_at, updated_at
+		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
 		WHERE workflow_id = $1 AND tenant_id = $2
 		ORDER BY created_at
@@ -76,7 +78,8 @@ func (r *BlockGroupRepository) ListByWorkflow(ctx context.Context, tenantID, wor
 		var g domain.BlockGroup
 		if err := rows.Scan(
 			&g.ID, &g.TenantID, &g.WorkflowID, &g.Name, &g.Type, &g.Config,
-			&g.ParentGroupID, &g.PositionX, &g.PositionY, &g.Width, &g.Height,
+			&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
+			&g.PositionX, &g.PositionY, &g.Width, &g.Height,
 			&g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -90,7 +93,7 @@ func (r *BlockGroupRepository) ListByWorkflow(ctx context.Context, tenantID, wor
 // ListByParent retrieves all child block groups of a parent group
 func (r *BlockGroupRepository) ListByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*domain.BlockGroup, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, position_x, position_y, width, height, created_at, updated_at
+		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
 		WHERE parent_group_id = $1 AND tenant_id = $2
 		ORDER BY created_at
@@ -106,7 +109,8 @@ func (r *BlockGroupRepository) ListByParent(ctx context.Context, tenantID, paren
 		var g domain.BlockGroup
 		if err := rows.Scan(
 			&g.ID, &g.TenantID, &g.WorkflowID, &g.Name, &g.Type, &g.Config,
-			&g.ParentGroupID, &g.PositionX, &g.PositionY, &g.Width, &g.Height,
+			&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
+			&g.PositionX, &g.PositionY, &g.Width, &g.Height,
 			&g.CreatedAt, &g.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -122,11 +126,12 @@ func (r *BlockGroupRepository) Update(ctx context.Context, g *domain.BlockGroup)
 	g.UpdatedAt = time.Now().UTC()
 	query := `
 		UPDATE block_groups
-		SET name = $1, type = $2, config = $3, parent_group_id = $4, position_x = $5, position_y = $6, width = $7, height = $8, updated_at = $9
-		WHERE id = $10 AND tenant_id = $11
+		SET name = $1, type = $2, config = $3, parent_group_id = $4, pre_process = $5, post_process = $6, position_x = $7, position_y = $8, width = $9, height = $10, updated_at = $11
+		WHERE id = $12 AND tenant_id = $13
 	`
 	result, err := r.pool.Exec(ctx, query,
-		g.Name, g.Type, g.Config, g.ParentGroupID, g.PositionX, g.PositionY, g.Width, g.Height, g.UpdatedAt,
+		g.Name, g.Type, g.Config, g.ParentGroupID, g.PreProcess, g.PostProcess,
+		g.PositionX, g.PositionY, g.Width, g.Height, g.UpdatedAt,
 		g.ID, g.TenantID,
 	)
 	if err != nil {

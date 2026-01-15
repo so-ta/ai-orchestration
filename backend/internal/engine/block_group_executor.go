@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/souta/ai-orchestration/internal/adapter"
+	"github.com/souta/ai-orchestration/internal/block/sandbox"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -15,11 +17,14 @@ import (
 )
 
 // BlockGroupExecutor handles execution of block groups (control flow constructs)
+// Redesigned to support 4 group types: parallel, try_catch, foreach, while
+// All groups now use body-only structure with pre_process/post_process for I/O transformation
 type BlockGroupExecutor struct {
 	registry  *adapter.Registry
 	logger    *slog.Logger
 	evaluator *ConditionEvaluator
-	executor  *Executor // Reference to main executor for step execution
+	executor  *Executor         // Reference to main executor for step execution
+	sandbox   *sandbox.Sandbox  // Sandbox for executing pre/post_process JS
 }
 
 // NewBlockGroupExecutor creates a new block group executor
@@ -29,6 +34,7 @@ func NewBlockGroupExecutor(registry *adapter.Registry, logger *slog.Logger, exec
 		logger:    logger,
 		evaluator: NewConditionEvaluator(),
 		executor:  executor,
+		sandbox:   sandbox.New(sandbox.DefaultConfig()),
 	}
 }
 
@@ -41,7 +47,16 @@ type BlockGroupContext struct {
 	Graph    *Graph
 }
 
+// BlockGroupResult represents the result of a block group execution
+type BlockGroupResult struct {
+	Output json.RawMessage `json:"output"`
+	Port   string          `json:"port"` // "out" or "error"
+	Error  error           `json:"-"`
+}
+
 // ExecuteGroup executes a block group based on its type
+// Supports 4 types: parallel, try_catch, foreach, while
+// Removed: if_else, switch_case (use condition/switch blocks instead)
 func (e *BlockGroupExecutor) ExecuteGroup(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
 	ctx, span := tracer.Start(ctx, "block_group.execute",
 		trace.WithAttributes(
@@ -58,24 +73,30 @@ func (e *BlockGroupExecutor) ExecuteGroup(ctx context.Context, bgCtx *BlockGroup
 		"step_count", len(bgCtx.Steps),
 	)
 
-	var result json.RawMessage
-	var err error
+	// 1. Run pre_process to transform external input to internal input
+	internalInput, err := e.runPreProcess(ctx, bgCtx.Group, bgCtx.Input)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "pre_process failed")
+		return nil, fmt.Errorf("pre_process failed: %w", err)
+	}
 
+	// Update context with transformed input
+	bgCtx.Input = internalInput
+
+	// 2. Execute group based on type
+	var internalOutput json.RawMessage
 	switch bgCtx.Group.Type {
 	case domain.BlockGroupTypeParallel:
-		result, err = e.executeParallel(ctx, bgCtx)
+		internalOutput, err = e.executeParallel(ctx, bgCtx)
 	case domain.BlockGroupTypeTryCatch:
-		result, err = e.executeTryCatch(ctx, bgCtx)
-	case domain.BlockGroupTypeIfElse:
-		result, err = e.executeIfElse(ctx, bgCtx)
-	case domain.BlockGroupTypeSwitchCase:
-		result, err = e.executeSwitchCase(ctx, bgCtx)
+		internalOutput, err = e.executeTryCatch(ctx, bgCtx)
 	case domain.BlockGroupTypeForeach:
-		result, err = e.executeForeach(ctx, bgCtx)
+		internalOutput, err = e.executeForeach(ctx, bgCtx)
 	case domain.BlockGroupTypeWhile:
-		result, err = e.executeWhile(ctx, bgCtx)
+		internalOutput, err = e.executeWhile(ctx, bgCtx)
 	default:
-		err = fmt.Errorf("unknown block group type: %s", bgCtx.Group.Type)
+		err = fmt.Errorf("unknown block group type: %s (valid types: parallel, try_catch, foreach, while)", bgCtx.Group.Type)
 	}
 
 	if err != nil {
@@ -84,8 +105,98 @@ func (e *BlockGroupExecutor) ExecuteGroup(ctx context.Context, bgCtx *BlockGroup
 		return nil, err
 	}
 
+	// 3. Run post_process to transform internal output to external output
+	externalOutput, err := e.runPostProcess(ctx, bgCtx.Group, internalOutput)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "post_process failed")
+		return nil, fmt.Errorf("post_process failed: %w", err)
+	}
+
 	span.SetStatus(codes.Ok, "block group completed")
-	return result, nil
+	return externalOutput, nil
+}
+
+// runPreProcess executes the pre_process JavaScript to transform input
+func (e *BlockGroupExecutor) runPreProcess(ctx context.Context, group *domain.BlockGroup, input json.RawMessage) (json.RawMessage, error) {
+	if group.PreProcess == nil || *group.PreProcess == "" {
+		return input, nil // No transformation
+	}
+
+	ctx, span := tracer.Start(ctx, "block_group.pre_process")
+	defer span.End()
+
+	// Parse input into map
+	var inputMap map[string]interface{}
+	if err := json.Unmarshal(input, &inputMap); err != nil {
+		// If input is not an object, wrap it
+		inputMap = map[string]interface{}{"value": json.RawMessage(input)}
+	}
+
+	// Create sandbox context with HTTP client
+	sandboxCtx := &sandbox.ExecutionContext{
+		HTTP: sandbox.NewHTTPClient(30 * time.Second),
+		Logger: func(args ...interface{}) {
+			e.logger.Info("pre_process log", "group_id", group.ID, "message", fmt.Sprint(args...))
+		},
+	}
+
+	// Wrap code to return result
+	wrappedCode := wrapTransformCode(*group.PreProcess)
+
+	result, err := e.sandbox.Execute(ctx, wrappedCode, inputMap, sandboxCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(result)
+}
+
+// runPostProcess executes the post_process JavaScript to transform output
+func (e *BlockGroupExecutor) runPostProcess(ctx context.Context, group *domain.BlockGroup, output json.RawMessage) (json.RawMessage, error) {
+	if group.PostProcess == nil || *group.PostProcess == "" {
+		return output, nil // No transformation
+	}
+
+	ctx, span := tracer.Start(ctx, "block_group.post_process")
+	defer span.End()
+
+	// Parse output into map
+	var outputMap map[string]interface{}
+	if err := json.Unmarshal(output, &outputMap); err != nil {
+		// If output is not an object, wrap it
+		outputMap = map[string]interface{}{"value": json.RawMessage(output)}
+	}
+
+	// Create sandbox context with HTTP client
+	sandboxCtx := &sandbox.ExecutionContext{
+		HTTP: sandbox.NewHTTPClient(30 * time.Second),
+		Logger: func(args ...interface{}) {
+			e.logger.Info("post_process log", "group_id", group.ID, "message", fmt.Sprint(args...))
+		},
+	}
+
+	// Wrap code to return result
+	wrappedCode := wrapTransformCode(*group.PostProcess)
+
+	result, err := e.sandbox.Execute(ctx, wrappedCode, outputMap, sandboxCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	return json.Marshal(result)
+}
+
+// wrapTransformCode wraps pre/post_process code to ensure it returns a value
+func wrapTransformCode(code string) string {
+	return fmt.Sprintf(`
+(function() {
+	var result = (function(input) {
+		%s
+	})(input);
+	return result !== undefined ? result : input;
+})()
+`, code)
 }
 
 // executeParallel executes all steps in parallel and waits for all to complete
@@ -229,7 +340,9 @@ func (e *BlockGroupExecutor) executeStep(ctx context.Context, execCtx *Execution
 	return output, nil
 }
 
-// executeTryCatch executes try block, and on error executes catch block
+// executeTryCatch executes body steps with retry support
+// Simplified: no more try/catch/finally roles, just body
+// Error handling is done via output port (error info returned in output)
 func (e *BlockGroupExecutor) executeTryCatch(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
 	ctx, span := tracer.Start(ctx, "block_group.try_catch")
 	defer span.End()
@@ -242,184 +355,71 @@ func (e *BlockGroupExecutor) executeTryCatch(ctx context.Context, bgCtx *BlockGr
 		}
 	}
 
-	// Separate steps by role
-	var trySteps, catchSteps, finallySteps []*domain.Step
+	// Get body steps only (all steps should have body role now)
+	var bodySteps []*domain.Step
 	for _, step := range bgCtx.Steps {
-		switch step.GroupRole {
-		case string(domain.GroupRoleTry), string(domain.GroupRoleBody):
-			trySteps = append(trySteps, step)
-		case string(domain.GroupRoleCatch):
-			catchSteps = append(catchSteps, step)
-		case string(domain.GroupRoleFinally):
-			finallySteps = append(finallySteps, step)
+		if step.GroupRole == "" || step.GroupRole == string(domain.GroupRoleBody) {
+			bodySteps = append(bodySteps, step)
 		}
 	}
+
+	span.SetAttributes(attribute.Int("body_step_count", len(bodySteps)))
+	span.SetAttributes(attribute.Int("retry_count", config.RetryCount))
 
 	var output json.RawMessage
-	var tryError error
+	var lastError error
 
-	// Execute try block
-	for _, step := range trySteps {
-		output, tryError = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input)
-		if tryError != nil {
-			break
-		}
-	}
+	// Execute body with retry support
+	for attempt := 0; attempt <= config.RetryCount; attempt++ {
+		if attempt > 0 {
+			e.logger.Info("Retrying try-catch body",
+				"attempt", attempt,
+				"max_retries", config.RetryCount,
+			)
+			span.AddEvent("retry_attempt", trace.WithAttributes(attribute.Int("attempt", attempt)))
 
-	// If error occurred, execute catch block
-	if tryError != nil {
-		e.logger.Info("Try block failed, executing catch", "error", tryError)
-		span.AddEvent("catch_triggered")
-
-		// Prepare catch input with error info
-		catchInput := map[string]interface{}{
-			"error":   tryError.Error(),
-			"input":   json.RawMessage(bgCtx.Input),
-		}
-		catchInputJSON, err := json.Marshal(catchInput)
-		if err != nil {
-			e.logger.Error("Failed to marshal catch input", "error", err)
-			catchInputJSON = bgCtx.Input
-		}
-
-		for _, step := range catchSteps {
-			var stepErr error
-			output, stepErr = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, catchInputJSON)
-			if stepErr != nil {
-				e.logger.Error("Catch step failed", "step_id", step.ID, "error", stepErr)
+			// Wait before retry
+			if config.RetryDelay > 0 {
+				time.Sleep(time.Duration(config.RetryDelay) * time.Millisecond)
 			}
 		}
-	}
 
-	// Always execute finally block
-	if len(finallySteps) > 0 {
-		span.AddEvent("finally_executing")
-		for _, step := range finallySteps {
-			if _, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input); err != nil {
-				e.logger.Error("Finally step failed", "step_id", step.ID, "error", err)
+		// Execute all body steps
+		lastError = nil
+		for _, step := range bodySteps {
+			var err error
+			output, err = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input)
+			if err != nil {
+				lastError = err
+				break
 			}
 		}
-	}
 
-	if output == nil {
-		output = json.RawMessage("{}")
-	}
-	return output, nil
-}
-
-// executeIfElse executes then or else branch based on condition
-func (e *BlockGroupExecutor) executeIfElse(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
-	ctx, span := tracer.Start(ctx, "block_group.if_else")
-	defer span.End()
-
-	// Parse config
-	var config domain.IfElseConfig
-	if bgCtx.Group.Config != nil {
-		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
-			e.logger.Warn("Failed to parse if-else config, using defaults", "error", err)
+		// If successful, return
+		if lastError == nil {
+			span.SetAttributes(attribute.Int("successful_attempt", attempt))
+			return output, nil
 		}
 	}
 
-	// Evaluate condition
-	conditionResult, err := e.evaluator.Evaluate(config.Condition, bgCtx.Input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate if condition: %w", err)
+	// All retries exhausted, return error info in output
+	e.logger.Warn("Try-catch exhausted all retries",
+		"group_id", bgCtx.Group.ID,
+		"retries", config.RetryCount,
+		"error", lastError,
+	)
+	span.AddEvent("all_retries_exhausted")
+
+	// Return error information that can be routed via error port
+	errorOutput := map[string]interface{}{
+		"__error":  true,
+		"__port":   "error",
+		"error":    lastError.Error(),
+		"input":    json.RawMessage(bgCtx.Input),
+		"attempts": config.RetryCount + 1,
 	}
 
-	span.SetAttributes(attribute.Bool("condition_result", conditionResult))
-
-	// Separate steps by role
-	var thenSteps, elseSteps []*domain.Step
-	for _, step := range bgCtx.Steps {
-		switch step.GroupRole {
-		case string(domain.GroupRoleThen), string(domain.GroupRoleBody):
-			thenSteps = append(thenSteps, step)
-		case string(domain.GroupRoleElse):
-			elseSteps = append(elseSteps, step)
-		}
-	}
-
-	// Execute appropriate branch
-	var stepsToExecute []*domain.Step
-	if conditionResult {
-		stepsToExecute = thenSteps
-		span.AddEvent("then_branch_executing")
-	} else {
-		stepsToExecute = elseSteps
-		span.AddEvent("else_branch_executing")
-	}
-
-	var output json.RawMessage
-	for _, step := range stepsToExecute {
-		output, err = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if output == nil {
-		output = json.RawMessage("{}")
-	}
-	return output, nil
-}
-
-// executeSwitchCase executes the matching case branch
-func (e *BlockGroupExecutor) executeSwitchCase(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
-	ctx, span := tracer.Start(ctx, "block_group.switch_case")
-	defer span.End()
-
-	// Parse config
-	var config domain.SwitchCaseConfig
-	if bgCtx.Group.Config != nil {
-		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
-			e.logger.Warn("Failed to parse switch-case config, using defaults", "error", err)
-		}
-	}
-
-	// Group steps by role (case_0, case_1, default, etc.)
-	stepsByRole := make(map[string][]*domain.Step)
-	for _, step := range bgCtx.Steps {
-		role := step.GroupRole
-		if role == "" {
-			role = string(domain.GroupRoleDefault)
-		}
-		stepsByRole[role] = append(stepsByRole[role], step)
-	}
-
-	// Evaluate expression and find matching case
-	var matchedRole string
-	for i, caseExpr := range config.Cases {
-		caseRole := fmt.Sprintf("case_%d", i)
-		result, err := e.evaluator.Evaluate(caseExpr, bgCtx.Input)
-		if err == nil && result {
-			matchedRole = caseRole
-			break
-		}
-	}
-
-	// If no match, use default
-	if matchedRole == "" {
-		matchedRole = string(domain.GroupRoleDefault)
-	}
-
-	span.SetAttributes(attribute.String("matched_case", matchedRole))
-
-	// Execute matched case steps
-	stepsToExecute := stepsByRole[matchedRole]
-	var output json.RawMessage
-	var err error
-
-	for _, step := range stepsToExecute {
-		output, err = e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, bgCtx.Input)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if output == nil {
-		output = json.RawMessage("{}")
-	}
-	return output, nil
+	return json.Marshal(errorOutput)
 }
 
 // executeForeach executes body steps for each item in the input array

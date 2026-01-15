@@ -8,24 +8,22 @@ import (
 )
 
 // BlockGroupType represents the type of a block group (control flow construct)
+// Redesigned to 4 types only: parallel, try_catch, foreach, while
+// Removed: if_else (use condition block), switch_case (use switch block)
 type BlockGroupType string
 
 const (
-	BlockGroupTypeParallel   BlockGroupType = "parallel"    // Parallel execution group
-	BlockGroupTypeTryCatch   BlockGroupType = "try_catch"   // Try-catch-finally error handling
-	BlockGroupTypeIfElse     BlockGroupType = "if_else"     // Conditional branching
-	BlockGroupTypeSwitchCase BlockGroupType = "switch_case" // Multi-branch routing
-	BlockGroupTypeForeach    BlockGroupType = "foreach"     // Array iteration loop
-	BlockGroupTypeWhile      BlockGroupType = "while"       // Condition-based loop
+	BlockGroupTypeParallel BlockGroupType = "parallel"  // Parallel execution of different flows
+	BlockGroupTypeTryCatch BlockGroupType = "try_catch" // Error handling with retry support
+	BlockGroupTypeForeach  BlockGroupType = "foreach"   // Array iteration (same process for each element)
+	BlockGroupTypeWhile    BlockGroupType = "while"     // Condition-based loop
 )
 
-// ValidBlockGroupTypes returns all valid block group types
+// ValidBlockGroupTypes returns all valid block group types (4 types only)
 func ValidBlockGroupTypes() []BlockGroupType {
 	return []BlockGroupType{
 		BlockGroupTypeParallel,
 		BlockGroupTypeTryCatch,
-		BlockGroupTypeIfElse,
-		BlockGroupTypeSwitchCase,
 		BlockGroupTypeForeach,
 		BlockGroupTypeWhile,
 	}
@@ -42,46 +40,30 @@ func (t BlockGroupType) IsValid() bool {
 }
 
 // GroupRole represents the role of a step within a block group
+// Simplified: all groups now only have "body" role
+// Removed: try, catch, finally, then, else, default, case_N
+// Error handling is done via output ports (out, error)
 type GroupRole string
 
 const (
-	GroupRoleBody    GroupRole = "body"    // Main execution body (parallel, foreach, while)
-	GroupRoleTry     GroupRole = "try"     // Try block (try_catch)
-	GroupRoleCatch   GroupRole = "catch"   // Catch block (try_catch)
-	GroupRoleFinally GroupRole = "finally" // Finally block (try_catch)
-	GroupRoleThen    GroupRole = "then"    // Then branch (if_else)
-	GroupRoleElse    GroupRole = "else"    // Else branch (if_else)
-	GroupRoleDefault GroupRole = "default" // Default case (switch_case)
+	GroupRoleBody GroupRole = "body" // Main execution body (all group types)
 )
 
-// ValidGroupRoles returns all valid group roles
+// ValidGroupRoles returns all valid group roles (body only)
 func ValidGroupRoles() []GroupRole {
 	return []GroupRole{
 		GroupRoleBody,
-		GroupRoleTry,
-		GroupRoleCatch,
-		GroupRoleFinally,
-		GroupRoleThen,
-		GroupRoleElse,
-		GroupRoleDefault,
 	}
 }
 
 // IsValid checks if the group role is valid
 func (r GroupRole) IsValid() bool {
-	// Allow case_N roles for switch_case
-	if len(r) > 5 && r[:5] == "case_" {
-		return true
-	}
-	for _, valid := range ValidGroupRoles() {
-		if r == valid {
-			return true
-		}
-	}
-	return false
+	return r == GroupRoleBody
 }
 
 // BlockGroup represents a control flow construct that groups multiple steps
+// Redesigned with pre_process/post_process for input/output transformation
+// Similar to regular blocks, providing unified interface
 type BlockGroup struct {
 	ID            uuid.UUID       `json:"id"`
 	TenantID      uuid.UUID       `json:"tenant_id"`
@@ -90,12 +72,19 @@ type BlockGroup struct {
 	Type          BlockGroupType  `json:"type"`
 	Config        json.RawMessage `json:"config"`
 	ParentGroupID *uuid.UUID      `json:"parent_group_id,omitempty"` // For nested groups
-	PositionX     int             `json:"position_x"`
-	PositionY     int             `json:"position_y"`
-	Width         int             `json:"width"`
-	Height        int             `json:"height"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
+
+	// Input/Output transformation (same as regular blocks)
+	PreProcess  *string `json:"pre_process,omitempty"`  // JS: external IN -> internal IN
+	PostProcess *string `json:"post_process,omitempty"` // JS: internal OUT -> external OUT
+
+	// UI positioning
+	PositionX int `json:"position_x"`
+	PositionY int `json:"position_y"`
+	Width     int `json:"width"`
+	Height    int `json:"height"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // NewBlockGroup creates a new block group
@@ -136,42 +125,33 @@ func (g *BlockGroup) SetParent(parentID *uuid.UUID) {
 }
 
 // ParallelConfig represents configuration for parallel block group
+// Executes multiple independent flows concurrently within the group
 type ParallelConfig struct {
 	MaxConcurrent int  `json:"max_concurrent,omitempty"` // Max concurrent executions (0 = unlimited)
 	FailFast      bool `json:"fail_fast,omitempty"`      // Stop all on first failure
 }
 
-// TryCatchConfig represents configuration for try-catch-finally block group
+// TryCatchConfig represents configuration for try-catch block group
+// Simplified: catch logic is handled via error output port to external blocks
 type TryCatchConfig struct {
-	ErrorTypes []string `json:"error_types,omitempty"` // Error types to catch ("*" = all)
-	RetryCount int      `json:"retry_count,omitempty"` // Number of retries before catch
-	RetryDelay int      `json:"retry_delay_ms,omitempty"` // Delay between retries in ms
-}
-
-// IfElseConfig represents configuration for if-else block group
-type IfElseConfig struct {
-	Condition string `json:"condition"` // Condition expression (e.g., "$.status == 'active'")
-}
-
-// SwitchCaseConfig represents configuration for switch-case block group
-type SwitchCaseConfig struct {
-	Expression string   `json:"expression"`           // Expression to evaluate
-	Cases      []string `json:"cases"`                // Case values
-	HasDefault bool     `json:"has_default,omitempty"` // Whether default case exists
+	RetryCount int `json:"retry_count,omitempty"`    // Number of retries before error (default: 0)
+	RetryDelay int `json:"retry_delay_ms,omitempty"` // Delay between retries in ms
 }
 
 // ForeachConfig represents configuration for foreach block group
+// Applies the same body process to each element in an array
 type ForeachConfig struct {
-	InputPath  string `json:"input_path"`            // Path to array (e.g., "$.items")
+	InputPath  string `json:"input_path,omitempty"`  // Path to array (default: "$.items")
 	Parallel   bool   `json:"parallel,omitempty"`    // Execute iterations in parallel
-	MaxWorkers int    `json:"max_workers,omitempty"` // Max parallel workers
+	MaxWorkers int    `json:"max_workers,omitempty"` // Max parallel workers (0 = unlimited)
 }
 
 // WhileConfig represents configuration for while block group
+// Repeats body execution while condition is true
 type WhileConfig struct {
-	Condition     string `json:"condition"`               // Condition expression
+	Condition     string `json:"condition"`                // Condition expression (e.g., "$.counter < $.target")
 	MaxIterations int    `json:"max_iterations,omitempty"` // Safety limit (default: 100)
-	DoWhile       bool   `json:"do_while,omitempty"`       // Execute at least once (do-while)
+	DoWhile       bool   `json:"do_while,omitempty"`       // Execute at least once before checking condition
 }
 
 // BlockGroupRun represents the execution state of a block group
