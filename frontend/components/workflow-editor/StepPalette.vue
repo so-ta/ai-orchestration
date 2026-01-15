@@ -50,7 +50,8 @@ onMounted(async () => {
   try {
     const response = await blocksApi.list({ enabled: true })
     blocks.value = response.blocks
-    // Expand all subcategories by default
+    // Expand all subcategories by default (including block groups)
+    expandedSubcategories.value.add('__groups__')
     for (const block of response.blocks) {
       if (block.subcategory) {
         expandedSubcategories.value.add(block.subcategory)
