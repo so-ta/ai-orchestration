@@ -87,6 +87,54 @@ func TestHasChanges(t *testing.T) {
 			},
 			want: true,
 		},
+		{
+			name: "subcategory changed",
+			existing: &domain.BlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			seed: &blocks.SystemBlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryRAG,
+			},
+			want: true,
+		},
+		{
+			name: "subcategory added",
+			existing: &domain.BlockDefinition{
+				Version:  1,
+				Name:     "Test Block",
+				Category: domain.BlockCategoryAI,
+				// No subcategory
+			},
+			seed: &blocks.SystemBlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			want: true,
+		},
+		{
+			name: "subcategory same",
+			existing: &domain.BlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			seed: &blocks.SystemBlockDefinition{
+				Version:     1,
+				Name:        "Test Block",
+				Category:    domain.BlockCategoryAI,
+				Subcategory: domain.BlockSubcategoryChat,
+			},
+			want: false,
+		},
 	}
 
 	for _, tt := range tests {

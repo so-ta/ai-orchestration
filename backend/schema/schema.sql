@@ -105,6 +105,7 @@ CREATE TABLE public.block_definitions (
     group_kind character varying(50),
     is_container boolean DEFAULT false NOT NULL,
     CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'flow'::character varying, 'apps'::character varying, 'custom'::character varying])::text[]))),
+    CONSTRAINT valid_block_subcategory CHECK (subcategory IS NULL OR (subcategory)::text = ANY ((ARRAY['chat'::character varying, 'rag'::character varying, 'routing'::character varying, 'branching'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'slack'::character varying, 'discord'::character varying, 'notion'::character varying, 'github'::character varying, 'google'::character varying, 'linear'::character varying, 'email'::character varying, 'web'::character varying])::text[])),
     CONSTRAINT valid_group_kind CHECK (group_kind IS NULL OR (group_kind)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])),
     CONSTRAINT no_self_reference CHECK (parent_block_id IS NULL OR parent_block_id != id)
 );

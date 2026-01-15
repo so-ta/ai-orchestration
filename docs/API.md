@@ -921,7 +921,8 @@ GET /blocks
 Query:
 | Param | Type | Description |
 |-------|------|-------------|
-| `category` | string | Filter by category: `ai`, `logic`, `integration`, `data`, `control`, `utility` |
+| `category` | string | Filter by category: `ai`, `flow`, `apps`, `custom` |
+| `subcategory` | string | Filter by subcategory: `chat`, `rag`, `routing`, `branching`, `data`, `control`, `utility`, `slack`, `discord`, `notion`, `github`, `google`, `linear`, `email`, `web` |
 | `enabled` | bool | Filter enabled blocks only |
 
 Response `200`:
@@ -935,6 +936,7 @@ Response `200`:
       "name": "LLM Call",
       "description": "Call an LLM provider",
       "category": "ai",
+      "subcategory": "chat",
       "icon": "brain",
       "config_schema": {},
       "input_schema": {},
@@ -981,7 +983,8 @@ Request:
   "slug": "string (required)",
   "name": "string (required)",
   "description": "string",
-  "category": "ai|logic|integration|data|control|utility (required)",
+  "category": "ai|flow|apps|custom (required)",
+  "subcategory": "chat|rag|routing|branching|data|control|utility|slack|discord|notion|github|google|linear|email|web (optional)",
   "icon": "string",
   "config_schema": {},
   "input_schema": {},
@@ -1378,6 +1381,7 @@ Response `200`:
       "name": "LLM Call",
       "description": "LLM APIを呼び出す",
       "category": "ai",
+      "subcategory": "chat",
       "code": "const response = await ctx.llm.chat(...)",
       "config_schema": {},
       "input_schema": {},
