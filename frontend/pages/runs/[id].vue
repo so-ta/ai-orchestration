@@ -548,6 +548,7 @@ onUnmounted(() => {
                   <DagEditor
                     :steps="workflowDefinition.steps || []"
                     :edges="workflowDefinition.edges || []"
+                    :block-groups="workflowDefinition.block_groups || []"
                     :readonly="true"
                     :selected-step-id="selectedStepRun?.step_id || null"
                     :step-runs="run?.step_runs || []"

@@ -171,6 +171,7 @@ func processJob(
 				InputSchema: workflow.InputSchema,
 				Steps:       workflow.Steps,
 				Edges:       workflow.Edges,
+				BlockGroups: workflow.BlockGroups,
 			}
 		} else {
 			if err := json.Unmarshal(version.Definition, &def); err != nil {
@@ -189,6 +190,7 @@ func processJob(
 			InputSchema: workflow.InputSchema,
 			Steps:       workflow.Steps,
 			Edges:       workflow.Edges,
+			BlockGroups: workflow.BlockGroups,
 		}
 	}
 

@@ -148,4 +148,5 @@ type WorkflowDefinition struct {
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	Steps        []Step          `json:"steps"`
 	Edges        []Edge          `json:"edges"`
+	BlockGroups  []BlockGroup    `json:"block_groups,omitempty"`
 }

@@ -83,6 +83,7 @@ type ExecutionContext struct {
 	Definition      *domain.WorkflowDefinition
 	StepRuns        map[uuid.UUID]*domain.StepRun
 	StepData        map[uuid.UUID]json.RawMessage // step outputs
+	GroupData       map[uuid.UUID]json.RawMessage // block group outputs
 	InjectedOutputs map[string]json.RawMessage    // pre-injected outputs for partial execution
 	mu              sync.RWMutex
 }
@@ -94,6 +95,7 @@ func NewExecutionContext(run *domain.Run, def *domain.WorkflowDefinition) *Execu
 		Definition:      def,
 		StepRuns:        make(map[uuid.UUID]*domain.StepRun),
 		StepData:        make(map[uuid.UUID]json.RawMessage),
+		GroupData:       make(map[uuid.UUID]json.RawMessage),
 		InjectedOutputs: make(map[string]json.RawMessage),
 	}
 }
@@ -344,28 +346,53 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 
 // Graph represents the execution graph
 type Graph struct {
-	Steps    map[uuid.UUID]domain.Step
-	InEdges  map[uuid.UUID][]domain.Edge // incoming edges
-	OutEdges map[uuid.UUID][]domain.Edge // outgoing edges
+	Steps       map[uuid.UUID]domain.Step
+	BlockGroups map[uuid.UUID]domain.BlockGroup
+	InEdges     map[uuid.UUID][]domain.Edge // incoming edges to steps
+	OutEdges    map[uuid.UUID][]domain.Edge // outgoing edges from steps
+	GroupInEdges  map[uuid.UUID][]domain.Edge // incoming edges to groups
+	GroupOutEdges map[uuid.UUID][]domain.Edge // outgoing edges from groups
 }
 
 func (e *Executor) buildGraph(def *domain.WorkflowDefinition) *Graph {
 	graph := &Graph{
-		Steps:    make(map[uuid.UUID]domain.Step),
-		InEdges:  make(map[uuid.UUID][]domain.Edge),
-		OutEdges: make(map[uuid.UUID][]domain.Edge),
+		Steps:         make(map[uuid.UUID]domain.Step),
+		BlockGroups:   make(map[uuid.UUID]domain.BlockGroup),
+		InEdges:       make(map[uuid.UUID][]domain.Edge),
+		OutEdges:      make(map[uuid.UUID][]domain.Edge),
+		GroupInEdges:  make(map[uuid.UUID][]domain.Edge),
+		GroupOutEdges: make(map[uuid.UUID][]domain.Edge),
 	}
 
 	for _, step := range def.Steps {
 		graph.Steps[step.ID] = step
 	}
 
-	// Only add step-to-step edges to the graph
-	// Group edges (source/target group IDs) are handled separately
+	for _, group := range def.BlockGroups {
+		graph.BlockGroups[group.ID] = group
+	}
+
+	// Process all edges including group edges
 	for _, edge := range def.Edges {
+		// Step-to-step edge
 		if edge.SourceStepID != nil && edge.TargetStepID != nil {
 			graph.InEdges[*edge.TargetStepID] = append(graph.InEdges[*edge.TargetStepID], edge)
 			graph.OutEdges[*edge.SourceStepID] = append(graph.OutEdges[*edge.SourceStepID], edge)
+		}
+		// Step-to-group edge
+		if edge.SourceStepID != nil && edge.TargetBlockGroupID != nil {
+			graph.OutEdges[*edge.SourceStepID] = append(graph.OutEdges[*edge.SourceStepID], edge)
+			graph.GroupInEdges[*edge.TargetBlockGroupID] = append(graph.GroupInEdges[*edge.TargetBlockGroupID], edge)
+		}
+		// Group-to-step edge
+		if edge.SourceBlockGroupID != nil && edge.TargetStepID != nil {
+			graph.GroupOutEdges[*edge.SourceBlockGroupID] = append(graph.GroupOutEdges[*edge.SourceBlockGroupID], edge)
+			graph.InEdges[*edge.TargetStepID] = append(graph.InEdges[*edge.TargetStepID], edge)
+		}
+		// Group-to-group edge
+		if edge.SourceBlockGroupID != nil && edge.TargetBlockGroupID != nil {
+			graph.GroupOutEdges[*edge.SourceBlockGroupID] = append(graph.GroupOutEdges[*edge.SourceBlockGroupID], edge)
+			graph.GroupInEdges[*edge.TargetBlockGroupID] = append(graph.GroupInEdges[*edge.TargetBlockGroupID], edge)
 		}
 	}
 
@@ -385,8 +412,9 @@ func (e *Executor) findStartNodes(graph *Graph) []uuid.UUID {
 }
 
 func (e *Executor) executeNodes(ctx context.Context, execCtx *ExecutionContext, graph *Graph, nodeIDs []uuid.UUID) error {
-	// Track completed nodes
+	// Track completed nodes and groups
 	completed := make(map[uuid.UUID]bool)
+	completedGroups := make(map[uuid.UUID]bool)
 	var mu sync.Mutex
 
 	// Use a WaitGroup to wait for parallel executions
@@ -408,8 +436,14 @@ func (e *Executor) executeNodes(ctx context.Context, execCtx *ExecutionContext, 
 			completed[id] = true
 			mu.Unlock()
 
-			// Find next nodes to execute
-			nextNodes := e.findNextNodes(ctx, execCtx, graph, id, completed, &mu)
+			// Check for group edges and execute groups
+			if err := e.executeNextGroups(ctx, execCtx, graph, id, completed, completedGroups, &mu); err != nil {
+				errChan <- err
+				return
+			}
+
+			// Find next step nodes to execute
+			nextNodes := e.findNextNodes(ctx, execCtx, graph, id, completed, completedGroups, &mu)
 			if len(nextNodes) > 0 {
 				if err := e.executeNodes(ctx, execCtx, graph, nextNodes); err != nil {
 					errChan <- err
@@ -431,7 +465,194 @@ func (e *Executor) executeNodes(ctx context.Context, execCtx *ExecutionContext, 
 	return nil
 }
 
-func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext, graph *Graph, currentID uuid.UUID, completed map[uuid.UUID]bool, mu *sync.Mutex) []uuid.UUID {
+// executeNextGroups finds and executes block groups that are next in the execution flow
+func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionContext, graph *Graph, currentStepID uuid.UUID, completed, completedGroups map[uuid.UUID]bool, mu *sync.Mutex) error {
+	execCtx.mu.RLock()
+	currentOutput := execCtx.StepData[currentStepID]
+	execCtx.mu.RUnlock()
+
+	for _, edge := range graph.OutEdges[currentStepID] {
+		// Only process step-to-group edges
+		if edge.TargetBlockGroupID == nil {
+			continue
+		}
+		groupID := *edge.TargetBlockGroupID
+
+		// Check if group already completed
+		mu.Lock()
+		if completedGroups[groupID] {
+			mu.Unlock()
+			continue
+		}
+		mu.Unlock()
+
+		// Check if all incoming edges to this group are satisfied
+		allDependenciesMet := true
+		for _, inEdge := range graph.GroupInEdges[groupID] {
+			if inEdge.SourceStepID != nil {
+				mu.Lock()
+				if !completed[*inEdge.SourceStepID] {
+					allDependenciesMet = false
+				}
+				mu.Unlock()
+			}
+			if inEdge.SourceBlockGroupID != nil {
+				mu.Lock()
+				if !completedGroups[*inEdge.SourceBlockGroupID] {
+					allDependenciesMet = false
+				}
+				mu.Unlock()
+			}
+			if !allDependenciesMet {
+				break
+			}
+		}
+
+		if !allDependenciesMet {
+			continue
+		}
+
+		// Execute the block group
+		group := graph.BlockGroups[groupID]
+		e.logger.Info("Executing block group",
+			"group_id", groupID,
+			"group_name", group.Name,
+			"group_type", group.Type,
+		)
+
+		groupOutput, outputPort, err := e.executeBlockGroup(ctx, execCtx, graph, &group, currentOutput)
+		if err != nil {
+			e.logger.Error("Block group execution failed",
+				"group_id", groupID,
+				"error", err,
+			)
+			return err
+		}
+
+		mu.Lock()
+		completedGroups[groupID] = true
+		mu.Unlock()
+
+		execCtx.mu.Lock()
+		execCtx.GroupData[groupID] = groupOutput
+		execCtx.mu.Unlock()
+
+		// Execute next steps/groups from this group's output
+		if err := e.executeFromGroupOutput(ctx, execCtx, graph, groupID, groupOutput, outputPort, completed, completedGroups, mu); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// executeBlockGroup executes a block group and returns its output
+func (e *Executor) executeBlockGroup(ctx context.Context, execCtx *ExecutionContext, graph *Graph, group *domain.BlockGroup, input json.RawMessage) (json.RawMessage, string, error) {
+	// Find steps that belong to this group
+	var groupSteps []*domain.Step
+	for _, step := range graph.Steps {
+		if step.BlockGroupID != nil && *step.BlockGroupID == group.ID {
+			s := step // Create a copy
+			groupSteps = append(groupSteps, &s)
+		}
+	}
+
+	// Create BlockGroupExecutor
+	blockGroupExecutor := NewBlockGroupExecutor(e.registry, e.logger, e)
+
+	// Create context for group execution
+	bgCtx := &BlockGroupContext{
+		Group:   group,
+		Steps:   groupSteps,
+		Input:   input,
+		ExecCtx: execCtx,
+		Graph:   graph,
+	}
+
+	// Execute group
+	output, err := blockGroupExecutor.ExecuteGroup(ctx, bgCtx)
+	if err != nil {
+		return nil, "error", err
+	}
+
+	// Determine output port based on output content
+	outputPort := "complete"
+	var outputMap map[string]interface{}
+	if err := json.Unmarshal(output, &outputMap); err == nil {
+		if port, ok := outputMap["__port"].(string); ok {
+			outputPort = port
+		}
+		if isError, ok := outputMap["__error"].(bool); ok && isError {
+			outputPort = "error"
+		}
+	}
+
+	return output, outputPort, nil
+}
+
+// executeFromGroupOutput handles execution after a group completes
+func (e *Executor) executeFromGroupOutput(ctx context.Context, execCtx *ExecutionContext, graph *Graph, groupID uuid.UUID, output json.RawMessage, outputPort string, completed, completedGroups map[uuid.UUID]bool, mu *sync.Mutex) error {
+	// Find edges from this group and execute next nodes
+	for _, edge := range graph.GroupOutEdges[groupID] {
+		// Check if this edge's source port matches the output port
+		if edge.SourcePort != "" {
+			if edge.SourcePort != outputPort {
+				continue // Skip edges that don't match the output port
+			}
+		}
+
+		// Execute next step
+		if edge.TargetStepID != nil {
+			// Store group output for the next step's input preparation
+			execCtx.mu.Lock()
+			execCtx.StepData[groupID] = output
+			execCtx.mu.Unlock()
+
+			if err := e.executeNodes(ctx, execCtx, graph, []uuid.UUID{*edge.TargetStepID}); err != nil {
+				return err
+			}
+		}
+
+		// Execute next group
+		if edge.TargetBlockGroupID != nil {
+			nextGroupID := *edge.TargetBlockGroupID
+			mu.Lock()
+			alreadyCompleted := completedGroups[nextGroupID]
+			mu.Unlock()
+
+			if !alreadyCompleted {
+				nextGroup := graph.BlockGroups[nextGroupID]
+				e.logger.Info("Executing next block group from group output",
+					"from_group_id", groupID,
+					"to_group_id", nextGroupID,
+					"group_name", nextGroup.Name,
+				)
+
+				groupOutput, nextOutputPort, err := e.executeBlockGroup(ctx, execCtx, graph, &nextGroup, output)
+				if err != nil {
+					return err
+				}
+
+				mu.Lock()
+				completedGroups[nextGroupID] = true
+				mu.Unlock()
+
+				execCtx.mu.Lock()
+				execCtx.GroupData[nextGroupID] = groupOutput
+				execCtx.mu.Unlock()
+
+				// Recursively handle output from this group
+				if err := e.executeFromGroupOutput(ctx, execCtx, graph, nextGroupID, groupOutput, nextOutputPort, completed, completedGroups, mu); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext, graph *Graph, currentID uuid.UUID, completed, completedGroups map[uuid.UUID]bool, mu *sync.Mutex) []uuid.UUID {
 	var nextNodes []uuid.UUID
 
 	// Get the output of current step for edge condition evaluation
@@ -440,7 +661,12 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 	execCtx.mu.RUnlock()
 
 	for _, edge := range graph.OutEdges[currentID] {
-		// Skip edges without step target (group edges)
+		// Skip edges to groups (handled separately)
+		if edge.TargetBlockGroupID != nil {
+			continue
+		}
+
+		// Skip edges without step target
 		if edge.TargetStepID == nil {
 			continue
 		}
@@ -466,17 +692,23 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 			}
 		}
 
-		// Check if all incoming edges' sources are completed
+		// Check if all incoming edges' sources are completed (steps and groups)
 		allDependenciesMet := true
 		for _, inEdge := range graph.InEdges[targetID] {
-			if inEdge.SourceStepID == nil {
-				continue // Skip edges without step source (group edges)
+			if inEdge.SourceStepID != nil {
+				mu.Lock()
+				if !completed[*inEdge.SourceStepID] {
+					allDependenciesMet = false
+				}
+				mu.Unlock()
 			}
-			mu.Lock()
-			if !completed[*inEdge.SourceStepID] {
-				allDependenciesMet = false
+			if inEdge.SourceBlockGroupID != nil {
+				mu.Lock()
+				if !completedGroups[*inEdge.SourceBlockGroupID] {
+					allDependenciesMet = false
+				}
+				mu.Unlock()
 			}
-			mu.Unlock()
 			if !allDependenciesMet {
 				break
 			}
@@ -619,7 +851,7 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 	defer execCtx.mu.RUnlock()
 
 	// No previous step outputs - use workflow input
-	if len(execCtx.StepData) == 0 {
+	if len(execCtx.StepData) == 0 && len(execCtx.GroupData) == 0 {
 		return execCtx.Run.Input, nil
 	}
 
@@ -627,21 +859,34 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 	var sourceEdges []domain.Edge
 	if execCtx.Definition != nil {
 		for _, edge := range execCtx.Definition.Edges {
-			// Only consider step-to-step edges
+			// Consider both step-to-step and group-to-step edges
 			if edge.TargetStepID != nil && *edge.TargetStepID == step.ID {
 				sourceEdges = append(sourceEdges, edge)
 			}
 		}
 	}
 
-	// If exactly one source edge, use that step's output directly (pass-through mode)
-	// This enables linear workflows where data flows naturally from step to step
-	if len(sourceEdges) == 1 && sourceEdges[0].SourceStepID != nil {
-		sourceStepID := *sourceEdges[0].SourceStepID
-		if data, ok := execCtx.StepData[sourceStepID]; ok {
-			return data, nil
+	// If exactly one source edge from a step, use that step's output directly (pass-through mode)
+	if len(sourceEdges) == 1 {
+		edge := sourceEdges[0]
+		if edge.SourceStepID != nil {
+			sourceStepID := *edge.SourceStepID
+			if data, ok := execCtx.StepData[sourceStepID]; ok {
+				return data, nil
+			}
 		}
-		// Fallback to workflow input if source step has no data
+		// If source is a block group, use group output
+		if edge.SourceBlockGroupID != nil {
+			sourceGroupID := *edge.SourceBlockGroupID
+			if data, ok := execCtx.GroupData[sourceGroupID]; ok {
+				return data, nil
+			}
+			// Also check StepData as group output might be stored there for convenience
+			if data, ok := execCtx.StepData[sourceGroupID]; ok {
+				return data, nil
+			}
+		}
+		// Fallback to workflow input if source has no data
 		return execCtx.Run.Input, nil
 	}
 
@@ -656,6 +901,15 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 			stepOutput = string(data) // fallback to raw string
 		}
 		merged[stepID.String()] = stepOutput
+	}
+
+	for groupID, data := range execCtx.GroupData {
+		var groupOutput interface{}
+		if err := json.Unmarshal(data, &groupOutput); err != nil {
+			e.logger.Warn("Failed to unmarshal group output", "group_id", groupID, "error", err)
+			groupOutput = string(data) // fallback to raw string
+		}
+		merged[groupID.String()] = groupOutput
 	}
 
 	result, err := json.Marshal(merged)
