@@ -85,7 +85,7 @@ async function loadWorkflow() {
 }
 
 // Add step from palette drop
-async function handleStepDrop(data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: string }) {
+async function handleStepDrop(data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: GroupRole }) {
   if (!workflow.value || isReadonly.value) return
 
   const defaultConfigs: Record<string, Record<string, any>> = {
