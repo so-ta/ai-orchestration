@@ -532,6 +532,34 @@ Indexes:
 - `idx_audit_logs_tenant` ON (tenant_id)
 - `idx_audit_logs_created` ON (created_at)
 
+## Canonical Query Patterns (必須)
+
+Claude Code はこのセクションのパターンに従ってクエリを書くこと。
+
+### 必須ルール
+
+| ルール | 説明 | 違反時のリスク |
+|--------|------|---------------|
+| `tenant_id` フィルタ必須 | すべての SELECT/UPDATE/DELETE に必須 | テナント分離違反（データ漏洩） |
+| `deleted_at IS NULL` 必須 | soft delete 対応テーブルで必須 | 削除済みデータを取得 |
+| `SELECT *` 禁止 | カラムを明示的に指定 | スキーマ変更時に壊れる |
+| プレースホルダー必須 | `$1`, `$2` を使用 | SQL インジェクション |
+
+### 正しいパターン vs 禁止パターン
+
+```sql
+-- ✅ 正しいパターン
+SELECT id, tenant_id, name, status, created_at, updated_at
+FROM workflows
+WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL;
+
+-- ❌ 禁止パターン
+SELECT * FROM workflows WHERE id = $1;
+-- 問題: SELECT *, tenant_id なし, deleted_at なし
+```
+
+---
+
 ## Query Patterns
 
 ### List Workflows (with tenant isolation)

@@ -1,12 +1,28 @@
-# Block Registry Design
+# Block Registry Reference
 
-Block definitions, error codes, and system block management.
+ブロック定義の API リファレンス（Source of Truth）。
 
 > **Status**: ✅ Implemented (Unified Block Model)
-> **Updated**: 2026-01-13
-> **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md)
-> **Migration**: `013_add_integration_blocks.sql` - 外部連携ブロック追加
-> **RAG Support**: `seed.sql` - RAGブロック7種追加
+> **Updated**: 2026-01-15
+> **Role**: **API 仕様リファレンス**（このドキュメントが正）
+> **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - 設計思想・アーキテクチャ
+
+---
+
+## このドキュメントの責任範囲
+
+| 内容 | 担当 |
+|------|------|
+| ブロック一覧・仕様 | ✅ **このドキュメント** |
+| ctx API 仕様 | ✅ **このドキュメント** |
+| エラーコード定義 | ✅ **このドキュメント** |
+| コード例 | ✅ **このドキュメント** |
+| 設計思想・Why | ❌ [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) を参照 |
+| アーキテクチャ | ❌ [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) を参照 |
+
+**Claude Code への指示**: API 仕様はこのドキュメントを参照。設計思想は UNIFIED_BLOCK_MODEL.md を参照。
+
+---
 
 ## Quick Reference
 

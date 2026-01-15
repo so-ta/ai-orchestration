@@ -35,14 +35,34 @@ AIエージェントは以下の場合、人間に確認を求めず自律的に
 - セキュリティに関わる判断
 - 外部サービスの課金に影響する変更
 
-### Session Start Checklist
+### Session Start Protocol (AI エージェント必読)
+
+#### 1. 作業タイプを特定
+
+| 作業タイプ | 読むべきドキュメント（順番に） |
+|-----------|------------------------------|
+| バグ修正 | WORKFLOW_RULES.md → TROUBLESHOOTING.md → 関連技術ドキュメント → TESTING.md |
+| 新機能追加 | INDEX.md → 関連技術ドキュメント → TESTING.md → DOCUMENTATION.md |
+| ブロック追加 | BLOCK_REGISTRY.md → UNIFIED_BLOCK_MODEL.md → add-block.md |
+| リファクタ | BACKEND.md / FRONTEND.md（Canonical Patterns） |
+| PR 作成 | GIT_RULES.md → CODEX_REVIEW.md |
+| DAG Editor 修正 | FRONTEND.md（Block Group Push Logic, Group Resize Logic）→ WORKFLOW_RULES.md |
+
+#### 2. 作業前チェックリスト
 
 ```
-1. [ ] CLAUDE.md を読む（このファイル）
-2. [ ] docs/INDEX.md で関連ドキュメントを特定
-3. [ ] 作業対象のドキュメントを読む
-4. [ ] 既存の実装パターンを確認
-5. [ ] テスト・検証手順を確認
+1. [ ] 関連ドキュメントを読んだ
+2. [ ] 既存の類似コードを確認した（Canonical Pattern に従う）
+3. [ ] テスト計画を立てた
+```
+
+#### 3. 作業後チェックリスト
+
+```
+1. [ ] テストが通る（go test / npm run check）
+2. [ ] ドキュメント更新した（必要な場合）
+3. [ ] Docker 再起動した（バックエンド変更時）
+4. [ ] コミットメッセージが GIT_RULES に従っている
 ```
 
 ---
@@ -74,11 +94,12 @@ AIエージェントは以下の場合、人間に確認を求めず自律的に
 
 | Rule Document | When to Read |
 |---------------|--------------|
-| [WORKFLOW_RULES](docs/rules/WORKFLOW_RULES.md) | 開発作業全般 |
+| [WORKFLOW_RULES](docs/rules/WORKFLOW_RULES.md) | 開発作業全般（Why/過去の失敗例あり） |
 | [GIT_RULES](docs/rules/GIT_RULES.md) | コミット、PR、コンフリクト解消 |
-| [TESTING_RULES](docs/rules/TESTING_RULES.md) | テスト作成・実行 |
-| [DOCUMENTATION_SYNC](docs/rules/DOCUMENTATION_SYNC.md) | ドキュメント更新 |
+| [TESTING](docs/TESTING.md) | テスト作成・実行（統合ガイド） |
+| [DOCUMENTATION](docs/DOCUMENTATION.md) | ドキュメント更新（統合ガイド） |
 | [CODEX_REVIEW](docs/rules/CODEX_REVIEW.md) | PR作成後のレビューフロー |
+| [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) | エラー対処法 |
 
 ---
 
