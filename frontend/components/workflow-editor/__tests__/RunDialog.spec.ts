@@ -12,10 +12,9 @@ const i18n = createI18n({
       workflows: {
         runDialog: {
           title: 'Run Workflow',
-          inputTitle: 'Input',
-          inputDescription: 'Input for {stepName}',
-          noInputRequired: 'No input required',
-          schemaDetails: 'Schema Details',
+          inputTitle: 'Input Data',
+          inputDescription: 'Enter the required input data for this workflow',
+          schemaDetails: 'Input Schema Details',
           run: 'Run',
         },
       },
@@ -27,10 +26,9 @@ const i18n = createI18n({
       workflows: {
         runDialog: {
           title: 'ワークフロー実行',
-          inputTitle: '入力',
-          inputDescription: '{stepName}への入力',
-          noInputRequired: '入力は不要です',
-          schemaDetails: 'スキーマ詳細',
+          inputTitle: '入力データ',
+          inputDescription: 'ワークフローの実行に必要な入力データを入力してください',
+          schemaDetails: '入力スキーマ詳細',
           run: '実行',
         },
       },
@@ -70,7 +68,42 @@ import RunDialog from '../RunDialog.vue'
 import type { Step, BlockDefinition } from '~/types/api'
 
 describe('RunDialog', () => {
+  // Steps with input_schema defined in Start step's config
   const mockSteps: Step[] = [
+    {
+      id: 'step-start',
+      workflow_id: 'workflow-1',
+      name: 'Start',
+      type: 'start',
+      config: {
+        input_schema: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', title: 'Message' },
+          },
+          required: ['message'],
+        },
+      },
+      position_x: 100,
+      position_y: 100,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
+    {
+      id: 'step-llm',
+      workflow_id: 'workflow-1',
+      name: 'LLM Step',
+      type: 'llm',
+      config: { provider: 'openai', model: 'gpt-4' },
+      position_x: 100,
+      position_y: 250,
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    },
+  ]
+
+  // Steps without input_schema in Start step's config
+  const mockStepsWithoutSchema: Step[] = [
     {
       id: 'step-start',
       workflow_id: 'workflow-1',
@@ -225,57 +258,26 @@ describe('RunDialog', () => {
   })
 
   describe('input schema handling', () => {
-    it('should show input form when block has input_schema', () => {
+    it('should show input form when Start step has input_schema in config', () => {
+      // mockSteps has input_schema defined in Start step's config
       const wrapper = createWrapper()
       expect(wrapper.find('.input-section').exists()).toBe(true)
       expect(wrapper.find('.dynamic-config-form-mock').exists()).toBe(true)
     })
 
-    it('should show no input message when block has no input_schema', () => {
-      const blocksWithoutSchema: BlockDefinition[] = [
-        {
-          id: 'block-start',
-          slug: 'start',
-          name: 'Start',
-          category: 'flow',
-          description: 'Start block',
-          is_system: true,
-          config_schema: {},
-          input_ports: [],
-          output_ports: [],
-          error_codes: [],
-          enabled: true,
-          created_at: '2024-01-01T00:00:00Z',
-          updated_at: '2024-01-01T00:00:00Z',
-        },
-        {
-          id: 'block-llm',
-          slug: 'llm',
-          name: 'LLM',
-          category: 'ai',
-          description: 'LLM block',
-          is_system: true,
-          config_schema: {},
-          // No input_schema
-          input_ports: [],
-          output_ports: [],
-          error_codes: [],
-          enabled: true,
-          created_at: '2024-01-01T00:00:00Z',
-          updated_at: '2024-01-01T00:00:00Z',
-        },
-      ]
-
-      const wrapper = createWrapper({ blocks: blocksWithoutSchema })
-      expect(wrapper.find('.no-input-message').exists()).toBe(true)
+    it('should not show input form when Start step has no input_schema', () => {
+      // Use steps without input_schema in Start step's config
+      const wrapper = createWrapper({ steps: mockStepsWithoutSchema })
+      // No input section should be shown - user can run directly
+      expect(wrapper.find('.input-section').exists()).toBe(false)
     })
   })
 
-  describe('first executable step detection', () => {
-    it('should find the first step after start', () => {
+  describe('workflow name display', () => {
+    it('should display workflow name in input description', () => {
       const wrapper = createWrapper()
-      // The input description should mention the first executable step's name
-      expect(wrapper.text()).toContain('LLM Step')
+      // The input description should mention the workflow name
+      expect(wrapper.text()).toContain('Test Workflow')
     })
 
     it('should handle missing start step', () => {
@@ -296,12 +298,14 @@ describe('RunDialog', () => {
       const wrapper = createWrapper({ steps: stepsWithoutStart })
       // Should still mount without error
       expect(wrapper.exists()).toBe(true)
+      // No input section when start step is missing - user can run directly
+      expect(wrapper.find('.input-section').exists()).toBe(false)
     })
 
-    it('should handle missing edge from start', () => {
-      const wrapper = createWrapper({ edges: [] })
-      // Should show no input message when first step cannot be determined
-      expect(wrapper.find('.no-input-message').exists()).toBe(true)
+    it('should not show input section when Start step has no input_schema', () => {
+      const wrapper = createWrapper({ steps: mockStepsWithoutSchema })
+      // No input section when Start step has no input_schema - user can run directly
+      expect(wrapper.find('.input-section').exists()).toBe(false)
     })
   })
 

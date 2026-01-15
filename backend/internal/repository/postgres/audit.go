@@ -93,9 +93,10 @@ func (r *AuditLogRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	}
 
 	// List query
+	// Cast inet to text for scanning into string
 	query := fmt.Sprintf(`
 		SELECT id, tenant_id, actor_id, actor_email, action, resource_type,
-			   resource_id, metadata, ip_address, user_agent, created_at
+			   resource_id, metadata, ip_address::text, user_agent, created_at
 		FROM audit_logs
 		WHERE %s
 		ORDER BY created_at DESC
@@ -129,9 +130,10 @@ func (r *AuditLogRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 }
 
 func (r *AuditLogRepository) ListByResource(ctx context.Context, tenantID uuid.UUID, resourceType domain.AuditResourceType, resourceID uuid.UUID) ([]*domain.AuditLog, error) {
+	// Cast inet to text for scanning into string
 	query := `
 		SELECT id, tenant_id, actor_id, actor_email, action, resource_type,
-			   resource_id, metadata, ip_address, user_agent, created_at
+			   resource_id, metadata, ip_address::text, user_agent, created_at
 		FROM audit_logs
 		WHERE tenant_id = $1 AND resource_type = $2 AND resource_id = $3
 		ORDER BY created_at DESC
