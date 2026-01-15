@@ -904,8 +904,8 @@ watch(() => props.step, () => {
     <div class="execution-content">
       <!-- Step Selected (not Start): Show step-specific execution controls -->
       <template v-if="step && !isStartStep">
-        <!-- Input Section -->
-        <div class="input-section">
+        <!-- Input Section (only shown when step has input fields) -->
+        <div v-if="hasStepInputFields" class="input-section">
           <div class="input-header">
             <label class="input-label">{{ t('execution.customInput') }}</label>
             <div class="input-actions">
@@ -1154,8 +1154,8 @@ watch(() => props.step, () => {
       <template v-else>
         <!-- Workflow Execution Section -->
         <div class="workflow-execution-section">
-          <!-- Input Section -->
-          <div class="input-section">
+          <!-- Input Section (only shown when workflow has input fields) -->
+          <div v-if="hasWorkflowInputFields" class="input-section">
             <div class="input-header">
               <label class="input-label">{{ t('execution.customInput') }}</label>
               <div class="input-actions">
