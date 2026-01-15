@@ -619,12 +619,6 @@ func hasUnconnectedSteps(steps []domain.Step, edges []domain.Edge) bool {
 // validateBranchingBlocksInGroups checks that branching blocks (condition/switch) with multiple output edges
 // are contained within a Block Group. This prevents complex parallel flows outside of managed group contexts.
 func validateBranchingBlocksInGroups(steps []domain.Step, edges []domain.Edge) error {
-	// Build step map for quick lookup
-	stepMap := make(map[uuid.UUID]*domain.Step)
-	for i := range steps {
-		stepMap[steps[i].ID] = &steps[i]
-	}
-
 	// Count outgoing edges per step (only step-to-step edges)
 	outgoingEdgeCount := make(map[uuid.UUID]int)
 	for _, edge := range edges {
