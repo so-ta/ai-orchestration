@@ -193,6 +193,9 @@ func (m *mockStepRunRepo) ListByStep(ctx context.Context, tenantID, runID, stepI
 	}
 	return nil, nil
 }
+func (m *mockStepRunRepo) GetMaxSequenceNumberForRun(ctx context.Context, tenantID, runID uuid.UUID) (int, error) {
+	return 0, nil
+}
 
 // Test helper to create RunUsecase with mocks (bypassing Queue)
 func newTestRunUsecase(

@@ -840,8 +840,13 @@ const allTestStepRuns = computed<StepRunWithRunInfo[]>(() => {
       }
     }
   }
-  // Sort by created_at descending (newest first)
+  // Sort by sequence_number descending (newest first), then by created_at as fallback
   return stepRuns.sort((a, b) => {
+    // First sort by sequence_number descending
+    if (a.sequence_number !== b.sequence_number) {
+      return b.sequence_number - a.sequence_number
+    }
+    // Fallback to created_at for records without sequence_number
     const dateA = new Date(a.completed_at || a.started_at || a.created_at).getTime()
     const dateB = new Date(b.completed_at || b.started_at || b.created_at).getTime()
     return dateB - dateA

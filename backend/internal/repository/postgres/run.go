@@ -150,13 +150,13 @@ func (r *RunRepository) GetWithStepRuns(ctx context.Context, tenantID, id uuid.U
 
 	// Join with runs table to ensure tenant isolation
 	query := `
-		SELECT sr.id, sr.run_id, sr.step_id, sr.step_name, sr.status, sr.attempt,
+		SELECT sr.id, sr.run_id, sr.step_id, sr.step_name, sr.status, sr.attempt, sr.sequence_number,
 		       sr.input, sr.output, sr.error, sr.started_at, sr.completed_at,
 		       sr.duration_ms, sr.created_at
 		FROM step_runs sr
 		JOIN runs r ON r.id = sr.run_id AND r.tenant_id = $2
 		WHERE sr.run_id = $1
-		ORDER BY sr.created_at
+		ORDER BY sr.sequence_number ASC, sr.created_at ASC
 	`
 	rows, err := r.db.Query(ctx, query, id, tenantID)
 	if err != nil {
@@ -167,7 +167,7 @@ func (r *RunRepository) GetWithStepRuns(ctx context.Context, tenantID, id uuid.U
 	for rows.Next() {
 		var sr domain.StepRun
 		if err := rows.Scan(
-			&sr.ID, &sr.RunID, &sr.StepID, &sr.StepName, &sr.Status, &sr.Attempt,
+			&sr.ID, &sr.RunID, &sr.StepID, &sr.StepName, &sr.Status, &sr.Attempt, &sr.SequenceNumber,
 			&sr.Input, &sr.Output, &sr.Error, &sr.StartedAt, &sr.CompletedAt,
 			&sr.DurationMs, &sr.CreatedAt,
 		); err != nil {
