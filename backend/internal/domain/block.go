@@ -249,7 +249,7 @@ func (b *BlockDefinition) HasInternalSteps() bool {
 
 // IsGroupBlock returns true if this block is a group block (container)
 func (b *BlockDefinition) IsGroupBlock() bool {
-	return b.GroupKind != BlockGroupKindNone && b.GroupKind != ""
+	return b.GroupKind != BlockGroupKindNone
 }
 
 // GetEffectiveCode returns the code to execute (resolved code for inherited blocks, own code otherwise)

@@ -251,3 +251,63 @@ func TestInternalStep_Structure(t *testing.T) {
 	assert.Equal(t, "api_response", step.OutputKey)
 	assert.Contains(t, string(step.Config), "api.example.com")
 }
+
+// Phase B: BlockGroupKind tests
+func TestBlockGroupKind_IsValid(t *testing.T) {
+	tests := []struct {
+		kind     BlockGroupKind
+		expected bool
+	}{
+		{BlockGroupKindParallel, true},
+		{BlockGroupKindTryCatch, true},
+		{BlockGroupKindForeach, true},
+		{BlockGroupKindWhile, true},
+		{BlockGroupKindNone, true},         // None (empty) is valid - means not a group block
+		{BlockGroupKind(""), true},         // Empty is valid - same as None
+		{BlockGroupKind("invalid"), false},
+		{BlockGroupKind("if_else"), false}, // Removed in Phase A
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.kind), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.kind.IsValid())
+		})
+	}
+}
+
+func TestValidBlockGroupKinds(t *testing.T) {
+	kinds := ValidBlockGroupKinds()
+
+	assert.Len(t, kinds, 4)
+	assert.Contains(t, kinds, BlockGroupKindParallel)
+	assert.Contains(t, kinds, BlockGroupKindTryCatch)
+	assert.Contains(t, kinds, BlockGroupKindForeach)
+	assert.Contains(t, kinds, BlockGroupKindWhile)
+
+	// Verify all returned kinds are valid
+	for _, kind := range kinds {
+		assert.True(t, kind.IsValid(), "kind %s should be valid", kind)
+	}
+}
+
+func TestBlockDefinition_IsGroupBlock(t *testing.T) {
+	tests := []struct {
+		name      string
+		groupKind BlockGroupKind
+		expected  bool
+	}{
+		{"parallel is group block", BlockGroupKindParallel, true},
+		{"try_catch is group block", BlockGroupKindTryCatch, true},
+		{"foreach is group block", BlockGroupKindForeach, true},
+		{"while is group block", BlockGroupKindWhile, true},
+		{"none is not group block", BlockGroupKindNone, false},
+		{"empty is not group block", BlockGroupKind(""), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			block := &BlockDefinition{GroupKind: tt.groupKind}
+			assert.Equal(t, tt.expected, block.IsGroupBlock())
+		})
+	}
+}
