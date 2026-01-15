@@ -76,7 +76,7 @@ func getClientIP(r *http.Request) string {
 	}
 	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+		return strings.TrimSpace(xri)
 	}
 	// Fall back to RemoteAddr, stripping port number
 	// RemoteAddr format is "IP:port" for IPv4 or "[IP]:port" for IPv6
