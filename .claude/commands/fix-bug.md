@@ -86,5 +86,5 @@ docker compose restart api worker
 
 ## 参考
 
-- [docs/rules/TESTING_RULES.md](docs/rules/TESTING_RULES.md)
+- [docs/TESTING.md](docs/TESTING.md)
 - [docs/rules/WORKFLOW_RULES.md](docs/rules/WORKFLOW_RULES.md)
