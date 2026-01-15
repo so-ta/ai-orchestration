@@ -70,10 +70,12 @@ export type StepType =
 export interface Edge {
   id: string
   workflow_id: string
-  source_step_id: string
-  target_step_id: string
-  source_port?: string // Output port name (e.g., "true", "false")
-  target_port?: string // Input port name (e.g., "input", "items")
+  source_step_id?: string | null // Source step (null if from group)
+  target_step_id?: string | null // Target step (null if to group)
+  source_block_group_id?: string | null // Source group (null if from step)
+  target_block_group_id?: string | null // Target group (null if to step)
+  source_port?: string // Output port name (e.g., "true", "false", "out")
+  target_port?: string // Input port name (e.g., "input", "items", "in")
   condition?: string
   created_at: string
 }

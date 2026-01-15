@@ -15,7 +15,7 @@ const props = defineProps<{
   workflowId: string
   workflowName: string
   steps: Step[]
-  edges: Array<{ source_step_id: string; target_step_id: string }>
+  edges: Array<{ source_step_id?: string | null; target_step_id?: string | null }>
   blocks: BlockDefinition[]
 }>()
 

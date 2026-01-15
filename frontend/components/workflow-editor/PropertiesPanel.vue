@@ -16,7 +16,7 @@ const props = defineProps<{
   saving?: boolean
   latestRun?: Run | null
   steps?: Step[]
-  edges?: Array<{ id: string; source_step_id: string; target_step_id: string }>
+  edges?: Array<{ id: string; source_step_id?: string | null; target_step_id?: string | null }>
   blockDefinitions?: BlockDefinition[]
 }>()
 

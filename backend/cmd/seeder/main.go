@@ -98,10 +98,13 @@ func main() {
 	workflowRepo := postgres.NewWorkflowRepository(pool)
 	stepRepo := postgres.NewStepRepository(pool)
 	edgeRepo := postgres.NewEdgeRepository(pool)
+	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 
 	// Create migrators
 	blockMigrator := migration.NewMigrator(blockRepo, versionRepo)
-	workflowMigrator := migration.NewWorkflowMigrator(workflowRepo, stepRepo, edgeRepo).WithBlockRepo(blockRepo)
+	workflowMigrator := migration.NewWorkflowMigrator(workflowRepo, stepRepo, edgeRepo).
+		WithBlockRepo(blockRepo).
+		WithBlockGroupRepo(blockGroupRepo)
 
 	if *dryRun {
 		// Dry run mode

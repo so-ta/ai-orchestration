@@ -250,8 +250,8 @@ func (h *WorkflowHandler) Save(w http.ResponseWriter, r *http.Request) {
 		}
 		edges[i] = domain.Edge{
 			ID:           edgeID,
-			SourceStepID: sourceID,
-			TargetStepID: targetID,
+			SourceStepID: &sourceID,
+			TargetStepID: &targetID,
 			Condition:    e.Condition,
 		}
 	}
@@ -333,8 +333,8 @@ func (h *WorkflowHandler) SaveDraft(w http.ResponseWriter, r *http.Request) {
 		}
 		edges[i] = domain.Edge{
 			ID:           edgeID,
-			SourceStepID: sourceID,
-			TargetStepID: targetID,
+			SourceStepID: &sourceID,
+			TargetStepID: &targetID,
 			Condition:    e.Condition,
 		}
 	}

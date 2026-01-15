@@ -20,12 +20,16 @@ func NewEdgeHandler(edgeUsecase *usecase.EdgeUsecase) *EdgeHandler {
 }
 
 // CreateEdgeRequest represents a create edge request
+// Either source_step_id or source_block_group_id must be provided
+// Either target_step_id or target_block_group_id must be provided
 type CreateEdgeRequest struct {
-	SourceStepID string `json:"source_step_id"`
-	TargetStepID string `json:"target_step_id"`
-	SourcePort   string `json:"source_port"`
-	TargetPort   string `json:"target_port"`
-	Condition    string `json:"condition"`
+	SourceStepID       string `json:"source_step_id,omitempty"`
+	TargetStepID       string `json:"target_step_id,omitempty"`
+	SourceBlockGroupID string `json:"source_block_group_id,omitempty"`
+	TargetBlockGroupID string `json:"target_block_group_id,omitempty"`
+	SourcePort         string `json:"source_port"`
+	TargetPort         string `json:"target_port"`
+	Condition          string `json:"condition"`
 }
 
 // Create handles POST /api/v1/workflows/{workflow_id}/edges
@@ -43,26 +47,55 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sourceID, err := uuid.Parse(req.SourceStepID)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source_step_id", nil)
-		return
+	input := usecase.CreateEdgeInput{
+		TenantID:   tenantID,
+		WorkflowID: workflowID,
+		SourcePort: req.SourcePort,
+		TargetPort: req.TargetPort,
+		Condition:  req.Condition,
 	}
-	targetID, err := uuid.Parse(req.TargetStepID)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target_step_id", nil)
+
+	// Parse source (step or group)
+	if req.SourceStepID != "" {
+		sourceID, err := uuid.Parse(req.SourceStepID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source_step_id", nil)
+			return
+		}
+		input.SourceStepID = &sourceID
+	} else if req.SourceBlockGroupID != "" {
+		sourceGroupID, err := uuid.Parse(req.SourceBlockGroupID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source_block_group_id", nil)
+			return
+		}
+		input.SourceBlockGroupID = &sourceGroupID
+	} else {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "source_step_id or source_block_group_id is required", nil)
 		return
 	}
 
-	edge, err := h.edgeUsecase.Create(r.Context(), usecase.CreateEdgeInput{
-		TenantID:     tenantID,
-		WorkflowID:   workflowID,
-		SourceStepID: sourceID,
-		TargetStepID: targetID,
-		SourcePort:   req.SourcePort,
-		TargetPort:   req.TargetPort,
-		Condition:    req.Condition,
-	})
+	// Parse target (step or group)
+	if req.TargetStepID != "" {
+		targetID, err := uuid.Parse(req.TargetStepID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target_step_id", nil)
+			return
+		}
+		input.TargetStepID = &targetID
+	} else if req.TargetBlockGroupID != "" {
+		targetGroupID, err := uuid.Parse(req.TargetBlockGroupID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target_block_group_id", nil)
+			return
+		}
+		input.TargetBlockGroupID = &targetGroupID
+	} else {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "target_step_id or target_block_group_id is required", nil)
+		return
+	}
+
+	edge, err := h.edgeUsecase.Create(r.Context(), input)
 	if err != nil {
 		HandleError(w, err)
 		return

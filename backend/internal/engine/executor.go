@@ -362,9 +362,13 @@ func (e *Executor) buildGraph(def *domain.WorkflowDefinition) *Graph {
 		graph.Steps[step.ID] = step
 	}
 
+	// Only add step-to-step edges to the graph
+	// Group edges (source/target group IDs) are handled separately
 	for _, edge := range def.Edges {
-		graph.InEdges[edge.TargetStepID] = append(graph.InEdges[edge.TargetStepID], edge)
-		graph.OutEdges[edge.SourceStepID] = append(graph.OutEdges[edge.SourceStepID], edge)
+		if edge.SourceStepID != nil && edge.TargetStepID != nil {
+			graph.InEdges[*edge.TargetStepID] = append(graph.InEdges[*edge.TargetStepID], edge)
+			graph.OutEdges[*edge.SourceStepID] = append(graph.OutEdges[*edge.SourceStepID], edge)
+		}
 	}
 
 	return graph
@@ -438,7 +442,11 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 	execCtx.mu.RUnlock()
 
 	for _, edge := range graph.OutEdges[currentID] {
-		targetID := edge.TargetStepID
+		// Skip edges without step target (group edges)
+		if edge.TargetStepID == nil {
+			continue
+		}
+		targetID := *edge.TargetStepID
 
 		// Evaluate edge condition if present
 		if edge.Condition != nil && *edge.Condition != "" {
@@ -463,8 +471,11 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 		// Check if all incoming edges' sources are completed
 		allDependenciesMet := true
 		for _, inEdge := range graph.InEdges[targetID] {
+			if inEdge.SourceStepID == nil {
+				continue // Skip edges without step source (group edges)
+			}
 			mu.Lock()
-			if !completed[inEdge.SourceStepID] {
+			if !completed[*inEdge.SourceStepID] {
 				allDependenciesMet = false
 			}
 			mu.Unlock()
@@ -620,7 +631,8 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 	var sourceEdges []domain.Edge
 	if execCtx.Definition != nil {
 		for _, edge := range execCtx.Definition.Edges {
-			if edge.TargetStepID == step.ID {
+			// Only consider step-to-step edges
+			if edge.TargetStepID != nil && *edge.TargetStepID == step.ID {
 				sourceEdges = append(sourceEdges, edge)
 			}
 		}
@@ -628,8 +640,8 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 
 	// If exactly one source edge, use that step's output directly (pass-through mode)
 	// This enables linear workflows where data flows naturally from step to step
-	if len(sourceEdges) == 1 {
-		sourceStepID := sourceEdges[0].SourceStepID
+	if len(sourceEdges) == 1 && sourceEdges[0].SourceStepID != nil {
+		sourceStepID := *sourceEdges[0].SourceStepID
 		if data, ok := execCtx.StepData[sourceStepID]; ok {
 			return data, nil
 		}

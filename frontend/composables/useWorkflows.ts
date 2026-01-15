@@ -52,8 +52,10 @@ export function useWorkflows() {
     }>
     edges: Array<{
       id: string
-      source_step_id: string
-      target_step_id: string
+      source_step_id?: string | null
+      target_step_id?: string | null
+      source_block_group_id?: string | null
+      target_block_group_id?: string | null
       source_port?: string
       target_port?: string
       condition?: string
@@ -77,8 +79,10 @@ export function useWorkflows() {
     }>
     edges: Array<{
       id: string
-      source_step_id: string
-      target_step_id: string
+      source_step_id?: string | null
+      target_step_id?: string | null
+      source_block_group_id?: string | null
+      target_block_group_id?: string | null
       source_port?: string
       target_port?: string
       condition?: string
@@ -130,8 +134,10 @@ export function useWorkflows() {
   }
 
   async function createEdge(workflowId: string, data: {
-    source_step_id: string
-    target_step_id: string
+    source_step_id?: string
+    target_step_id?: string
+    source_block_group_id?: string
+    target_block_group_id?: string
     source_port?: string
     target_port?: string
     condition?: string

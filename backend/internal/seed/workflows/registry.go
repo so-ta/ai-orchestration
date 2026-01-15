@@ -18,6 +18,7 @@ func NewRegistry() *Registry {
 	r.registerRAGWorkflows()
 	r.registerComprehensiveWorkflows()
 	r.registerDemoWorkflows()
+	r.registerBlockGroupDemoWorkflows()
 
 	return r
 }

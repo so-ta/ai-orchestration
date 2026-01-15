@@ -36,8 +36,8 @@ func TestHasCycle(t *testing.T) {
 			name:  "linear path - no cycle",
 			steps: []domain.Step{stepA, stepB, stepC},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-				{SourceStepID: stepB.ID, TargetStepID: stepC.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+				{SourceStepID: &stepB.ID, TargetStepID: &stepC.ID},
 			},
 			expected: false,
 		},
@@ -45,10 +45,10 @@ func TestHasCycle(t *testing.T) {
 			name:  "diamond shape - no cycle",
 			steps: []domain.Step{stepA, stepB, stepC, stepD},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-				{SourceStepID: stepA.ID, TargetStepID: stepC.ID},
-				{SourceStepID: stepB.ID, TargetStepID: stepD.ID},
-				{SourceStepID: stepC.ID, TargetStepID: stepD.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepC.ID},
+				{SourceStepID: &stepB.ID, TargetStepID: &stepD.ID},
+				{SourceStepID: &stepC.ID, TargetStepID: &stepD.ID},
 			},
 			expected: false,
 		},
@@ -56,8 +56,8 @@ func TestHasCycle(t *testing.T) {
 			name:  "simple cycle (A -> B -> A)",
 			steps: []domain.Step{stepA, stepB},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-				{SourceStepID: stepB.ID, TargetStepID: stepA.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+				{SourceStepID: &stepB.ID, TargetStepID: &stepA.ID},
 			},
 			expected: true,
 		},
@@ -65,9 +65,9 @@ func TestHasCycle(t *testing.T) {
 			name:  "longer cycle (A -> B -> C -> A)",
 			steps: []domain.Step{stepA, stepB, stepC},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-				{SourceStepID: stepB.ID, TargetStepID: stepC.ID},
-				{SourceStepID: stepC.ID, TargetStepID: stepA.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+				{SourceStepID: &stepB.ID, TargetStepID: &stepC.ID},
+				{SourceStepID: &stepC.ID, TargetStepID: &stepA.ID},
 			},
 			expected: true,
 		},
@@ -75,7 +75,7 @@ func TestHasCycle(t *testing.T) {
 			name:  "self loop",
 			steps: []domain.Step{stepA},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepA.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepA.ID},
 			},
 			expected: true,
 		},
@@ -83,9 +83,9 @@ func TestHasCycle(t *testing.T) {
 			name:  "multiple components with cycle",
 			steps: []domain.Step{stepA, stepB, stepC, stepD},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-				{SourceStepID: stepC.ID, TargetStepID: stepD.ID},
-				{SourceStepID: stepD.ID, TargetStepID: stepC.ID}, // Cycle in second component
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+				{SourceStepID: &stepC.ID, TargetStepID: &stepD.ID},
+				{SourceStepID: &stepD.ID, TargetStepID: &stepC.ID}, // Cycle in second component
 			},
 			expected: true,
 		},
@@ -126,8 +126,8 @@ func TestHasUnconnectedSteps(t *testing.T) {
 			name:  "all steps connected",
 			steps: []domain.Step{stepA, stepB, stepC},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-				{SourceStepID: stepB.ID, TargetStepID: stepC.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+				{SourceStepID: &stepB.ID, TargetStepID: &stepC.ID},
 			},
 			expected: false,
 		},
@@ -135,7 +135,7 @@ func TestHasUnconnectedSteps(t *testing.T) {
 			name:  "one unconnected step",
 			steps: []domain.Step{stepA, stepB, stepC},
 			edges: []domain.Edge{
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
 				// stepC is not connected
 			},
 			expected: true,
@@ -145,7 +145,7 @@ func TestHasUnconnectedSteps(t *testing.T) {
 			steps: []domain.Step{stepA, stepB, stepC},
 			edges: []domain.Edge{
 				// Only A and B connected
-				{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
+				{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
 			},
 			expected: true,
 		},
@@ -185,8 +185,8 @@ func TestWorkflowUsecase_ValidateDAG(t *testing.T) {
 			workflow: &domain.Workflow{
 				Steps: []domain.Step{stepA, stepB, stepC},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-					{SourceStepID: stepB.ID, TargetStepID: stepC.ID},
+					{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+					{SourceStepID: &stepB.ID, TargetStepID: &stepC.ID},
 				},
 			},
 			expectError: false,
@@ -204,8 +204,8 @@ func TestWorkflowUsecase_ValidateDAG(t *testing.T) {
 			workflow: &domain.Workflow{
 				Steps: []domain.Step{stepA, stepB},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
-					{SourceStepID: stepB.ID, TargetStepID: stepA.ID},
+					{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
+					{SourceStepID: &stepB.ID, TargetStepID: &stepA.ID},
 				},
 			},
 			expectError: true,
@@ -216,7 +216,7 @@ func TestWorkflowUsecase_ValidateDAG(t *testing.T) {
 			workflow: &domain.Workflow{
 				Steps: []domain.Step{stepA, stepB, stepC},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA.ID, TargetStepID: stepB.ID},
+					{SourceStepID: &stepA.ID, TargetStepID: &stepB.ID},
 					// stepC is not connected
 				},
 			},

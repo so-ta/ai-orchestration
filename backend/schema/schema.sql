@@ -390,12 +390,16 @@ CREATE TABLE public.edges (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     tenant_id uuid NOT NULL,
     workflow_id uuid NOT NULL,
-    source_step_id uuid NOT NULL,
-    target_step_id uuid NOT NULL,
+    source_step_id uuid,
+    target_step_id uuid,
+    source_block_group_id uuid,
+    target_block_group_id uuid,
     condition text,
     created_at timestamp with time zone DEFAULT now(),
     source_port character varying(50) DEFAULT ''::character varying,
-    target_port character varying(50) DEFAULT ''::character varying
+    target_port character varying(50) DEFAULT ''::character varying,
+    CONSTRAINT edges_source_check CHECK ((source_step_id IS NOT NULL OR source_block_group_id IS NOT NULL)),
+    CONSTRAINT edges_target_check CHECK ((target_step_id IS NOT NULL OR target_block_group_id IS NOT NULL))
 );
 
 
@@ -1010,11 +1014,17 @@ ALTER TABLE ONLY public.edges
 
 
 --
--- Name: edges edges_source_step_id_target_step_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: edges edges_unique_connection; Type: CONSTRAINT; Schema: public; Owner: -
+-- Ensures unique connections considering both step and group endpoints
 --
 
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_source_step_id_target_step_id_key UNIQUE (source_step_id, target_step_id);
+CREATE UNIQUE INDEX edges_unique_connection ON public.edges (
+    workflow_id,
+    COALESCE(source_step_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    COALESCE(target_step_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    COALESCE(source_block_group_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    COALESCE(target_block_group_id, '00000000-0000-0000-0000-000000000000'::uuid)
+);
 
 
 --
@@ -1797,6 +1807,22 @@ ALTER TABLE ONLY public.edges
 
 ALTER TABLE ONLY public.edges
     ADD CONSTRAINT edges_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: edges edges_source_block_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.edges
+    ADD CONSTRAINT edges_source_block_group_id_fkey FOREIGN KEY (source_block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
+
+
+--
+-- Name: edges edges_target_block_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.edges
+    ADD CONSTRAINT edges_target_block_group_id_fkey FOREIGN KEY (target_block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
 
 
 --

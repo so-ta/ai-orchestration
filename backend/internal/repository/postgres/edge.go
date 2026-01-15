@@ -23,11 +23,11 @@ func NewEdgeRepository(pool *pgxpool.Pool) *EdgeRepository {
 // Create creates a new edge
 func (r *EdgeRepository) Create(ctx context.Context, e *domain.Edge) error {
 	query := `
-		INSERT INTO edges (id, tenant_id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO edges (id, tenant_id, workflow_id, source_step_id, target_step_id, source_block_group_id, target_block_group_id, source_port, target_port, condition, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		e.ID, e.TenantID, e.WorkflowID, e.SourceStepID, e.TargetStepID, e.SourcePort, e.TargetPort, e.Condition, e.CreatedAt,
+		e.ID, e.TenantID, e.WorkflowID, e.SourceStepID, e.TargetStepID, e.SourceBlockGroupID, e.TargetBlockGroupID, e.SourcePort, e.TargetPort, e.Condition, e.CreatedAt,
 	)
 	return err
 }
@@ -35,13 +35,13 @@ func (r *EdgeRepository) Create(ctx context.Context, e *domain.Edge) error {
 // GetByID retrieves an edge by ID
 func (r *EdgeRepository) GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Edge, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
+		SELECT id, tenant_id, workflow_id, source_step_id, target_step_id, source_block_group_id, target_block_group_id, source_port, target_port, condition, created_at
 		FROM edges
 		WHERE id = $1 AND workflow_id = $2 AND tenant_id = $3
 	`
 	var e domain.Edge
 	err := r.pool.QueryRow(ctx, query, id, workflowID, tenantID).Scan(
-		&e.ID, &e.TenantID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
+		&e.ID, &e.TenantID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourceBlockGroupID, &e.TargetBlockGroupID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrEdgeNotFound
@@ -55,7 +55,7 @@ func (r *EdgeRepository) GetByID(ctx context.Context, tenantID, workflowID, id u
 // ListByWorkflow retrieves all edges for a workflow
 func (r *EdgeRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
+		SELECT id, tenant_id, workflow_id, source_step_id, target_step_id, source_block_group_id, target_block_group_id, source_port, target_port, condition, created_at
 		FROM edges
 		WHERE workflow_id = $1 AND tenant_id = $2
 	`
@@ -69,7 +69,7 @@ func (r *EdgeRepository) ListByWorkflow(ctx context.Context, tenantID, workflowI
 	for rows.Next() {
 		var e domain.Edge
 		if err := rows.Scan(
-			&e.ID, &e.TenantID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
+			&e.ID, &e.TenantID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourceBlockGroupID, &e.TargetBlockGroupID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

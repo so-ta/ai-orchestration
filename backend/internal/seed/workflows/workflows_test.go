@@ -17,8 +17,8 @@ func TestRegistry_AllWorkflowsValid(t *testing.T) {
 func TestRegistry_WorkflowCount(t *testing.T) {
 	registry := NewRegistry()
 
-	// Expect at least 11 workflows (4 copilot + 3 RAG + 4 demo)
-	minExpected := 11
+	// Expect at least 12 workflows (4 copilot + 3 RAG + 4 demo + 1 block-group-demo)
+	minExpected := 12
 	actual := registry.Count()
 	if actual < minExpected {
 		t.Errorf("Expected at least %d workflows, got %d", minExpected, actual)
@@ -41,6 +41,7 @@ func TestRegistry_GetBySlug(t *testing.T) {
 		"data-pipeline-block-demo",
 		"ai-routing-block-demo",
 		"control-flow-block-demo",
+		"block-group-demo",
 	}
 
 	for _, slug := range knownSlugs {
@@ -214,6 +215,95 @@ func TestWorkflow_Validate(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
+			}
+		})
+	}
+}
+
+func TestBlockGroupDemoWorkflow(t *testing.T) {
+	registry := NewRegistry()
+
+	wf, ok := registry.GetBySlug("block-group-demo")
+	if !ok {
+		t.Fatal("block-group-demo workflow not found")
+	}
+
+	// Check block groups exist
+	if len(wf.BlockGroups) == 0 {
+		t.Error("BlockGroups should not be empty")
+	}
+
+	// Check all 4 block group types are present
+	expectedTypes := map[string]bool{
+		"parallel":  false,
+		"try_catch": false,
+		"foreach":   false,
+		"while":     false,
+	}
+
+	for _, bg := range wf.BlockGroups {
+		if _, exists := expectedTypes[bg.Type]; exists {
+			expectedTypes[bg.Type] = true
+		}
+	}
+
+	for groupType, found := range expectedTypes {
+		if !found {
+			t.Errorf("Block group type %s not found in workflow", groupType)
+		}
+	}
+
+	// Check steps with BlockGroupTempID are properly configured
+	stepsInGroups := 0
+	for _, step := range wf.Steps {
+		if step.BlockGroupTempID != "" {
+			stepsInGroups++
+			// Verify the referenced group exists
+			groupFound := false
+			for _, bg := range wf.BlockGroups {
+				if bg.TempID == step.BlockGroupTempID {
+					groupFound = true
+					break
+				}
+			}
+			if !groupFound {
+				t.Errorf("Step %s references non-existent block group %s", step.Name, step.BlockGroupTempID)
+			}
+		}
+	}
+
+	if stepsInGroups == 0 {
+		t.Error("Expected at least one step inside a block group")
+	}
+
+	// Validate the workflow
+	if err := wf.Validate(); err != nil {
+		t.Errorf("Workflow validation failed: %v", err)
+	}
+}
+
+func TestBlockGroupDefinitionFields(t *testing.T) {
+	registry := NewRegistry()
+
+	wf, ok := registry.GetBySlug("block-group-demo")
+	if !ok {
+		t.Fatal("block-group-demo workflow not found")
+	}
+
+	for _, bg := range wf.BlockGroups {
+		t.Run(bg.TempID, func(t *testing.T) {
+			if bg.TempID == "" {
+				t.Error("TempID is required")
+			}
+			if bg.Name == "" {
+				t.Error("Name is required")
+			}
+			if bg.Type == "" {
+				t.Error("Type is required")
+			}
+			// Width and Height should have defaults or be set
+			if bg.Width == 0 && bg.Height == 0 {
+				// This is OK - defaults will be applied during migration
 			}
 		})
 	}

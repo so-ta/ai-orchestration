@@ -418,7 +418,9 @@ func findTerminalSteps(steps []domain.Step, edges []domain.Edge) []uuid.UUID {
 	// Build set of steps that have outgoing edges
 	hasOutgoing := make(map[uuid.UUID]bool)
 	for _, edge := range edges {
-		hasOutgoing[edge.SourceStepID] = true
+		if edge.SourceStepID != nil {
+			hasOutgoing[*edge.SourceStepID] = true
+		}
 	}
 
 	// Find steps with no outgoing edges

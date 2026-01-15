@@ -226,7 +226,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 
 	// Get edges from database
 	edgesQuery := `
-		SELECT id, workflow_id, source_step_id, target_step_id, source_port, target_port, condition, created_at
+		SELECT id, workflow_id, source_step_id, target_step_id, source_block_group_id, target_block_group_id, source_port, target_port, condition, created_at
 		FROM edges
 		WHERE workflow_id = $1
 	`
@@ -239,7 +239,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 	for rows.Next() {
 		var e domain.Edge
 		if err := rows.Scan(
-			&e.ID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
+			&e.ID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourceBlockGroupID, &e.TargetBlockGroupID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -935,9 +935,22 @@ function getEdgeFlowStatus(sourceStepId: string, targetStepId: string): { animat
 
 // Convert edges to Vue Flow edges
 const flowEdges = computed<FlowEdge[]>(() => {
-  return props.edges.map(edge => {
+  const result: FlowEdge[] = []
+
+  for (const edge of props.edges) {
+    // Determine source: step ID or group ID (with 'group_' prefix for Vue Flow)
+    const source = edge.source_step_id || (edge.source_block_group_id ? `group_${edge.source_block_group_id}` : '')
+    const target = edge.target_step_id || (edge.target_block_group_id ? `group_${edge.target_block_group_id}` : '')
+
+    // Skip edges with missing source/target
+    if (!source || !target) {
+      continue
+    }
+
     const baseColor = getEdgeColor(edge.source_port)
-    const flowStatus = getEdgeFlowStatus(edge.source_step_id, edge.target_step_id)
+    const flowStatus = edge.source_step_id && edge.target_step_id
+      ? getEdgeFlowStatus(edge.source_step_id, edge.target_step_id)
+      : { animated: false, status: 'idle' }
 
     // Override color based on flow status
     let color = baseColor
@@ -951,10 +964,16 @@ const flowEdges = computed<FlowEdge[]>(() => {
       color = '#ef4444' // red for error
     }
 
-    return {
+    // Use special styling for group edges
+    const isGroupEdge = edge.source_block_group_id || edge.target_block_group_id
+    if (isGroupEdge) {
+      color = '#8b5cf6' // purple for group edges
+    }
+
+    result.push({
       id: edge.id,
-      source: edge.source_step_id,
-      target: edge.target_step_id,
+      source,
+      target,
       sourceHandle: edge.source_port || undefined, // Connect from specific output port
       targetHandle: edge.target_port || undefined, // Connect to specific input port
       type: 'smoothstep',
@@ -964,8 +983,10 @@ const flowEdges = computed<FlowEdge[]>(() => {
       labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
       style: { stroke: color, strokeWidth },
       markerEnd: { type: MarkerType.ArrowClosed, color },
-    }
-  })
+    })
+  }
+
+  return result
 })
 
 // Handle new connection

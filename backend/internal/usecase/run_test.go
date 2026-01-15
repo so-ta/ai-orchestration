@@ -601,8 +601,8 @@ func TestCollectDownstreamSteps(t *testing.T) {
 			definition: &domain.WorkflowDefinition{
 				Steps: []domain.Step{{ID: stepA}, {ID: stepB}, {ID: stepC}},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA, TargetStepID: stepB},
-					{SourceStepID: stepB, TargetStepID: stepC},
+					{SourceStepID: &stepA, TargetStepID: &stepB},
+					{SourceStepID: &stepB, TargetStepID: &stepC},
 				},
 			},
 			startStepID:    stepA,
@@ -613,8 +613,8 @@ func TestCollectDownstreamSteps(t *testing.T) {
 			definition: &domain.WorkflowDefinition{
 				Steps: []domain.Step{{ID: stepA}, {ID: stepB}, {ID: stepC}},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA, TargetStepID: stepB},
-					{SourceStepID: stepB, TargetStepID: stepC},
+					{SourceStepID: &stepA, TargetStepID: &stepB},
+					{SourceStepID: &stepB, TargetStepID: &stepC},
 				},
 			},
 			startStepID:    stepB,
@@ -625,10 +625,10 @@ func TestCollectDownstreamSteps(t *testing.T) {
 			definition: &domain.WorkflowDefinition{
 				Steps: []domain.Step{{ID: stepA}, {ID: stepB}, {ID: stepC}, {ID: stepD}},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA, TargetStepID: stepB},
-					{SourceStepID: stepA, TargetStepID: stepC},
-					{SourceStepID: stepB, TargetStepID: stepD},
-					{SourceStepID: stepC, TargetStepID: stepD},
+					{SourceStepID: &stepA, TargetStepID: &stepB},
+					{SourceStepID: &stepA, TargetStepID: &stepC},
+					{SourceStepID: &stepB, TargetStepID: &stepD},
+					{SourceStepID: &stepC, TargetStepID: &stepD},
 				},
 			},
 			startStepID:    stepA,
@@ -639,10 +639,10 @@ func TestCollectDownstreamSteps(t *testing.T) {
 			definition: &domain.WorkflowDefinition{
 				Steps: []domain.Step{{ID: stepA}, {ID: stepB}, {ID: stepC}, {ID: stepD}},
 				Edges: []domain.Edge{
-					{SourceStepID: stepA, TargetStepID: stepB},
-					{SourceStepID: stepA, TargetStepID: stepC},
-					{SourceStepID: stepB, TargetStepID: stepD},
-					{SourceStepID: stepC, TargetStepID: stepD},
+					{SourceStepID: &stepA, TargetStepID: &stepB},
+					{SourceStepID: &stepA, TargetStepID: &stepC},
+					{SourceStepID: &stepB, TargetStepID: &stepD},
+					{SourceStepID: &stepC, TargetStepID: &stepD},
 				},
 			},
 			startStepID:    stepB,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
-import { calculateLayout } from '~/utils/graph-layout'
+import { calculateLayout, calculateLayoutWithGroups } from '~/utils/graph-layout'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -880,18 +880,41 @@ async function handleAutoLayout() {
   try {
     saving.value = true
 
-    // Calculate new positions using dagre (Left-to-Right layout)
-    // Uses default options from graph-layout.ts which snap to 20px grid
-    const layoutResults = calculateLayout(steps, edges)
+    // Check if there are block groups
+    if (blockGroups.value.length > 0) {
+      // Use layout with groups support
+      const layoutResults = calculateLayoutWithGroups(steps, edges, blockGroups.value)
 
-    // Update all step positions
-    const updatePromises = layoutResults.map(result =>
-      workflows.updateStep(workflowId, result.stepId, {
-        position: { x: result.x, y: result.y },
-      })
-    )
+      // Update all step positions
+      const stepUpdatePromises = layoutResults.steps.map(result =>
+        workflows.updateStep(workflowId, result.stepId, {
+          position: { x: result.x, y: result.y },
+        })
+      )
 
-    await Promise.all(updatePromises)
+      // Update all group positions and sizes
+      const groupUpdatePromises = layoutResults.groups.map(result =>
+        blockGroupsApi.update(workflowId, result.groupId, {
+          position: { x: result.x, y: result.y },
+          size: { width: result.width, height: result.height },
+        })
+      )
+
+      await Promise.all([...stepUpdatePromises, ...groupUpdatePromises])
+    } else {
+      // Use simple layout without groups
+      const layoutResults = calculateLayout(steps, edges)
+
+      // Update all step positions
+      const updatePromises = layoutResults.map(result =>
+        workflows.updateStep(workflowId, result.stepId, {
+          position: { x: result.x, y: result.y },
+        })
+      )
+
+      await Promise.all(updatePromises)
+    }
+
     await loadWorkflow()
   } catch (e) {
     toast.error('Failed to auto-layout', e instanceof Error ? e.message : undefined)

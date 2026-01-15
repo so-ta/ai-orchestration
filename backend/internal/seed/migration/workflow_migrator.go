@@ -38,10 +38,11 @@ type WorkflowUpdateInfo struct {
 
 // WorkflowMigrator handles workflow definition migration
 type WorkflowMigrator struct {
-	workflowRepo repository.WorkflowRepository
-	stepRepo     repository.StepRepository
-	edgeRepo     repository.EdgeRepository
-	blockRepo    repository.BlockDefinitionRepository
+	workflowRepo   repository.WorkflowRepository
+	stepRepo       repository.StepRepository
+	edgeRepo       repository.EdgeRepository
+	blockRepo      repository.BlockDefinitionRepository
+	blockGroupRepo repository.BlockGroupRepository
 }
 
 // NewWorkflowMigrator creates a new workflow migrator
@@ -60,6 +61,12 @@ func NewWorkflowMigrator(
 // WithBlockRepo sets the block definition repository for resolving block slugs
 func (m *WorkflowMigrator) WithBlockRepo(blockRepo repository.BlockDefinitionRepository) *WorkflowMigrator {
 	m.blockRepo = blockRepo
+	return m
+}
+
+// WithBlockGroupRepo sets the block group repository for creating block groups
+func (m *WorkflowMigrator) WithBlockGroupRepo(blockGroupRepo repository.BlockGroupRepository) *WorkflowMigrator {
+	m.blockGroupRepo = blockGroupRepo
 	return m
 }
 
@@ -152,22 +159,92 @@ func (m *WorkflowMigrator) createWorkflow(ctx context.Context, seedWorkflow *wor
 		return "", fmt.Errorf("failed to create workflow: %w", err)
 	}
 
+	// Create block groups and build temp_id -> actual_id mapping
+	groupIDMap, err := m.createBlockGroups(ctx, seedWorkflow, tenantID, workflowID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create block groups: %w", err)
+	}
+
 	// Create steps and build temp_id -> actual_id mapping
-	stepIDMap, err := m.createSteps(ctx, seedWorkflow, tenantID, workflowID)
+	stepIDMap, err := m.createSteps(ctx, seedWorkflow, tenantID, workflowID, groupIDMap)
 	if err != nil {
 		return "", fmt.Errorf("failed to create steps: %w", err)
 	}
 
-	// Create edges using the step ID mapping
-	if err := m.createEdges(ctx, seedWorkflow, tenantID, workflowID, stepIDMap); err != nil {
+	// Create edges using the step ID and group ID mappings
+	if err := m.createEdgesWithGroupMap(ctx, seedWorkflow, tenantID, workflowID, stepIDMap, groupIDMap); err != nil {
 		return "", fmt.Errorf("failed to create edges: %w", err)
 	}
 
 	return "created", nil
 }
 
+// createBlockGroups creates all block groups for a workflow and returns a temp_id -> group_id mapping
+func (m *WorkflowMigrator) createBlockGroups(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID) (map[string]uuid.UUID, error) {
+	groupIDMap := make(map[string]uuid.UUID)
+
+	if len(seedWorkflow.BlockGroups) == 0 || m.blockGroupRepo == nil {
+		return groupIDMap, nil
+	}
+
+	now := time.Now().UTC()
+
+	// First pass: create all groups without parent references
+	for _, seedGroup := range seedWorkflow.BlockGroups {
+		groupID := uuid.New()
+		groupIDMap[seedGroup.TempID] = groupID
+
+		width := seedGroup.Width
+		if width == 0 {
+			width = 400
+		}
+		height := seedGroup.Height
+		if height == 0 {
+			height = 300
+		}
+
+		var preProcess, postProcess *string
+		if seedGroup.PreProcess != "" {
+			preProcess = &seedGroup.PreProcess
+		}
+		if seedGroup.PostProcess != "" {
+			postProcess = &seedGroup.PostProcess
+		}
+
+		group := &domain.BlockGroup{
+			ID:          groupID,
+			TenantID:    tenantID,
+			WorkflowID:  workflowID,
+			Name:        seedGroup.Name,
+			Type:        domain.BlockGroupType(seedGroup.Type),
+			Config:      seedGroup.Config,
+			PreProcess:  preProcess,
+			PostProcess: postProcess,
+			PositionX:   seedGroup.PositionX,
+			PositionY:   seedGroup.PositionY,
+			Width:       width,
+			Height:      height,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+
+		// Set parent group if specified
+		if seedGroup.ParentTempID != "" {
+			if parentID, ok := groupIDMap[seedGroup.ParentTempID]; ok {
+				group.ParentGroupID = &parentID
+			}
+		}
+
+		if err := m.blockGroupRepo.Create(ctx, group); err != nil {
+			return nil, fmt.Errorf("failed to create block group %s: %w", seedGroup.Name, err)
+		}
+	}
+
+	return groupIDMap, nil
+}
+
 // createSteps creates all steps for a workflow and returns a temp_id -> step_id mapping
-func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID) (map[string]uuid.UUID, error) {
+func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, groupIDMap map[string]uuid.UUID) (map[string]uuid.UUID, error) {
 	stepIDMap := make(map[string]uuid.UUID)
 	now := time.Now().UTC()
 
@@ -195,19 +272,29 @@ func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workfl
 			}
 		}
 
+		// Resolve block group ID from temp_id
+		var blockGroupID *uuid.UUID
+		if seedStep.BlockGroupTempID != "" {
+			if gid, ok := groupIDMap[seedStep.BlockGroupTempID]; ok {
+				blockGroupID = &gid
+			}
+		}
+
 		step := &domain.Step{
-			ID:                stepID,
-			TenantID:          tenantID,
-			WorkflowID:        workflowID,
-			Name:              seedStep.Name,
-			Type:              domain.StepType(seedStep.Type),
-			Config:            seedStep.Config,
-			PositionX:         seedStep.PositionX,
-			PositionY:         seedStep.PositionY,
-			BlockDefinitionID: blockDefID,
+			ID:                 stepID,
+			TenantID:           tenantID,
+			WorkflowID:         workflowID,
+			Name:               seedStep.Name,
+			Type:               domain.StepType(seedStep.Type),
+			Config:             seedStep.Config,
+			PositionX:          seedStep.PositionX,
+			PositionY:          seedStep.PositionY,
+			BlockDefinitionID:  blockDefID,
+			BlockGroupID:       blockGroupID,
+			GroupRole:          "body", // Default role for steps in block groups
 			CredentialBindings: json.RawMessage(`{}`),
-			CreatedAt:         now,
-			UpdatedAt:         now,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
 
 		if err := m.stepRepo.Create(ctx, step); err != nil {
@@ -220,17 +307,62 @@ func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workfl
 
 // createEdges creates all edges for a workflow
 func (m *WorkflowMigrator) createEdges(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, stepIDMap map[string]uuid.UUID) error {
+	// Build group ID map from current workflow's block groups
+	groupIDMap := make(map[string]uuid.UUID)
+	if m.blockGroupRepo != nil {
+		groups, err := m.blockGroupRepo.ListByWorkflow(ctx, tenantID, workflowID)
+		if err == nil {
+			for _, group := range groups {
+				// Match by name to find temp_id (from seed)
+				for _, seedGroup := range seedWorkflow.BlockGroups {
+					if seedGroup.Name == group.Name {
+						groupIDMap[seedGroup.TempID] = group.ID
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return m.createEdgesWithGroupMap(ctx, seedWorkflow, tenantID, workflowID, stepIDMap, groupIDMap)
+}
+
+// createEdgesWithGroupMap creates all edges for a workflow with explicit group ID mapping
+func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, stepIDMap map[string]uuid.UUID, groupIDMap map[string]uuid.UUID) error {
 	now := time.Now().UTC()
 
 	for _, seedEdge := range seedWorkflow.Edges {
-		sourceID, ok := stepIDMap[seedEdge.SourceTempID]
-		if !ok {
-			return fmt.Errorf("invalid source_temp_id: %s", seedEdge.SourceTempID)
+		var sourceStepID, targetStepID *uuid.UUID
+		var sourceGroupID, targetGroupID *uuid.UUID
+
+		// Resolve source (step or group)
+		if seedEdge.SourceTempID != "" {
+			id, ok := stepIDMap[seedEdge.SourceTempID]
+			if !ok {
+				return fmt.Errorf("invalid source_temp_id: %s", seedEdge.SourceTempID)
+			}
+			sourceStepID = &id
+		} else if seedEdge.SourceGroupTempID != "" {
+			id, ok := groupIDMap[seedEdge.SourceGroupTempID]
+			if !ok {
+				return fmt.Errorf("invalid source_group_temp_id: %s", seedEdge.SourceGroupTempID)
+			}
+			sourceGroupID = &id
 		}
 
-		targetID, ok := stepIDMap[seedEdge.TargetTempID]
-		if !ok {
-			return fmt.Errorf("invalid target_temp_id: %s", seedEdge.TargetTempID)
+		// Resolve target (step or group)
+		if seedEdge.TargetTempID != "" {
+			id, ok := stepIDMap[seedEdge.TargetTempID]
+			if !ok {
+				return fmt.Errorf("invalid target_temp_id: %s", seedEdge.TargetTempID)
+			}
+			targetStepID = &id
+		} else if seedEdge.TargetGroupTempID != "" {
+			id, ok := groupIDMap[seedEdge.TargetGroupTempID]
+			if !ok {
+				return fmt.Errorf("invalid target_group_temp_id: %s", seedEdge.TargetGroupTempID)
+			}
+			targetGroupID = &id
 		}
 
 		var condition *string
@@ -239,15 +371,17 @@ func (m *WorkflowMigrator) createEdges(ctx context.Context, seedWorkflow *workfl
 		}
 
 		edge := &domain.Edge{
-			ID:           uuid.New(),
-			TenantID:     tenantID,
-			WorkflowID:   workflowID,
-			SourceStepID: sourceID,
-			TargetStepID: targetID,
-			SourcePort:   seedEdge.SourcePort,
-			TargetPort:   seedEdge.TargetPort,
-			Condition:    condition,
-			CreatedAt:    now,
+			ID:                 uuid.New(),
+			TenantID:           tenantID,
+			WorkflowID:         workflowID,
+			SourceStepID:       sourceStepID,
+			TargetStepID:       targetStepID,
+			SourceBlockGroupID: sourceGroupID,
+			TargetBlockGroupID: targetGroupID,
+			SourcePort:         seedEdge.SourcePort,
+			TargetPort:         seedEdge.TargetPort,
+			Condition:          condition,
+			CreatedAt:          now,
 		}
 
 		if err := m.edgeRepo.Create(ctx, edge); err != nil {
@@ -281,8 +415,8 @@ func (m *WorkflowMigrator) updateWorkflow(ctx context.Context, existing *domain.
 		return "", fmt.Errorf("failed to update workflow: %w", err)
 	}
 
-	// Delete existing steps and edges, then recreate
-	// This is simpler than trying to diff and update individual steps/edges
+	// Delete existing steps, edges, and block groups, then recreate
+	// This is simpler than trying to diff and update individual items
 	existingSteps, err := m.stepRepo.ListByWorkflow(ctx, tenantID, existing.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to list existing steps: %w", err)
@@ -300,20 +434,38 @@ func (m *WorkflowMigrator) updateWorkflow(ctx context.Context, existing *domain.
 		}
 	}
 
-	// Delete steps
+	// Delete steps (before block groups due to foreign key)
 	for _, step := range existingSteps {
 		if err := m.stepRepo.Delete(ctx, tenantID, existing.ID, step.ID); err != nil {
 			return "", fmt.Errorf("failed to delete step: %w", err)
 		}
 	}
 
-	// Recreate steps and edges
-	stepIDMap, err := m.createSteps(ctx, seedWorkflow, tenantID, existing.ID)
+	// Delete existing block groups
+	if m.blockGroupRepo != nil {
+		existingGroups, err := m.blockGroupRepo.ListByWorkflow(ctx, tenantID, existing.ID)
+		if err != nil {
+			return "", fmt.Errorf("failed to list existing block groups: %w", err)
+		}
+		for _, group := range existingGroups {
+			if err := m.blockGroupRepo.Delete(ctx, tenantID, group.ID); err != nil {
+				return "", fmt.Errorf("failed to delete block group: %w", err)
+			}
+		}
+	}
+
+	// Recreate block groups, steps, and edges
+	groupIDMap, err := m.createBlockGroups(ctx, seedWorkflow, tenantID, existing.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create block groups: %w", err)
+	}
+
+	stepIDMap, err := m.createSteps(ctx, seedWorkflow, tenantID, existing.ID, groupIDMap)
 	if err != nil {
 		return "", fmt.Errorf("failed to create steps: %w", err)
 	}
 
-	if err := m.createEdges(ctx, seedWorkflow, tenantID, existing.ID, stepIDMap); err != nil {
+	if err := m.createEdgesWithGroupMap(ctx, seedWorkflow, tenantID, existing.ID, stepIDMap, groupIDMap); err != nil {
 		return "", fmt.Errorf("failed to create edges: %w", err)
 	}
 

@@ -912,14 +912,14 @@ func TestExecutor_FullWorkflowWithNewSteps(t *testing.T) {
 			{
 				ID:           uuid.New(),
 				WorkflowID:   workflowID,
-				SourceStepID: startStep.ID,
-				TargetStepID: loopStep.ID,
+				SourceStepID: &startStep.ID,
+				TargetStepID: &loopStep.ID,
 			},
 			{
 				ID:           uuid.New(),
 				WorkflowID:   workflowID,
-				SourceStepID: loopStep.ID,
-				TargetStepID: waitStep.ID,
+				SourceStepID: &loopStep.ID,
+				TargetStepID: &waitStep.ID,
 			},
 		},
 	}

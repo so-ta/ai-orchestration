@@ -498,10 +498,12 @@ func (u *WorkflowUsecase) ValidateDAG(workflow *domain.Workflow) error {
 
 // hasCycle checks if the DAG contains a cycle using DFS
 func hasCycle(steps []domain.Step, edges []domain.Edge) bool {
-	// Build adjacency list
+	// Build adjacency list (only for step-to-step edges)
 	adj := make(map[uuid.UUID][]uuid.UUID)
 	for _, edge := range edges {
-		adj[edge.SourceStepID] = append(adj[edge.SourceStepID], edge.TargetStepID)
+		if edge.SourceStepID != nil && edge.TargetStepID != nil {
+			adj[*edge.SourceStepID] = append(adj[*edge.SourceStepID], *edge.TargetStepID)
+		}
 	}
 
 	// Track visited states: 0 = unvisited, 1 = visiting, 2 = visited
@@ -542,8 +544,12 @@ func hasUnconnectedSteps(steps []domain.Step, edges []domain.Edge) bool {
 
 	connected := make(map[uuid.UUID]bool)
 	for _, edge := range edges {
-		connected[edge.SourceStepID] = true
-		connected[edge.TargetStepID] = true
+		if edge.SourceStepID != nil {
+			connected[*edge.SourceStepID] = true
+		}
+		if edge.TargetStepID != nil {
+			connected[*edge.TargetStepID] = true
+		}
 	}
 
 	for _, step := range steps {
@@ -573,8 +579,8 @@ func (u *WorkflowUsecase) deriveInputSchemaFromFirstStep(ctx context.Context, st
 	// 2. Find first step after Start
 	var firstStepID uuid.UUID
 	for _, edge := range edges {
-		if edge.SourceStepID == startStepID {
-			firstStepID = edge.TargetStepID
+		if edge.SourceStepID != nil && *edge.SourceStepID == startStepID && edge.TargetStepID != nil {
+			firstStepID = *edge.TargetStepID
 			break
 		}
 	}

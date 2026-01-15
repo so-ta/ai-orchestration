@@ -624,10 +624,12 @@ func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInp
 
 // collectDownstreamSteps collects all steps reachable from the starting step (BFS)
 func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUID) []uuid.UUID {
-	// Build adjacency list
+	// Build adjacency list (only for step-to-step edges)
 	outEdges := make(map[uuid.UUID][]uuid.UUID)
 	for _, edge := range def.Edges {
-		outEdges[edge.SourceStepID] = append(outEdges[edge.SourceStepID], edge.TargetStepID)
+		if edge.SourceStepID != nil && edge.TargetStepID != nil {
+			outEdges[*edge.SourceStepID] = append(outEdges[*edge.SourceStepID], *edge.TargetStepID)
+		}
 	}
 
 	// BFS to collect all downstream steps
