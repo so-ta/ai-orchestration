@@ -311,4 +311,4 @@ open coverage/index.html
 
 - [FRONTEND.md](../../docs/FRONTEND.md) - Frontend architecture
 - [CLAUDE.md](../../CLAUDE.md) - Project conventions
-- [TEST_PLAN.md](../../docs/TEST_PLAN.md) - Overall test plan
+- [TESTING.md](../../docs/TESTING.md) - Test integration guide

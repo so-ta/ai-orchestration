@@ -375,12 +375,12 @@ func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
 
 **対策:**
 - コード変更と同時にドキュメントを更新
-- [DOCUMENTATION_SYNC.md](./DOCUMENTATION_SYNC.md) の更新マッピングを参照
+- [DOCUMENTATION.md](../DOCUMENTATION.md) の更新マッピングを参照
 
 ---
 
 ## Related Documents
 
 - [GIT_RULES.md](./GIT_RULES.md) - Git操作ルール
-- [TESTING_RULES.md](./TESTING_RULES.md) - テストルール
-- [DOCUMENTATION_SYNC.md](./DOCUMENTATION_SYNC.md) - ドキュメント同期
+- [TESTING.md](../TESTING.md) - テスト統合ガイド
+- [DOCUMENTATION.md](../DOCUMENTATION.md) - ドキュメント作成ガイド

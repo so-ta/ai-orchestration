@@ -1,7 +1,7 @@
 # Backend Testing Guidelines
 
 > **Last Updated**: 2026-01-12
-> **Related**: [TEST_PLAN.md](./TEST_PLAN.md), [BACKEND.md](./BACKEND.md)
+> **Related**: [TESTING.md](./TESTING.md), [BACKEND.md](./BACKEND.md)
 
 このドキュメントはGoバックエンドのテストガイドラインを定義します。
 
@@ -704,6 +704,6 @@ fi
 
 | Document | Description |
 |----------|-------------|
-| [TEST_PLAN.md](./TEST_PLAN.md) | Overall test plan and phases |
+| [TESTING.md](./TESTING.md) | Test integration guide |
 | [BACKEND.md](./BACKEND.md) | Backend architecture |
 | [frontend/docs/TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules |

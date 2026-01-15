@@ -212,5 +212,5 @@ func TestCreateWorkflow(t *testing.T) {
 | [docs/BACKEND.md](./docs/BACKEND.md) | バックエンド構造 |
 | [docs/FRONTEND.md](./docs/FRONTEND.md) | フロントエンド構造 |
 | [docs/API.md](./docs/API.md) | API仕様 |
-| [docs/TEST_PLAN.md](./docs/TEST_PLAN.md) | テスト計画 |
+| [docs/TESTING.md](./docs/TESTING.md) | テスト統合ガイド |
 | [docs/designs/UNIFIED_BLOCK_MODEL.md](./docs/designs/UNIFIED_BLOCK_MODEL.md) | ブロックアーキテクチャ |

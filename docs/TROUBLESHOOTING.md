@@ -509,7 +509,7 @@ docker compose restart api worker
 
 **症状**: コードと仕様書が乖離
 
-**対処**: [DOCUMENTATION_SYNC.md](./rules/DOCUMENTATION_SYNC.md) を参照
+**対処**: [DOCUMENTATION.md](./DOCUMENTATION.md) を参照
 
 ---
 
@@ -550,7 +550,7 @@ docker compose restart api worker
 ## Related Documents
 
 - [WORKFLOW_RULES.md](./rules/WORKFLOW_RULES.md) - 開発ワークフロー全般
-- [TESTING_RULES.md](./rules/TESTING_RULES.md) - テスト作成・実行
+- [TESTING.md](./TESTING.md) - テスト統合ガイド
 - [GIT_RULES.md](./rules/GIT_RULES.md) - Git 操作ルール
 - [BACKEND.md](./BACKEND.md) - バックエンド構造
 - [FRONTEND.md](./FRONTEND.md) - フロントエンド構造
