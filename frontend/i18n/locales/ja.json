@@ -691,8 +691,10 @@
         "skip": "スキップ",
         "skipDesc": "次のステップへ続行",
         "fallback": "フォールバック",
-        "fallbackDesc": "フォールバック値を返す",
-        "fallbackValue": "フォールバック値（JSON）"
+        "fallbackDesc": "フォールバック値を返す、またはエラーポートにルーティング",
+        "fallbackValue": "フォールバック値（JSON）",
+        "enableErrorPort": "エラーポートを使用",
+        "enableErrorPortDesc": "静的なフォールバック値ではなく、エラーを「error」出力ポートにルーティング"
       }
     },
     "comingSoon": "近日公開",
