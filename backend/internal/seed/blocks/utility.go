@@ -53,7 +53,7 @@ func CodeBlock() *SystemBlockDefinition {
 				"code": {
 					"type": "string",
 					"title": "コード",
-					"description": "JavaScript code to execute",
+					"description": "JavaScript code to execute. Use 'return { port: \"portName\", data: {...} }' to specify output port.",
 					"x-ui-widget": "code"
 				},
 				"output_schema": {
@@ -61,6 +61,19 @@ func CodeBlock() *SystemBlockDefinition {
 					"title": "出力スキーマ",
 					"description": "出力データのスキーマを定義（定義されたフィールドのみが次のステップに渡されます）",
 					"x-ui-widget": "output-schema"
+				},
+				"custom_output_ports": {
+					"type": "array",
+					"title": "カスタム出力ポート",
+					"description": "コードから指定可能な出力ポート名を定義します。return { port: \"portName\", data: {...} } で出力先を指定できます。",
+					"items": {"type": "string"},
+					"default": []
+				},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "エラーハンドルを有効化",
+					"description": "エラー発生時に専用のエラーポートに出力します",
+					"default": false
 				}
 			}
 		}`),
@@ -102,6 +115,7 @@ func FunctionBlock() *SystemBlockDefinition {
 				"code": {
 					"type": "string",
 					"title": "コード",
+					"description": "JavaScript code to execute. Use 'return { port: \"portName\", data: {...} }' to specify output port.",
 					"x-ui-widget": "code"
 				},
 				"language": {
@@ -114,6 +128,19 @@ func FunctionBlock() *SystemBlockDefinition {
 					"title": "出力スキーマ",
 					"description": "出力データのスキーマを定義（定義されたフィールドのみが次のステップに渡されます）",
 					"x-ui-widget": "output-schema"
+				},
+				"custom_output_ports": {
+					"type": "array",
+					"title": "カスタム出力ポート",
+					"description": "コードから指定可能な出力ポート名を定義します。return { port: \"portName\", data: {...} } で出力先を指定できます。",
+					"items": {"type": "string"},
+					"default": []
+				},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "エラーハンドルを有効化",
+					"description": "エラー発生時に専用のエラーポートに出力します",
+					"default": false
 				}
 			}
 		}`),

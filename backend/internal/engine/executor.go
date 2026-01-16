@@ -83,6 +83,7 @@ type ExecutionContext struct {
 	Definition      *domain.WorkflowDefinition
 	StepRuns        map[uuid.UUID]*domain.StepRun
 	StepData        map[uuid.UUID]json.RawMessage // step outputs
+	StepOutputPorts map[uuid.UUID]string          // output port used by each step (for port-based routing)
 	GroupData       map[uuid.UUID]json.RawMessage // block group outputs
 	InjectedOutputs map[string]json.RawMessage    // pre-injected outputs for partial execution
 	sequenceCounter int                           // counter for step execution order within an attempt
@@ -96,6 +97,7 @@ func NewExecutionContext(run *domain.Run, def *domain.WorkflowDefinition) *Execu
 		Definition:      def,
 		StepRuns:        make(map[uuid.UUID]*domain.StepRun),
 		StepData:        make(map[uuid.UUID]json.RawMessage),
+		StepOutputPorts: make(map[uuid.UUID]string),
 		GroupData:       make(map[uuid.UUID]json.RawMessage),
 		InjectedOutputs: make(map[string]json.RawMessage),
 	}
@@ -484,7 +486,13 @@ func (e *Executor) executeNodes(ctx context.Context, execCtx *ExecutionContext, 
 func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionContext, graph *Graph, currentStepID uuid.UUID, completed, completedGroups map[uuid.UUID]bool, mu *sync.Mutex) error {
 	execCtx.mu.RLock()
 	currentOutput := execCtx.StepData[currentStepID]
+	currentOutputPort := execCtx.StepOutputPorts[currentStepID]
 	execCtx.mu.RUnlock()
+
+	// Default output port if not set
+	if currentOutputPort == "" {
+		currentOutputPort = "output"
+	}
 
 	for _, edge := range graph.OutEdges[currentStepID] {
 		// Only process step-to-group edges
@@ -492,6 +500,18 @@ func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionCont
 			continue
 		}
 		groupID := *edge.TargetBlockGroupID
+
+		// Port-based routing for step-to-group edges
+		if edge.SourcePort != "" {
+			if edge.SourcePort != currentOutputPort {
+				continue
+			}
+		} else {
+			// No port specified - only trigger on default "output" port
+			if currentOutputPort != "output" {
+				continue
+			}
+		}
 
 		// Check if group already completed
 		mu.Lock()
@@ -671,10 +691,16 @@ func (e *Executor) executeFromGroupOutput(ctx context.Context, execCtx *Executio
 func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext, graph *Graph, currentID uuid.UUID, completed, completedGroups map[uuid.UUID]bool, mu *sync.Mutex) []uuid.UUID {
 	var nextNodes []uuid.UUID
 
-	// Get the output of current step for edge condition evaluation
+	// Get the output and output port of current step
 	execCtx.mu.RLock()
 	currentOutput := execCtx.StepData[currentID]
+	currentOutputPort := execCtx.StepOutputPorts[currentID]
 	execCtx.mu.RUnlock()
+
+	// Default output port if not set
+	if currentOutputPort == "" {
+		currentOutputPort = "output"
+	}
 
 	for _, edge := range graph.OutEdges[currentID] {
 		// Skip edges to groups (handled separately)
@@ -687,6 +713,29 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 			continue
 		}
 		targetID := *edge.TargetStepID
+
+		// Port-based routing: check if edge source port matches step output port
+		if edge.SourcePort != "" {
+			// Edge has explicit port requirement - must match
+			if edge.SourcePort != currentOutputPort {
+				e.logger.Debug("Edge skipped due to port mismatch",
+					"edge_id", edge.ID,
+					"edge_port", edge.SourcePort,
+					"output_port", currentOutputPort,
+				)
+				continue
+			}
+		} else {
+			// Edge has no port requirement - only match default "output" port
+			// This ensures edges without port specification don't trigger on error/custom ports
+			if currentOutputPort != "output" {
+				e.logger.Debug("Edge skipped: no port specified, but output is non-default",
+					"edge_id", edge.ID,
+					"output_port", currentOutputPort,
+				)
+				continue
+			}
+		}
 
 		// Evaluate edge condition if present
 		if edge.Condition != nil && *edge.Condition != "" {
@@ -829,22 +878,54 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		}
 	}
 
-	if err != nil {
-		stepRun.Fail(err.Error())
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		e.logger.Error("Step execution failed",
-			"run_id", execCtx.Run.ID,
-			"step_id", step.ID,
-			"error", err,
-		)
-		return err
-	}
+	// Determine output port (default is "output")
+	outputPort := "output"
 
-	stepRun.Complete(output)
+	if err != nil {
+		// Check if error port is enabled in step config
+		enableErrorPort := getConfigBool(step.Config, "enable_error_port")
+		if enableErrorPort && e.hasEdgeFromPort(graph, step.ID, "error") {
+			// Route to error port instead of failing
+			errorOutput := map[string]interface{}{
+				"error": map[string]interface{}{
+					"message": err.Error(),
+					"type":    "execution_error",
+				},
+				"input": json.RawMessage(input),
+			}
+			output, _ = json.Marshal(errorOutput)
+			outputPort = "error"
+
+			stepRun.Complete(output)
+			e.logger.Info("Step error routed to error port",
+				"run_id", execCtx.Run.ID,
+				"step_id", step.ID,
+				"error", err.Error(),
+			)
+		} else {
+			// Normal error handling - fail the step
+			stepRun.Fail(err.Error())
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			e.logger.Error("Step execution failed",
+				"run_id", execCtx.Run.ID,
+				"step_id", step.ID,
+				"error", err,
+			)
+			return err
+		}
+	} else {
+		// Check for custom output port in output (for code blocks)
+		// extractOutputPortAndData also unwraps { port, data } format to just data
+		var cleanedOutput json.RawMessage
+		outputPort, cleanedOutput = e.extractOutputPortAndData(step, output)
+		output = cleanedOutput
+		stepRun.Complete(output)
+	}
 
 	execCtx.mu.Lock()
 	execCtx.StepData[step.ID] = output
+	execCtx.StepOutputPorts[step.ID] = outputPort
 	execCtx.mu.Unlock()
 
 	if stepRun.DurationMs != nil {
@@ -855,10 +936,107 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	e.logger.Info("Step completed",
 		"run_id", execCtx.Run.ID,
 		"step_id", step.ID,
+		"output_port", outputPort,
 		"duration_ms", stepRun.DurationMs,
 	)
 
 	return nil
+}
+
+// getConfigBool extracts a boolean value from step config
+func getConfigBool(config json.RawMessage, key string) bool {
+	if config == nil {
+		return false
+	}
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return false
+	}
+	if val, ok := configMap[key].(bool); ok {
+		return val
+	}
+	return false
+}
+
+// getConfigStringArray extracts a string array from step config
+func getConfigStringArray(config json.RawMessage, key string) []string {
+	if config == nil {
+		return nil
+	}
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return nil
+	}
+	if val, ok := configMap[key].([]interface{}); ok {
+		result := make([]string, 0, len(val))
+		for _, v := range val {
+			if s, ok := v.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+// hasEdgeFromPort checks if there's an edge from the step with the specified source port
+func (e *Executor) hasEdgeFromPort(graph *Graph, stepID uuid.UUID, portName string) bool {
+	for _, edge := range graph.OutEdges[stepID] {
+		if edge.SourcePort == portName {
+			return true
+		}
+	}
+	return false
+}
+
+// extractOutputPortAndData extracts the output port and actual data from step output
+// For code blocks with custom ports, it looks for { port: "portName", data: {...} } format
+// Returns (outputPort, cleanedOutput) where cleanedOutput has port wrapper and __port field removed
+func (e *Executor) extractOutputPortAndData(step domain.Step, output json.RawMessage) (string, json.RawMessage) {
+	// Check if this is a code/function block with custom output ports
+	customPorts := getConfigStringArray(step.Config, "custom_output_ports")
+	if len(customPorts) == 0 {
+		// Check for __port in output (used by condition/switch blocks)
+		var outputMap map[string]interface{}
+		if err := json.Unmarshal(output, &outputMap); err == nil {
+			if port, ok := outputMap["__port"].(string); ok {
+				// Remove __port from output to avoid leaking internal field to next step
+				delete(outputMap, "__port")
+				cleanedOutput, err := json.Marshal(outputMap)
+				if err != nil {
+					return port, output // fallback to original if marshal fails
+				}
+				return port, cleanedOutput
+			}
+		}
+		return "output", output
+	}
+
+	// Try to parse as { port: "...", data: {...} } format
+	var portOutput struct {
+		Port string          `json:"port"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(output, &portOutput); err == nil && portOutput.Port != "" {
+		// Validate that the port is in custom_output_ports
+		for _, p := range customPorts {
+			if p == portOutput.Port {
+				// Return the data field content (unwrapped) instead of the full output
+				if portOutput.Data != nil && len(portOutput.Data) > 0 {
+					return portOutput.Port, portOutput.Data
+				}
+				return portOutput.Port, output
+			}
+		}
+		// Port not in allowed list - use default
+		e.logger.Warn("Invalid output port specified, using default",
+			"step_id", step.ID,
+			"specified_port", portOutput.Port,
+			"allowed_ports", customPorts,
+		)
+	}
+
+	return "output", output
 }
 
 func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step) (json.RawMessage, error) {

@@ -34,7 +34,13 @@ func LLMBlock() *SystemBlockDefinition {
 				"max_tokens": {"type": "integer", "default": 4096, "maximum": 128000},
 				"temperature": {"type": "number", "default": 0.7, "maximum": 2},
 				"user_prompt": {"type": "string", "maxLength": 50000},
-				"system_prompt": {"type": "string", "maxLength": 10000}
+				"system_prompt": {"type": "string", "maxLength": 10000},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "エラーハンドルを有効化",
+					"description": "エラー発生時に専用のエラーポートに出力します",
+					"default": false
+				}
 			}
 		}`),
 		InputSchema: json.RawMessage(`{

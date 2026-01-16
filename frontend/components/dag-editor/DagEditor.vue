@@ -196,12 +196,37 @@ function getOutputPorts(stepType: string, step?: Step): OutputPort[] {
     return dynamicPorts
   }
 
-  const ports = outputPortsMap.value.get(stepType)
-  if (ports && ports.length > 0) {
-    return ports
+  // Build output ports dynamically from block definition and step config
+  let basePorts = outputPortsMap.value.get(stepType) || []
+  if (basePorts.length === 0) {
+    basePorts = [{ name: 'output', label: 'Output', is_default: true }]
   }
-  // Default single output port
-  return [{ name: 'output', label: 'Output', is_default: true }]
+
+  // Check for custom_output_ports in config (for code/function blocks)
+  const customOutputPorts = config?.custom_output_ports as string[] | undefined
+  if (customOutputPorts && customOutputPorts.length > 0) {
+    // Replace default ports with custom ports
+    basePorts = customOutputPorts.map((name, index) => ({
+      name,
+      label: name,
+      is_default: index === 0,
+    }))
+  }
+
+  // Check for enable_error_port in config
+  const enableErrorPort = config?.enable_error_port as boolean | undefined
+  if (enableErrorPort) {
+    // Add error port if not already present
+    const hasErrorPort = basePorts.some(p => p.name === 'error')
+    if (!hasErrorPort) {
+      basePorts = [
+        ...basePorts,
+        { name: 'error', label: 'Error', is_default: false }
+      ]
+    }
+  }
+
+  return basePorts
 }
 
 // Check if a step type has multiple inputs
