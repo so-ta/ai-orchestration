@@ -96,11 +96,41 @@ const emit = defineEmits<{
   }): void
 }>()
 
-const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode } = useVueFlow()
+const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, getNodes, viewport } = useVueFlow()
 const toast = useToast()
 
 // Selected edge for deletion
 const selectedEdgeId = ref<string | null>(null)
+
+// Compute selected edge position for delete button
+const selectedEdgePosition = computed(() => {
+  if (!selectedEdgeId.value) return null
+
+  const selectedEdge = flowEdges.value.find(e => e.id === selectedEdgeId.value)
+  if (!selectedEdge) return null
+
+  const nodes = getNodes.value
+  const sourceNode = nodes.find(n => n.id === selectedEdge.source)
+  const targetNode = nodes.find(n => n.id === selectedEdge.target)
+
+  if (!sourceNode || !targetNode) return null
+
+  // Calculate midpoint between source and target
+  const sourceX = sourceNode.position.x + (sourceNode.dimensions?.width || 180) / 2
+  const sourceY = sourceNode.position.y + (sourceNode.dimensions?.height || 60) / 2
+  const targetX = targetNode.position.x + (targetNode.dimensions?.width || 180) / 2
+  const targetY = targetNode.position.y + (targetNode.dimensions?.height || 60) / 2
+
+  // Midpoint in flow coordinates
+  const midX = (sourceX + targetX) / 2
+  const midY = (sourceY + targetY) / 2
+
+  // Convert to screen coordinates using viewport
+  const screenX = midX * viewport.value.zoom + viewport.value.x
+  const screenY = midY * viewport.value.zoom + viewport.value.y
+
+  return { x: screenX, y: screenY - 30 } // Offset above the edge
+})
 
 // Drag state
 const isDragOver = ref(false)
@@ -1044,8 +1074,11 @@ const flowEdges = computed<FlowEdge[]>(() => {
       label: getEdgeLabel(edge.source_port, edge.condition),
       labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
       labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
+      labelShowBg: true,
       style: { stroke: color, strokeWidth },
       markerEnd: { type: MarkerType.ArrowClosed, color },
+      interactionWidth: 20, // Make edge easier to click
+      data: { isSelected, edgeId: edge.id },
     })
   }
 
@@ -1787,6 +1820,9 @@ onNodeDragStop((event) => {
 
 // Handle node click
 function onNodeClick(event: { node: Node }) {
+  // Clear edge selection when clicking on a node
+  selectedEdgeId.value = null
+
   // Check if this is a group node
   if (event.node.type === 'group') {
     emit('group:select', event.node.data.group)
@@ -2613,7 +2649,29 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
         :node-color="(node: Node) => node.type === 'group' ? node.data.color : getStepColor(node.data.type)"
         class="dag-minimap"
       />
+
     </VueFlow>
+
+    <!-- Edge Delete Button (positioned at edge center) -->
+    <div
+      v-if="selectedEdgePosition && !readonly"
+      class="edge-delete-button-container"
+      :style="{
+        left: `${selectedEdgePosition.x}px`,
+        top: `${selectedEdgePosition.y}px`,
+      }"
+    >
+      <button
+        class="edge-delete-button-floating"
+        @click.stop="handleDeleteSelectedEdge"
+        title="エッジを削除 (Delete)"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      </button>
+    </div>
 
     <!-- Drop indicator overlay -->
     <div v-if="isDragOver" class="drop-indicator">
@@ -2630,22 +2688,6 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
       Drag blocks here to add steps
     </div>
 
-    <!-- Edge selection toolbar -->
-    <div v-if="selectedEdgeId && !readonly" class="edge-selection-toolbar">
-      <button
-        class="edge-delete-button"
-        @click="handleDeleteSelectedEdge"
-        title="エッジを削除 (Delete/Backspace)"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          <line x1="10" y1="11" x2="10" y2="17"></line>
-          <line x1="14" y1="11" x2="14" y2="17"></line>
-        </svg>
-        <span>エッジを削除</span>
-      </button>
-    </div>
   </div>
 </template>
 
@@ -3285,48 +3327,39 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   opacity: 1;
 }
 
-/* Edge Selection Toolbar */
-.edge-selection-toolbar {
+/* Edge Delete Button (floating on selected edge) */
+.edge-delete-button-container {
   position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
 }
 
-.edge-delete-button {
+.edge-delete-button-floating {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: white;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.edge-delete-button:hover {
+.edge-delete-button-floating:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.edge-delete-button-floating:active {
   background: #fee2e2;
-  border-color: #fca5a5;
-}
-
-.edge-delete-button:active {
-  background: #fecaca;
-}
-
-.edge-delete-button svg {
-  flex-shrink: 0;
+  transform: scale(0.95);
 }
 </style>

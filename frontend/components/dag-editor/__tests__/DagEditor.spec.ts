@@ -24,6 +24,8 @@ vi.mock('@vue-flow/core', () => ({
     onEdgeClick: vi.fn(),
     project: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
     updateNode: vi.fn(),
+    getNodes: { value: [] },
+    viewport: { value: { x: 0, y: 0, zoom: 1 } },
   }),
   Handle: defineComponent({
     name: 'Handle',
