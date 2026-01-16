@@ -317,7 +317,7 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	}
 }
 
-// executeCustomOrPassthrough handles custom block execution or passes through for unknown types.
+// executeCustomOrPassthrough handles custom block execution or returns error for unknown types.
 func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
 	// First check by BlockDefinitionID
 	if step.BlockDefinitionID != nil {
@@ -327,13 +327,13 @@ func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *Exec
 	if e.blockDefRepo != nil {
 		return e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
 	}
-	// For unimplemented types without block definition, log warning and pass through
-	e.logger.Warn("Unknown step type without block definition, passing through input",
+	// Unknown step type without block definition - return error to fail workflow explicitly
+	e.logger.Error("Unknown step type without block definition",
 		"step_id", step.ID,
 		"step_name", step.Name,
 		"step_type", step.Type,
 	)
-	return input, nil
+	return nil, fmt.Errorf("unknown step type %q without block definition: step %s (%s)", step.Type, step.Name, step.ID)
 }
 
 // Execute executes the workflow
