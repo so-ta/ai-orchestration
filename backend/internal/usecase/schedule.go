@@ -116,12 +116,7 @@ type ListSchedulesOutput struct {
 
 // List lists schedules with pagination
 func (u *ScheduleUsecase) List(ctx context.Context, input ListSchedulesInput) (*ListSchedulesOutput, error) {
-	if input.Page < 1 {
-		input.Page = 1
-	}
-	if input.Limit < 1 || input.Limit > 100 {
-		input.Limit = 20
-	}
+	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
 	filter := repository.ScheduleFilter{
 		WorkflowID: input.WorkflowID,

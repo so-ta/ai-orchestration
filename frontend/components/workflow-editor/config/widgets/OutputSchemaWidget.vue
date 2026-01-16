@@ -13,7 +13,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: object): void
+  (e: 'update:modelValue', value: OutputSchemaObject): void
   (e: 'blur'): void
 }>()
 
@@ -36,6 +36,19 @@ interface SchemaField {
   required: boolean
 }
 
+// JSON Schema structure for output schema
+interface OutputSchemaObject {
+  type?: string
+  properties?: Record<string, SchemaProperty>
+  required?: string[]
+}
+
+interface SchemaProperty {
+  type?: string
+  title?: string
+  description?: string
+}
+
 // Internal state
 const fields = ref<SchemaField[]>([])
 const showJsonEditor = ref(false)
@@ -54,13 +67,14 @@ const description = computed(() => {
 })
 
 // Parse schema to fields
-function parseSchemaToFields(schema: any): SchemaField[] {
-  if (!schema || schema.type !== 'object' || !schema.properties) {
+function parseSchemaToFields(schema: unknown): SchemaField[] {
+  const schemaObj = schema as OutputSchemaObject | null | undefined
+  if (!schemaObj || schemaObj.type !== 'object' || !schemaObj.properties) {
     return []
   }
 
-  const required = schema.required || []
-  return Object.entries(schema.properties).map(([name, prop]: [string, any]) => ({
+  const required = schemaObj.required || []
+  return Object.entries(schemaObj.properties).map(([name, prop]) => ({
     id: crypto.randomUUID(),
     name,
     type: prop.type || 'string',
@@ -71,12 +85,12 @@ function parseSchemaToFields(schema: any): SchemaField[] {
 }
 
 // Convert fields to schema
-function fieldsToSchema(fields: SchemaField[]): object {
+function fieldsToSchema(fields: SchemaField[]): OutputSchemaObject {
   if (fields.length === 0) {
     return {}
   }
 
-  const properties: Record<string, any> = {}
+  const properties: Record<string, SchemaProperty> = {}
   const required: string[] = []
 
   for (const field of fields) {
@@ -150,9 +164,11 @@ function removeField(index: number) {
 }
 
 // Update field
-function updateField(index: number, key: keyof SchemaField, value: any) {
+function updateField(index: number, key: keyof SchemaField, value: SchemaField[keyof SchemaField]) {
   if (fields.value[index]) {
-    (fields.value[index] as any)[key] = value
+    // Type-safe field update using a new object spread
+    const field = fields.value[index]
+    fields.value[index] = { ...field, [key]: value }
     emitChanges()
   }
 }

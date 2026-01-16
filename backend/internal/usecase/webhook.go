@@ -108,12 +108,7 @@ type ListWebhooksOutput struct {
 
 // List lists webhooks with pagination
 func (u *WebhookUsecase) List(ctx context.Context, input ListWebhooksInput) (*ListWebhooksOutput, error) {
-	if input.Page < 1 {
-		input.Page = 1
-	}
-	if input.Limit < 1 || input.Limit > 100 {
-		input.Limit = 20
-	}
+	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
 	filter := repository.WebhookFilter{
 		WorkflowID: input.WorkflowID,
@@ -334,7 +329,7 @@ func (u *WebhookUsecase) validateWorkflowInput(ctx context.Context, tenantID, wo
 	}
 
 	// Extract input_schema from start step's config
-	inputSchema := extractInputSchemaFromStepConfig(startStep.Config)
+	inputSchema := ExtractInputSchemaFromConfig(startStep.Config)
 	if inputSchema == nil {
 		return nil // No input_schema defined, skip validation
 	}
@@ -343,23 +338,7 @@ func (u *WebhookUsecase) validateWorkflowInput(ctx context.Context, tenantID, wo
 	return domain.ValidateInputSchema(input, inputSchema)
 }
 
-// extractInputSchemaFromStepConfig extracts the input_schema from a step's config
-func extractInputSchemaFromStepConfig(config json.RawMessage) json.RawMessage {
-	if config == nil || len(config) == 0 {
-		return nil
-	}
-
-	var configMap map[string]json.RawMessage
-	if err := json.Unmarshal(config, &configMap); err != nil {
-		return nil
-	}
-
-	if inputSchema, ok := configMap["input_schema"]; ok {
-		return inputSchema
-	}
-
-	return nil
-}
+// Note: extractInputSchemaFromStepConfig has been moved to helpers.go as ExtractInputSchemaFromConfig
 
 // hasValidInputMapping checks if the input mapping is configured and non-empty
 func (u *WebhookUsecase) hasValidInputMapping(mapping json.RawMessage) bool {

@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/middleware"
@@ -62,6 +64,109 @@ func parseIntFromString(str string, defaultValue int) int {
 		return defaultValue
 	}
 	return val
+}
+
+// parseUUID parses a UUID from a URL parameter and writes an error response if invalid.
+// Returns the parsed UUID and true if successful, or uuid.Nil and false if parsing failed.
+func parseUUID(w http.ResponseWriter, r *http.Request, paramName, resourceName string) (uuid.UUID, bool) {
+	idStr := chi.URLParam(r, paramName)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid "+resourceName, nil)
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+// parseUUIDString parses a UUID from a string and writes an error response if invalid.
+// Returns the parsed UUID and true if successful, or uuid.Nil and false if parsing failed.
+func parseUUIDString(w http.ResponseWriter, idStr, resourceName string) (uuid.UUID, bool) {
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid "+resourceName, nil)
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
+// decodeJSONBody decodes JSON request body into the provided struct.
+// Returns true if successful, or writes an error response and returns false if decoding failed.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, v interface{}) bool {
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+		return false
+	}
+	return true
+}
+
+// StepData represents step data in save request
+type StepData struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Type      string          `json:"type"`
+	Config    json.RawMessage `json:"config"`
+	PositionX int             `json:"position_x"`
+	PositionY int             `json:"position_y"`
+}
+
+// EdgeData represents edge data in save request
+type EdgeData struct {
+	ID           string  `json:"id"`
+	SourceStepID string  `json:"source_step_id"`
+	TargetStepID string  `json:"target_step_id"`
+	Condition    *string `json:"condition"`
+}
+
+// convertStepData converts StepData slice to domain.Step slice.
+// Returns the converted steps and true if successful, or nil and false if any UUID parsing failed.
+func convertStepData(w http.ResponseWriter, stepDataList []StepData) ([]domain.Step, bool) {
+	steps := make([]domain.Step, len(stepDataList))
+	for i, s := range stepDataList {
+		stepID, err := uuid.Parse(s.ID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID: "+s.ID, nil)
+			return nil, false
+		}
+		steps[i] = domain.Step{
+			ID:        stepID,
+			Name:      s.Name,
+			Type:      domain.StepType(s.Type),
+			Config:    s.Config,
+			PositionX: s.PositionX,
+			PositionY: s.PositionY,
+		}
+	}
+	return steps, true
+}
+
+// convertEdgeData converts EdgeData slice to domain.Edge slice.
+// Returns the converted edges and true if successful, or nil and false if any UUID parsing failed.
+func convertEdgeData(w http.ResponseWriter, edgeDataList []EdgeData) ([]domain.Edge, bool) {
+	edges := make([]domain.Edge, len(edgeDataList))
+	for i, e := range edgeDataList {
+		edgeID, err := uuid.Parse(e.ID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid edge ID: "+e.ID, nil)
+			return nil, false
+		}
+		sourceID, err := uuid.Parse(e.SourceStepID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source step ID: "+e.SourceStepID, nil)
+			return nil, false
+		}
+		targetID, err := uuid.Parse(e.TargetStepID)
+		if err != nil {
+			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target step ID: "+e.TargetStepID, nil)
+			return nil, false
+		}
+		edges[i] = domain.Edge{
+			ID:           edgeID,
+			SourceStepID: &sourceID,
+			TargetStepID: &targetID,
+			Condition:    e.Condition,
+		}
+	}
+	return edges, true
 }
 
 // getClientIP extracts client IP address from request

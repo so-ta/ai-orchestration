@@ -1,16 +1,21 @@
 import type { Schedule, CreateScheduleRequest, UpdateScheduleRequest, ApiResponse, PaginatedResponse } from '~/types/api'
+import { useListState } from './useAsyncState'
 
 export function useSchedules() {
   const api = useApi()
+  const {
+    items: schedules,
+    loading,
+    error,
+    execute,
+    setItems,
+    addItem,
+    updateItem,
+    removeItem,
+  } = useListState<Schedule>()
 
-  const schedules = ref<Schedule[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-
-  const list = async (workflowId?: string): Promise<Schedule[]> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function list(workflowId?: string): Promise<Schedule[]> {
+    return execute(async () => {
       const params = new URLSearchParams()
       if (workflowId) {
         params.append('workflow_id', workflowId)
@@ -19,111 +24,56 @@ export function useSchedules() {
       const endpoint = `/schedules${queryString ? `?${queryString}` : ''}`
 
       const result = await api.get<PaginatedResponse<Schedule>>(endpoint)
-      schedules.value = result.data || []
-      return result.data || []
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+      const items = result.data || []
+      setItems(items)
+      return items
+    }, 'Failed to fetch schedules')
   }
 
-  const get = async (id: string): Promise<Schedule> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function get(id: string): Promise<Schedule> {
+    return execute(async () => {
       const result = await api.get<ApiResponse<Schedule>>(`/schedules/${id}`)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to fetch schedule')
   }
 
-  const create = async (data: CreateScheduleRequest): Promise<Schedule> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function create(data: CreateScheduleRequest): Promise<Schedule> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Schedule>>('/schedules', data)
-      schedules.value.push(result.data)
+      addItem(result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to create schedule')
   }
 
-  const update = async (id: string, data: UpdateScheduleRequest): Promise<Schedule> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function update(id: string, data: UpdateScheduleRequest): Promise<Schedule> {
+    return execute(async () => {
       const result = await api.put<ApiResponse<Schedule>>(`/schedules/${id}`, data)
-      const index = schedules.value.findIndex(s => s.id === id)
-      if (index !== -1) {
-        schedules.value[index] = result.data
-      }
+      updateItem(s => s.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to update schedule')
   }
 
-  const remove = async (id: string): Promise<void> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function remove(id: string): Promise<void> {
+    return execute(async () => {
       await api.delete(`/schedules/${id}`)
-      schedules.value = schedules.value.filter(s => s.id !== id)
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+      removeItem(s => s.id === id)
+    }, 'Failed to delete schedule')
   }
 
-  const pause = async (id: string): Promise<Schedule> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function pause(id: string): Promise<Schedule> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Schedule>>(`/schedules/${id}/pause`)
-      const index = schedules.value.findIndex(s => s.id === id)
-      if (index !== -1) {
-        schedules.value[index] = result.data
-      }
+      updateItem(s => s.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to pause schedule')
   }
 
-  const resume = async (id: string): Promise<Schedule> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function resume(id: string): Promise<Schedule> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Schedule>>(`/schedules/${id}/resume`)
-      const index = schedules.value.findIndex(s => s.id === id)
-      if (index !== -1) {
-        schedules.value[index] = result.data
-      }
+      updateItem(s => s.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to resume schedule')
   }
 
   return {

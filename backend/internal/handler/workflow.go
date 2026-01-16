@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
 )
@@ -36,8 +35,7 @@ func (h *WorkflowHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 
 	var req CreateWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -92,9 +90,8 @@ func (h *WorkflowHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/workflows/{id}
 func (h *WorkflowHandler) Get(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -117,15 +114,13 @@ type UpdateWorkflowRequest struct {
 // Update handles PUT /api/v1/workflows/{id}
 func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -152,9 +147,8 @@ func (h *WorkflowHandler) Update(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /api/v1/workflows/{id}
 func (h *WorkflowHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -178,82 +172,28 @@ type SaveWorkflowRequest struct {
 	Edges       []EdgeData      `json:"edges"`
 }
 
-// StepData represents step data in save request
-type StepData struct {
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Type      string          `json:"type"`
-	Config    json.RawMessage `json:"config"`
-	PositionX int             `json:"position_x"`
-	PositionY int             `json:"position_y"`
-}
-
-// EdgeData represents edge data in save request
-type EdgeData struct {
-	ID           string  `json:"id"`
-	SourceStepID string  `json:"source_step_id"`
-	TargetStepID string  `json:"target_step_id"`
-	Condition    *string `json:"condition"`
-}
-
 // Save handles POST /api/v1/workflows/{id}/save
 // Creates a new version and saves the workflow
 func (h *WorkflowHandler) Save(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req SaveWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
-	// Convert step data to domain steps
-	steps := make([]domain.Step, len(req.Steps))
-	for i, s := range req.Steps {
-		stepID, err := uuid.Parse(s.ID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID: "+s.ID, nil)
-			return
-		}
-		steps[i] = domain.Step{
-			ID:        stepID,
-			Name:      s.Name,
-			Type:      domain.StepType(s.Type),
-			Config:    s.Config,
-			PositionX: s.PositionX,
-			PositionY: s.PositionY,
-		}
+	steps, ok := convertStepData(w, req.Steps)
+	if !ok {
+		return
 	}
 
-	// Convert edge data to domain edges
-	edges := make([]domain.Edge, len(req.Edges))
-	for i, e := range req.Edges {
-		edgeID, err := uuid.Parse(e.ID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid edge ID: "+e.ID, nil)
-			return
-		}
-		sourceID, err := uuid.Parse(e.SourceStepID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source step ID: "+e.SourceStepID, nil)
-			return
-		}
-		targetID, err := uuid.Parse(e.TargetStepID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target step ID: "+e.TargetStepID, nil)
-			return
-		}
-		edges[i] = domain.Edge{
-			ID:           edgeID,
-			SourceStepID: &sourceID,
-			TargetStepID: &targetID,
-			Condition:    e.Condition,
-		}
+	edges, ok := convertEdgeData(w, req.Edges)
+	if !ok {
+		return
 	}
 
 	workflow, err := h.workflowUsecase.Save(r.Context(), usecase.SaveWorkflowInput{
@@ -283,60 +223,24 @@ func (h *WorkflowHandler) Save(w http.ResponseWriter, r *http.Request) {
 // Saves the workflow as draft without creating a new version
 func (h *WorkflowHandler) SaveDraft(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req SaveWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
-	// Convert step data to domain steps
-	steps := make([]domain.Step, len(req.Steps))
-	for i, s := range req.Steps {
-		stepID, err := uuid.Parse(s.ID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID: "+s.ID, nil)
-			return
-		}
-		steps[i] = domain.Step{
-			ID:        stepID,
-			Name:      s.Name,
-			Type:      domain.StepType(s.Type),
-			Config:    s.Config,
-			PositionX: s.PositionX,
-			PositionY: s.PositionY,
-		}
+	steps, ok := convertStepData(w, req.Steps)
+	if !ok {
+		return
 	}
 
-	// Convert edge data to domain edges
-	edges := make([]domain.Edge, len(req.Edges))
-	for i, e := range req.Edges {
-		edgeID, err := uuid.Parse(e.ID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid edge ID: "+e.ID, nil)
-			return
-		}
-		sourceID, err := uuid.Parse(e.SourceStepID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source step ID: "+e.SourceStepID, nil)
-			return
-		}
-		targetID, err := uuid.Parse(e.TargetStepID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target step ID: "+e.TargetStepID, nil)
-			return
-		}
-		edges[i] = domain.Edge{
-			ID:           edgeID,
-			SourceStepID: &sourceID,
-			TargetStepID: &targetID,
-			Condition:    e.Condition,
-		}
+	edges, ok := convertEdgeData(w, req.Edges)
+	if !ok {
+		return
 	}
 
 	workflow, err := h.workflowUsecase.SaveDraft(r.Context(), usecase.SaveDraftInput{
@@ -360,9 +264,8 @@ func (h *WorkflowHandler) SaveDraft(w http.ResponseWriter, r *http.Request) {
 // Discards the draft and returns the saved version
 func (h *WorkflowHandler) DiscardDraft(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -384,15 +287,13 @@ type RestoreVersionRequest struct {
 // Restores a workflow to a specific version
 func (h *WorkflowHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req RestoreVersionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -414,9 +315,8 @@ func (h *WorkflowHandler) RestoreVersion(w http.ResponseWriter, r *http.Request)
 // Deprecated: Use Save instead. Kept for backward compatibility.
 func (h *WorkflowHandler) Publish(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -438,9 +338,8 @@ func (h *WorkflowHandler) Publish(w http.ResponseWriter, r *http.Request) {
 // ListVersions handles GET /api/v1/workflows/{id}/versions
 func (h *WorkflowHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -456,9 +355,8 @@ func (h *WorkflowHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 // GetVersion handles GET /api/v1/workflows/{id}/versions/{version}
 func (h *WorkflowHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	id, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 

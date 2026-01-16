@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,7 +40,10 @@ func (r *WorkflowRepository) Create(ctx context.Context, w *domain.Workflow) err
 		w.InputSchema, w.OutputSchema, w.Draft, w.CreatedBy, w.CreatedAt, w.UpdatedAt,
 		w.IsSystem, w.SystemSlug,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("create workflow: %w", err)
+	}
+	return nil
 }
 
 // GetByID retrieves a workflow by ID
@@ -60,7 +64,7 @@ func (r *WorkflowRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID
 		return nil, domain.ErrWorkflowNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get workflow by ID: %w", err)
 	}
 	// Set HasDraft flag
 	w.HasDraft = w.HasUnsavedDraft()
@@ -75,14 +79,14 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 	argIndex := 2
 
 	if filter.Status != nil {
-		countQuery += ` AND status = $` + string(rune('0'+argIndex))
+		countQuery += fmt.Sprintf(` AND status = $%d`, argIndex)
 		args = append(args, *filter.Status)
 		argIndex++
 	}
 
 	var total int
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("count workflows: %w", err)
 	}
 
 	// List query
@@ -96,7 +100,7 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 	argIndex = 2
 
 	if filter.Status != nil {
-		query += ` AND status = $2`
+		query += fmt.Sprintf(` AND status = $%d`, argIndex)
 		args = append(args, *filter.Status)
 		argIndex++
 	}
@@ -105,13 +109,13 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 
 	if filter.Limit > 0 {
 		offset := (filter.Page - 1) * filter.Limit
-		query += ` LIMIT $` + string(rune('0'+argIndex)) + ` OFFSET $` + string(rune('0'+argIndex+1))
+		query += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, argIndex, argIndex+1)
 		args = append(args, filter.Limit, offset)
 	}
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("list workflows: %w", err)
 	}
 	defer rows.Close()
 
@@ -123,11 +127,15 @@ func (r *WorkflowRepository) List(ctx context.Context, tenantID uuid.UUID, filte
 			&w.InputSchema, &w.OutputSchema, &w.Draft, &w.CreatedBy, &w.PublishedAt,
 			&w.CreatedAt, &w.UpdatedAt, &w.DeletedAt, &w.IsSystem, &w.SystemSlug,
 		); err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("scan workflow: %w", err)
 		}
 		// Set HasDraft flag
 		w.HasDraft = w.HasUnsavedDraft()
 		workflows = append(workflows, &w)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate workflows: %w", err)
 	}
 
 	return workflows, total, nil
@@ -148,7 +156,7 @@ func (r *WorkflowRepository) Update(ctx context.Context, w *domain.Workflow) err
 		w.ID, w.TenantID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("update workflow: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return domain.ErrWorkflowNotFound
@@ -161,7 +169,7 @@ func (r *WorkflowRepository) Delete(ctx context.Context, tenantID, id uuid.UUID)
 	query := `UPDATE workflows SET deleted_at = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL`
 	result, err := r.db.Exec(ctx, query, time.Now().UTC(), id, tenantID)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete workflow: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return domain.ErrWorkflowNotFound
@@ -181,7 +189,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 	if w.HasUnsavedDraft() {
 		draft, err := w.GetDraft()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("get draft: %w", err)
 		}
 		if draft != nil {
 			w.Name = draft.Name
@@ -204,7 +212,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 	`
 	rows, err := r.db.Query(ctx, stepsQuery, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query steps: %w", err)
 	}
 	defer rows.Close()
 
@@ -216,12 +224,16 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 			&s.BlockGroupID, &groupRole,
 			&s.PositionX, &s.PositionY, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan step: %w", err)
 		}
 		if groupRole != nil {
 			s.GroupRole = *groupRole
 		}
 		w.Steps = append(w.Steps, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate steps: %w", err)
 	}
 
 	// Get edges from database
@@ -232,7 +244,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 	`
 	rows, err = r.db.Query(ctx, edgesQuery, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query edges: %w", err)
 	}
 	defer rows.Close()
 
@@ -241,9 +253,13 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 		if err := rows.Scan(
 			&e.ID, &e.WorkflowID, &e.SourceStepID, &e.TargetStepID, &e.SourceBlockGroupID, &e.TargetBlockGroupID, &e.SourcePort, &e.TargetPort, &e.Condition, &e.CreatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan edge: %w", err)
 		}
 		w.Edges = append(w.Edges, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate edges: %w", err)
 	}
 
 	// Get block groups from database
@@ -256,7 +272,7 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 	`
 	rows, err = r.db.Query(ctx, blockGroupsQuery, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query block groups: %w", err)
 	}
 	defer rows.Close()
 
@@ -268,9 +284,13 @@ func (r *WorkflowRepository) GetWithStepsAndEdges(ctx context.Context, tenantID,
 			&bg.PreProcess, &bg.PostProcess, &bg.Config,
 			&bg.CreatedAt, &bg.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan block group: %w", err)
 		}
 		w.BlockGroups = append(w.BlockGroups, bg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate block groups: %w", err)
 	}
 
 	return w, nil
@@ -295,7 +315,7 @@ func (r *WorkflowRepository) GetSystemBySlug(ctx context.Context, slug string) (
 		return nil, domain.ErrWorkflowNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get system workflow by slug: %w", err)
 	}
 	// Set HasDraft flag
 	w.HasDraft = w.HasUnsavedDraft()

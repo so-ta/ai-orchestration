@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -85,11 +86,11 @@ func (r *TenantRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.T
 		&tenant.DeletedAt,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrTenantNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get tenant by ID: %w", err)
 	}
 
 	return &tenant, nil
@@ -127,11 +128,11 @@ func (r *TenantRepository) GetBySlug(ctx context.Context, slug string) (*domain.
 		&tenant.DeletedAt,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrTenantNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get tenant by slug: %w", err)
 	}
 
 	return &tenant, nil

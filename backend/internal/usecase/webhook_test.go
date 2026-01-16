@@ -1315,32 +1315,32 @@ func TestWebhookUsecase_validateWorkflowInput(t *testing.T) {
 	})
 }
 
-// Tests for extractInputSchemaFromStepConfig
+// Tests for ExtractInputSchemaFromConfig (moved to helpers.go)
 
-func TestExtractInputSchemaFromStepConfig(t *testing.T) {
+func TestExtractInputSchemaFromConfig(t *testing.T) {
 	t.Run("nil config", func(t *testing.T) {
-		result := extractInputSchemaFromStepConfig(nil)
+		result := ExtractInputSchemaFromConfig(nil)
 		assert.Nil(t, result)
 	})
 
 	t.Run("empty config", func(t *testing.T) {
-		result := extractInputSchemaFromStepConfig(json.RawMessage{})
+		result := ExtractInputSchemaFromConfig(json.RawMessage{})
 		assert.Nil(t, result)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
-		result := extractInputSchemaFromStepConfig(json.RawMessage(`{invalid}`))
+		result := ExtractInputSchemaFromConfig(json.RawMessage(`{invalid}`))
 		assert.Nil(t, result)
 	})
 
 	t.Run("no input_schema key", func(t *testing.T) {
-		result := extractInputSchemaFromStepConfig(json.RawMessage(`{"other": "value"}`))
+		result := ExtractInputSchemaFromConfig(json.RawMessage(`{"other": "value"}`))
 		assert.Nil(t, result)
 	})
 
 	t.Run("valid input_schema", func(t *testing.T) {
 		config := json.RawMessage(`{"input_schema": {"type": "object"}}`)
-		result := extractInputSchemaFromStepConfig(config)
+		result := ExtractInputSchemaFromConfig(config)
 		assert.NotNil(t, result)
 		assert.JSONEq(t, `{"type": "object"}`, string(result))
 	})

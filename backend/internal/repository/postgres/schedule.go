@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,18 +98,18 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	argIndex := 2
 
 	if filter.WorkflowID != nil {
-		countQuery += ` AND workflow_id = $` + string(rune('0'+argIndex))
+		countQuery += fmt.Sprintf(` AND workflow_id = $%d`, argIndex)
 		countArgs = append(countArgs, *filter.WorkflowID)
 		argIndex++
 	}
 	if filter.Status != nil {
-		countQuery += ` AND status = $` + string(rune('0'+argIndex))
+		countQuery += fmt.Sprintf(` AND status = $%d`, argIndex)
 		countArgs = append(countArgs, *filter.Status)
 	}
 
 	var total int
 	if err := r.pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("count schedules: %w", err)
 	}
 
 	// List query
@@ -123,23 +124,23 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	argIdx := 2
 
 	if filter.WorkflowID != nil {
-		query += ` AND workflow_id = $` + string(rune('0'+argIdx))
+		query += fmt.Sprintf(` AND workflow_id = $%d`, argIdx)
 		args = append(args, *filter.WorkflowID)
 		argIdx++
 	}
 	if filter.Status != nil {
-		query += ` AND status = $` + string(rune('0'+argIdx))
+		query += fmt.Sprintf(` AND status = $%d`, argIdx)
 		args = append(args, *filter.Status)
 		argIdx++
 	}
 
-	query += ` ORDER BY created_at DESC LIMIT $` + string(rune('0'+argIdx)) + ` OFFSET $` + string(rune('0'+argIdx+1))
+	query += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argIdx, argIdx+1)
 	offset := (filter.Page - 1) * filter.Limit
 	args = append(args, filter.Limit, offset)
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("list schedules: %w", err)
 	}
 	defer rows.Close()
 
@@ -153,9 +154,13 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 			&s.LastRunID, &s.RunCount, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 		)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("scan schedule: %w", err)
 		}
 		schedules = append(schedules, &s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate schedules: %w", err)
 	}
 
 	return schedules, total, nil

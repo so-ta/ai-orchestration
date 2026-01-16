@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
 )
@@ -34,15 +32,13 @@ type CreateStepRequest struct {
 // Create handles POST /api/v1/workflows/{id}/steps
 func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req CreateStepRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -66,9 +62,8 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 // List handles GET /api/v1/workflows/{workflow_id}/steps
 func (h *StepHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -95,20 +90,17 @@ type UpdateStepRequest struct {
 // Update handles PUT /api/v1/workflows/{workflow_id}/steps/{step_id}
 func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateStepRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -137,14 +129,12 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /api/v1/workflows/{workflow_id}/steps/{step_id}
 func (h *StepHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
 		return
 	}
 

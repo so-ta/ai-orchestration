@@ -133,7 +133,7 @@ func (r *CredentialResolver) resolveSystemCredential(ctx context.Context, name s
 		return nil, fmt.Errorf("failed to parse credential data: %w", err)
 	}
 
-	return r.credentialDataToMap(credData), nil
+	return CredentialDataToMap(credData), nil
 }
 
 // resolveTenantCredential resolves a tenant credential by ID
@@ -168,60 +168,10 @@ func (r *CredentialResolver) resolveTenantCredential(ctx context.Context, tenant
 		return nil, fmt.Errorf("failed to parse credential data: %w", err)
 	}
 
-	return r.credentialDataToMap(credData), nil
+	return CredentialDataToMap(credData), nil
 }
 
-// credentialDataToMap converts CredentialData to a map for sandbox access
-func (r *CredentialResolver) credentialDataToMap(data *domain.CredentialData) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	result["type"] = data.Type
-
-	// API Key fields
-	if data.APIKey != "" {
-		result["api_key"] = data.APIKey
-	}
-	if data.HeaderName != "" {
-		result["header_name"] = data.HeaderName
-	}
-	if data.HeaderPrefix != "" {
-		result["header_prefix"] = data.HeaderPrefix
-	}
-
-	// Basic Auth fields
-	if data.Username != "" {
-		result["username"] = data.Username
-	}
-	if data.Password != "" {
-		result["password"] = data.Password
-	}
-
-	// OAuth2 fields
-	if data.AccessToken != "" {
-		result["access_token"] = data.AccessToken
-	}
-	if data.RefreshToken != "" {
-		result["refresh_token"] = data.RefreshToken
-	}
-	if data.TokenType != "" {
-		result["token_type"] = data.TokenType
-	}
-	if data.ExpiresAt != nil {
-		result["expires_at"] = data.ExpiresAt.Unix()
-	}
-	if len(data.Scopes) > 0 {
-		result["scopes"] = data.Scopes
-	}
-
-	// Custom fields
-	if len(data.Custom) > 0 {
-		for k, v := range data.Custom {
-			result[k] = v
-		}
-	}
-
-	return result
-}
+// Note: credentialDataToMap has been moved to helpers.go as CredentialDataToMap
 
 // GetAuthHeader returns the appropriate authentication header for a resolved credential
 func (r *CredentialResolver) GetAuthHeader(cred map[string]interface{}) (headerName, headerValue string) {

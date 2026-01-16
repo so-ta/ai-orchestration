@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
@@ -43,15 +42,13 @@ type RunWithDefinitionResponse struct {
 // Create handles POST /api/v1/workflows/{workflow_id}/runs
 func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req CreateRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -106,9 +103,8 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 // List handles GET /api/v1/workflows/{workflow_id}/runs
 func (h *RunHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -132,9 +128,8 @@ func (h *RunHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/runs/{run_id}
 func (h *RunHandler) Get(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	runID, err := uuid.Parse(chi.URLParam(r, "run_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid run ID", nil)
+	runID, ok := parseUUID(w, r, "run_id", "run ID")
+	if !ok {
 		return
 	}
 
@@ -155,9 +150,8 @@ func (h *RunHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Cancel handles POST /api/v1/runs/{run_id}/cancel
 func (h *RunHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	runID, err := uuid.Parse(chi.URLParam(r, "run_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid run ID", nil)
+	runID, ok := parseUUID(w, r, "run_id", "run ID")
+	if !ok {
 		return
 	}
 
@@ -181,14 +175,12 @@ type ExecuteSingleStepRequest struct {
 // ExecuteSingleStep handles POST /api/v1/runs/{run_id}/steps/{step_id}/execute
 func (h *RunHandler) ExecuteSingleStep(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	runID, err := uuid.Parse(chi.URLParam(r, "run_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid run ID", nil)
+	runID, ok := parseUUID(w, r, "run_id", "run ID")
+	if !ok {
 		return
 	}
-	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
 		return
 	}
 
@@ -221,21 +213,18 @@ type ResumeFromStepRequest struct {
 // ResumeFromStep handles POST /api/v1/runs/{run_id}/resume
 func (h *RunHandler) ResumeFromStep(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	runID, err := uuid.Parse(chi.URLParam(r, "run_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid run ID", nil)
+	runID, ok := parseUUID(w, r, "run_id", "run ID")
+	if !ok {
 		return
 	}
 
 	var req ResumeFromStepRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
-	fromStepID, err := uuid.Parse(req.FromStepID)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid from_step_id", nil)
+	fromStepID, ok := parseUUIDString(w, req.FromStepID, "from_step_id")
+	if !ok {
 		return
 	}
 
@@ -256,14 +245,12 @@ func (h *RunHandler) ResumeFromStep(w http.ResponseWriter, r *http.Request) {
 // GetStepHistory handles GET /api/v1/runs/{run_id}/steps/{step_id}/history
 func (h *RunHandler) GetStepHistory(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	runID, err := uuid.Parse(chi.URLParam(r, "run_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid run ID", nil)
+	runID, ok := parseUUID(w, r, "run_id", "run ID")
+	if !ok {
 		return
 	}
-	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
 		return
 	}
 
@@ -285,14 +272,12 @@ type TestStepInlineRequest struct {
 // This allows testing a single step without requiring an existing run
 func (h *RunHandler) TestStepInline(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
 		return
 	}
 

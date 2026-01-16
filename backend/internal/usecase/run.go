@@ -186,12 +186,7 @@ type ListRunsOutput struct {
 
 // List lists runs for a workflow
 func (u *RunUsecase) List(ctx context.Context, input ListRunsInput) (*ListRunsOutput, error) {
-	if input.Page < 1 {
-		input.Page = 1
-	}
-	if input.Limit < 1 || input.Limit > 100 {
-		input.Limit = 20
-	}
+	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
 	filter := repository.RunFilter{
 		Status:      input.Status,
@@ -661,20 +656,4 @@ func (u *RunUsecase) validateWorkflowInput(ctx context.Context, tenantID, workfl
 	return domain.ValidateInputSchema(input, workflow.InputSchema)
 }
 
-// extractInputSchemaFromConfig extracts the input_schema from a step's config
-func extractInputSchemaFromConfig(config json.RawMessage) json.RawMessage {
-	if config == nil || len(config) == 0 {
-		return nil
-	}
-
-	var configMap map[string]json.RawMessage
-	if err := json.Unmarshal(config, &configMap); err != nil {
-		return nil
-	}
-
-	if inputSchema, ok := configMap["input_schema"]; ok {
-		return inputSchema
-	}
-
-	return nil
-}
+// Note: extractInputSchemaFromConfig has been moved to helpers.go as ExtractInputSchemaFromConfig
