@@ -840,16 +840,14 @@ const allTestStepRuns = computed<StepRunWithRunInfo[]>(() => {
       }
     }
   }
-  // Sort by sequence_number descending (newest first), then by created_at as fallback
+  // Sort by attempt descending, then by sequence_number descending
   return stepRuns.sort((a, b) => {
-    // First sort by sequence_number descending
-    if (a.sequence_number !== b.sequence_number) {
-      return b.sequence_number - a.sequence_number
+    // First sort by attempt descending
+    if (a.attempt !== b.attempt) {
+      return b.attempt - a.attempt
     }
-    // Fallback to created_at for records without sequence_number
-    const dateA = new Date(a.completed_at || a.started_at || a.created_at).getTime()
-    const dateB = new Date(b.completed_at || b.started_at || b.created_at).getTime()
-    return dateB - dateA
+    // Then by sequence_number descending
+    return b.sequence_number - a.sequence_number
   })
 })
 
@@ -1122,7 +1120,8 @@ watch(() => props.step, () => {
             <table class="history-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Seq</th>
+                  <th>Attempt</th>
                   <th>{{ t('runs.table.status') }}</th>
                   <th>{{ t('runs.table.step') }}</th>
                   <th>{{ t('runs.table.duration') }}</th>
@@ -1132,7 +1131,10 @@ watch(() => props.step, () => {
               <tbody>
                 <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" @click="openStepRunModal(stepRun)" class="clickable-row">
                   <td>
-                    <span class="attempt-badge">#{{ stepRun.run_number }}</span>
+                    <span class="seq-badge">#{{ stepRun.sequence_number }}</span>
+                  </td>
+                  <td>
+                    <span class="attempt-badge">#{{ stepRun.attempt }}</span>
                   </td>
                   <td>
                     <span :class="['status-badge', stepRun.status]">
@@ -1294,7 +1296,8 @@ watch(() => props.step, () => {
             <table class="history-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Seq</th>
+                  <th>Attempt</th>
                   <th>{{ t('runs.table.status') }}</th>
                   <th>{{ t('runs.table.step') }}</th>
                   <th>{{ t('runs.table.duration') }}</th>
@@ -1304,7 +1307,10 @@ watch(() => props.step, () => {
               <tbody>
                 <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" @click="openStepRunModal(stepRun)" class="clickable-row">
                   <td>
-                    <span class="attempt-badge">#{{ stepRun.run_number }}</span>
+                    <span class="seq-badge">#{{ stepRun.sequence_number }}</span>
+                  </td>
+                  <td>
+                    <span class="attempt-badge">#{{ stepRun.attempt }}</span>
                   </td>
                   <td>
                     <span :class="['status-badge', stepRun.status]">
@@ -1867,6 +1873,21 @@ watch(() => props.step, () => {
 .status-badge.pending {
   background: #f3f4f6;
   color: #6b7280;
+}
+
+/* Seq Badge */
+.seq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  color: #6b7280;
+  border-radius: 4px;
 }
 
 /* Attempt Badge */

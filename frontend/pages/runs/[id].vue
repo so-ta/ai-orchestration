@@ -196,13 +196,16 @@ const totalSteps = computed(() => {
   return run.value?.step_runs?.length || 0
 })
 
-// Step runs sorted by timestamp descending (newest first)
+// Step runs sorted by attempt descending, then sequence_number descending
 const sortedStepRuns = computed(() => {
   if (!run.value?.step_runs) return []
   return [...run.value.step_runs].sort((a, b) => {
-    const timeA = new Date(a.completed_at || a.started_at || a.created_at).getTime()
-    const timeB = new Date(b.completed_at || b.started_at || b.created_at).getTime()
-    return timeB - timeA // Descending order
+    // First sort by attempt descending
+    if (a.attempt !== b.attempt) {
+      return b.attempt - a.attempt
+    }
+    // Then by sequence_number descending
+    return b.sequence_number - a.sequence_number
   })
 })
 
@@ -589,7 +592,9 @@ onUnmounted(() => {
               <table v-else class="steps-table">
                 <thead>
                   <tr>
+                    <th class="col-seq">Seq</th>
                     <th class="col-block">Block</th>
+                    <th class="col-attempt">Attempt</th>
                     <th class="col-status">Status</th>
                     <th class="col-step-id">Step ID</th>
                     <th class="col-duration">Duration</th>
@@ -603,16 +608,19 @@ onUnmounted(() => {
                     class="step-row"
                     @click="handleStepShowDetails(stepRun)"
                   >
+                    <td class="col-seq">
+                      <span class="seq-text">#{{ stepRun.sequence_number }}</span>
+                    </td>
                     <td class="col-block">
                       <div class="block-cell">
                         <span :class="['block-icon', `status-${stepRun.status}`]">
                           {{ getStatusIcon(stepRun.status) }}
                         </span>
                         <span class="block-name">{{ stepRun.step_name }}</span>
-                        <span v-if="stepRun.attempt > 1" class="attempt-badge-sm">
-                          #{{ stepRun.attempt }}
-                        </span>
                       </div>
+                    </td>
+                    <td class="col-attempt">
+                      <span class="attempt-text">#{{ stepRun.attempt }}</span>
                     </td>
                     <td class="col-status">
                       <span :class="['status-tag', `status-tag-${stepRun.status}`]">
@@ -1396,8 +1404,18 @@ onUnmounted(() => {
   vertical-align: middle;
 }
 
+.col-seq {
+  width: 50px;
+  text-align: center;
+}
+
 .col-block {
   min-width: 180px;
+}
+
+.col-attempt {
+  width: 60px;
+  text-align: center;
 }
 
 .col-status {
@@ -1448,6 +1466,18 @@ onUnmounted(() => {
 .block-name {
   font-weight: 500;
   color: var(--color-text);
+}
+
+.seq-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.attempt-text {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
 }
 
 .attempt-badge-sm {
