@@ -1082,12 +1082,25 @@ onConnect((params) => {
     }
 
     // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
-    // If sourceHandle is not set, use the default (first) output port of the source step
+    // If sourceHandle is not set, use the default (first) output port of the source
     let sourcePort = params.sourceHandle || undefined
-    if (!sourcePort && sourceStep) {
-      const outputPorts = getOutputPorts(sourceStep.type, sourceStep)
-      if (outputPorts.length > 0) {
-        sourcePort = outputPorts[0].name
+    if (!sourcePort) {
+      if (sourceStep) {
+        // Step: use the step's output ports
+        const outputPorts = getOutputPorts(sourceStep.type, sourceStep)
+        if (outputPorts.length > 0) {
+          sourcePort = outputPorts[0].name
+        }
+      } else if (sourceStepId.startsWith(GROUP_NODE_PREFIX)) {
+        // Group: source is a group node, use group's output ports
+        const groupUuid = getGroupUuidFromNodeId(sourceStepId)
+        const group = props.blockGroups?.find(g => g.id === groupUuid)
+        if (group) {
+          const groupPorts = getGroupOutputPorts(group.type)
+          if (groupPorts.length > 0) {
+            sourcePort = groupPorts[0].name
+          }
+        }
       }
     }
     const targetPort = params.targetHandle || undefined
