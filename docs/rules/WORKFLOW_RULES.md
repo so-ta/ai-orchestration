@@ -379,6 +379,60 @@ func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
 
 ---
 
+### Rule 9: グループノードとステップノードの区別（DAG Editor）
+
+**Why:**
+DAG Editorでは、ステップノード（UUID形式）とグループノード（`group_${UUID}`形式）が異なるID体系を持つ。
+エッジはステップ間接続（`source_step_id`/`target_step_id`）とグループ接続（`source_block_group_id`/`target_block_group_id`）の両方をサポートする。
+これらを混同すると、エッジが正しく保存・表示されない。
+
+**過去の失敗例:**
+```
+症状1: グループブロックからのエッジ作成後、自動整形でY軸順序が正しくならない
+原因: onConnectハンドラでグループノードのsource_portが設定されていなかった
+結果: エッジのsource_portがundefinedになり、整形ロジックが機能しなかった
+
+症状2: ワークフロー保存後、グループエッジが消える
+原因: prepareWorkflowData()でsource_block_group_id/target_block_group_idを含めていなかった
+結果: グループエッジが保存されず、リロード後に消失
+```
+
+**対策:**
+```typescript
+// ❌ ステップのみを考慮
+const sourcePort = sourceStep ? getOutputPorts(sourceStep)[0].name : undefined
+
+// ✅ グループも考慮
+if (sourceStep) {
+  sourcePort = getOutputPorts(sourceStep)[0].name
+} else if (sourceNodeId.startsWith('group_')) {
+  const group = blockGroups.find(g => g.id === parseGroupId(sourceNodeId))
+  sourcePort = getGroupOutputPorts(group.type)[0].name
+}
+
+// ❌ エッジ保存時にグループフィールドを忘れる
+edges.map(e => ({
+  source_step_id: e.source_step_id,
+  target_step_id: e.target_step_id,
+}))
+
+// ✅ グループフィールドも含める
+edges.map(e => ({
+  source_step_id: e.source_step_id,
+  target_step_id: e.target_step_id,
+  source_block_group_id: e.source_block_group_id,
+  target_block_group_id: e.target_block_group_id,
+}))
+```
+
+**チェックリスト:**
+- [ ] エッジ作成時にグループノードを考慮しているか
+- [ ] エッジ保存時に `source_block_group_id`/`target_block_group_id` を含めているか
+- [ ] ノードID解析時に `group_` プレフィックスを判定しているか
+- [ ] ポート取得時にグループタイプに応じたポートを返しているか
+
+---
+
 ## Related Documents
 
 - [GIT_RULES.md](./GIT_RULES.md) - Git操作ルール

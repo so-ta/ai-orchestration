@@ -1061,6 +1061,38 @@ function countOutgoingEdges(stepId: string): number {
   return props.edges.filter(e => e.source_step_id === stepId).length
 }
 
+// Get default source port for a node (step or group)
+function getDefaultSourcePort(nodeId: string, step: Step | undefined): string | undefined {
+  if (step) {
+    const outputPorts = getOutputPorts(step.type, step)
+    return outputPorts.length > 0 ? outputPorts[0].name : undefined
+  }
+  if (nodeId?.startsWith(GROUP_NODE_PREFIX)) {
+    const groupUuid = getGroupUuidFromNodeId(nodeId)
+    const group = props.blockGroups?.find(g => g.id === groupUuid)
+    if (group) {
+      const groupPorts = getGroupOutputPorts(group.type)
+      return groupPorts.length > 0 ? groupPorts[0].name : undefined
+    }
+  }
+  return undefined
+}
+
+// Get default target port for a node (step or group)
+// Groups use 'in' as their single input port
+function getDefaultTargetPort(nodeId: string): string | undefined {
+  const step = props.steps.find(s => s.id === nodeId)
+  if (step) {
+    const inputPorts = getInputPorts(step.type)
+    return inputPorts.length > 0 ? inputPorts[0].name : undefined
+  }
+  if (nodeId?.startsWith(GROUP_NODE_PREFIX)) {
+    // Groups have a single input port named 'in'
+    return 'in'
+  }
+  return undefined
+}
+
 // Handle new connection
 onConnect((params) => {
   if (!props.readonly) {
@@ -1082,15 +1114,9 @@ onConnect((params) => {
     }
 
     // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
-    // If sourceHandle is not set, use the default (first) output port of the source step
-    let sourcePort = params.sourceHandle || undefined
-    if (!sourcePort && sourceStep) {
-      const outputPorts = getOutputPorts(sourceStep.type, sourceStep)
-      if (outputPorts.length > 0) {
-        sourcePort = outputPorts[0].name
-      }
-    }
-    const targetPort = params.targetHandle || undefined
+    // If not set, use the default (first) port of the source/target (supports both steps and groups)
+    const sourcePort = params.sourceHandle || getDefaultSourcePort(sourceStepId, sourceStep)
+    const targetPort = params.targetHandle || getDefaultTargetPort(params.target)
     emit('edge:add', params.source, params.target, sourcePort, targetPort)
   }
 })

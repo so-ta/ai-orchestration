@@ -720,6 +720,8 @@ function prepareWorkflowData() {
       id: e.id,
       source_step_id: e.source_step_id,
       target_step_id: e.target_step_id,
+      source_block_group_id: e.source_block_group_id,
+      target_block_group_id: e.target_block_group_id,
       source_port: e.source_port,
       target_port: e.target_port,
       condition: e.condition,
@@ -889,6 +891,9 @@ async function handleDeleteStep() {
     await workflows.deleteStep(workflowId, stepId)
 
     // Remove step and related edges from local state instead of reloading
+    // Only removes edges directly connected to this step (source_step_id/target_step_id)
+    // Group edges (source_block_group_id/target_block_group_id) are preserved
+    // since they connect to groups, not individual steps
     workflow.value.steps = (workflow.value.steps || []).filter(s => s.id !== stepId)
     workflow.value.edges = (workflow.value.edges || []).filter(
       e => e.source_step_id !== stepId && e.target_step_id !== stepId
