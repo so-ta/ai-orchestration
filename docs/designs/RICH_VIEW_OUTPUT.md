@@ -357,8 +357,8 @@ const output = {
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
-- [UNIFIED_BLOCK_MODEL.md](UNIFIED_BLOCK_MODEL.md) - Block execution architecture
-- [BACKEND.md](../BACKEND.md) - Backend architecture
-- [FRONTEND.md](../FRONTEND.md) - Frontend architecture
+- [UNIFIED_BLOCK_MODEL.md](UNIFIED_BLOCK_MODEL.md) - ブロック実行アーキテクチャ
+- [BACKEND.md](../BACKEND.md) - バックエンドアーキテクチャ
+- [FRONTEND.md](../FRONTEND.md) - フロントエンドアーキテクチャ

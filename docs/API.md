@@ -1,71 +1,71 @@
-# API Reference
+# APIリファレンス
 
-REST API endpoints, request/response schemas, and authentication.
+REST APIエンドポイント、リクエスト/レスポンススキーマ、認証についてのドキュメント。
 
-> **Migration Note (2026-01)**: Workflow has been renamed to Project. Projects support multiple Start blocks, each with its own trigger configuration. The webhooks table has been removed; webhook functionality is now configured via Start block `trigger_config`.
+> **移行メモ (2026-01)**: WorkflowはProjectに名称変更されました。Projectは複数のStartブロックをサポートし、それぞれ独自のトリガー設定を持ちます。webhooksテーブルは削除され、Webhook機能はStartブロックの`trigger_config`で設定するようになりました。
 
-## Quick Reference
+## クイックリファレンス
 
-| Item | Value |
+| 項目 | 値 |
 |------|-------|
-| Base URL | `/api/v1` |
-| Auth | Bearer JWT |
+| ベースURL | `/api/v1` |
+| 認証 | Bearer JWT |
 | Content-Type | `application/json` |
-| Tenant (Dev) | `X-Tenant-ID` header |
-| Tenant (Prod) | JWT claim |
-| Health Check | `GET /health`, `GET /ready` |
+| テナント (開発) | `X-Tenant-ID` ヘッダー |
+| テナント (本番) | JWT クレーム |
+| ヘルスチェック | `GET /health`, `GET /ready` |
 
-## Headers
+## ヘッダー
 
-| Header | Required | Description |
+| ヘッダー | 必須 | 説明 |
 |--------|----------|-------------|
-| `Authorization` | Yes* | `Bearer <token>` (*unless AUTH_ENABLED=false) |
-| `Content-Type` | Yes | `application/json` |
-| `X-Tenant-ID` | Dev only | UUID, required when AUTH_ENABLED=false |
-| `X-Request-ID` | No | UUID for tracing |
+| `Authorization` | はい* | `Bearer <token>` (*AUTH_ENABLED=false以外) |
+| `Content-Type` | はい | `application/json` |
+| `X-Tenant-ID` | 開発のみ | UUID、AUTH_ENABLED=false時に必須 |
+| `X-Request-ID` | いいえ | トレーシング用UUID |
 
-## Error Response
+## エラーレスポンス
 
 ```json
 {
   "error": {
     "code": "ERROR_CODE",
-    "message": "Human readable message",
+    "message": "人間が読めるメッセージ",
     "details": {}
   }
 }
 ```
 
-| Code | HTTP | Description |
+| コード | HTTP | 説明 |
 |------|------|-------------|
-| `UNAUTHORIZED` | 401 | Invalid/missing token |
-| `FORBIDDEN` | 403 | Insufficient permissions |
-| `NOT_FOUND` | 404 | Resource not found |
-| `VALIDATION_ERROR` | 400 | Invalid request body |
-| `SCHEMA_VALIDATION_ERROR` | 400 | Input does not match Start block's input_schema |
-| `CONFLICT` | 409 | Resource conflict |
-| `INVALID_STATE` | 409 | Resource is in invalid state for operation (e.g., run cannot be cancelled/resumed, schedule is disabled) |
-| `INTERNAL_ERROR` | 500 | Server error |
-| `RATE_LIMIT_EXCEEDED` | 429 | Rate limit exceeded |
+| `UNAUTHORIZED` | 401 | 無効/欠落トークン |
+| `FORBIDDEN` | 403 | 権限不足 |
+| `NOT_FOUND` | 404 | リソースが見つからない |
+| `VALIDATION_ERROR` | 400 | 無効なリクエストボディ |
+| `SCHEMA_VALIDATION_ERROR` | 400 | 入力がStartブロックのinput_schemaと一致しない |
+| `CONFLICT` | 409 | リソースの競合 |
+| `INVALID_STATE` | 409 | 操作に無効な状態（実行がキャンセル/再開不可、スケジュールが無効など） |
+| `INTERNAL_ERROR` | 500 | サーバーエラー |
+| `RATE_LIMIT_EXCEEDED` | 429 | レート制限超過 |
 
-### Schema Validation Error Response
+### スキーマ検証エラーレスポンス
 
-When the input data does not match the Start block's `input_schema`, the API returns a detailed validation error:
+入力データがStartブロックの`input_schema`と一致しない場合、APIは詳細な検証エラーを返します：
 
 ```json
 {
   "error": {
     "code": "SCHEMA_VALIDATION_ERROR",
-    "message": "Input validation failed",
+    "message": "入力検証に失敗しました",
     "details": {
       "errors": [
         {
           "field": "email",
-          "message": "email is required"
+          "message": "emailは必須です"
         },
         {
           "field": "age",
-          "message": "age must be of type integer"
+          "message": "ageはinteger型である必要があります"
         }
       ]
     }
@@ -73,27 +73,27 @@ When the input data does not match the Start block's `input_schema`, the API ret
 }
 ```
 
-This error is returned by:
-- `POST /projects/{project_id}/runs` - when run input doesn't match Start block's input_schema
-- Webhook triggers - when webhook payload (after input_mapping in Start block's trigger_config) doesn't match input_schema
+このエラーは以下で返されます：
+- `POST /projects/{project_id}/runs` - 実行入力がStartブロックのinput_schemaと一致しない場合
+- Webhookトリガー - Webhookペイロード（Startブロックのtrigger_config内のinput_mapping適用後）がinput_schemaと一致しない場合
 
 ---
 
-## Rate Limiting
+## レート制限
 
-API requests are rate limited at multiple scopes to ensure fair usage.
+APIリクエストは公平な使用を確保するため、複数のスコープでレート制限されます。
 
-### Rate Limit Scopes
+### レート制限スコープ
 
-| Scope | Default Limit | Window | Description |
+| スコープ | デフォルト制限 | ウィンドウ | 説明 |
 |-------|--------------|--------|-------------|
-| `tenant` | 1000 req | 1 min | Per-tenant limit across all endpoints |
-| `project` | 100 req | 1 min | Per-project limit for run creation |
-| `webhook` | 60 req | 1 min | Per-webhook-key limit for trigger endpoint |
+| `tenant` | 1000 req | 1分 | 全エンドポイントでのテナントごとの制限 |
+| `project` | 100 req | 1分 | 実行作成のプロジェクトごとの制限 |
+| `webhook` | 60 req | 1分 | トリガーエンドポイントのWebhookキーごとの制限 |
 
-### Rate Limit Headers
+### レート制限ヘッダー
 
-All responses include rate limit headers:
+すべてのレスポンスにレート制限ヘッダーが含まれます：
 
 ```
 X-RateLimit-tenant-Limit: 1000
@@ -101,13 +101,13 @@ X-RateLimit-tenant-Remaining: 999
 X-RateLimit-tenant-Reset: 1704067200
 ```
 
-### Rate Limit Error Response
+### レート制限エラーレスポンス
 
 ```json
 {
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
-    "message": "Rate limit exceeded for tenant scope",
+    "message": "tenantスコープのレート制限を超過しました",
     "retry_at": "2024-01-01T00:00:00Z",
     "limit": 1000,
     "scope": "tenant"
@@ -115,36 +115,36 @@ X-RateLimit-tenant-Reset: 1704067200
 }
 ```
 
-### Configuration
+### 設定
 
-Rate limits can be configured via environment variables:
+レート制限は環境変数で設定できます：
 
-| Variable | Default | Description |
+| 変数 | デフォルト | 説明 |
 |----------|---------|-------------|
-| `RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
-| `RATE_LIMIT_TENANT` | `1000` | Requests per minute per tenant |
-| `RATE_LIMIT_PROJECT` | `100` | Requests per minute per project |
-| `RATE_LIMIT_WEBHOOK` | `60` | Requests per minute per webhook key |
+| `RATE_LIMIT_ENABLED` | `true` | レート制限の有効化/無効化 |
+| `RATE_LIMIT_TENANT` | `1000` | テナントごとの1分あたりのリクエスト数 |
+| `RATE_LIMIT_PROJECT` | `100` | プロジェクトごとの1分あたりのリクエスト数 |
+| `RATE_LIMIT_WEBHOOK` | `60` | Webhookキーごとの1分あたりのリクエスト数 |
 
 ---
 
 ## Projects
 
-Projects (formerly Workflows) are the main organizational unit for DAG definitions. A project can have multiple Start blocks, each with its own trigger type (manual, schedule, webhook).
+Projects（旧Workflows）はDAG定義の主要な組織単位です。プロジェクトは複数のStartブロックを持つことができ、それぞれ独自のトリガータイプ（manual、schedule、webhook）を持ちます。
 
-### List
+### 一覧取得
 ```
 GET /projects
 ```
 
-Query:
-| Param | Type | Default | Description |
+クエリ：
+| パラメータ | 型 | デフォルト | 説明 |
 |-------|------|---------|-------------|
-| `status` | string | - | `draft` or `published` |
-| `page` | int | 1 | Page number |
-| `limit` | int | 20 | Items per page (max 100) |
+| `status` | string | - | `draft` または `published` |
+| `page` | int | 1 | ページ番号 |
+| `limit` | int | 20 | 1ページあたりの件数（最大100） |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -167,23 +167,23 @@ Response `200`:
 }
 ```
 
-### Create
+### 作成
 ```
 POST /projects
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "name": "string (required)",
+  "name": "string (必須)",
   "description": "string",
   "variables": {}
 }
 ```
 
-> **Note**: `input_schema` and `output_schema` have been replaced by `variables` at the project level. Input/output schemas are now defined per Start block.
+> **注意**: `input_schema`と`output_schema`はプロジェクトレベルの`variables`に置き換えられました。入出力スキーマはStartブロックごとに定義されるようになりました。
 
-Response `201`:
+レスポンス `201`：
 ```json
 {
   "id": "uuid",
@@ -197,21 +197,21 @@ Response `201`:
 }
 ```
 
-### Get
+### 取得
 ```
 GET /projects/{id}
 ```
 
-Response `200`: Same as Create response
+レスポンス `200`: 作成レスポンスと同じ
 
-### Update
+### 更新
 ```
 PUT /projects/{id}
 ```
 
-Constraint: Only `draft` status
+制約: `draft`ステータスのみ
 
-Request:
+リクエスト：
 ```json
 {
   "name": "string",
@@ -220,23 +220,23 @@ Request:
 }
 ```
 
-Response `200`: Updated project
+レスポンス `200`: 更新されたプロジェクト
 
-### Delete
+### 削除
 ```
 DELETE /projects/{id}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
-### Publish
+### 公開
 ```
 POST /projects/{id}/publish
 ```
 
-Constraint: Must be `draft` status
+制約: `draft`ステータスである必要がある
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "id": "uuid",
@@ -250,12 +250,12 @@ Response `200`:
 
 ## Steps
 
-### List
+### 一覧取得
 ```
 GET /projects/{project_id}/steps
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -273,24 +273,24 @@ Response `200`:
 }
 ```
 
-### Create
+### 作成
 ```
 POST /projects/{project_id}/steps
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "name": "string (required)",
-  "type": "start|llm|tool|condition|map|join|subflow (required)",
+  "name": "string (必須)",
+  "type": "start|llm|tool|condition|map|join|subflow (必須)",
   "config": {},
   "position": {"x": 0, "y": 0}
 }
 ```
 
-Config by type:
+タイプ別の設定：
 
-**start** (Multiple Start blocks per project supported):
+**start** (プロジェクトごとに複数のStartブロックをサポート)：
 ```json
 {
   "trigger_type": "manual|schedule|webhook",
@@ -306,35 +306,35 @@ Config by type:
 }
 ```
 
-> **Note**: Each Start block can have a different trigger type. Webhook and schedule configurations are now part of the Start block's `trigger_config` rather than separate tables.
+> **注意**: 各Startブロックは異なるトリガータイプを持つことができます。WebhookとScheduleの設定は、別テーブルではなくStartブロックの`trigger_config`の一部になりました。
 
-**llm**:
+**llm**：
 ```json
 {
   "provider": "openai|anthropic",
   "model": "gpt-4|claude-3-opus-20240229",
-  "prompt": "string with {{input.field}} templates",
+  "prompt": "{{input.field}} テンプレートを含む文字列",
   "temperature": 0.7,
   "max_tokens": 1000
 }
 ```
 
-**tool**:
+**tool**：
 ```json
 {
   "adapter_id": "mock|http|openai|anthropic",
-  "...adapter_specific"
+  "...アダプター固有"
 }
 ```
 
-**condition**:
+**condition**：
 ```json
 {
   "expression": "$.field > 10"
 }
 ```
 
-**map**:
+**map**：
 ```json
 {
   "input_path": "$.items",
@@ -343,33 +343,33 @@ Config by type:
 }
 ```
 
-Response `201`: Created step
+レスポンス `201`: 作成されたステップ
 
-### Update
+### 更新
 ```
 PUT /projects/{project_id}/steps/{step_id}
 ```
 
-Request: Same as Create
-Response `200`: Updated step
+リクエスト: 作成と同じ
+レスポンス `200`: 更新されたステップ
 
-### Delete
+### 削除
 ```
 DELETE /projects/{project_id}/steps/{step_id}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
 ---
 
 ## Edges
 
-### List
+### 一覧取得
 ```
 GET /projects/{project_id}/edges
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -378,73 +378,73 @@ Response `200`:
       "project_id": "uuid",
       "source_step_id": "uuid",
       "target_step_id": "uuid",
-      "condition": "string (optional)",
+      "condition": "string (オプション)",
       "created_at": "ISO8601"
     }
   ]
 }
 ```
 
-### Create
+### 作成
 ```
 POST /projects/{project_id}/edges
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "source_step_id": "uuid (required)",
-  "target_step_id": "uuid (required)",
+  "source_step_id": "uuid (必須)",
+  "target_step_id": "uuid (必須)",
   "condition": "$.success == true"
 }
 ```
 
-Response `201`: Created edge
+レスポンス `201`: 作成されたエッジ
 
-Validation:
-- Rejects cyclic connections
-- Source and target must exist
+検証：
+- 循環接続を拒否
+- ソースとターゲットが存在する必要がある
 
-### Delete
+### 削除
 ```
 DELETE /projects/{project_id}/edges/{edge_id}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
 ---
 
 ## Block Groups
 
-Block groups are control flow constructs that group multiple steps.
+Block Groupsは複数のステップをグループ化する制御フロー構造です。
 
-> **Updated**: 2026-01-15
-> Simplified to 4 types only: `parallel`, `try_catch`, `foreach`, `while`
-> Removed: `if_else` (use `condition` block), `switch_case` (use `switch` block)
-> All groups now use `body` role only with `pre_process`/`post_process` for transformation.
+> **更新**: 2026-01-15
+> 4タイプのみに簡略化: `parallel`, `try_catch`, `foreach`, `while`
+> 削除: `if_else` (`condition`ブロックを使用), `switch_case` (`switch`ブロックを使用)
+> すべてのグループは`body`ロールのみを使用し、変換には`pre_process`/`post_process`を使用。
 
-### Group Types
+### グループタイプ
 
-| Type | Description | Config |
+| タイプ | 説明 | 設定 |
 |------|-------------|--------|
-| `parallel` | Execute multiple flows concurrently | `max_concurrent`, `fail_fast` |
-| `try_catch` | Error handling with retry support | `retry_count`, `retry_delay_ms` |
-| `foreach` | Iterate over array elements | `input_path`, `parallel`, `max_workers` |
-| `while` | Condition-based loop | `condition`, `max_iterations`, `do_while` |
+| `parallel` | 複数のフローを並列実行 | `max_concurrent`, `fail_fast` |
+| `try_catch` | リトライサポート付きエラーハンドリング | `retry_count`, `retry_delay_ms` |
+| `foreach` | 配列要素の反復処理 | `input_path`, `parallel`, `max_workers` |
+| `while` | 条件ベースのループ | `condition`, `max_iterations`, `do_while` |
 
-### List
+### 一覧取得
 ```
 GET /projects/{project_id}/block-groups
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
     {
       "id": "uuid",
       "project_id": "uuid",
-      "name": "Parallel Tasks",
+      "name": "並列タスク",
       "type": "parallel",
       "config": { "max_concurrent": 10, "fail_fast": false },
       "parent_group_id": null,
@@ -457,15 +457,15 @@ Response `200`:
 }
 ```
 
-### Create
+### 作成
 ```
 POST /projects/{project_id}/block-groups
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "name": "Parallel Tasks",
+  "name": "並列タスク",
   "type": "parallel|try_catch|foreach|while",
   "config": {},
   "parent_group_id": null,
@@ -476,35 +476,35 @@ Request:
 }
 ```
 
-| Field | Type | Required | Description |
+| フィールド | 型 | 必須 | 説明 |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Display name |
-| `type` | string | Yes | One of: `parallel`, `try_catch`, `foreach`, `while` |
-| `config` | object | No | Type-specific configuration |
-| `parent_group_id` | uuid | No | For nested groups |
-| `pre_process` | string | No | JS code: external IN → internal IN |
-| `post_process` | string | No | JS code: internal OUT → external OUT |
-| `position` | object | Yes | `{ x, y }` coordinates |
-| `size` | object | Yes | `{ width, height }` dimensions |
+| `name` | string | はい | 表示名 |
+| `type` | string | はい | `parallel`, `try_catch`, `foreach`, `while` のいずれか |
+| `config` | object | いいえ | タイプ固有の設定 |
+| `parent_group_id` | uuid | いいえ | ネストされたグループ用 |
+| `pre_process` | string | いいえ | JSコード: 外部IN → 内部IN |
+| `post_process` | string | いいえ | JSコード: 内部OUT → 外部OUT |
+| `position` | object | はい | `{ x, y }` 座標 |
+| `size` | object | はい | `{ width, height }` 寸法 |
 
-Response `201`: Created block group
+レスポンス `201`: 作成されたブロックグループ
 
-### Get
+### 取得
 ```
 GET /projects/{project_id}/block-groups/{group_id}
 ```
 
-Response `200`: Block group details
+レスポンス `200`: ブロックグループの詳細
 
-### Update
+### 更新
 ```
 PUT /projects/{project_id}/block-groups/{group_id}
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "name": "Updated Name",
+  "name": "更新された名前",
   "config": { "max_concurrent": 5 },
   "pre_process": "return { ...input, modified: true };",
   "post_process": "return output;",
@@ -513,21 +513,21 @@ Request:
 }
 ```
 
-Response `200`: Updated block group
+レスポンス `200`: 更新されたブロックグループ
 
-### Delete
+### 削除
 ```
 DELETE /projects/{project_id}/block-groups/{group_id}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
-### Add Step to Group
+### グループにステップを追加
 ```
 POST /projects/{project_id}/block-groups/{group_id}/steps
 ```
 
-Request:
+リクエスト：
 ```json
 {
   "step_id": "uuid",
@@ -535,46 +535,46 @@ Request:
 }
 ```
 
-> **Note**: Only `body` role is supported. All other roles have been removed.
+> **注意**: `body`ロールのみがサポートされています。他のロールは削除されました。
 
-Response `200`: Updated step
+レスポンス `200`: 更新されたステップ
 
-**Restrictions:**
-- `start` steps cannot be added to block groups (returns `400 VALIDATION_ERROR`)
+**制限:**
+- `start`ステップはブロックグループに追加できません（`400 VALIDATION_ERROR`を返す）
 
-**Possible Errors:**
+**発生する可能性のあるエラー:**
 
-| Code | Message | Description |
+| コード | メッセージ | 説明 |
 |------|---------|-------------|
-| VALIDATION_ERROR | this step type cannot be added to a block group | Start nodes cannot be in groups |
-| VALIDATION_ERROR | invalid group role | Only `body` role is valid |
-| NOT_FOUND | block group not found | Block group does not exist |
-| CONFLICT | published project cannot be edited | Project is published |
+| VALIDATION_ERROR | このステップタイプはブロックグループに追加できません | Startノードはグループに入れられない |
+| VALIDATION_ERROR | 無効なグループロール | `body`ロールのみが有効 |
+| NOT_FOUND | ブロックグループが見つかりません | ブロックグループが存在しない |
+| CONFLICT | 公開済みプロジェクトは編集できません | プロジェクトが公開済み |
 
-### Get Steps in Group
+### グループ内のステップを取得
 ```
 GET /projects/{project_id}/block-groups/{group_id}/steps
 ```
 
-Response `200`: Array of steps
+レスポンス `200`: ステップの配列
 
-### Remove Step from Group
+### グループからステップを削除
 ```
 DELETE /projects/{project_id}/block-groups/{group_id}/steps/{step_id}
 ```
 
-Response `200`: Updated step (with null block_group_id)
+レスポンス `200`: 更新されたステップ（block_group_idがnull）
 
 ---
 
 ## Runs
 
-### Execute
+### 実行
 ```
 POST /projects/{project_id}/runs
 ```
 
-Request:
+リクエスト：
 ```json
 {
   "input": {},
@@ -584,17 +584,17 @@ Request:
 }
 ```
 
-| Field | Type | Default | Description |
+| フィールド | 型 | デフォルト | 説明 |
 |-------|------|---------|-------------|
-| `input` | object | `{}` | Input data for the run |
-| `start_step_id` | uuid | - | **Required for multi-start projects**: Specifies which Start block to trigger |
-| `triggered_by` | string | `manual` | Trigger type: `manual`, `test`, `webhook`, `schedule`, `internal` |
-| `version` | int | 0 | Project version to execute (0 = latest) |
-| `mode` | string | - | **Deprecated**: Use `triggered_by` instead (`mode: "test"` maps to `triggered_by: "test"`) |
+| `input` | object | `{}` | 実行の入力データ |
+| `start_step_id` | uuid | - | **複数Startプロジェクトでは必須**: トリガーするStartブロックを指定 |
+| `triggered_by` | string | `manual` | トリガータイプ: `manual`, `test`, `webhook`, `schedule`, `internal` |
+| `version` | int | 0 | 実行するプロジェクトバージョン（0 = 最新） |
+| `mode` | string | - | **非推奨**: 代わりに`triggered_by`を使用（`mode: "test"`は`triggered_by: "test"`にマップ） |
 
-> **Note**: Projects can have multiple Start blocks. When executing a run, you must specify which Start block to use via `start_step_id` if the project has more than one Start block.
+> **注意**: プロジェクトは複数のStartブロックを持つことができます。実行を実行する際、プロジェクトに複数のStartブロックがある場合は`start_step_id`でどのStartブロックを使用するか指定する必要があります。
 
-Response `201`:
+レスポンス `201`：
 ```json
 {
   "id": "uuid",
@@ -608,27 +608,27 @@ Response `201`:
 }
 ```
 
-### List by Project
+### プロジェクト別一覧取得
 ```
 GET /projects/{project_id}/runs
 ```
 
-Query:
-| Param | Type | Default |
+クエリ：
+| パラメータ | 型 | デフォルト |
 |-------|------|---------|
 | `status` | string | - |
 | `start_step_id` | uuid | - |
 | `page` | int | 1 |
 | `limit` | int | 20 |
 
-Response `200`: Paginated runs
+レスポンス `200`: ページネーションされた実行一覧
 
-### Get
+### 取得
 ```
 GET /runs/{run_id}
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "id": "uuid",
@@ -640,7 +640,7 @@ Response `200`:
   "trigger_type": "manual",
   "input": {},
   "output": {},
-  "error": "string (if failed)",
+  "error": "string (失敗時)",
   "started_at": "ISO8601",
   "completed_at": "ISO8601",
   "duration_ms": 1000,
@@ -662,38 +662,38 @@ Response `200`:
 }
 ```
 
-### Cancel
+### キャンセル
 ```
 POST /runs/{run_id}/cancel
 ```
 
-Response `200`: Updated run with `status: cancelled`
+レスポンス `200`: `status: cancelled`で更新された実行
 
-**Error Responses:**
+**エラーレスポンス:**
 
-| Code | HTTP | Condition |
+| コード | HTTP | 条件 |
 |------|------|-----------|
-| `NOT_FOUND` | 404 | Run does not exist |
-| `INVALID_STATE` | 409 | Run is not in a cancellable state (e.g., already completed or cancelled) |
+| `NOT_FOUND` | 404 | 実行が存在しない |
+| `INVALID_STATE` | 409 | 実行がキャンセル可能な状態にない（すでに完了またはキャンセル済み等） |
 
-### Resume From Step
+### ステップから再開
 ```
 POST /runs/{run_id}/resume
 ```
 
-Resume execution from a specific step through all downstream steps.
+特定のステップからすべての下流ステップまで実行を再開します。
 
-Request:
+リクエスト：
 ```json
 {
-  "from_step_id": "uuid (required)",
+  "from_step_id": "uuid (必須)",
   "input_override": {}
 }
 ```
 
-Constraint: Run must be `completed` or `failed` status
+制約: 実行は`completed`または`failed`ステータスである必要がある
 
-Response `202`:
+レスポンス `202`：
 ```json
 {
   "data": {
@@ -704,30 +704,30 @@ Response `202`:
 }
 ```
 
-**Error Responses:**
+**エラーレスポンス:**
 
-| Code | HTTP | Condition |
+| コード | HTTP | 条件 |
 |------|------|-----------|
-| `NOT_FOUND` | 404 | Run does not exist |
-| `INVALID_STATE` | 409 | Run is not in a resumable state (must be `completed` or `failed`) |
+| `NOT_FOUND` | 404 | 実行が存在しない |
+| `INVALID_STATE` | 409 | 実行が再開可能な状態にない（`completed`または`failed`である必要がある） |
 
-### Execute Single Step
+### 単一ステップを実行
 ```
 POST /runs/{run_id}/steps/{step_id}/execute
 ```
 
-Re-execute only a single step from an existing run.
+既存の実行から単一ステップのみを再実行します。
 
-Request:
+リクエスト：
 ```json
 {
   "input": {}
 }
 ```
 
-Constraint: Run must be `completed` or `failed` status
+制約: 実行は`completed`または`failed`ステータスである必要がある
 
-Response `202`:
+レスポンス `202`：
 ```json
 {
   "data": {
@@ -741,14 +741,14 @@ Response `202`:
 }
 ```
 
-### Get Step History
+### ステップ履歴を取得
 ```
 GET /runs/{run_id}/steps/{step_id}/history
 ```
 
-Get all execution history for a specific step in a run.
+実行内の特定のステップのすべての実行履歴を取得します。
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -775,7 +775,7 @@ Response `200`:
       "attempt": 1,
       "input": {},
       "output": {},
-      "error": "Error message",
+      "error": "エラーメッセージ",
       "started_at": "ISO8601",
       "completed_at": "ISO8601",
       "duration_ms": 200
@@ -784,21 +784,21 @@ Response `200`:
 }
 ```
 
-### Test Step Inline
+### ステップをインラインでテスト
 ```
 POST /projects/{project_id}/steps/{step_id}/test
 ```
 
-Test a single step without requiring an existing run. Creates a temporary run and executes only the specified step.
+既存の実行を必要とせずに単一ステップをテストします。一時的な実行を作成し、指定されたステップのみを実行します。
 
-Request:
+リクエスト：
 ```json
 {
   "input": {}
 }
 ```
 
-Response `202`:
+レスポンス `202`：
 ```json
 {
   "data": {
@@ -824,14 +824,14 @@ Response `202`:
 
 ## Schedules
 
-Schedules are now linked to specific Start blocks within a project. When a schedule triggers, it executes the specified Start block.
+スケジュールはプロジェクト内の特定のStartブロックにリンクされるようになりました。スケジュールがトリガーされると、指定されたStartブロックを実行します。
 
-### List
+### 一覧取得
 ```
 GET /projects/{project_id}/schedules
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -851,17 +851,17 @@ Response `200`:
 }
 ```
 
-### Create
+### 作成
 ```
 POST /projects/{project_id}/schedules
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "name": "string (required)",
-  "start_step_id": "uuid (required)",
-  "cron": "0 9 * * * (required)",
+  "name": "string (必須)",
+  "start_step_id": "uuid (必須)",
+  "cron": "0 9 * * * (必須)",
   "timezone": "Asia/Tokyo",
   "input": {},
   "enabled": true,
@@ -872,37 +872,37 @@ Request:
 }
 ```
 
-> **Note**: `start_step_id` is required and must reference a Start block within the project. This determines which Start block will be triggered when the schedule fires.
+> **注意**: `start_step_id`は必須で、プロジェクト内のStartブロックを参照する必要があります。これにより、スケジュールが発火したときにどのStartブロックがトリガーされるかが決まります。
 
-Response `201`: Created schedule
+レスポンス `201`: 作成されたスケジュール
 
-### Update
+### 更新
 ```
 PUT /schedules/{schedule_id}
 ```
 
-Response `200`: Updated schedule
+レスポンス `200`: 更新されたスケジュール
 
-### Delete
+### 削除
 ```
 DELETE /schedules/{schedule_id}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
 ---
 
 ## Webhooks
 
-> **Migration Note**: The standalone webhooks table has been removed. Webhook functionality is now configured directly in Start blocks via `trigger_type: "webhook"` and `trigger_config`.
+> **移行メモ**: スタンドアロンのwebhooksテーブルは削除されました。Webhook機能はStartブロックで`trigger_type: "webhook"`と`trigger_config`を通じて直接設定されるようになりました。
 
-### Webhook Configuration (via Start Block)
+### Webhook設定 (Startブロック経由)
 
-To create a webhook trigger, create or update a Start block with:
+Webhookトリガーを作成するには、Startブロックを以下のように作成または更新します：
 
 ```json
 {
-  "name": "Webhook Trigger",
+  "name": "Webhookトリガー",
   "type": "start",
   "config": {
     "trigger_type": "webhook",
@@ -918,21 +918,21 @@ To create a webhook trigger, create or update a Start block with:
 }
 ```
 
-### Receive Webhook (External)
+### Webhook受信 (外部)
 ```
 POST /projects/{project_id}/webhook/{start_step_id}
 ```
 
-Headers:
-| Header | Required | Description |
+ヘッダー：
+| ヘッダー | 必須 | 説明 |
 |--------|----------|-------------|
-| `X-Webhook-Signature` | Yes | `sha256=<hmac>` |
-| `X-Webhook-Timestamp` | Yes | Unix timestamp |
-| `X-Idempotency-Key` | No | Deduplication key |
+| `X-Webhook-Signature` | はい | `sha256=<hmac>` |
+| `X-Webhook-Timestamp` | はい | Unixタイムスタンプ |
+| `X-Idempotency-Key` | いいえ | 重複排除キー |
 
-Request: Any JSON payload
+リクエスト: 任意のJSONペイロード
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "run_id": "uuid",
@@ -944,21 +944,21 @@ Response `200`:
 
 ## Blocks
 
-Block definitions for workflow steps. Blocks can be system blocks (built-in) or tenant-specific custom blocks. Blocks support inheritance for reusable configurations.
+ワークフローステップ用のブロック定義。ブロックはシステムブロック（組み込み）またはテナント固有のカスタムブロックにできます。ブロックは再利用可能な設定のための継承をサポートします。
 
-### List
+### 一覧取得
 ```
 GET /blocks
 ```
 
-Query:
-| Param | Type | Description |
+クエリ：
+| パラメータ | 型 | 説明 |
 |-------|------|-------------|
-| `category` | string | Filter by category: `ai`, `flow`, `apps`, `custom` |
-| `subcategory` | string | Filter by subcategory: `chat`, `rag`, `routing`, `branching`, `data`, `control`, `utility`, `slack`, `discord`, `notion`, `github`, `google`, `linear`, `email`, `web` |
-| `enabled` | bool | Filter enabled blocks only |
+| `category` | string | カテゴリでフィルタ: `ai`, `flow`, `apps`, `custom` |
+| `subcategory` | string | サブカテゴリでフィルタ: `chat`, `rag`, `routing`, `branching`, `data`, `control`, `utility`, `slack`, `discord`, `notion`, `github`, `google`, `linear`, `email`, `web` |
+| `enabled` | bool | 有効なブロックのみをフィルタ |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "blocks": [
@@ -966,8 +966,8 @@ Response `200`:
       "id": "uuid",
       "tenant_id": "uuid",
       "slug": "llm",
-      "name": "LLM Call",
-      "description": "Call an LLM provider",
+      "name": "LLM呼び出し",
+      "description": "LLMプロバイダーを呼び出す",
       "category": "ai",
       "subcategory": "chat",
       "icon": "brain",
@@ -998,33 +998,33 @@ Response `200`:
 }
 ```
 
-### Get
+### 取得
 ```
 GET /blocks/{slug}
 ```
 
-Response `200`: Single block definition
+レスポンス `200`: 単一ブロック定義
 
-### Create
+### 作成
 ```
 POST /blocks
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "slug": "string (required)",
-  "name": "string (required)",
+  "slug": "string (必須)",
+  "name": "string (必須)",
   "description": "string",
-  "category": "ai|flow|apps|custom (required)",
-  "subcategory": "chat|rag|routing|branching|data|control|utility|slack|discord|notion|github|google|linear|email|web (optional)",
+  "category": "ai|flow|apps|custom (必須)",
+  "subcategory": "chat|rag|routing|branching|data|control|utility|slack|discord|notion|github|google|linear|email|web (オプション)",
   "icon": "string",
   "config_schema": {},
   "input_schema": {},
   "output_schema": {},
   "code": "string",
   "ui_config": {},
-  "parent_block_id": "uuid (optional)",
+  "parent_block_id": "uuid (オプション)",
   "config_defaults": {},
   "pre_process": "string",
   "post_process": "string",
@@ -1038,42 +1038,42 @@ Request:
 }
 ```
 
-**Block Inheritance/Extension Fields:**
+**ブロック継承/拡張フィールド:**
 
-| Field | Type | Description |
+| フィールド | 型 | 説明 |
 |-------|------|-------------|
-| `parent_block_id` | uuid | Reference to parent block for inheritance (only blocks with code can be inherited) |
-| `config_defaults` | object | Default values for parent's config_schema (overrides parent defaults) |
-| `pre_process` | string | JavaScript code executed before main code (for input transformation) |
-| `post_process` | string | JavaScript code executed after main code (for output transformation) |
-| `internal_steps` | array | Array of steps to execute sequentially inside the block |
+| `parent_block_id` | uuid | 継承用の親ブロックへの参照（コードを持つブロックのみ継承可能） |
+| `config_defaults` | object | 親のconfig_schemaのデフォルト値（親のデフォルトを上書き） |
+| `pre_process` | string | メインコードの前に実行されるJavaScriptコード（入力変換用） |
+| `post_process` | string | メインコードの後に実行されるJavaScriptコード（出力変換用） |
+| `internal_steps` | array | ブロック内で順次実行されるステップの配列 |
 
-**Resolved Fields (populated by backend for inherited blocks):**
+**解決済みフィールド（継承ブロック用にバックエンドで設定）:**
 
-| Field | Type | Description |
+| フィールド | 型 | 説明 |
 |-------|------|-------------|
-| `pre_process_chain` | string[] | Chain of preProcess code (child → root) |
-| `post_process_chain` | string[] | Chain of postProcess code (root → child) |
-| `resolved_code` | string | Code from root ancestor |
-| `resolved_config_defaults` | object | Merged config defaults from inheritance chain |
+| `pre_process_chain` | string[] | preProcessコードのチェーン（子 → ルート） |
+| `post_process_chain` | string[] | postProcessコードのチェーン（ルート → 子） |
+| `resolved_code` | string | ルート祖先からのコード |
+| `resolved_config_defaults` | object | 継承チェーンからマージされた設定デフォルト |
 
-Response `201`: Created block
+レスポンス `201`: 作成されたブロック
 
-**Validation Errors:**
+**検証エラー:**
 
-| Code | Message | Description |
+| コード | メッセージ | 説明 |
 |------|---------|-------------|
-| VALIDATION_ERROR | circular inheritance detected | Block would create a circular inheritance |
-| VALIDATION_ERROR | inheritance depth exceeded maximum limit | Inheritance chain exceeds 10 levels |
-| VALIDATION_ERROR | parent block cannot be inherited (no code) | Parent block has no code to inherit |
-| CONFLICT | block with this slug already exists | Slug is already used |
+| VALIDATION_ERROR | 循環継承が検出されました | ブロックが循環継承を作成する |
+| VALIDATION_ERROR | 継承深度が最大制限を超えました | 継承チェーンが10レベルを超える |
+| VALIDATION_ERROR | 親ブロックは継承できません（コードなし） | 親ブロックに継承するコードがない |
+| CONFLICT | このslugのブロックはすでに存在します | Slugがすでに使用されている |
 
-### Update
+### 更新
 ```
 PUT /blocks/{slug}
 ```
 
-Request:
+リクエスト：
 ```json
 {
   "name": "string",
@@ -1085,7 +1085,7 @@ Request:
   "code": "string",
   "ui_config": {},
   "enabled": true,
-  "parent_block_id": "uuid (null to clear)",
+  "parent_block_id": "uuid (クリアするにはnull)",
   "config_defaults": {},
   "pre_process": "string",
   "post_process": "string",
@@ -1093,31 +1093,31 @@ Request:
 }
 ```
 
-Response `200`: Updated block
+レスポンス `200`: 更新されたブロック
 
-### Delete
+### 削除
 ```
 DELETE /blocks/{slug}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
 ---
 
 ## Adapters
 
-### List
+### 一覧取得
 ```
 GET /adapters
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
     {
       "id": "mock",
-      "name": "Mock Adapter",
+      "name": "モックアダプター",
       "description": "string",
       "input_schema": {},
       "output_schema": {}
@@ -1130,23 +1130,23 @@ Response `200`:
 
 ## Audit Logs
 
-### List
+### 一覧取得
 ```
 GET /audit-logs
 ```
 
-Query:
-| Param | Type | Description |
+クエリ：
+| パラメータ | 型 | 説明 |
 |-------|------|-------------|
 | `action` | string | `create`, `update`, `delete`, `publish`, `execute` |
 | `resource_type` | string | `project`, `run`, `secret` |
-| `actor_id` | uuid | User ID |
-| `from` | ISO8601 | Start time |
-| `to` | ISO8601 | End time |
-| `page` | int | Page number |
-| `limit` | int | Items per page |
+| `actor_id` | uuid | ユーザーID |
+| `from` | ISO8601 | 開始時刻 |
+| `to` | ISO8601 | 終了時刻 |
+| `page` | int | ページ番号 |
+| `limit` | int | 1ページあたりの件数 |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -1167,19 +1167,19 @@ Response `200`:
 
 ---
 
-## Usage & Cost Tracking
+## 使用量とコスト追跡
 
-### Get Usage Summary
+### 使用量サマリーを取得
 ```
 GET /usage/summary
 ```
 
-Query:
-| Param | Type | Default | Description |
+クエリ：
+| パラメータ | 型 | デフォルト | 説明 |
 |-------|------|---------|-------------|
 | `period` | string | `month` | `day`, `week`, `month` |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": {
@@ -1196,18 +1196,18 @@ Response `200`:
 }
 ```
 
-### Get Daily Usage
+### 日次使用量を取得
 ```
 GET /usage/daily
 ```
 
-Query:
-| Param | Type | Required | Description |
+クエリ：
+| パラメータ | 型 | 必須 | 説明 |
 |-------|------|----------|-------------|
-| `start` | ISO8601 | Yes | Start date |
-| `end` | ISO8601 | Yes | End date |
+| `start` | ISO8601 | はい | 開始日 |
+| `end` | ISO8601 | はい | 終了日 |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -1224,23 +1224,23 @@ Response `200`:
 }
 ```
 
-### Get Usage by Project
+### プロジェクト別使用量を取得
 ```
 GET /usage/by-project
 ```
 
-Query:
-| Param | Type | Default | Description |
+クエリ：
+| パラメータ | 型 | デフォルト | 説明 |
 |-------|------|---------|-------------|
 | `period` | string | `month` | `day`, `week`, `month` |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
     {
       "project_id": "uuid",
-      "project_name": "My Project",
+      "project_name": "マイプロジェクト",
       "total_requests": 500,
       "total_tokens": 150000,
       "total_cost_usd": 5.25
@@ -1249,17 +1249,17 @@ Response `200`:
 }
 ```
 
-### Get Usage by Model
+### モデル別使用量を取得
 ```
 GET /usage/by-model
 ```
 
-Query:
-| Param | Type | Default | Description |
+クエリ：
+| パラメータ | 型 | デフォルト | 説明 |
 |-------|------|---------|-------------|
 | `period` | string | `month` | `day`, `week`, `month` |
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -1276,12 +1276,12 @@ Response `200`:
 }
 ```
 
-### Get Run Usage
+### 実行使用量を取得
 ```
 GET /runs/{run_id}/usage
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -1305,12 +1305,12 @@ Response `200`:
 }
 ```
 
-### List Budgets
+### 予算一覧
 ```
 GET /usage/budgets
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -1328,29 +1328,29 @@ Response `200`:
 }
 ```
 
-### Create Budget
+### 予算作成
 ```
 POST /usage/budgets
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "project_id": "uuid (optional)",
+  "project_id": "uuid (オプション)",
   "budget_type": "monthly|daily",
   "budget_amount_usd": 100.00,
   "alert_threshold": 0.80
 }
 ```
 
-Response `201`: Created budget
+レスポンス `201`: 作成された予算
 
-### Update Budget
+### 予算更新
 ```
 PUT /usage/budgets/{id}
 ```
 
-Request:
+リクエスト：
 ```json
 {
   "budget_amount_usd": 150.00,
@@ -1359,21 +1359,21 @@ Request:
 }
 ```
 
-Response `200`: Updated budget
+レスポンス `200`: 更新された予算
 
-### Delete Budget
+### 予算削除
 ```
 DELETE /usage/budgets/{id}
 ```
 
-Response `204`: No content
+レスポンス `204`: コンテンツなし
 
-### Get Model Pricing
+### モデル料金を取得
 ```
 GET /usage/pricing
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "data": [
@@ -1395,23 +1395,23 @@ Response `200`:
 
 ---
 
-## Admin - System Blocks
+## 管理者 - システムブロック
 
 管理者専用APIエンドポイント。システムブロックの編集・バージョン管理を行う。
 
-### List System Blocks
+### システムブロック一覧
 ```
 GET /admin/blocks
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "blocks": [
     {
       "id": "uuid",
       "slug": "llm",
-      "name": "LLM Call",
+      "name": "LLM呼び出し",
       "description": "LLM APIを呼び出す",
       "category": "ai",
       "subcategory": "chat",
@@ -1430,22 +1430,22 @@ Response `200`:
 }
 ```
 
-### Get System Block
+### システムブロック取得
 ```
 GET /admin/blocks/{id}
 ```
 
-Response `200`: System block details
+レスポンス `200`: システムブロックの詳細
 
-### Update System Block
+### システムブロック更新
 ```
 PUT /admin/blocks/{id}
 ```
 
-Request:
+リクエスト：
 ```json
 {
-  "name": "LLM Call",
+  "name": "LLM呼び出し",
   "description": "LLM APIを呼び出す",
   "code": "const response = await ctx.llm.chat(...)",
   "config_schema": {},
@@ -1456,14 +1456,14 @@ Request:
 }
 ```
 
-Response `200`: Updated block (version incremented)
+レスポンス `200`: 更新されたブロック（バージョンがインクリメント）
 
-### List Block Versions
+### ブロックバージョン一覧
 ```
 GET /admin/blocks/{id}/versions
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "versions": [
@@ -1484,37 +1484,37 @@ Response `200`:
 }
 ```
 
-### Get Block Version
+### ブロックバージョン取得
 ```
 GET /admin/blocks/{id}/versions/{version}
 ```
 
-Response `200`: Specific version details
+レスポンス `200`: 特定バージョンの詳細
 
-### Rollback Block
+### ブロックロールバック
 ```
 POST /admin/blocks/{id}/rollback
 ```
 
-Request:
+リクエスト：
 ```json
 {
   "version": 2
 }
 ```
 
-Response `200`: Block restored to specified version (new version created)
+レスポンス `200`: 指定されたバージョンに復元されたブロック（新しいバージョンが作成される）
 
 ---
 
-## Health
+## ヘルス
 
 ### Liveness
 ```
 GET /health
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "status": "ok"
@@ -1526,7 +1526,7 @@ Response `200`:
 GET /ready
 ```
 
-Response `200`:
+レスポンス `200`：
 ```json
 {
   "status": "ok",
@@ -1537,7 +1537,7 @@ Response `200`:
 }
 ```
 
-Response `503` (unhealthy):
+レスポンス `503` (異常時)：
 ```json
 {
   "status": "error",
@@ -1550,51 +1550,51 @@ Response `503` (unhealthy):
 
 ---
 
-## cURL Examples
+## cURLサンプル
 
-### Create Project
+### プロジェクト作成
 ```bash
 curl -X POST http://localhost:8080/api/v1/projects \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
-  -d '{"name": "Test Project"}'
+  -d '{"name": "テストプロジェクト"}'
 ```
 
-### Add Step
+### ステップ追加
 ```bash
 curl -X POST "http://localhost:8080/api/v1/projects/{id}/steps" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
   -d '{
-    "name": "Step 1",
+    "name": "ステップ1",
     "type": "tool",
     "config": {"adapter_id": "mock", "response": {"result": "ok"}}
   }'
 ```
 
-### Execute Project
+### プロジェクト実行
 ```bash
 curl -X POST "http://localhost:8080/api/v1/projects/{id}/runs" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
-  -d '{"input": {"message": "Hello"}, "start_step_id": "{start_step_uuid}", "triggered_by": "test"}'
+  -d '{"input": {"message": "こんにちは"}, "start_step_id": "{start_step_uuid}", "triggered_by": "test"}'
 ```
 
-### With JWT Auth
+### JWT認証あり
 ```bash
-# Get token
+# トークンを取得
 TOKEN=$(curl -s -X POST http://localhost:8180/realms/ai-orchestration/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=admin@example.com&password=admin123&grant_type=password&client_id=frontend" \
   | jq -r .access_token)
 
-# Use token
+# トークンを使用
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/projects
 ```
 
-## Related Documents
+## 関連ドキュメント
 
-- [BACKEND.md](./BACKEND.md) - Backend code structure and handlers
-- [DATABASE.md](./DATABASE.md) - Database schema
-- [openapi.yaml](./openapi.yaml) - Machine-readable OpenAPI spec
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Environment and authentication setup
+- [BACKEND.md](./BACKEND.md) - バックエンドのコード構造とハンドラー
+- [DATABASE.md](./DATABASE.md) - データベーススキーマ
+- [openapi.yaml](./openapi.yaml) - 機械可読なOpenAPI仕様
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - 環境と認証のセットアップ

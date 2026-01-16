@@ -2,7 +2,7 @@
 
 **Status**: 🚧 Phase 3まで実装完了
 **Created**: 2026-01-12
-**Related Documents**:
+**関連ドキュメント**:
 - [UNIFIED_BLOCK_MODEL.md](./UNIFIED_BLOCK_MODEL.md)
 - [BLOCK_REGISTRY.md](../BLOCK_REGISTRY.md)
 - [FRONTEND.md](../FRONTEND.md)

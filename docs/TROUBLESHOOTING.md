@@ -1,4 +1,4 @@
-# Troubleshooting Guide
+# トラブルシューティングガイド
 
 Claude Code がエラーに遭遇した際の対処法リファレンス。
 
@@ -7,7 +7,7 @@ Claude Code がエラーに遭遇した際の対処法リファレンス。
 
 ---
 
-## Quick Diagnosis
+## クイック診断
 
 | 症状 | 最初に確認すること | 対処法 |
 |------|------------------|--------|
@@ -19,9 +19,9 @@ Claude Code がエラーに遭遇した際の対処法リファレンス。
 
 ---
 
-## Database Errors
+## データベースエラー
 
-### Error: connection refused to localhost:5432
+### エラー: connection refused to localhost:5432
 
 **原因**: PostgreSQL コンテナが起動していない
 
@@ -40,7 +40,7 @@ docker compose up -d postgres
 
 ---
 
-### Error: relation "xxx" does not exist
+### エラー: relation "xxx" does not exist
 
 **原因**: マイグレーションが適用されていない
 
@@ -58,7 +58,7 @@ DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmod
 
 ---
 
-### Error: duplicate key value violates unique constraint
+### エラー: duplicate key value violates unique constraint
 
 **原因**: seed データと既存データの衝突
 
@@ -76,7 +76,7 @@ make db-seed
 
 ---
 
-### Error: null value in column "xxx" violates not-null constraint
+### エラー: null value in column "xxx" violates not-null constraint
 
 **原因**: INSERT/UPDATE 時の必須フィールド漏れ
 
@@ -94,9 +94,9 @@ make db-seed
 
 ---
 
-## Backend Errors (Go)
+## バックエンドエラー (Go)
 
-### Error: undefined: xxx
+### エラー: undefined: xxx
 
 **原因**: 関数・変数・型が未定義
 
@@ -111,7 +111,7 @@ cd backend && go mod tidy
 
 ---
 
-### Error: cannot use xxx (type A) as type B
+### エラー: cannot use xxx (type A) as type B
 
 **原因**: 型の不一致
 
@@ -137,7 +137,7 @@ rawJSON, _ := json.Marshal(cfg)
 
 ---
 
-### Error: cannot find package "xxx"
+### エラー: cannot find package "xxx"
 
 **原因**: 依存パッケージが未インストール
 
@@ -153,7 +153,7 @@ cd backend && go get <package-path>
 
 ---
 
-### Error: cyclic import
+### エラー: cyclic import
 
 **原因**: パッケージ間の循環参照
 
@@ -175,7 +175,7 @@ repository → domain/interfaces
 
 ---
 
-### Error: context deadline exceeded
+### エラー: context deadline exceeded
 
 **原因**: 操作がタイムアウト
 
@@ -193,9 +193,9 @@ repository → domain/interfaces
 
 ---
 
-## Frontend Errors (Vue/Nuxt)
+## フロントエンドエラー (Vue/Nuxt)
 
-### Error: Cannot find module 'xxx'
+### エラー: Cannot find module 'xxx'
 
 **原因**: node_modules が古い、または破損
 
@@ -208,7 +208,7 @@ npm install
 
 ---
 
-### Error: Type 'xxx' is not assignable to type 'yyy'
+### エラー: Type 'xxx' is not assignable to type 'yyy'
 
 **原因**: TypeScript 型エラー
 
@@ -233,7 +233,7 @@ const name = workflow.value?.name ?? 'default'
 
 ---
 
-### Error: [Vue warn]: Invalid prop type
+### エラー: [Vue warn]: Invalid prop type
 
 **原因**: コンポーネント props の型不一致
 
@@ -244,7 +244,7 @@ const name = workflow.value?.name ?? 'default'
 
 ---
 
-### Error: Hydration mismatch
+### エラー: Hydration mismatch
 
 **原因**: サーバーサイドとクライアントサイドの HTML が不一致
 
@@ -268,7 +268,7 @@ onMounted(() => { mounted.value = true })
 
 ---
 
-### Error: alert/confirm/prompt is not defined (SSR)
+### エラー: alert/confirm/prompt is not defined (SSR)
 
 **原因**: ブラウザ API を SSR で使用
 
@@ -283,7 +283,7 @@ toast.add({ title: 'Success', description: 'Operation completed' })
 
 ---
 
-### Error: @rollup/rollup-darwin-* not found
+### エラー: @rollup/rollup-darwin-* not found
 
 **原因**: ローカルビルド時の rollup 依存問題
 
@@ -300,9 +300,9 @@ npm install
 
 ---
 
-## Docker / Container Errors
+## Docker / コンテナエラー
 
-### Error: port is already allocated
+### エラー: port is already allocated
 
 **原因**: 同じポートで別のサービスが起動中
 
@@ -319,7 +319,7 @@ docker compose stop <service>
 
 ---
 
-### Error: no such service: xxx
+### エラー: no such service: xxx
 
 **原因**: docker-compose.yml に定義されていないサービス
 
@@ -356,9 +356,9 @@ make db-reset && docker compose restart api worker
 
 ---
 
-## Git / PR Errors
+## Git / PR エラー
 
-### Error: conflict in xxx
+### エラー: conflict in xxx
 
 **対処**:
 1. `main` から最新を取得: `git fetch origin main`
@@ -370,7 +370,7 @@ make db-reset && docker compose restart api worker
 
 ---
 
-### Error: pre-commit hook failed
+### エラー: pre-commit hook failed
 
 **対処**:
 1. エラーメッセージを確認
@@ -395,18 +395,18 @@ cd frontend && npm run lint -- --fix
 3. 修正して再 push
 
 ```bash
-# Backend
+# バックエンド
 cd backend && go test ./...
 
-# Frontend
+# フロントエンド
 cd frontend && npm run check
 ```
 
 ---
 
-## Sandbox / Block Execution Errors
+## Sandbox / ブロック実行エラー
 
-### Error: goja does not support 'await'
+### エラー: goja does not support 'await'
 
 **原因**: ブロックコードで `await` を使用
 
@@ -423,7 +423,7 @@ const response = ctx.llm.chat(...);
 
 ---
 
-### Error: unknown adapter: xxx
+### エラー: unknown adapter: xxx
 
 **原因**: 存在しないアダプタを呼び出し
 
@@ -435,7 +435,7 @@ const response = ctx.llm.chat(...);
 
 ---
 
-### Error: execution timeout
+### エラー: execution timeout
 
 **原因**: ブロックコードが時間内に完了しない
 
@@ -446,7 +446,7 @@ const response = ctx.llm.chat(...);
 
 ---
 
-## DAG Editor Errors
+## DAG エディタエラー
 
 ### ブロックがドラッグ後に元の位置に戻る
 
@@ -481,7 +481,7 @@ const response = ctx.llm.chat(...);
 
 ---
 
-## Common Mistakes by Claude Code
+## Claude Code がよくする間違い
 
 ### 1. テスト通過後に再起動を忘れる
 
@@ -523,12 +523,12 @@ docker compose restart api worker
 
 ---
 
-## Error Resolution Template
+## エラー解決テンプレート
 
 エラーに遭遇したら、以下のテンプレートで記録:
 
 ```markdown
-### Error: [エラーメッセージ]
+### エラー: [エラーメッセージ]
 
 **発生状況**:
 - 実行したコマンド/操作:
@@ -547,7 +547,7 @@ docker compose restart api worker
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
 - [WORKFLOW_RULES.md](./rules/WORKFLOW_RULES.md) - 開発ワークフロー全般
 - [TESTING.md](./TESTING.md) - テスト統合ガイド

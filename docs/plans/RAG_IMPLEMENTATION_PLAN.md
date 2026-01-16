@@ -1140,7 +1140,7 @@ func TestTenantIsolation(t *testing.T) {
 - [UNIFIED_BLOCK_MODEL.md](../designs/UNIFIED_BLOCK_MODEL.md) - ブロックアーキテクチャ
 - [BLOCK_REGISTRY.md](../BLOCK_REGISTRY.md) - 既存ブロック一覧
 - [DATABASE.md](../DATABASE.md) - スキーマ管理
-- [LangChain Retrieval Docs](https://docs.langchain.com/oss/python/langchain/retrieval) - 参考設計
+- [LangChain Retrieval Docs](https://docs.langchain.com/oss/python/langchain/retrieval) - 参考資料
 
 ---
 

@@ -810,9 +810,9 @@ ORDER BY created_at DESC;
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
-- [BACKEND.md](../BACKEND.md) - Backend architecture
-- [API.md](../API.md) - API documentation
-- [DATABASE.md](../DATABASE.md) - Database schema
-- [UNIFIED_BLOCK_MODEL.md](../designs/UNIFIED_BLOCK_MODEL.md) - Block execution architecture
+- [BACKEND.md](../BACKEND.md) - バックエンドアーキテクチャ
+- [API.md](../API.md) - APIドキュメント
+- [DATABASE.md](../DATABASE.md) - データベーススキーマ
+- [UNIFIED_BLOCK_MODEL.md](../designs/UNIFIED_BLOCK_MODEL.md) - ブロック実行アーキテクチャ

@@ -1,10 +1,10 @@
-# Git Rules
+# Gitルール
 
 Git操作、コミット、PR、コンフリクト解消のルール。
 
 ---
 
-## Commit Message Convention
+## コミットメッセージ規約
 
 ### 形式
 
@@ -93,7 +93,7 @@ Push前に必ず確認:
 
 ---
 
-## Branch Naming
+## ブランチ命名規則
 
 | タイプ | プレフィックス | 例 |
 |--------|---------------|-----|
@@ -122,7 +122,7 @@ Push前に必ず確認:
 
 ---
 
-## Conflict Resolution Flow
+## コンフリクト解消フロー
 
 **PRにpush後、mainブランチとのコンフリクトが発生した場合は、必ず以下のフローで解消すること。**
 
@@ -199,7 +199,7 @@ git push origin <branch-name>
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
 - [CODEX_REVIEW.md](./CODEX_REVIEW.md) - PRレビューフロー
 - [WORKFLOW_RULES.md](./WORKFLOW_RULES.md) - 開発ワークフロー

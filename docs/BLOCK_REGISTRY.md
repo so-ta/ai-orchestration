@@ -1,13 +1,13 @@
-# Block Registry Reference
+# ブロックレジストリリファレンス
 
 ブロック定義の API リファレンス（Source of Truth）。
 
-> **Status**: ✅ Implemented (Unified Block Model)
+> **Status**: ✅ 実装済み（Unified Block Model）
 > **Updated**: 2026-01-15
 > **Role**: **API 仕様リファレンス**（このドキュメントが正）
 > **See also**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - 設計思想・アーキテクチャ
 > **Migration**: `013_add_integration_blocks.sql` - 外部連携ブロック追加
-> **RAG Support**: `seed.sql` - RAGブロック7種追加
+> **RAG Support**: `seed.sql` - RAG ブロック 7 種追加
 
 ---
 
@@ -26,23 +26,23 @@
 
 ---
 
-## Quick Reference
+## クイックリファレンス
 
-| Item | Value |
+| 項目 | 値 |
 |------|-------|
-| Table | `block_definitions` |
-| System Blocks | `tenant_id = NULL` (46 blocks: 18 core + 10 foundation + 11 integration + 7 RAG) |
-| Tenant Blocks | `tenant_id = UUID` |
-| Executor | Goja JavaScript VM |
-| Version History | `block_versions` table |
-| Categories | ai, logic, integration, data, control, utility |
+| テーブル | `block_definitions` |
+| システムブロック | `tenant_id = NULL`（46 個: コア 18 + 基盤 10 + 連携 11 + RAG 7） |
+| テナントブロック | `tenant_id = UUID` |
+| 実行環境 | Goja JavaScript VM |
+| バージョン履歴 | `block_versions` テーブル |
+| カテゴリ | ai, logic, integration, data, control, utility |
 
-## Overview
+## 概要
 
-Block Registryはワークフローのステップタイプを管理するシステムです。
-**Unified Block Model**により、すべてのブロックはJavaScriptコードとして統一実行されます。
+Block Registry はワークフローのステップタイプを管理するシステムです。
+**Unified Block Model** により、すべてのブロックは JavaScript コードとして統一実行されます。
 
-## Architecture
+## アーキテクチャ
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -82,67 +82,67 @@ Block Registryはワークフローのステップタイプを管理するシス
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Data Model
+## データモデル
 
 ### BlockDefinition
 
 ```go
 type BlockDefinition struct {
-    ID             uuid.UUID       // Unique ID
-    TenantID       *uuid.UUID      // NULL = system block, otherwise tenant-specific
-    Slug           string          // Unique identifier (e.g., "llm", "discord")
-    Name           string          // Display name
-    Description    string          // Block description
+    ID             uuid.UUID       // 一意の ID
+    TenantID       *uuid.UUID      // NULL = システムブロック、それ以外はテナント固有
+    Slug           string          // 一意の識別子（例: "llm", "discord"）
+    Name           string          // 表示名
+    Description    string          // ブロックの説明
     Category       string          // ai, logic, integration, data, control, utility
 
-    // === Unified Block Model fields ===
-    Code           string          // JavaScript code executed in sandbox
+    // === Unified Block Model フィールド ===
+    Code           string          // サンドボックスで実行される JavaScript コード
     UIConfig       json.RawMessage // {icon, color, configSchema}
-    IsSystem       bool            // System blocks = admin only edit
-    Version        int             // Version number, incremented on update
+    IsSystem       bool            // システムブロック = 管理者のみ編集可
+    Version        int             // バージョン番号、更新時にインクリメント
 
-    // Schemas (JSON Schema format)
-    ConfigSchema   json.RawMessage // Configuration options for the block
-    InputSchema    json.RawMessage // Expected input structure
-    OutputSchema   json.RawMessage // Output structure
+    // スキーマ（JSON Schema 形式）
+    ConfigSchema   json.RawMessage // ブロックの設定オプション
+    InputSchema    json.RawMessage // 期待される入力構造
+    OutputSchema   json.RawMessage // 出力構造
 
-    // Error handling
-    ErrorCodes     []ErrorCodeDef  // Defined error codes for this block
+    // エラーハンドリング
+    ErrorCodes     []ErrorCodeDef  // このブロックの定義済みエラーコード
 
-    // === Block Inheritance/Extension fields ===
-    ParentBlockID  *uuid.UUID      // Reference to parent block for inheritance
-    ConfigDefaults json.RawMessage // Default values for parent's config_schema
-    PreProcess     string          // JavaScript code for input transformation
-    PostProcess    string          // JavaScript code for output transformation
-    InternalSteps  []InternalStep  // Composite block internal steps
+    // === ブロック継承/拡張フィールド ===
+    ParentBlockID  *uuid.UUID      // 継承用の親ブロック参照
+    ConfigDefaults json.RawMessage // 親の config_schema のデフォルト値
+    PreProcess     string          // 入力変換用 JavaScript コード
+    PostProcess    string          // 出力変換用 JavaScript コード
+    InternalSteps  []InternalStep  // 複合ブロックの内部ステップ
 
-    // === Resolved fields (populated by backend) ===
-    PreProcessChain        []string        // Chain of preProcess code (child→root)
-    PostProcessChain       []string        // Chain of postProcess code (root→child)
-    ResolvedCode           string          // Code from root ancestor
-    ResolvedConfigDefaults json.RawMessage // Merged config defaults from chain
+    // === 解決済みフィールド（バックエンドで設定） ===
+    PreProcessChain        []string        // preProcess コードのチェーン（子→ルート）
+    PostProcessChain       []string        // postProcess コードのチェーン（ルート→子）
+    ResolvedCode           string          // ルート祖先からのコード
+    ResolvedConfigDefaults json.RawMessage // チェーンからマージされた設定デフォルト
 
-    // Metadata
+    // メタデータ
     Enabled        bool
     CreatedAt      time.Time
     UpdatedAt      time.Time
 }
 
 type InternalStep struct {
-    Type      string          `json:"type"`       // Block slug to execute
-    Config    json.RawMessage `json:"config"`     // Step configuration
-    OutputKey string          `json:"output_key"` // Key for storing output
+    Type      string          `json:"type"`       // 実行するブロックの slug
+    Config    json.RawMessage `json:"config"`     // ステップ設定
+    OutputKey string          `json:"output_key"` // 出力を格納するキー
 }
 
 type ErrorCodeDef struct {
-    Code        string `json:"code"`        // e.g., "LLM_001"
-    Name        string `json:"name"`        // e.g., "RATE_LIMIT_EXCEEDED"
-    Description string `json:"description"` // Human-readable description
-    Retryable   bool   `json:"retryable"`   // Can this error be retried?
+    Code        string `json:"code"`        // 例: "LLM_001"
+    Name        string `json:"name"`        // 例: "RATE_LIMIT_EXCEEDED"
+    Description string `json:"description"` // 人間が読める説明
+    Retryable   bool   `json:"retryable"`   // このエラーはリトライ可能か？
 }
 ```
 
-### Block Inheritance/Extension
+### ブロック継承/拡張
 
 ブロック継承により、既存ブロックを拡張して再利用可能なブロックを作成できます。
 **多段継承**により、認証パターンやサービス固有の設定を階層的に定義できます。
@@ -151,33 +151,33 @@ type ErrorCodeDef struct {
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                    Hierarchical Block Inheritance                        │
+│                    階層的ブロック継承                                     │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  http (Level 0: Base)                                                    │
-│  ├── webhook (Level 1: Pattern)                                         │
-│  │   ├── slack (Level 2: Concrete)                                      │
-│  │   └── discord (Level 2: Concrete)                                    │
+│  http (Level 0: ベース)                                                  │
+│  ├── webhook (Level 1: パターン)                                         │
+│  │   ├── slack (Level 2: 具体)                                          │
+│  │   └── discord (Level 2: 具体)                                        │
 │  │                                                                       │
-│  ├── rest-api (Level 1: Pattern)                                        │
-│  │   ├── bearer-api (Level 2: Auth)                                     │
-│  │   │   ├── github-api (Level 3: Service)                              │
-│  │   │   │   ├── github_create_issue (Level 4: Operation)               │
-│  │   │   │   └── github_add_comment (Level 4: Operation)                │
-│  │   │   ├── notion-api (Level 3: Service)                              │
-│  │   │   │   ├── notion_query_db (Level 4: Operation)                   │
-│  │   │   │   └── notion_create_page (Level 4: Operation)                │
-│  │   │   └── email_sendgrid (Level 3: Concrete)                         │
-│  │   ├── api-key-header (Level 2: Auth)                                 │
-│  │   ├── api-key-query (Level 2: Auth)                                  │
-│  │   │   └── google-api (Level 3: Service)                              │
-│  │   │       ├── gsheets_append (Level 4: Operation)                    │
-│  │   │       └── gsheets_read (Level 4: Operation)                      │
-│  │   └── web_search (Level 2: Concrete)                                 │
+│  ├── rest-api (Level 1: パターン)                                        │
+│  │   ├── bearer-api (Level 2: 認証)                                     │
+│  │   │   ├── github-api (Level 3: サービス)                              │
+│  │   │   │   ├── github_create_issue (Level 4: 操作)                    │
+│  │   │   │   └── github_add_comment (Level 4: 操作)                     │
+│  │   │   ├── notion-api (Level 3: サービス)                              │
+│  │   │   │   ├── notion_query_db (Level 4: 操作)                        │
+│  │   │   │   └── notion_create_page (Level 4: 操作)                     │
+│  │   │   └── email_sendgrid (Level 3: 具体)                             │
+│  │   ├── api-key-header (Level 2: 認証)                                 │
+│  │   ├── api-key-query (Level 2: 認証)                                  │
+│  │   │   └── google-api (Level 3: サービス)                              │
+│  │   │       ├── gsheets_append (Level 4: 操作)                         │
+│  │   │       └── gsheets_read (Level 4: 操作)                           │
+│  │   └── web_search (Level 2: 具体)                                     │
 │  │                                                                       │
-│  └── graphql (Level 1: Pattern) ← inherits rest-api                     │
-│      └── linear-api (Level 2: Service)                                  │
-│          └── linear_create_issue (Level 3: Operation)                   │
+│  └── graphql (Level 1: パターン) ← rest-api を継承                       │
+│      └── linear-api (Level 2: サービス)                                  │
+│          └── linear_create_issue (Level 3: 操作)                        │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -186,34 +186,34 @@ type ErrorCodeDef struct {
 
 | Level | 名称 | 責務 | 例 |
 |-------|------|------|-----|
-| 0 | Base | 基本的な実行ロジック | `http` |
-| 1 | Pattern | 通信パターン、基本認証 | `webhook`, `rest-api`, `graphql` |
-| 2 | Auth | 認証方式の抽象化 | `bearer-api`, `api-key-header`, `api-key-query` |
-| 3 | Service | サービス固有の設定 | `github-api`, `notion-api`, `google-api` |
-| 4+ | Operation | 具体的な操作 | `github_create_issue`, `notion_query_db` |
+| 0 | ベース | 基本的な実行ロジック | `http` |
+| 1 | パターン | 通信パターン、基本認証 | `webhook`, `rest-api`, `graphql` |
+| 2 | 認証 | 認証方式の抽象化 | `bearer-api`, `api-key-header`, `api-key-query` |
+| 3 | サービス | サービス固有の設定 | `github-api`, `notion-api`, `google-api` |
+| 4+ | 操作 | 具体的な操作 | `github_create_issue`, `notion_query_db` |
 
 #### 継承の仕組み
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│          Multi-Level Inheritance Execution Flow                   │
+│          多段継承の実行フロー                                      │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                    │
 │  github_create_issue → github-api → bearer-api → rest-api → http │
 │                                                                    │
-│  Execution Order:                                                  │
-│  1. PreProcess Chain (child → root):                              │
+│  実行順序:                                                         │
+│  1. PreProcess チェーン（子 → ルート）:                            │
 │     github_create_issue.preProcess → github-api.preProcess →      │
 │     bearer-api.preProcess → rest-api.preProcess                   │
 │                                                                    │
-│  2. Config Merge (root → child):                                  │
+│  2. Config マージ（ルート → 子）:                                  │
 │     rest-api.configDefaults ← bearer-api.configDefaults ←        │
 │     github-api.configDefaults ← github_create_issue.configDefaults│
-│     ← step.config (runtime)                                       │
+│     ← step.config（実行時）                                       │
 │                                                                    │
-│  3. Execute Code (from root ancestor: http.code)                  │
+│  3. コード実行（ルート祖先から: http.code）                         │
 │                                                                    │
-│  4. PostProcess Chain (root → child):                             │
+│  4. PostProcess チェーン（ルート → 子）:                           │
 │     rest-api.postProcess → bearer-api.postProcess →               │
 │     github-api.postProcess → github_create_issue.postProcess      │
 │                                                                    │
@@ -225,7 +225,7 @@ type ErrorCodeDef struct {
 | ルール | 説明 |
 |--------|------|
 | コードを持つブロックのみ継承可能 | `Code != ""` |
-| 最大継承深度 | 50レベル（実用上は4-5レベル） |
+| 最大継承深度 | 50 レベル（実用上は 4-5 レベル） |
 | 循環継承禁止 | A→B→C→A のような循環は不可（トポロジカルソートで検出） |
 | テナント分離 | 同一テナント内またはシステムブロックからのみ継承可能 |
 | マイグレーション順序 | トポロジカルソートにより親ブロックが先に処理される |
@@ -233,27 +233,27 @@ type ErrorCodeDef struct {
 #### ConfigDefaults のマージ順序
 
 ```
-root ancestor defaults (rest-api)
-    ↓ (override)
-auth level defaults (bearer-api: auth_type=bearer)
-    ↓ (override)
-service defaults (github-api: base_url, secret_key)
-    ↓ (override)
-child defaults (github_create_issue: specific settings)
-    ↓ (override)
-step config (execution time)
+ルート祖先のデフォルト (rest-api)
+    ↓（上書き）
+認証レベルのデフォルト (bearer-api: auth_type=bearer)
+    ↓（上書き）
+サービスのデフォルト (github-api: base_url, secret_key)
+    ↓（上書き）
+子のデフォルト (github_create_issue: 固有の設定)
+    ↓（上書き）
+ステップ設定（実行時）
 ```
 
 #### 継承ブロックの例（新アーキテクチャ）
 
 ```javascript
-// github_create_issue (inherits from github-api → bearer-api → rest-api → http)
+// github_create_issue (github-api → bearer-api → rest-api → http から継承)
 
-// ConfigDefaults (親からのマージ):
-// From rest-api: { auth_type: "bearer" }
-// From github-api: { base_url: "https://api.github.com", secret_key: "GITHUB_TOKEN" }
+// ConfigDefaults（親からのマージ）:
+// rest-api より: { auth_type: "bearer" }
+// github-api より: { base_url: "https://api.github.com", secret_key: "GITHUB_TOKEN" }
 
-// PreProcess (このブロック固有):
+// PreProcess（このブロック固有）:
 const payload = {
     title: renderTemplate(config.title, input),
     body: config.body ? renderTemplate(config.body, input) : undefined,
@@ -267,7 +267,7 @@ return {
     body: payload
 };
 
-// PostProcess (このブロック固有):
+// PostProcess（このブロック固有）:
 if (input.status >= 400) {
     const errorMsg = input.body?.message || 'Unknown error';
     throw new Error('[GITHUB_002] Issue作成失敗: ' + errorMsg);
@@ -279,21 +279,21 @@ return {
     html_url: input.body.html_url
 };
 
-// 親のPreProcessチェーン（自動実行）:
-// 1. github-api: GitHub APIヘッダー追加 (Accept, X-GitHub-Api-Version)
+// 親の PreProcess チェーン（自動実行）:
+// 1. github-api: GitHub API ヘッダー追加 (Accept, X-GitHub-Api-Version)
 // 2. bearer-api: token → auth_key マッピング
-// 3. rest-api: Authorization: Bearer ヘッダー追加、URL構築
-// 4. http: 実際のHTTPリクエスト実行
+// 3. rest-api: Authorization: Bearer ヘッダー追加、URL 構築
+// 4. http: 実際の HTTP リクエスト実行
 
-// 親のPostProcessチェーン（自動実行）:
+// 親の PostProcess チェーン（自動実行）:
 // 1. rest-api: レート制限・エラーステータスチェック
-// 2. github-api: 404エラーのカスタムメッセージ
+// 2. github-api: 404 エラーのカスタムメッセージ
 ```
 
 #### 新規サービス追加の例
 
 ```javascript
-// 例: Jira Issue作成を追加（~20行で実装可能）
+// 例: Jira Issue 作成を追加（約 20 行で実装可能）
 
 // Step 1: jira-api 基盤ブロック作成
 {
@@ -304,7 +304,7 @@ return {
         "secret_key": "JIRA_API_TOKEN"
     },
     pre_process: `
-        // Basic Auth用のヘッダー変換
+        // Basic Auth 用のヘッダー変換
         const email = ctx.secrets.JIRA_EMAIL;
         const token = config.auth_key || ctx.secrets[config.secret_key];
         const basicAuth = btoa(email + ':' + token);
@@ -343,7 +343,7 @@ return {
 複数のブロックを順次実行する複合ブロックを作成できます：
 
 ```javascript
-// enriched-http block
+// enriched-http ブロック
 // internal_steps:
 [
     {
@@ -353,7 +353,7 @@ return {
     },
     {
         "type": "http",
-        "config": {},  // Uses merged config
+        "config": {},  // マージされた設定を使用
         "output_key": "response"
     },
     {
@@ -365,26 +365,26 @@ return {
 // 出力は internal_steps の結果がマージされた状態
 ```
 
-### Database Schema
+### データベーススキーマ
 
 ```sql
--- block_definitions テーブル（Unified Block Model対応）
+-- block_definitions テーブル（Unified Block Model 対応）
 CREATE TABLE block_definitions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID REFERENCES tenants(id),  -- NULL = system block
+    tenant_id UUID REFERENCES tenants(id),  -- NULL = システムブロック
     slug VARCHAR(100) NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     category VARCHAR(50) NOT NULL,
     icon VARCHAR(50),
 
-    -- === Unified Block Model columns ===
-    code TEXT,                              -- JavaScript code
+    -- === Unified Block Model カラム ===
+    code TEXT,                              -- JavaScript コード
     ui_config JSONB NOT NULL DEFAULT '{}',  -- {icon, color, configSchema}
     is_system BOOLEAN NOT NULL DEFAULT FALSE,
     version INTEGER NOT NULL DEFAULT 1,
 
-    -- Schemas
+    -- スキーマ
     config_schema JSONB NOT NULL DEFAULT '{}',
     input_schema JSONB,
     output_schema JSONB,
@@ -405,14 +405,14 @@ CREATE TABLE block_versions (
     block_id UUID NOT NULL REFERENCES block_definitions(id) ON DELETE CASCADE,
     version INTEGER NOT NULL,
 
-    -- Snapshot
+    -- スナップショット
     code TEXT NOT NULL,
     config_schema JSONB NOT NULL,
     input_schema JSONB,
     output_schema JSONB,
     ui_config JSONB NOT NULL,
 
-    -- Change tracking
+    -- 変更追跡
     change_summary TEXT,
     changed_by UUID,
 
@@ -427,7 +427,7 @@ CREATE INDEX idx_block_definitions_enabled ON block_definitions(enabled);
 CREATE INDEX idx_block_versions_block_id ON block_versions(block_id);
 ```
 
-## Input Schema
+## 入力スキーマ
 
 ### 概要
 
@@ -490,31 +490,31 @@ CREATE INDEX idx_block_versions_block_id ON block_versions(block_id);
 4. ユーザーが入力 → バリデーション
 5. 実行開始（入力値を `runs.create()` に渡す）
 
-## Error Code System
+## エラーコードシステム
 
-### Standard Error Code Format
+### 標準エラーコード形式
 
 ```
 {BLOCK}_{NUMBER}_{TYPE}
 
-Examples:
-- LLM_001_RATE_LIMIT     - LLM rate limit exceeded
-- LLM_002_INVALID_MODEL  - Invalid model specified
-- HTTP_001_TIMEOUT       - HTTP request timeout
-- HTTP_002_CONN_REFUSED  - Connection refused
-- COND_001_INVALID_EXPR  - Invalid condition expression
-- DISCORD_001_WEBHOOK_ERROR - Discord webhook error
+例:
+- LLM_001_RATE_LIMIT     - LLM レート制限超過
+- LLM_002_INVALID_MODEL  - 無効なモデル指定
+- HTTP_001_TIMEOUT       - HTTP リクエストタイムアウト
+- HTTP_002_CONN_REFUSED  - 接続拒否
+- COND_001_INVALID_EXPR  - 無効な条件式
+- DISCORD_001_WEBHOOK_ERROR - Discord Webhook エラー
 ```
 
-### BlockError Structure
+### BlockError 構造
 
 ```go
 type BlockError struct {
-    Code       string          `json:"code"`        // Error code (e.g., "LLM_001")
-    Message    string          `json:"message"`     // Human-readable message
-    Details    json.RawMessage `json:"details"`     // Additional error details
-    Retryable  bool            `json:"retryable"`   // Can this be retried?
-    RetryAfter *time.Duration  `json:"retry_after"` // Suggested retry delay
+    Code       string          `json:"code"`        // エラーコード（例: "LLM_001"）
+    Message    string          `json:"message"`     // 人間が読めるメッセージ
+    Details    json.RawMessage `json:"details"`     // 追加のエラー詳細
+    Retryable  bool            `json:"retryable"`   // リトライ可能か？
+    RetryAfter *time.Duration  `json:"retry_after"` // 推奨リトライ遅延
 }
 
 func (e *BlockError) Error() string {
@@ -522,26 +522,26 @@ func (e *BlockError) Error() string {
 }
 ```
 
-### Error Code Categories
+### エラーコードカテゴリ
 
-| Category | Range | Description |
+| カテゴリ | 範囲 | 説明 |
 |----------|-------|-------------|
-| SYSTEM   | 000-099 | System-level errors |
-| CONFIG   | 100-199 | Configuration errors |
-| INPUT    | 200-299 | Input validation errors |
-| EXEC     | 300-399 | Execution errors |
-| OUTPUT   | 400-499 | Output processing errors |
-| AUTH     | 500-599 | Authentication/authorization errors |
-| RATE     | 600-699 | Rate limiting errors |
-| TIMEOUT  | 700-799 | Timeout errors |
+| SYSTEM   | 000-099 | システムレベルエラー |
+| CONFIG   | 100-199 | 設定エラー |
+| INPUT    | 200-299 | 入力バリデーションエラー |
+| EXEC     | 300-399 | 実行エラー |
+| OUTPUT   | 400-499 | 出力処理エラー |
+| AUTH     | 500-599 | 認証/認可エラー |
+| RATE     | 600-699 | レート制限エラー |
+| TIMEOUT  | 700-799 | タイムアウトエラー |
 
-## System Blocks
+## システムブロック
 
 システムブロック（`tenant_id = NULL`）は全ユーザーに提供されます。
 
 ### 現在のシステムブロック一覧
 
-| Slug | Name | Category | Code概要 |
+| Slug | 名前 | カテゴリ | コード概要 |
 |------|------|----------|----------|
 | `start` | Start | control | `return input;` |
 | `llm` | LLM | ai | `ctx.llm.chat(...)` |
@@ -557,90 +557,90 @@ func (e *BlockError) Error() string {
 | `wait` | Wait | control | 遅延・タイマー |
 | `human_in_loop` | Human in Loop | control | `ctx.human.requestApproval(...)` |
 | `error` | Error | control | `throw new Error(...)` |
-| `router` | Router | ai | AI分類ルーティング |
+| `router` | Router | ai | AI 分類ルーティング |
 | `note` | Note | utility | ドキュメント用（`return input;`） |
-| `code` | Code | utility | ユーザー定義JavaScript |
+| `code` | Code | utility | ユーザー定義 JavaScript |
 
-> **Note**: `join`ブロックは廃止されました。Block Group外での分岐ブロック（Condition/Switch）の複数出力は禁止されており、Block Group内では出力が自動的に集約されるため、joinブロックは不要になりました。
+> **注記**: `join` ブロックは廃止されました。Block Group 外での分岐ブロック（Condition/Switch）の複数出力は禁止されており、Block Group 内では出力が自動的に集約されるため、join ブロックは不要になりました。
 
 ### 基盤/パターンブロック一覧（継承階層用）
 
 これらのブロックは具体的な連携ブロックの親として機能し、認証やエラーハンドリングを共通化します。
 
-| Slug | Name | Category | 親 | 説明 |
+| Slug | 名前 | カテゴリ | 親 | 説明 |
 |------|------|----------|-----|------|
-| `webhook` | Webhook | integration | `http` | Webhook POST通知パターン |
-| `rest-api` | REST API | integration | `http` | REST API with 認証（Bearer/API Key対応） |
-| `graphql` | GraphQL | integration | `rest-api` | GraphQL API呼び出しパターン |
-| `bearer-api` | Bearer Token API | integration | `rest-api` | Bearer Token認証API |
-| `api-key-header` | API Key Header | integration | `rest-api` | API Key Headerベース認証 |
-| `api-key-query` | API Key Query | integration | `rest-api` | API Key Queryパラメータ認証 |
-| `github-api` | GitHub API | integration | `bearer-api` | GitHub API共通設定 |
-| `notion-api` | Notion API | integration | `bearer-api` | Notion API共通設定 |
-| `google-api` | Google API | integration | `api-key-query` | Google API共通設定 |
-| `linear-api` | Linear API | integration | `graphql` | Linear GraphQL API共通設定 |
+| `webhook` | Webhook | integration | `http` | Webhook POST 通知パターン |
+| `rest-api` | REST API | integration | `http` | REST API with 認証（Bearer/API Key 対応） |
+| `graphql` | GraphQL | integration | `rest-api` | GraphQL API 呼び出しパターン |
+| `bearer-api` | Bearer Token API | integration | `rest-api` | Bearer Token 認証 API |
+| `api-key-header` | API Key Header | integration | `rest-api` | API Key Header ベース認証 |
+| `api-key-query` | API Key Query | integration | `rest-api` | API Key Query パラメータ認証 |
+| `github-api` | GitHub API | integration | `bearer-api` | GitHub API 共通設定 |
+| `notion-api` | Notion API | integration | `bearer-api` | Notion API 共通設定 |
+| `google-api` | Google API | integration | `api-key-query` | Google API 共通設定 |
+| `linear-api` | Linear API | integration | `graphql` | Linear GraphQL API 共通設定 |
 
 ### 外部連携ブロック一覧
 
-| Slug | Name | 親ブロック | 説明 | 必要シークレット |
+| Slug | 名前 | 親ブロック | 説明 | 必要シークレット |
 |------|------|-----------|------|-----------------|
-| `slack` | Slack | `webhook` | Slackチャンネルにメッセージ送信 | `SLACK_WEBHOOK_URL` |
-| `discord` | Discord | `webhook` | Discord Webhookに通知 | `DISCORD_WEBHOOK_URL` |
-| `github_create_issue` | GitHub: Issue作成 | `github-api` | GitHubにIssueを作成 | `GITHUB_TOKEN` |
-| `github_add_comment` | GitHub: コメント追加 | `github-api` | Issue/PRにコメント追加 | `GITHUB_TOKEN` |
-| `notion_create_page` | Notion: ページ作成 | `notion-api` | Notionにページを作成 | `NOTION_API_KEY` |
-| `notion_query_db` | Notion: DB検索 | `notion-api` | Notionデータベースを検索 | `NOTION_API_KEY` |
+| `slack` | Slack | `webhook` | Slack チャンネルにメッセージ送信 | `SLACK_WEBHOOK_URL` |
+| `discord` | Discord | `webhook` | Discord Webhook に通知 | `DISCORD_WEBHOOK_URL` |
+| `github_create_issue` | GitHub: Issue 作成 | `github-api` | GitHub に Issue を作成 | `GITHUB_TOKEN` |
+| `github_add_comment` | GitHub: コメント追加 | `github-api` | Issue/PR にコメント追加 | `GITHUB_TOKEN` |
+| `notion_create_page` | Notion: ページ作成 | `notion-api` | Notion にページを作成 | `NOTION_API_KEY` |
+| `notion_query_db` | Notion: DB 検索 | `notion-api` | Notion データベースを検索 | `NOTION_API_KEY` |
 | `gsheets_append` | Google Sheets: 行追加 | `google-api` | スプレッドシートに行を追加 | `GOOGLE_API_KEY` |
 | `gsheets_read` | Google Sheets: 読み取り | `google-api` | スプレッドシートから読み取り | `GOOGLE_API_KEY` |
-| `email_sendgrid` | Email (SendGrid) | `api-key-header` | SendGridでメール送信 | `SENDGRID_API_KEY` |
-| `web_search` | Web検索 | `api-key-header` | Tavily APIでWeb検索 | `TAVILY_API_KEY` |
-| `linear_create_issue` | Linear: Issue作成 | `linear-api` | LinearにIssueを作成 | `LINEAR_API_KEY` |
+| `email_sendgrid` | Email (SendGrid) | `api-key-header` | SendGrid でメール送信 | `SENDGRID_API_KEY` |
+| `web_search` | Web 検索 | `api-key-header` | Tavily API で Web 検索 | `TAVILY_API_KEY` |
+| `linear_create_issue` | Linear: Issue 作成 | `linear-api` | Linear に Issue を作成 | `LINEAR_API_KEY` |
 
-### RAGブロック一覧
+### RAG ブロック一覧
 
-| Slug | Name | Category | 説明 | 必要シークレット |
+| Slug | 名前 | カテゴリ | 説明 | 必要シークレット |
 |------|------|----------|------|-----------------|
 | `embedding` | Embedding | ai | テキストをベクトルに変換 | `OPENAI_API_KEY`, `COHERE_API_KEY`, `VOYAGE_API_KEY` |
-| `vector-upsert` | Vector Upsert | data | ドキュメントをベクトルDBに保存 | - |
+| `vector-upsert` | Vector Upsert | data | ドキュメントをベクトル DB に保存 | - |
 | `vector-search` | Vector Search | data | 類似ドキュメントを検索（ハイブリッド検索対応） | - |
-| `vector-delete` | Vector Delete | data | ベクトルDBからドキュメント削除 | - |
+| `vector-delete` | Vector Delete | data | ベクトル DB からドキュメント削除 | - |
 | `doc-loader` | Document Loader | data | URL/テキストからドキュメント取得 | - |
 | `text-splitter` | Text Splitter | data | テキストをチャンクに分割 | - |
-| `rag-query` | RAG Query | ai | RAG検索+LLM生成（一括処理） | `OPENAI_API_KEY` |
+| `rag-query` | RAG Query | ai | RAG 検索+LLM 生成（一括処理） | `OPENAI_API_KEY` |
 
-### RAGブロック エラーコード一覧
+### RAG ブロック エラーコード一覧
 
-| Code | Name | Block | Retryable | Description |
+| コード | 名前 | ブロック | リトライ可 | 説明 |
 |------|------|-------|-----------|-------------|
-| `EMB_001` | PROVIDER_ERROR | embedding | ✅ | Embedding provider API error |
-| `EMB_002` | EMPTY_INPUT | embedding | ❌ | No text provided for embedding |
-| `VEC_001` | COLLECTION_REQUIRED | vector-* | ❌ | Collection name is required |
-| `VEC_002` | DOCUMENTS_REQUIRED | vector-upsert | ❌ | Documents array is required |
-| `VEC_003` | VECTOR_OR_QUERY_REQUIRED | vector-search | ❌ | Either vector or query text is required |
-| `VEC_004` | IDS_REQUIRED | vector-delete | ❌ | IDs array is required |
-| `DOC_001` | FETCH_ERROR | doc-loader | ✅ | Failed to fetch URL (includes SSRF protection) |
-| `DOC_002` | EMPTY_CONTENT | doc-loader | ❌ | No content provided |
-| `TXT_001` | EMPTY_TEXT | text-splitter | ❌ | No text provided for splitting |
-| `RAG_001` | QUERY_REQUIRED | rag-query | ❌ | Query text is required |
-| `RAG_002` | COLLECTION_REQUIRED | rag-query | ❌ | Collection name is required |
+| `EMB_001` | PROVIDER_ERROR | embedding | ✅ | Embedding プロバイダー API エラー |
+| `EMB_002` | EMPTY_INPUT | embedding | ❌ | Embedding 用のテキストがない |
+| `VEC_001` | COLLECTION_REQUIRED | vector-* | ❌ | コレクション名が必須 |
+| `VEC_002` | DOCUMENTS_REQUIRED | vector-upsert | ❌ | ドキュメント配列が必須 |
+| `VEC_003` | VECTOR_OR_QUERY_REQUIRED | vector-search | ❌ | ベクトルまたはクエリテキストが必須 |
+| `VEC_004` | IDS_REQUIRED | vector-delete | ❌ | ID 配列が必須 |
+| `DOC_001` | FETCH_ERROR | doc-loader | ✅ | URL 取得失敗（SSRF 保護を含む） |
+| `DOC_002` | EMPTY_CONTENT | doc-loader | ❌ | コンテンツがない |
+| `TXT_001` | EMPTY_TEXT | text-splitter | ❌ | 分割用のテキストがない |
+| `RAG_001` | QUERY_REQUIRED | rag-query | ❌ | クエリテキストが必須 |
+| `RAG_002` | COLLECTION_REQUIRED | rag-query | ❌ | コレクション名が必須 |
 
-### Goja Runtime Constraints (重要)
+### Goja ランタイム制約（重要）
 
-ブロックコードはGoja JavaScript VMで実行されます。以下の制約があります：
+ブロックコードは Goja JavaScript VM で実行されます。以下の制約があります：
 
 | 制約 | 説明 | 対処法 |
 |------|------|--------|
-| **`await`禁止** | gojaは`await`キーワードをサポートしない | `ctx.*`メソッドは同期的に呼び出す |
-| **`async function`禁止** | async関数定義不可 | 通常の`function`を使用 |
-| **`async () =>`禁止** | async arrow function不可 | 通常の`() =>`を使用 |
+| **`await` 禁止** | goja は `await` キーワードをサポートしない | `ctx.*` メソッドは同期的に呼び出す |
+| **`async function` 禁止** | async 関数定義不可 | 通常の `function` を使用 |
+| **`async () =>` 禁止** | async アロー関数不可 | 通常の `() =>` を使用 |
 
 #### なぜ同期的に動作するか
 
-`ctx.llm.chat()`, `ctx.http.get()`などのメソッドは、Go側で非同期処理を行い、結果が返るまでブロックします。
-JavaScript側からは同期的な関数呼び出しに見えます。
+`ctx.llm.chat()`, `ctx.http.get()` などのメソッドは、Go 側で非同期処理を行い、結果が返るまでブロックします。
+JavaScript 側からは同期的な関数呼び出しに見えます。
 
 ```javascript
-// ❌ NG: awaitは使用不可
+// ❌ NG: await は使用不可
 const response = await ctx.llm.chat(...);
 
 // ✅ OK: 同期的に呼び出す（内部でブロッキング）
@@ -649,7 +649,7 @@ const response = ctx.llm.chat(...);
 
 #### バリデーション
 
-seederコマンドはブロックコードをバリデーションし、`await`/`async`の使用を検出します：
+seeder コマンドはブロックコードをバリデーションし、`await`/`async` の使用を検出します：
 
 ```bash
 go run ./cmd/seeder --validate
@@ -664,7 +664,7 @@ go run ./cmd/seeder --validate
 ### システムブロックのコード例
 
 ```javascript
-// llm block
+// llm ブロック
 const prompt = renderTemplate(config.user_prompt || '', input);
 const systemPrompt = config.system_prompt || '';
 
@@ -684,7 +684,7 @@ return {
 ```
 
 ```javascript
-// http block
+// http ブロック
 const url = renderTemplate(config.url, input);
 
 const response = ctx.http.request(url, {
@@ -699,10 +699,10 @@ return response;
 ### 外部連携ブロックのコード例
 
 ```javascript
-// slack block
+// slack ブロック
 const webhookUrl = config.webhook_url || ctx.secrets.SLACK_WEBHOOK_URL;
 if (!webhookUrl) {
-    throw new Error('[SLACK_001] Webhook URLが設定されていません');
+    throw new Error('[SLACK_001] Webhook URL が設定されていません');
 }
 
 const payload = {
@@ -720,7 +720,7 @@ return { success: true, status: response.status };
 ```
 
 ```javascript
-// github_create_issue block
+// github_create_issue ブロック
 const token = config.token || ctx.secrets.GITHUB_TOKEN;
 const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/issues';
 
@@ -742,11 +742,11 @@ return {
 };
 ```
 
-### RAGブロックのコード例
+### RAG ブロックのコード例
 
 ```javascript
-// embedding block
-// Supported providers: openai, cohere, voyage (Phase 3.3)
+// embedding ブロック
+// サポートプロバイダー: openai, cohere, voyage (Phase 3.3)
 const texts = Array.isArray(input.texts) ? input.texts : [input.text || input.content];
 const result = ctx.embedding.embed(
     config.provider || 'openai',  // 'openai', 'cohere', 'voyage'
@@ -760,14 +760,14 @@ return {
     usage: result.usage
 };
 
-// Available models by provider:
+// プロバイダー別の利用可能なモデル:
 // OpenAI: text-embedding-3-small (1536d), text-embedding-3-large (3072d)
 // Cohere: embed-english-v3.0 (1024d), embed-multilingual-v3.0 (1024d)
 // Voyage: voyage-3 (1024d), voyage-3-lite, voyage-code-3
 ```
 
 ```javascript
-// vector-upsert block
+// vector-upsert ブロック
 const documents = (input.documents || [input]).map(doc => ({
     id: doc.id,
     content: doc.content || doc.text,
@@ -784,7 +784,7 @@ return { upserted_count: result.upserted_count, ids: result.ids };
 ```
 
 ```javascript
-// vector-search block
+// vector-search ブロック
 let queryVector = input.vector;
 if (!queryVector && input.query) {
     const embResult = ctx.embedding.embed(
@@ -806,8 +806,8 @@ return { matches: result.matches };
 ```
 
 ```javascript
-// vector-search with advanced filters (Phase 3.1)
-// Supports: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains
+// vector-search 高度なフィルタ付き (Phase 3.1)
+// サポート: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $and, $or, $exists, $contains
 const result = ctx.vector.query(config.collection, queryVector, {
     top_k: 10,
     filter: {
@@ -822,37 +822,37 @@ const result = ctx.vector.query(config.collection, queryVector, {
 ```
 
 ```javascript
-// vector-search with hybrid search (Phase 3.2)
-// Combines vector similarity + keyword search using RRF
+// vector-search ハイブリッド検索付き (Phase 3.2)
+// ベクトル類似度 + キーワード検索を RRF で組み合わせ
 const result = ctx.vector.query(config.collection, queryVector, {
     top_k: 10,
-    keyword: "machine learning",  // Enable hybrid search
-    hybrid_alpha: 0.7             // 70% vector, 30% keyword
+    keyword: "machine learning",  // ハイブリッド検索を有効化
+    hybrid_alpha: 0.7             // 70% ベクトル、30% キーワード
 });
 ```
 
 ```javascript
-// rag-query block (RAG検索+LLM生成)
-// 1. Embedding query
+// rag-query ブロック（RAG 検索 + LLM 生成）
+// 1. クエリを Embedding
 const embResult = ctx.embedding.embed(
     config.embedding_provider || 'openai',
     config.embedding_model || 'text-embedding-3-small',
     [input.query]
 );
 
-// 2. Vector search
+// 2. ベクトル検索
 const searchResult = ctx.vector.query(config.collection, embResult.vectors[0], {
     top_k: config.top_k || 5,
     include_content: true
 });
 
-// 3. Build context from retrieved documents
+// 3. 取得したドキュメントからコンテキストを構築
 const context = searchResult.matches.map(m => m.content).join('\n\n---\n\n');
 
-// 4. Generate response with LLM
+// 4. LLM でレスポンスを生成
 const systemPrompt = config.system_prompt ||
-    'Answer the question based on the following context. If the answer is not in the context, say so.';
-const userPrompt = 'Context:\n' + context + '\n\nQuestion: ' + input.query;
+    '以下のコンテキストに基づいて質問に回答してください。コンテキストに答えがない場合は、そう伝えてください。';
+const userPrompt = 'コンテキスト:\n' + context + '\n\n質問: ' + input.query;
 
 const response = ctx.llm.chat(
     config.llm_provider || 'openai',
@@ -873,15 +873,15 @@ return {
 };
 ```
 
-## Adding New Blocks
+## 新規ブロックの追加
 
-### 標準手順（Migrationによる追加）
+### 標準手順（Migration による追加）
 
 **⚠️ 必ず先に [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) を読むこと**
 
-1. **Migrationファイル作成**: `backend/migrations/XXX_{name}_block.sql`
+1. **Migration ファイル作成**: `backend/migrations/XXX_{name}_block.sql`
 
-2. **INSERT文作成**:
+2. **INSERT 文作成**:
 
 ```sql
 INSERT INTO block_definitions (
@@ -891,8 +891,8 @@ INSERT INTO block_definitions (
     gen_random_uuid(),
     NULL,  -- システムブロック（全ユーザーに提供）
     'discord',
-    'Discord通知',
-    'Discord Webhookにメッセージを送信',
+    'Discord 通知',
+    'Discord Webhook にメッセージを送信',
     'integration',
     'message-circle',
     '{
@@ -903,11 +903,11 @@ INSERT INTO block_definitions (
         },
         "required": ["message"]
     }',
-    '[{"code": "DISCORD_001", "name": "WEBHOOK_ERROR", "description": "Webhook呼び出し失敗", "retryable": true}]',
+    '[{"code": "DISCORD_001", "name": "WEBHOOK_ERROR", "description": "Webhook 呼び出し失敗", "retryable": true}]',
     $code$
 const webhookUrl = config.webhook_url || ctx.secrets.DISCORD_WEBHOOK_URL;
 if (!webhookUrl) {
-    throw new Error('Webhook URLが設定されていません');
+    throw new Error('Webhook URL が設定されていません');
 }
 
 const payload = {
@@ -935,33 +935,33 @@ DO UPDATE SET
     ui_config = EXCLUDED.ui_config;
 ```
 
-3. **Migration実行**:
+3. **Migration 実行**:
 ```bash
 docker compose exec api migrate -path /migrations -database "$DATABASE_URL" up
 ```
 
 4. **このドキュメントを更新**: システムブロック一覧に追加
 
-### Go Adapterが必要なケース（例外）
+### Go Adapter が必要なケース（例外）
 
-以下の場合のみ、Go Adapterを実装：
+以下の場合のみ、Go Adapter を実装：
 
 | ケース | 理由 |
 |--------|------|
-| LLMプロバイダー追加 | `ctx.llm`経由で呼び出すため |
-| 複雑な認証フロー | OAuth2等、JSでは困難な場合 |
+| LLM プロバイダー追加 | `ctx.llm` 経由で呼び出すため |
+| 複雑な認証フロー | OAuth2 等、JS では困難な場合 |
 | バイナリ処理 | 画像・ファイル処理等 |
 
-Go Adapter追加手順:
-1. Create `backend/internal/adapter/{name}.go`
-2. Implement `Adapter` interface
-3. Register in registry
-4. Add test `{name}_test.go`
-5. Update docs/BACKEND.md
+Go Adapter 追加手順:
+1. `backend/internal/adapter/{name}.go` を作成
+2. `Adapter` インターフェースを実装
+3. レジストリに登録
+4. テスト `{name}_test.go` を追加
+5. docs/BACKEND.md を更新
 
-## API Endpoints
+## API エンドポイント
 
-### Tenant API
+### テナント API
 
 ```
 GET    /api/v1/blocks                    # リスト（システム + テナントブロック）
@@ -971,7 +971,7 @@ PUT    /api/v1/blocks/{slug}             # 更新（テナント用のみ）
 DELETE /api/v1/blocks/{slug}             # 削除（カスタムのみ）
 ```
 
-### Admin API（システムブロック管理）
+### 管理者 API（システムブロック管理）
 
 ```
 GET    /api/v1/admin/blocks              # システムブロック一覧
@@ -981,9 +981,9 @@ GET    /api/v1/admin/blocks/{id}/versions # バージョン履歴
 POST   /api/v1/admin/blocks/{id}/rollback # ロールバック
 ```
 
-## Frontend Integration
+## フロントエンド統合
 
-### Block Palette
+### ブロックパレット
 
 ```typescript
 interface BlockDefinition {
@@ -1019,9 +1019,9 @@ function useBlocks() {
 }
 ```
 
-### Dynamic Config Form
+### 動的設定フォーム
 
-Block config formはJSON Schemaから動的に生成:
+ブロック設定フォームは JSON Schema から動的に生成:
 
 ```vue
 <template>
@@ -1032,82 +1032,82 @@ Block config formはJSON Schemaから動的に生成:
 </template>
 ```
 
-## Implementation Status
+## 実装状況
 
-| Phase | Status | Description |
+| フェーズ | 状態 | 説明 |
 |-------|--------|-------------|
-| DB Schema | ✅ 完了 | `block_definitions`, `block_versions` テーブル |
-| System Blocks | ✅ 完了 | 18個のシステムブロック登録済み |
-| Foundation Blocks | ✅ 完了 | 10個の基盤/パターンブロック（継承階層） |
-| Integration Blocks | ✅ 完了 | 11個の外部連携ブロック（継承アーキテクチャに移行済み） |
-| RAG Blocks | ✅ 完了 | 7個のRAGブロック（seed.sql） |
-| Sandbox (ctx) | ✅ 完了 | http, llm, workflow, human, adapter, embedding, vector |
-| Admin API | ✅ 完了 | バージョン管理、ロールバック |
-| Frontend | ✅ 完了 | StepPalette, PropertiesPanel |
-| Multi-Level Inheritance | ✅ 完了 | トポロジカルソート、最大深度50 |
+| DB スキーマ | ✅ 完了 | `block_definitions`, `block_versions` テーブル |
+| システムブロック | ✅ 完了 | 18 個のシステムブロック登録済み |
+| 基盤ブロック | ✅ 完了 | 10 個の基盤/パターンブロック（継承階層） |
+| 連携ブロック | ✅ 完了 | 11 個の外部連携ブロック（継承アーキテクチャに移行済み） |
+| RAG ブロック | ✅ 完了 | 7 個の RAG ブロック（seed.sql） |
+| サンドボックス (ctx) | ✅ 完了 | http, llm, workflow, human, adapter, embedding, vector |
+| 管理者 API | ✅ 完了 | バージョン管理、ロールバック |
+| フロントエンド | ✅ 完了 | StepPalette, PropertiesPanel |
+| 多段継承 | ✅ 完了 | トポロジカルソート、最大深度 50 |
 
-## Block Groups (Control Flow Constructs)
+## ブロックグループ（制御フロー構造）
 
 > **Updated**: 2026-01-15
-> **Phase A + B Complete**: グループブロックはBlockDefinitionに統合されました
+> **Phase A + B Complete**: グループブロックは BlockDefinition に統合されました
 > **See also**: [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md)
 
-Block Groups are container constructs that manage control flow for multiple steps. They provide similar functionality to blocks with `pre_process`/`post_process` for input/output transformation.
+ブロックグループは複数のステップの制御フローを管理するコンテナ構造です。入出力変換用の `pre_process`/`post_process` を持つブロックと同様の機能を提供します。
 
-**Phase B: BlockDefinition統合**
+**Phase B: BlockDefinition 統合**
 
 グループブロックは `block_definitions` テーブルで管理され、以下のフィールドで区別されます：
 - `category`: `"group"`
 - `group_kind`: `parallel` | `try_catch` | `foreach` | `while`
 - `is_container`: `true`
 
-これにより、グループブロックも通常のブロックと同様にBlock Paletteから選択・配置できます。
+これにより、グループブロックも通常のブロックと同様に Block Palette から選択・配置できます。
 
-### Block Group Types (4 types only)
+### ブロックグループタイプ（4 タイプのみ）
 
-| Type | Description | Config Properties |
+| タイプ | 説明 | 設定プロパティ |
 |------|-------------|-------------------|
-| `parallel` | Execute multiple independent flows concurrently | `max_concurrent`, `fail_fast` |
-| `try_catch` | Error handling with retry support | `retry_count`, `retry_delay_ms` |
-| `foreach` | Iterate same process over array elements | `input_path`, `parallel`, `max_workers` |
-| `while` | Condition-based loop | `condition`, `max_iterations`, `do_while` |
+| `parallel` | 複数の独立したフローを並行実行 | `max_concurrent`, `fail_fast` |
+| `try_catch` | リトライサポート付きエラーハンドリング | `retry_count`, `retry_delay_ms` |
+| `foreach` | 配列要素に対して同じ処理を反復 | `input_path`, `parallel`, `max_workers` |
+| `while` | 条件ベースのループ | `condition`, `max_iterations`, `do_while` |
 
-### Removed Types
+### 削除されたタイプ
 
-| Type | Alternative |
+| タイプ | 代替 |
 |------|-------------|
-| `if_else` | Use `condition` system block |
-| `switch_case` | Use `switch` system block |
+| `if_else` | `condition` システムブロックを使用 |
+| `switch_case` | `switch` システムブロックを使用 |
 
-### Group Role
+### グループロール
 
-All groups now use **`body` role only**. Previous roles (`try`, `catch`, `finally`, `then`, `else`, `default`, `case_N`) have been removed.
+すべてのグループは **`body` ロールのみ**を使用します。以前のロール（`try`, `catch`, `finally`, `then`, `else`, `default`, `case_N`）は削除されました。
 
-Error handling is now done via output ports:
-- `out` - Normal output
-- `error` - Error output (connects to external error handling blocks)
+エラーハンドリングは出力ポート経由で行います：
+- `out` - 通常出力
+- `error` - エラー出力（外部のエラーハンドリングブロックに接続）
 
 ### Pre/Post Process
 
-Similar to regular blocks, groups support JavaScript transformation:
+通常のブロックと同様に、グループも JavaScript 変換をサポートします：
 
 ```javascript
-// pre_process: external IN → internal IN
+// pre_process: 外部 IN → 内部 IN
 return { ...input, timestamp: Date.now() };
 
-// post_process: internal OUT → external OUT
+// post_process: 内部 OUT → 外部 OUT
 return { result: output.data, processed: true };
 ```
 
-### Nesting
+### ネスト
 
-Groups can be nested (e.g., while inside parallel):
+グループはネストできます（例: parallel 内に while）：
 
 ```
 parallel
 ├── body
 │   ├── step1
-│   └── while (nested)
+│   └── while（ネスト）
 │       └── body
 │           ├── step2
 │           └── step3
@@ -1115,20 +1115,20 @@ parallel
     └── step4
 ```
 
-### Block Group vs System Blocks
+### ブロックグループ vs システムブロック
 
-| Feature | Block Group | condition/switch Block |
+| 機能 | ブロックグループ | condition/switch ブロック |
 |---------|-------------|----------------------|
-| Contains steps | Yes (body) | No |
-| Pre/Post Process | Yes | No (inline logic) |
-| Output Ports | out, error | then/else, case_N |
-| Nesting | Yes | N/A |
-| Use Case | Complex control flow | Simple branching |
+| ステップを含む | はい（body） | いいえ |
+| Pre/Post Process | はい | いいえ（インラインロジック） |
+| 出力ポート | out, error | then/else, case_N |
+| ネスト | はい | N/A |
+| ユースケース | 複雑な制御フロー | シンプルな分岐 |
 
-## Related Documents
+## 関連ドキュメント
 
 - [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - **必読**: ブロック統一モデル詳細設計
-- [BACKEND.md](./BACKEND.md) - Backend architecture
-- [API.md](./API.md) - API documentation
-- [DATABASE.md](./DATABASE.md) - Database schema
-- [FRONTEND.md](./FRONTEND.md) - Frontend architecture
+- [BACKEND.md](./BACKEND.md) - バックエンドアーキテクチャ
+- [API.md](./API.md) - API ドキュメント
+- [DATABASE.md](./DATABASE.md) - データベーススキーマ
+- [FRONTEND.md](./FRONTEND.md) - フロントエンドアーキテクチャ
