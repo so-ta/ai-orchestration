@@ -88,14 +88,13 @@ func main() {
 	logger.Info("Encryptor initialized")
 
 	// Initialize repositories
-	workflowRepo := postgres.NewWorkflowRepository(pool)
+	projectRepo := postgres.NewProjectRepository(pool)
 	stepRepo := postgres.NewStepRepository(pool)
 	edgeRepo := postgres.NewEdgeRepository(pool)
 	runRepo := postgres.NewRunRepository(pool)
 	stepRunRepo := postgres.NewStepRunRepository(pool)
-	versionRepo := postgres.NewWorkflowVersionRepository(pool)
+	versionRepo := postgres.NewProjectVersionRepository(pool)
 	scheduleRepo := postgres.NewScheduleRepository(pool)
-	webhookRepo := postgres.NewWebhookRepository(pool)
 	auditRepo := postgres.NewAuditLogRepository(pool)
 	blockRepo := postgres.NewBlockDefinitionRepository(pool)
 	blockVersionRepo := postgres.NewBlockVersionRepository(pool)
@@ -107,29 +106,27 @@ func main() {
 	tenantRepo := postgres.NewTenantRepository(pool)
 
 	// Initialize usecases
-	workflowUsecase := usecase.NewWorkflowUsecase(workflowRepo, stepRepo, edgeRepo, versionRepo, blockRepo).
+	projectUsecase := usecase.NewProjectUsecase(projectRepo, stepRepo, edgeRepo, versionRepo, blockRepo).
 		WithBlockGroupRepo(blockGroupRepo)
-	stepUsecase := usecase.NewStepUsecase(workflowRepo, stepRepo, blockRepo)
-	edgeUsecase := usecase.NewEdgeUsecase(workflowRepo, stepRepo, edgeRepo).
+	stepUsecase := usecase.NewStepUsecase(projectRepo, stepRepo, blockRepo)
+	edgeUsecase := usecase.NewEdgeUsecase(projectRepo, stepRepo, edgeRepo).
 		WithBlockGroupRepo(blockGroupRepo).
 		WithBlockDefinitionRepo(blockRepo)
-	runUsecase := usecase.NewRunUsecase(workflowRepo, runRepo, versionRepo, stepRepo, edgeRepo, stepRunRepo, redisClient)
-	scheduleUsecase := usecase.NewScheduleUsecase(scheduleRepo, workflowRepo, runRepo)
-	webhookUsecase := usecase.NewWebhookUsecase(webhookRepo, workflowRepo, runRepo, stepRepo)
+	runUsecase := usecase.NewRunUsecase(projectRepo, runRepo, versionRepo, stepRepo, edgeRepo, stepRunRepo, redisClient)
+	scheduleUsecase := usecase.NewScheduleUsecase(scheduleRepo, projectRepo, runRepo)
 	auditService := usecase.NewAuditService(auditRepo)
-	blockGroupUsecase := usecase.NewBlockGroupUsecase(workflowRepo, blockGroupRepo, stepRepo)
+	blockGroupUsecase := usecase.NewBlockGroupUsecase(projectRepo, blockGroupRepo, stepRepo)
 	blockUsecase := usecase.NewBlockUsecase(blockRepo, blockVersionRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
-	copilotUsecase := usecase.NewCopilotUsecase(workflowRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
+	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
 	// Initialize handlers
-	workflowHandler := handler.NewWorkflowHandler(workflowUsecase, auditService)
+	projectHandler := handler.NewProjectHandler(projectUsecase, auditService)
 	stepHandler := handler.NewStepHandler(stepUsecase)
 	edgeHandler := handler.NewEdgeHandler(edgeUsecase)
 	runHandler := handler.NewRunHandler(runUsecase, auditService)
 	scheduleHandler := handler.NewScheduleHandler(scheduleUsecase, auditService)
-	webhookHandler := handler.NewWebhookHandler(webhookUsecase, auditService)
 	auditHandler := handler.NewAuditHandler(auditService)
 	blockHandler := handler.NewBlockHandler(blockRepo, blockUsecase)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
@@ -203,27 +200,27 @@ func main() {
 
 		// Workflows
 		r.Route("/workflows", func(r chi.Router) {
-			r.Get("/", workflowHandler.List)
-			r.Post("/", workflowHandler.Create)
+			r.Get("/", projectHandler.List)
+			r.Post("/", projectHandler.Create)
 
 			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", workflowHandler.Get)
-				r.Put("/", workflowHandler.Update)
-				r.Delete("/", workflowHandler.Delete)
+				r.Get("/", projectHandler.Get)
+				r.Put("/", projectHandler.Update)
+				r.Delete("/", projectHandler.Delete)
 
 				// Save and Draft operations
-				r.Post("/save", workflowHandler.Save)
-				r.Post("/draft", workflowHandler.SaveDraft)
-				r.Delete("/draft", workflowHandler.DiscardDraft)
-				r.Post("/restore", workflowHandler.RestoreVersion)
+				r.Post("/save", projectHandler.Save)
+				r.Post("/draft", projectHandler.SaveDraft)
+				r.Delete("/draft", projectHandler.DiscardDraft)
+				r.Post("/restore", projectHandler.RestoreVersion)
 
 				// Deprecated: kept for backward compatibility
-				r.Post("/publish", workflowHandler.Publish)
+				r.Post("/publish", projectHandler.Publish)
 
 				// Versions
 				r.Route("/versions", func(r chi.Router) {
-					r.Get("/", workflowHandler.ListVersions)
-					r.Get("/{version}", workflowHandler.GetVersion)
+					r.Get("/", projectHandler.ListVersions)
+					r.Get("/{version}", projectHandler.GetVersion)
 				})
 
 				// Steps
@@ -250,7 +247,7 @@ func main() {
 					r.Post("/sessions/new", copilotHandler.StartNewSession)
 					r.Get("/sessions/{session_id}", copilotHandler.GetSessionMessages)
 					r.Post("/chat", copilotHandler.ChatWithSession)
-					r.Post("/generate", copilotHandler.GenerateWorkflow)
+					r.Post("/generate", copilotHandler.GenerateProject)
 				})
 
 				// Edges
@@ -311,20 +308,6 @@ func main() {
 			})
 		})
 
-		// Webhooks
-		r.Route("/webhooks", func(r chi.Router) {
-			r.Get("/", webhookHandler.List)
-			r.Post("/", webhookHandler.Create)
-			r.Route("/{webhook_id}", func(r chi.Router) {
-				r.Get("/", webhookHandler.Get)
-				r.Put("/", webhookHandler.Update)
-				r.Delete("/", webhookHandler.Delete)
-				r.Post("/enable", webhookHandler.Enable)
-				r.Post("/disable", webhookHandler.Disable)
-				r.Post("/regenerate-secret", webhookHandler.RegenerateSecret)
-			})
-		})
-
 		// Audit logs
 		r.Route("/audit-logs", func(r chi.Router) {
 			r.Get("/", auditHandler.List)
@@ -364,7 +347,7 @@ func main() {
 
 			// Async endpoints (meta-workflow architecture)
 			r.Route("/async", func(r chi.Router) {
-				r.Post("/generate", copilotHandler.AsyncGenerateWorkflow)
+				r.Post("/generate", copilotHandler.AsyncGenerateProject)
 				r.Post("/suggest", copilotHandler.AsyncSuggest)
 				r.Post("/diagnose", copilotHandler.AsyncDiagnose)
 				r.Post("/optimize", copilotHandler.AsyncOptimize)
@@ -378,7 +361,7 @@ func main() {
 		r.Route("/usage", func(r chi.Router) {
 			r.Get("/summary", usageHandler.GetSummary)
 			r.Get("/daily", usageHandler.GetDaily)
-			r.Get("/by-workflow", usageHandler.GetByWorkflow)
+			r.Get("/by-workflow", usageHandler.GetByProject)
 			r.Get("/by-model", usageHandler.GetByModel)
 			r.Get("/pricing", usageHandler.GetPricing)
 
@@ -423,11 +406,6 @@ func main() {
 			})
 		})
 	})
-
-	// Public webhook trigger endpoint (no auth required, but with webhook rate limiting)
-	r.With(rateLimiter.WebhookRateLimitMiddleware(func(req *http.Request) (string, error) {
-		return chi.URLParam(req, "webhook_id"), nil
-	})).Post("/api/v1/webhooks/{webhook_id}/trigger", webhookHandler.Trigger)
 
 	// Server
 	port := getEnv("PORT", "8080")

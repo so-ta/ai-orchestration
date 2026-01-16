@@ -1,20 +1,22 @@
 -- AI Orchestration Database Schema
--- 
+--
 -- Usage:
 --   make db-apply   - Apply this schema to database
 --   make db-reset   - Drop and recreate all tables
 --   make db-seed    - Load initial data
 --
 -- This file is the single source of truth for the database schema.
+--
+-- MAJOR CHANGE: Workflow → Project with Multi-Start model
+-- - workflows table → projects table
+-- - workflow_versions → project_versions
+-- - webhooks table → removed (integrated into steps.trigger_config)
+-- - steps.workflow_id → steps.project_id
+-- - steps now has trigger_type/trigger_config for Start blocks
 
 --
 -- PostgreSQL database dump
 --
-
-\restrict qS68oUh7R0Ylf9hxaFCN1NsqAxjwYu48PFRRQDDRLom2r3jbe88asrCBhclQEWj
-
--- Dumped from database version 16.11
--- Dumped by pg_dump version 16.11
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -31,43 +33,206 @@ SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
+-- ============================================================================
+-- Extension: uuid-ossp
+-- ============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ============================================================================
+-- Core Tables
+-- ============================================================================
+
 --
--- Name: adapters; Type: TABLE; Schema: public; Owner: -
+-- Name: tenants; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.adapters (
-    id character varying(100) NOT NULL,
-    tenant_id uuid,
+CREATE TABLE public.tenants (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     name character varying(255) NOT NULL,
-    description text,
-    type character varying(50) NOT NULL,
-    config jsonb,
-    input_schema jsonb,
-    output_schema jsonb,
-    enabled boolean DEFAULT true NOT NULL,
+    slug character varying(255) NOT NULL,
+    settings jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    deleted_at timestamp with time zone,
+    status character varying(50) DEFAULT 'active'::character varying NOT NULL,
+    plan character varying(50) DEFAULT 'free'::character varying NOT NULL,
+    owner_email character varying(255),
+    owner_name character varying(255),
+    billing_email character varying(255),
+    metadata jsonb DEFAULT '{}'::jsonb,
+    feature_flags jsonb DEFAULT '{}'::jsonb,
+    limits jsonb DEFAULT '{}'::jsonb,
+    suspended_at timestamp with time zone,
+    suspended_reason text
+);
+
+COMMENT ON COLUMN public.tenants.status IS 'Tenant status: active, suspended, pending, inactive';
+COMMENT ON COLUMN public.tenants.plan IS 'Subscription plan: free, starter, professional, enterprise';
+COMMENT ON COLUMN public.tenants.owner_email IS 'Primary contact email for the tenant';
+COMMENT ON COLUMN public.tenants.owner_name IS 'Primary contact name for the tenant';
+COMMENT ON COLUMN public.tenants.billing_email IS 'Email for billing notifications';
+COMMENT ON COLUMN public.tenants.metadata IS 'Additional tenant metadata (industry, company_size, website, country, notes)';
+COMMENT ON COLUMN public.tenants.feature_flags IS 'Feature flags: copilot_enabled, advanced_analytics, custom_blocks, api_access, sso_enabled, audit_logs, max_concurrent_runs';
+COMMENT ON COLUMN public.tenants.limits IS 'Resource limits: max_projects, max_runs_per_day, max_users, max_credentials, max_storage_mb, retention_days';
+COMMENT ON COLUMN public.tenants.suspended_at IS 'Timestamp when tenant was suspended';
+COMMENT ON COLUMN public.tenants.suspended_reason IS 'Reason for tenant suspension';
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    email character varying(255) NOT NULL,
+    name character varying(255),
+    role character varying(50) DEFAULT 'viewer'::character varying NOT NULL,
+    last_login_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );
 
+-- ============================================================================
+-- Projects (formerly Workflows) - Multi-Start Model
+-- ============================================================================
 
 --
--- Name: audit_logs; Type: TABLE; Schema: public; Owner: -
+-- Name: projects; Type: TABLE; Schema: public; Owner: -
+-- NOTE: This replaces the workflows table. Projects contain multiple Start blocks.
 --
 
-CREATE TABLE public.audit_logs (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+CREATE TABLE public.projects (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
-    actor_id uuid,
-    actor_email character varying(255),
-    action character varying(100) NOT NULL,
-    resource_type character varying(100) NOT NULL,
-    resource_id uuid,
-    metadata jsonb,
-    ip_address inet,
-    user_agent text,
-    created_at timestamp with time zone DEFAULT now()
+    name character varying(255) NOT NULL,
+    description text,
+    status character varying(50) DEFAULT 'draft'::character varying NOT NULL,
+    version integer DEFAULT 0 NOT NULL,
+    variables jsonb DEFAULT '{}'::jsonb,
+    draft jsonb,
+    is_system boolean DEFAULT false NOT NULL,
+    system_slug character varying(100),
+    created_by uuid,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    deleted_at timestamp with time zone,
+    CONSTRAINT projects_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[])))
 );
 
+COMMENT ON TABLE public.projects IS 'Projects contain DAGs with multiple Start blocks (entry points). Replaces workflows table.';
+COMMENT ON COLUMN public.projects.variables IS 'Shared variables accessible by all steps in the project';
+COMMENT ON COLUMN public.projects.is_system IS 'True for system projects (e.g., Copilot). These are accessible across all tenants.';
+COMMENT ON COLUMN public.projects.system_slug IS 'Unique slug for system projects (e.g., copilot-generate). Used for internal lookups.';
+
+--
+-- Name: project_versions; Type: TABLE; Schema: public; Owner: -
+-- NOTE: This replaces workflow_versions table.
+--
+
+CREATE TABLE public.project_versions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    project_id uuid NOT NULL,
+    version integer NOT NULL,
+    definition jsonb NOT NULL,
+    saved_by uuid,
+    saved_at timestamp with time zone DEFAULT now()
+);
+
+COMMENT ON TABLE public.project_versions IS 'Version history for projects (immutable snapshots)';
+
+-- ============================================================================
+-- Steps, Edges, Block Groups
+-- ============================================================================
+
+--
+-- Name: block_groups; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.block_groups (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    type character varying(50) NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    parent_group_id uuid,
+    position_x integer DEFAULT 0,
+    position_y integer DEFAULT 0,
+    width integer DEFAULT 400,
+    height integer DEFAULT 300,
+    pre_process text,
+    post_process text,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT valid_block_group_type CHECK (((type)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])))
+);
+
+COMMENT ON TABLE public.block_groups IS 'Control flow constructs that group multiple steps';
+COMMENT ON COLUMN public.block_groups.type IS 'Type of control flow: parallel, try_catch, foreach, while';
+COMMENT ON COLUMN public.block_groups.config IS 'Type-specific configuration (JSON)';
+COMMENT ON COLUMN public.block_groups.parent_group_id IS 'Reference to parent group for nested structures';
+
+--
+-- Name: steps; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id, added trigger_type/trigger_config for Start blocks
+--
+
+CREATE TABLE public.steps (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    type character varying(50) NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    trigger_type character varying(50),
+    trigger_config jsonb DEFAULT '{}'::jsonb,
+    position_x integer DEFAULT 0,
+    position_y integer DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    block_group_id uuid,
+    group_role character varying(50),
+    credential_bindings jsonb DEFAULT '{}'::jsonb,
+    block_definition_id uuid,
+    CONSTRAINT steps_trigger_type_check CHECK ((trigger_type IS NULL OR (trigger_type)::text = ANY ((ARRAY['manual'::character varying, 'webhook'::character varying, 'schedule'::character varying, 'slack'::character varying, 'discord'::character varying, 'email'::character varying, 'internal'::character varying, 'api'::character varying])::text[])))
+);
+
+COMMENT ON COLUMN public.steps.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.steps.block_group_id IS 'Reference to containing block group (NULL if not in a group)';
+COMMENT ON COLUMN public.steps.group_role IS 'Role within block group: body (steps inside the group body)';
+COMMENT ON COLUMN public.steps.credential_bindings IS 'Mapping of credential names to tenant credential IDs';
+COMMENT ON COLUMN public.steps.block_definition_id IS 'Reference to block_definitions registry';
+COMMENT ON COLUMN public.steps.trigger_type IS 'For Start blocks: manual, webhook, schedule, slack, discord, email, internal, api';
+COMMENT ON COLUMN public.steps.trigger_config IS 'For Start blocks: trigger-specific configuration (secret, cron, input_mapping, etc.)';
+
+--
+-- Name: edges; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id
+--
+
+CREATE TABLE public.edges (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    source_step_id uuid,
+    target_step_id uuid,
+    source_block_group_id uuid,
+    target_block_group_id uuid,
+    condition text,
+    created_at timestamp with time zone DEFAULT now(),
+    source_port character varying(50) DEFAULT ''::character varying,
+    target_port character varying(50) DEFAULT ''::character varying,
+    CONSTRAINT edges_source_check CHECK ((source_step_id IS NOT NULL OR source_block_group_id IS NOT NULL)),
+    CONSTRAINT edges_target_check CHECK ((target_step_id IS NOT NULL OR target_block_group_id IS NOT NULL))
+);
+
+COMMENT ON COLUMN public.edges.project_id IS 'Reference to parent project (formerly workflow_id)';
+
+-- ============================================================================
+-- Block Definitions (Block Registry)
+-- ============================================================================
 
 --
 -- Name: block_definitions; Type: TABLE; Schema: public; Owner: -
@@ -110,83 +275,111 @@ CREATE TABLE public.block_definitions (
     CONSTRAINT no_self_reference CHECK (parent_block_id IS NULL OR parent_block_id != id)
 );
 
-
---
--- Name: COLUMN block_definitions.required_credentials; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.required_credentials IS 'JSON array declaring required credentials: [{name, type, scope, description, required}]';
-
-
---
--- Name: COLUMN block_definitions.is_public; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.is_public IS 'Whether tenant block is visible to other tenants';
-
-
---
--- Name: COLUMN block_definitions.code; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.code IS 'JavaScript code executed in sandbox. All blocks are code-based.';
-
-
---
--- Name: COLUMN block_definitions.ui_config; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.block_definitions.ui_config IS 'UI metadata: icon, color, configSchema for workflow editor';
-
-
---
--- Name: COLUMN block_definitions.is_system; Type: COMMENT; Schema: public; Owner: -
---
-
+COMMENT ON COLUMN public.block_definitions.ui_config IS 'UI metadata: icon, color, configSchema for project editor';
 COMMENT ON COLUMN public.block_definitions.is_system IS 'System blocks can only be edited by admins';
-
-
---
--- Name: COLUMN block_definitions.version; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.version IS 'Version number, incremented on each update';
-
-
---
--- Name: COLUMN block_definitions.parent_block_id; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.parent_block_id IS 'Parent block for inheritance (only blocks with code can be inherited)';
-
-
---
--- Name: COLUMN block_definitions.config_defaults; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.config_defaults IS 'Default values for parent config_schema when inheriting';
-
-
---
--- Name: COLUMN block_definitions.pre_process; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.pre_process IS 'JavaScript code executed before main code (input transformation)';
-
-
---
--- Name: COLUMN block_definitions.post_process; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.post_process IS 'JavaScript code executed after main code (output transformation)';
-
-
---
--- Name: COLUMN block_definitions.internal_steps; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.block_definitions.internal_steps IS 'Array of internal steps to execute sequentially: [{type, config, output_key}]';
 
+--
+-- Name: block_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.block_versions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    block_id uuid NOT NULL,
+    version integer NOT NULL,
+    code text NOT NULL,
+    config_schema jsonb NOT NULL,
+    input_schema jsonb,
+    output_schema jsonb,
+    ui_config jsonb NOT NULL,
+    change_summary text,
+    changed_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.block_versions IS 'Version history for block definitions, enables rollback';
+
+-- ============================================================================
+-- Execution (Runs, Step Runs, Block Group Runs)
+-- ============================================================================
+
+--
+-- Name: runs; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id, added start_step_id
+--
+
+CREATE TABLE public.runs (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    project_version integer NOT NULL,
+    start_step_id uuid,
+    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    input jsonb,
+    output jsonb,
+    error text,
+    triggered_by character varying(50) DEFAULT 'manual'::character varying NOT NULL,
+    run_number integer DEFAULT 0 NOT NULL,
+    triggered_by_user uuid,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now(),
+    trigger_source character varying(100),
+    trigger_metadata jsonb DEFAULT '{}'::jsonb,
+    deleted_at timestamp with time zone
+);
+
+COMMENT ON COLUMN public.runs.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.runs.project_version IS 'Project version that was executed (formerly workflow_version)';
+COMMENT ON COLUMN public.runs.start_step_id IS 'Which Start block triggered this run';
+COMMENT ON COLUMN public.runs.trigger_source IS 'Internal trigger source identifier: copilot, audit-system, etc.';
+COMMENT ON COLUMN public.runs.trigger_metadata IS 'Additional metadata about the trigger: feature, user_id, session_id, etc.';
+COMMENT ON COLUMN public.runs.run_number IS 'Sequential run number per project + triggered_by combination';
+
+--
+-- Name: run_number_sequences; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id
+--
+
+CREATE TABLE public.run_number_sequences (
+    project_id uuid NOT NULL,
+    triggered_by character varying(50) NOT NULL,
+    next_number integer DEFAULT 1 NOT NULL
+);
+
+COMMENT ON TABLE public.run_number_sequences IS 'Tracks next run_number for each project + triggered_by combination';
+
+--
+-- Name: step_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.step_runs (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    step_id uuid NOT NULL,
+    step_name character varying(255) NOT NULL,
+    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
+    attempt integer DEFAULT 1 NOT NULL,
+    sequence_number integer DEFAULT 0 NOT NULL,
+    input jsonb,
+    output jsonb,
+    error text,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    duration_ms integer,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+COMMENT ON COLUMN public.step_runs.sequence_number IS 'Execution order within the same run and attempt (1-indexed)';
 
 --
 -- Name: block_group_runs; Type: TABLE; Schema: public; Owner: -
@@ -208,115 +401,41 @@ CREATE TABLE public.block_group_runs (
     CONSTRAINT valid_block_group_run_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying, 'completed'::character varying, 'failed'::character varying, 'skipped'::character varying])::text[])))
 );
 
+-- ============================================================================
+-- Scheduling
+-- ============================================================================
 
 --
--- Name: block_groups; Type: TABLE; Schema: public; Owner: -
+-- Name: schedules; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id, added start_step_id
 --
 
-CREATE TABLE public.block_groups (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
+CREATE TABLE public.schedules (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     tenant_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    start_step_id uuid NOT NULL,
     name character varying(255) NOT NULL,
-    type character varying(50) NOT NULL,
-    config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    parent_group_id uuid,
-    position_x integer DEFAULT 0,
-    position_y integer DEFAULT 0,
-    width integer DEFAULT 400,
-    height integer DEFAULT 300,
-    pre_process text,
-    post_process text,
+    description text,
+    cron_expression character varying(100) NOT NULL,
+    timezone character varying(50) DEFAULT 'UTC'::character varying NOT NULL,
+    input jsonb,
+    status character varying(50) DEFAULT 'active'::character varying NOT NULL,
+    next_run_at timestamp with time zone,
+    last_run_at timestamp with time zone,
+    last_run_id uuid,
+    run_count integer DEFAULT 0 NOT NULL,
+    created_by uuid,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT valid_block_group_type CHECK (((type)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])))
+    updated_at timestamp with time zone DEFAULT now()
 );
 
+COMMENT ON COLUMN public.schedules.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.schedules.start_step_id IS 'Which Start block to execute when schedule triggers';
 
---
--- Name: TABLE block_groups; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.block_groups IS 'Control flow constructs that group multiple steps';
-
-
---
--- Name: COLUMN block_groups.type; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.block_groups.type IS 'Type of control flow: parallel, try_catch, foreach, while';
-
-
---
--- Name: COLUMN block_groups.config; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.block_groups.config IS 'Type-specific configuration (JSON)';
-
-
---
--- Name: COLUMN block_groups.parent_group_id; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.block_groups.parent_group_id IS 'Reference to parent group for nested structures';
-
-
---
--- Name: block_versions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.block_versions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    block_id uuid NOT NULL,
-    version integer NOT NULL,
-    code text NOT NULL,
-    config_schema jsonb NOT NULL,
-    input_schema jsonb,
-    output_schema jsonb,
-    ui_config jsonb NOT NULL,
-    change_summary text,
-    changed_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: TABLE block_versions; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.block_versions IS 'Version history for block definitions, enables rollback';
-
-
---
--- Name: copilot_messages; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.copilot_messages (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    session_id uuid NOT NULL,
-    role character varying(20) NOT NULL,
-    content text NOT NULL,
-    metadata jsonb,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT copilot_messages_role_check CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying])::text[])))
-);
-
-
---
--- Name: copilot_sessions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.copilot_sessions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
-    user_id character varying(255) NOT NULL,
-    workflow_id uuid NOT NULL,
-    title character varying(255),
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
+-- ============================================================================
+-- Credentials & Secrets
+-- ============================================================================
 
 --
 -- Name: credentials; Type: TABLE; Schema: public; Owner: -
@@ -341,253 +460,12 @@ CREATE TABLE public.credentials (
     CONSTRAINT valid_credential_type CHECK (((credential_type)::text = ANY ((ARRAY['oauth2'::character varying, 'api_key'::character varying, 'basic'::character varying, 'bearer'::character varying, 'custom'::character varying])::text[])))
 );
 
-
---
--- Name: TABLE credentials; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON TABLE public.credentials IS 'Stores encrypted API credentials for external service authentication';
-
-
---
--- Name: COLUMN credentials.encrypted_data; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.credentials.encrypted_data IS 'AES-256-GCM encrypted credential data (secrets)';
-
-
---
--- Name: COLUMN credentials.encrypted_dek; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.credentials.encrypted_dek IS 'Encrypted Data Encryption Key (envelope encryption)';
-
-
---
--- Name: COLUMN credentials.data_nonce; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.credentials.data_nonce IS '12-byte nonce/IV for data encryption';
-
-
---
--- Name: COLUMN credentials.dek_nonce; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.credentials.dek_nonce IS '12-byte nonce/IV for DEK encryption';
-
-
---
--- Name: COLUMN credentials.metadata; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.credentials.metadata IS 'Non-sensitive metadata (e.g., service name, account info)';
-
-
---
--- Name: edges; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.edges (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
-    source_step_id uuid,
-    target_step_id uuid,
-    source_block_group_id uuid,
-    target_block_group_id uuid,
-    condition text,
-    created_at timestamp with time zone DEFAULT now(),
-    source_port character varying(50) DEFAULT ''::character varying,
-    target_port character varying(50) DEFAULT ''::character varying,
-    CONSTRAINT edges_source_check CHECK ((source_step_id IS NOT NULL OR source_block_group_id IS NOT NULL)),
-    CONSTRAINT edges_target_check CHECK ((target_step_id IS NOT NULL OR target_block_group_id IS NOT NULL))
-);
-
-
---
--- Name: runs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.runs (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
-    workflow_version integer NOT NULL,
-    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
-    input jsonb,
-    output jsonb,
-    error text,
-    triggered_by character varying(50) DEFAULT 'manual'::character varying NOT NULL,
-    run_number integer DEFAULT 0 NOT NULL,
-    triggered_by_user uuid,
-    started_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now(),
-    trigger_source character varying(100),
-    trigger_metadata jsonb DEFAULT '{}'::jsonb,
-    deleted_at timestamp with time zone
-);
-
-
---
--- Name: COLUMN runs.trigger_source; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.runs.trigger_source IS 'Internal trigger source identifier: copilot, audit-system, etc.';
-
-
---
--- Name: COLUMN runs.trigger_metadata; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.runs.trigger_metadata IS 'Additional metadata about the trigger: feature, user_id, session_id, etc.';
-
-
---
--- Name: COLUMN runs.run_number; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.runs.run_number IS 'Sequential run number per workflow + triggered_by combination';
-
-
---
--- Name: run_number_sequences; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.run_number_sequences (
-    workflow_id uuid NOT NULL,
-    triggered_by character varying(50) NOT NULL,
-    next_number integer DEFAULT 1 NOT NULL
-);
-
-
---
--- Name: TABLE run_number_sequences; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.run_number_sequences IS 'Tracks next run_number for each workflow + triggered_by combination';
-
-
---
--- Name: schedules; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schedules (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
-    workflow_version integer DEFAULT 1 NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    cron_expression character varying(100) NOT NULL,
-    timezone character varying(50) DEFAULT 'UTC'::character varying NOT NULL,
-    input jsonb,
-    status character varying(50) DEFAULT 'active'::character varying NOT NULL,
-    next_run_at timestamp with time zone,
-    last_run_at timestamp with time zone,
-    last_run_id uuid,
-    run_count integer DEFAULT 0 NOT NULL,
-    created_by uuid,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: secrets; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.secrets (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id uuid NOT NULL,
-    name character varying(255) NOT NULL,
-    encrypted_value text NOT NULL,
-    created_by uuid,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: step_runs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.step_runs (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id uuid NOT NULL,
-    run_id uuid NOT NULL,
-    step_id uuid NOT NULL,
-    step_name character varying(255) NOT NULL,
-    status character varying(50) DEFAULT 'pending'::character varying NOT NULL,
-    attempt integer DEFAULT 1 NOT NULL,
-    sequence_number integer DEFAULT 0 NOT NULL,
-    input jsonb,
-    output jsonb,
-    error text,
-    started_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    duration_ms integer,
-    created_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: COLUMN step_runs.sequence_number; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.step_runs.sequence_number IS 'Execution order within the same run and attempt (1-indexed)';
-
-
---
--- Name: steps; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.steps (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    tenant_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
-    name character varying(255) NOT NULL,
-    type character varying(50) NOT NULL,
-    config jsonb DEFAULT '{}'::jsonb NOT NULL,
-    position_x integer DEFAULT 0,
-    position_y integer DEFAULT 0,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    block_group_id uuid,
-    group_role character varying(50),
-    credential_bindings jsonb DEFAULT '{}'::jsonb,
-    block_definition_id uuid
-);
-
-
---
--- Name: COLUMN steps.block_group_id; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.steps.block_group_id IS 'Reference to containing block group (NULL if not in a group)';
-
-
---
--- Name: COLUMN steps.group_role; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.steps.group_role IS 'Role within block group: body (steps inside the group body)';
-
-
---
--- Name: COLUMN steps.credential_bindings; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.steps.credential_bindings IS 'Mapping of credential names to tenant credential IDs';
-
-
---
--- Name: COLUMN steps.block_definition_id; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.steps.block_definition_id IS 'Reference to block_definitions registry';
-
 
 --
 -- Name: system_credentials; Type: TABLE; Schema: public; Owner: -
@@ -611,180 +489,35 @@ CREATE TABLE public.system_credentials (
     CONSTRAINT valid_system_credential_type CHECK (((credential_type)::text = ANY ((ARRAY['oauth2'::character varying, 'api_key'::character varying, 'basic'::character varying, 'bearer'::character varying, 'custom'::character varying])::text[])))
 );
 
-
---
--- Name: TABLE system_credentials; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON TABLE public.system_credentials IS 'Operator-managed credentials for system blocks (not accessible by tenants)';
 
-
 --
--- Name: tenants; Type: TABLE; Schema: public; Owner: -
+-- Name: secrets; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.tenants (
+CREATE TABLE public.secrets (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    tenant_id uuid NOT NULL,
     name character varying(255) NOT NULL,
-    slug character varying(255) NOT NULL,
-    settings jsonb DEFAULT '{}'::jsonb,
+    encrypted_value text NOT NULL,
+    created_by uuid,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    deleted_at timestamp with time zone,
-    status character varying(50) DEFAULT 'active'::character varying NOT NULL,
-    plan character varying(50) DEFAULT 'free'::character varying NOT NULL,
-    owner_email character varying(255),
-    owner_name character varying(255),
-    billing_email character varying(255),
-    metadata jsonb DEFAULT '{}'::jsonb,
-    feature_flags jsonb DEFAULT '{}'::jsonb,
-    limits jsonb DEFAULT '{}'::jsonb,
-    suspended_at timestamp with time zone,
-    suspended_reason text
+    updated_at timestamp with time zone DEFAULT now()
 );
 
-
---
--- Name: COLUMN tenants.status; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.status IS 'Tenant status: active, suspended, pending, inactive';
-
-
---
--- Name: COLUMN tenants.plan; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.plan IS 'Subscription plan: free, starter, professional, enterprise';
-
-
---
--- Name: COLUMN tenants.owner_email; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.owner_email IS 'Primary contact email for the tenant';
-
-
---
--- Name: COLUMN tenants.owner_name; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.owner_name IS 'Primary contact name for the tenant';
-
-
---
--- Name: COLUMN tenants.billing_email; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.billing_email IS 'Email for billing notifications';
-
-
---
--- Name: COLUMN tenants.metadata; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.metadata IS 'Additional tenant metadata (industry, company_size, website, country, notes)';
-
-
---
--- Name: COLUMN tenants.feature_flags; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.feature_flags IS 'Feature flags: copilot_enabled, advanced_analytics, custom_blocks, api_access, sso_enabled, audit_logs, max_concurrent_runs';
-
-
---
--- Name: COLUMN tenants.limits; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.limits IS 'Resource limits: max_workflows, max_runs_per_day, max_users, max_credentials, max_storage_mb, retention_days';
-
-
---
--- Name: COLUMN tenants.suspended_at; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.suspended_at IS 'Timestamp when tenant was suspended';
-
-
---
--- Name: COLUMN tenants.suspended_reason; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.tenants.suspended_reason IS 'Reason for tenant suspension';
-
-
---
--- Name: usage_budgets; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.usage_budgets (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
-    workflow_id uuid,
-    budget_type character varying(50) NOT NULL,
-    budget_amount_usd numeric(12,2) NOT NULL,
-    alert_threshold numeric(3,2) DEFAULT 0.80 NOT NULL,
-    enabled boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: TABLE usage_budgets; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.usage_budgets IS 'Budget settings for cost control and alerts';
-
-
---
--- Name: COLUMN usage_budgets.alert_threshold; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.usage_budgets.alert_threshold IS 'Percentage (0.00-1.00) at which to trigger alert';
-
-
---
--- Name: usage_daily_aggregates; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.usage_daily_aggregates (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
-    workflow_id uuid,
-    date date NOT NULL,
-    provider character varying(50) NOT NULL,
-    model character varying(100) NOT NULL,
-    total_requests integer DEFAULT 0 NOT NULL,
-    successful_requests integer DEFAULT 0 NOT NULL,
-    failed_requests integer DEFAULT 0 NOT NULL,
-    total_input_tokens bigint DEFAULT 0 NOT NULL,
-    total_output_tokens bigint DEFAULT 0 NOT NULL,
-    total_cost_usd numeric(12,6) DEFAULT 0 NOT NULL,
-    avg_latency_ms integer,
-    min_latency_ms integer,
-    max_latency_ms integer,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: TABLE usage_daily_aggregates; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON TABLE public.usage_daily_aggregates IS 'Pre-aggregated daily usage data for dashboard performance';
-
+-- ============================================================================
+-- Usage Tracking & Billing
+-- ============================================================================
 
 --
 -- Name: usage_records; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id
 --
 
 CREATE TABLE public.usage_records (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
-    workflow_id uuid,
+    project_id uuid,
     run_id uuid,
     step_run_id uuid,
     provider character varying(50) NOT NULL,
@@ -802,837 +535,305 @@ CREATE TABLE public.usage_records (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-
---
--- Name: TABLE usage_records; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON TABLE public.usage_records IS 'Individual LLM API call records with token usage and cost';
-
-
---
--- Name: COLUMN usage_records.provider; Type: COMMENT; Schema: public; Owner: -
---
-
+COMMENT ON COLUMN public.usage_records.project_id IS 'Reference to parent project (formerly workflow_id)';
 COMMENT ON COLUMN public.usage_records.provider IS 'LLM provider: openai, anthropic, google, etc.';
-
-
---
--- Name: COLUMN usage_records.model; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.usage_records.model IS 'Model identifier: gpt-4o, claude-3-opus, etc.';
-
-
---
--- Name: COLUMN usage_records.operation; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.usage_records.operation IS 'Operation type: chat, completion, embedding, etc.';
-
-
---
--- Name: COLUMN usage_records.total_cost_usd; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.usage_records.total_cost_usd IS 'Total cost in USD with 8 decimal precision';
 
-
 --
--- Name: users; Type: TABLE; Schema: public; Owner: -
+-- Name: usage_daily_aggregates; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id
 --
 
-CREATE TABLE public.users (
-    id uuid NOT NULL,
+CREATE TABLE public.usage_daily_aggregates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
-    email character varying(255) NOT NULL,
-    name character varying(255),
-    role character varying(50) DEFAULT 'viewer'::character varying NOT NULL,
-    last_login_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    project_id uuid,
+    date date NOT NULL,
+    provider character varying(50) NOT NULL,
+    model character varying(100) NOT NULL,
+    total_requests integer DEFAULT 0 NOT NULL,
+    successful_requests integer DEFAULT 0 NOT NULL,
+    failed_requests integer DEFAULT 0 NOT NULL,
+    total_input_tokens bigint DEFAULT 0 NOT NULL,
+    total_output_tokens bigint DEFAULT 0 NOT NULL,
+    total_cost_usd numeric(12,6) DEFAULT 0 NOT NULL,
+    avg_latency_ms integer,
+    min_latency_ms integer,
+    max_latency_ms integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+COMMENT ON TABLE public.usage_daily_aggregates IS 'Pre-aggregated daily usage data for dashboard performance';
 
 --
--- Name: webhooks; Type: TABLE; Schema: public; Owner: -
+-- Name: usage_budgets; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id
 --
 
-CREATE TABLE public.webhooks (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+CREATE TABLE public.usage_budgets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
-    workflow_id uuid NOT NULL,
-    workflow_version integer DEFAULT 0 NOT NULL,
-    name character varying(255) NOT NULL,
-    description text,
-    secret character varying(255) NOT NULL,
-    input_mapping jsonb,
+    project_id uuid,
+    budget_type character varying(50) NOT NULL,
+    budget_amount_usd numeric(12,2) NOT NULL,
+    alert_threshold numeric(3,2) DEFAULT 0.80 NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
-    last_triggered_at timestamp with time zone,
-    trigger_count integer DEFAULT 0 NOT NULL,
-    created_by uuid,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+COMMENT ON TABLE public.usage_budgets IS 'Budget settings for cost control and alerts';
+COMMENT ON COLUMN public.usage_budgets.alert_threshold IS 'Percentage (0.00-1.00) at which to trigger alert';
+
+-- ============================================================================
+-- Audit & Adapters
+-- ============================================================================
 
 --
--- Name: workflow_versions; Type: TABLE; Schema: public; Owner: -
+-- Name: audit_logs; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.workflow_versions (
-    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
-    workflow_id uuid NOT NULL,
-    version integer NOT NULL,
-    definition jsonb NOT NULL,
-    saved_by uuid,
-    saved_at timestamp with time zone DEFAULT now()
-);
-
-
---
--- Name: workflows; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.workflows (
+CREATE TABLE public.audit_logs (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     tenant_id uuid NOT NULL,
+    actor_id uuid,
+    actor_email character varying(255),
+    action character varying(100) NOT NULL,
+    resource_type character varying(100) NOT NULL,
+    resource_id uuid,
+    metadata jsonb,
+    ip_address inet,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+--
+-- Name: adapters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.adapters (
+    id character varying(100) NOT NULL,
+    tenant_id uuid,
     name character varying(255) NOT NULL,
     description text,
-    status character varying(50) DEFAULT 'draft'::character varying NOT NULL,
-    version integer DEFAULT 0 NOT NULL,
+    type character varying(50) NOT NULL,
+    config jsonb,
     input_schema jsonb,
     output_schema jsonb,
-    draft jsonb,
-    created_by uuid,
-    published_at timestamp with time zone,
+    enabled boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now(),
-    deleted_at timestamp with time zone,
-    is_system boolean DEFAULT false NOT NULL,
-    system_slug character varying(100)
+    updated_at timestamp with time zone DEFAULT now()
 );
 
+-- ============================================================================
+-- Copilot
+-- ============================================================================
 
 --
--- Name: TABLE workflows; Type: COMMENT; Schema: public; Owner: -
+-- Name: copilot_sessions; Type: TABLE; Schema: public; Owner: -
+-- NOTE: workflow_id → project_id
 --
 
-COMMENT ON TABLE public.workflows IS 'Workflow definitions. System workflows (is_system=true) are used for internal features like Copilot.';
-
-
---
--- Name: COLUMN workflows.is_system; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.workflows.is_system IS 'True for system workflows (e.g., Copilot). These are accessible across all tenants.';
-
-
---
--- Name: COLUMN workflows.system_slug; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.workflows.system_slug IS 'Unique slug for system workflows (e.g., copilot-generate). Used for internal lookups.';
-
+CREATE TABLE public.copilot_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    user_id character varying(255) NOT NULL,
+    project_id uuid,
+    title character varying(255),
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
 
 --
--- Name: adapters adapters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: copilot_messages; Type: TABLE; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.adapters
-    ADD CONSTRAINT adapters_pkey PRIMARY KEY (id);
+CREATE TABLE public.copilot_messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    session_id uuid NOT NULL,
+    role character varying(20) NOT NULL,
+    content text NOT NULL,
+    metadata jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT copilot_messages_role_check CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying])::text[])))
+);
 
+-- ============================================================================
+-- Primary Keys
+-- ============================================================================
 
---
--- Name: audit_logs audit_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
+ALTER TABLE ONLY public.tenants ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.tenants ADD CONSTRAINT tenants_slug_key UNIQUE (slug);
 
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.users ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.users ADD CONSTRAINT users_tenant_id_email_key UNIQUE (tenant_id, email);
 
+ALTER TABLE ONLY public.projects ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.project_versions ADD CONSTRAINT project_versions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.project_versions ADD CONSTRAINT project_versions_project_id_version_key UNIQUE (project_id, version);
 
---
--- Name: block_definitions block_definitions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
+ALTER TABLE ONLY public.steps ADD CONSTRAINT steps_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.block_groups ADD CONSTRAINT block_groups_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.block_definitions
-    ADD CONSTRAINT block_definitions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.block_definitions ADD CONSTRAINT block_definitions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.block_definitions ADD CONSTRAINT unique_block_slug UNIQUE NULLS NOT DISTINCT (tenant_id, slug);
+ALTER TABLE ONLY public.block_versions ADD CONSTRAINT block_versions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.block_versions ADD CONSTRAINT block_versions_block_id_version_key UNIQUE (block_id, version);
 
+ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.run_number_sequences ADD CONSTRAINT run_number_sequences_pkey PRIMARY KEY (project_id, triggered_by);
+ALTER TABLE ONLY public.step_runs ADD CONSTRAINT step_runs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_pkey PRIMARY KEY (id);
 
---
--- Name: block_group_runs block_group_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
+ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.block_group_runs
-    ADD CONSTRAINT block_group_runs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.credentials ADD CONSTRAINT credentials_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.credentials ADD CONSTRAINT unique_credential_name UNIQUE (tenant_id, name);
+ALTER TABLE ONLY public.system_credentials ADD CONSTRAINT system_credentials_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.system_credentials ADD CONSTRAINT system_credentials_name_key UNIQUE (name);
+ALTER TABLE ONLY public.secrets ADD CONSTRAINT secrets_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.secrets ADD CONSTRAINT secrets_tenant_id_name_key UNIQUE (tenant_id, name);
 
+ALTER TABLE ONLY public.usage_records ADD CONSTRAINT usage_records_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.usage_daily_aggregates ADD CONSTRAINT usage_daily_aggregates_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.usage_budgets ADD CONSTRAINT usage_budgets_pkey PRIMARY KEY (id);
 
---
--- Name: block_groups block_groups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
+ALTER TABLE ONLY public.audit_logs ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.adapters ADD CONSTRAINT adapters_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.block_groups
-    ADD CONSTRAINT block_groups_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.copilot_messages ADD CONSTRAINT copilot_messages_pkey PRIMARY KEY (id);
 
+-- ============================================================================
+-- Unique Indexes
+-- ============================================================================
 
---
--- Name: block_versions block_versions_block_id_version_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_versions
-    ADD CONSTRAINT block_versions_block_id_version_key UNIQUE (block_id, version);
-
-
---
--- Name: block_versions block_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_versions
-    ADD CONSTRAINT block_versions_pkey PRIMARY KEY (id);
-
-
---
--- Name: copilot_messages copilot_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.copilot_messages
-    ADD CONSTRAINT copilot_messages_pkey PRIMARY KEY (id);
-
-
---
--- Name: copilot_sessions copilot_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.copilot_sessions
-    ADD CONSTRAINT copilot_sessions_pkey PRIMARY KEY (id);
-
-
---
--- Name: credentials credentials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.credentials
-    ADD CONSTRAINT credentials_pkey PRIMARY KEY (id);
-
-
---
--- Name: edges edges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_pkey PRIMARY KEY (id);
-
-
---
--- Name: edges edges_unique_connection; Type: CONSTRAINT; Schema: public; Owner: -
--- Ensures unique connections considering both step and group endpoints
---
+CREATE UNIQUE INDEX idx_projects_system_slug ON public.projects USING btree (system_slug) WHERE (system_slug IS NOT NULL);
 
 CREATE UNIQUE INDEX edges_unique_connection ON public.edges (
-    workflow_id,
+    project_id,
     COALESCE(source_step_id, '00000000-0000-0000-0000-000000000000'::uuid),
     COALESCE(target_step_id, '00000000-0000-0000-0000-000000000000'::uuid),
     COALESCE(source_block_group_id, '00000000-0000-0000-0000-000000000000'::uuid),
     COALESCE(target_block_group_id, '00000000-0000-0000-0000-000000000000'::uuid)
 );
 
-
---
--- Name: runs runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.runs
-    ADD CONSTRAINT runs_pkey PRIMARY KEY (id);
-
-
---
--- Name: run_number_sequences run_number_sequences_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.run_number_sequences
-    ADD CONSTRAINT run_number_sequences_pkey PRIMARY KEY (workflow_id, triggered_by);
-
-
---
--- Name: schedules schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schedules
-    ADD CONSTRAINT schedules_pkey PRIMARY KEY (id);
-
-
---
--- Name: secrets secrets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.secrets
-    ADD CONSTRAINT secrets_pkey PRIMARY KEY (id);
-
-
---
--- Name: secrets secrets_tenant_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.secrets
-    ADD CONSTRAINT secrets_tenant_id_name_key UNIQUE (tenant_id, name);
-
-
---
--- Name: step_runs step_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.step_runs
-    ADD CONSTRAINT step_runs_pkey PRIMARY KEY (id);
-
-
---
--- Name: steps steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.steps
-    ADD CONSTRAINT steps_pkey PRIMARY KEY (id);
-
-
---
--- Name: system_credentials system_credentials_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.system_credentials
-    ADD CONSTRAINT system_credentials_name_key UNIQUE (name);
-
-
---
--- Name: system_credentials system_credentials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.system_credentials
-    ADD CONSTRAINT system_credentials_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenants tenants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tenants
-    ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
-
-
---
--- Name: tenants tenants_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.tenants
-    ADD CONSTRAINT tenants_slug_key UNIQUE (slug);
-
-
---
--- Name: block_definitions unique_block_slug; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_definitions
-    ADD CONSTRAINT unique_block_slug UNIQUE NULLS NOT DISTINCT (tenant_id, slug);
-
-
---
--- Name: credentials unique_credential_name; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.credentials
-    ADD CONSTRAINT unique_credential_name UNIQUE (tenant_id, name);
-
-
---
--- Name: usage_budgets usage_budgets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_budgets
-    ADD CONSTRAINT usage_budgets_pkey PRIMARY KEY (id);
-
-
---
--- Name: usage_daily_aggregates usage_daily_aggregates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_daily_aggregates
-    ADD CONSTRAINT usage_daily_aggregates_pkey PRIMARY KEY (id);
-
-
---
--- Name: usage_records usage_records_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_records
-    ADD CONSTRAINT usage_records_pkey PRIMARY KEY (id);
-
-
---
--- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
-
-
---
--- Name: users users_tenant_id_email_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_tenant_id_email_key UNIQUE (tenant_id, email);
-
-
---
--- Name: webhooks webhooks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.webhooks
-    ADD CONSTRAINT webhooks_pkey PRIMARY KEY (id);
-
-
---
--- Name: workflow_versions workflow_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflow_versions
-    ADD CONSTRAINT workflow_versions_pkey PRIMARY KEY (id);
-
-
---
--- Name: workflow_versions workflow_versions_workflow_id_version_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflow_versions
-    ADD CONSTRAINT workflow_versions_workflow_id_version_key UNIQUE (workflow_id, version);
-
-
---
--- Name: workflows workflows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflows
-    ADD CONSTRAINT workflows_pkey PRIMARY KEY (id);
-
-
---
--- Name: idx_audit_logs_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_audit_logs_created ON public.audit_logs USING btree (created_at);
-
-
---
--- Name: idx_audit_logs_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_audit_logs_tenant ON public.audit_logs USING btree (tenant_id);
-
-
---
--- Name: idx_block_definitions_category; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_definitions_category ON public.block_definitions USING btree (category);
-
-
---
--- Name: idx_block_definitions_subcategory; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_definitions_subcategory ON public.block_definitions USING btree (subcategory) WHERE (subcategory IS NOT NULL);
-
-
---
--- Name: idx_block_definitions_enabled; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_definitions_enabled ON public.block_definitions USING btree (enabled) WHERE (enabled = true);
-
-
---
--- Name: idx_block_definitions_slug; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_definitions_slug ON public.block_definitions USING btree (slug);
-
-
---
--- Name: idx_block_definitions_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_definitions_tenant ON public.block_definitions USING btree (tenant_id);
-
-
---
--- Name: idx_block_definitions_parent; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_definitions_parent ON public.block_definitions USING btree (parent_block_id) WHERE (parent_block_id IS NOT NULL);
-
-
---
--- Name: idx_block_group_runs_block_group; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_group_runs_block_group ON public.block_group_runs USING btree (block_group_id);
-
-
---
--- Name: idx_block_group_runs_run; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_group_runs_run ON public.block_group_runs USING btree (run_id);
-
-
---
--- Name: idx_block_groups_parent; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_groups_parent ON public.block_groups USING btree (parent_group_id);
-
-
---
--- Name: idx_block_groups_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_groups_workflow ON public.block_groups USING btree (workflow_id);
-
-
---
--- Name: idx_block_groups_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_groups_tenant ON public.block_groups USING btree (tenant_id);
-
-
---
--- Name: idx_block_group_runs_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_group_runs_tenant ON public.block_group_runs USING btree (tenant_id);
-
-
---
--- Name: idx_block_versions_block_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_versions_block_id ON public.block_versions USING btree (block_id);
-
-
---
--- Name: idx_block_versions_created_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_block_versions_created_at ON public.block_versions USING btree (created_at);
-
-
---
--- Name: idx_copilot_messages_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_copilot_messages_created ON public.copilot_messages USING btree (session_id, created_at);
-
-
---
--- Name: idx_copilot_messages_session; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_copilot_messages_session ON public.copilot_messages USING btree (session_id);
-
-
---
--- Name: idx_copilot_sessions_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_copilot_sessions_active ON public.copilot_sessions USING btree (tenant_id, user_id, workflow_id, is_active) WHERE (is_active = true);
-
-
---
--- Name: idx_copilot_sessions_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_copilot_sessions_tenant ON public.copilot_sessions USING btree (tenant_id);
-
-
---
--- Name: idx_copilot_sessions_user_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_copilot_sessions_user_workflow ON public.copilot_sessions USING btree (tenant_id, user_id, workflow_id);
-
-
---
--- Name: idx_credentials_expires; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_credentials_expires ON public.credentials USING btree (expires_at) WHERE (expires_at IS NOT NULL);
-
-
---
--- Name: idx_credentials_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_credentials_status ON public.credentials USING btree (status);
-
-
---
--- Name: idx_credentials_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_credentials_tenant ON public.credentials USING btree (tenant_id);
-
-
---
--- Name: idx_credentials_type; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_credentials_type ON public.credentials USING btree (credential_type);
-
-
---
--- Name: idx_edges_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_edges_tenant ON public.edges USING btree (tenant_id);
-
-
---
--- Name: idx_edges_source_port; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_edges_source_port ON public.edges USING btree (source_step_id, source_port);
-
-
---
--- Name: idx_edges_target_port; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_edges_target_port ON public.edges USING btree (target_port) WHERE ((target_port)::text <> ''::text);
-
-
---
--- Name: idx_runs_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_runs_status ON public.runs USING btree (status);
-
-
---
--- Name: idx_runs_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_runs_tenant ON public.runs USING btree (tenant_id);
-
-
---
--- Name: idx_runs_trigger_source; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_runs_trigger_source ON public.runs USING btree (trigger_source) WHERE (trigger_source IS NOT NULL);
-
-
---
--- Name: idx_runs_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_runs_workflow ON public.runs USING btree (workflow_id);
-
-
---
--- Name: idx_schedules_next_run; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_schedules_next_run ON public.schedules USING btree (next_run_at) WHERE ((status)::text = 'active'::text);
-
-
---
--- Name: idx_schedules_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_schedules_tenant ON public.schedules USING btree (tenant_id);
-
-
---
--- Name: idx_step_runs_run; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_step_runs_run ON public.step_runs USING btree (run_id);
-
-
---
--- Name: idx_step_runs_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_step_runs_tenant ON public.step_runs USING btree (tenant_id);
-
-
---
--- Name: idx_steps_block_group; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_steps_block_group ON public.steps USING btree (block_group_id);
-
-
---
--- Name: idx_steps_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_steps_tenant ON public.steps USING btree (tenant_id);
-
-
---
--- Name: idx_system_credentials_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_system_credentials_status ON public.system_credentials USING btree (status);
-
-
---
--- Name: idx_system_credentials_type; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_system_credentials_type ON public.system_credentials USING btree (credential_type);
-
-
---
--- Name: idx_tenants_owner_email; Type: INDEX; Schema: public; Owner: -
---
-
+CREATE UNIQUE INDEX idx_usage_budgets_unique ON public.usage_budgets USING btree (tenant_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), budget_type);
+CREATE UNIQUE INDEX idx_usage_daily_unique ON public.usage_daily_aggregates USING btree (tenant_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), date, provider, model);
+
+-- ============================================================================
+-- Indexes
+-- ============================================================================
+
+-- Tenants
+CREATE INDEX idx_tenants_status ON public.tenants USING btree (status);
+CREATE INDEX idx_tenants_plan ON public.tenants USING btree (plan);
 CREATE INDEX idx_tenants_owner_email ON public.tenants USING btree (owner_email);
 
+-- Projects
+CREATE INDEX idx_projects_tenant ON public.projects USING btree (tenant_id);
+CREATE INDEX idx_projects_status ON public.projects USING btree (status);
+CREATE INDEX idx_projects_deleted ON public.projects USING btree (deleted_at) WHERE (deleted_at IS NULL);
 
---
--- Name: idx_tenants_plan; Type: INDEX; Schema: public; Owner: -
---
+-- Project Versions
+CREATE INDEX idx_project_versions_project ON public.project_versions USING btree (project_id);
 
-CREATE INDEX idx_tenants_plan ON public.tenants USING btree (plan);
+-- Steps
+CREATE INDEX idx_steps_tenant ON public.steps USING btree (tenant_id);
+CREATE INDEX idx_steps_project ON public.steps USING btree (project_id);
+CREATE INDEX idx_steps_block_group ON public.steps USING btree (block_group_id);
+CREATE INDEX idx_steps_trigger_type ON public.steps USING btree (trigger_type) WHERE (trigger_type IS NOT NULL);
 
+-- Edges
+CREATE INDEX idx_edges_tenant ON public.edges USING btree (tenant_id);
+CREATE INDEX idx_edges_project ON public.edges USING btree (project_id);
+CREATE INDEX idx_edges_source_port ON public.edges USING btree (source_step_id, source_port);
+CREATE INDEX idx_edges_target_port ON public.edges USING btree (target_port) WHERE ((target_port)::text <> ''::text);
 
---
--- Name: idx_tenants_status; Type: INDEX; Schema: public; Owner: -
---
+-- Block Groups
+CREATE INDEX idx_block_groups_tenant ON public.block_groups USING btree (tenant_id);
+CREATE INDEX idx_block_groups_project ON public.block_groups USING btree (project_id);
+CREATE INDEX idx_block_groups_parent ON public.block_groups USING btree (parent_group_id);
 
-CREATE INDEX idx_tenants_status ON public.tenants USING btree (status);
+-- Block Definitions
+CREATE INDEX idx_block_definitions_tenant ON public.block_definitions USING btree (tenant_id);
+CREATE INDEX idx_block_definitions_category ON public.block_definitions USING btree (category);
+CREATE INDEX idx_block_definitions_subcategory ON public.block_definitions USING btree (subcategory) WHERE (subcategory IS NOT NULL);
+CREATE INDEX idx_block_definitions_enabled ON public.block_definitions USING btree (enabled) WHERE (enabled = true);
+CREATE INDEX idx_block_definitions_slug ON public.block_definitions USING btree (slug);
+CREATE INDEX idx_block_definitions_parent ON public.block_definitions USING btree (parent_block_id) WHERE (parent_block_id IS NOT NULL);
 
+-- Block Versions
+CREATE INDEX idx_block_versions_block_id ON public.block_versions USING btree (block_id);
+CREATE INDEX idx_block_versions_created_at ON public.block_versions USING btree (created_at);
 
---
--- Name: idx_usage_budgets_tenant; Type: INDEX; Schema: public; Owner: -
---
+-- Runs
+CREATE INDEX idx_runs_tenant ON public.runs USING btree (tenant_id);
+CREATE INDEX idx_runs_project ON public.runs USING btree (project_id);
+CREATE INDEX idx_runs_status ON public.runs USING btree (status);
+CREATE INDEX idx_runs_trigger_source ON public.runs USING btree (trigger_source) WHERE (trigger_source IS NOT NULL);
+CREATE INDEX idx_runs_start_step ON public.runs USING btree (start_step_id) WHERE (start_step_id IS NOT NULL);
 
-CREATE INDEX idx_usage_budgets_tenant ON public.usage_budgets USING btree (tenant_id);
+-- Step Runs
+CREATE INDEX idx_step_runs_tenant ON public.step_runs USING btree (tenant_id);
+CREATE INDEX idx_step_runs_run ON public.step_runs USING btree (run_id);
 
+-- Block Group Runs
+CREATE INDEX idx_block_group_runs_tenant ON public.block_group_runs USING btree (tenant_id);
+CREATE INDEX idx_block_group_runs_run ON public.block_group_runs USING btree (run_id);
+CREATE INDEX idx_block_group_runs_block_group ON public.block_group_runs USING btree (block_group_id);
 
---
--- Name: idx_usage_budgets_unique; Type: INDEX; Schema: public; Owner: -
---
+-- Schedules
+CREATE INDEX idx_schedules_tenant ON public.schedules USING btree (tenant_id);
+CREATE INDEX idx_schedules_project ON public.schedules USING btree (project_id);
+CREATE INDEX idx_schedules_start_step ON public.schedules USING btree (start_step_id);
+CREATE INDEX idx_schedules_next_run ON public.schedules USING btree (next_run_at) WHERE ((status)::text = 'active'::text);
 
-CREATE UNIQUE INDEX idx_usage_budgets_unique ON public.usage_budgets USING btree (tenant_id, COALESCE(workflow_id, '00000000-0000-0000-0000-000000000000'::uuid), budget_type);
+-- Credentials
+CREATE INDEX idx_credentials_tenant ON public.credentials USING btree (tenant_id);
+CREATE INDEX idx_credentials_type ON public.credentials USING btree (credential_type);
+CREATE INDEX idx_credentials_status ON public.credentials USING btree (status);
+CREATE INDEX idx_credentials_expires ON public.credentials USING btree (expires_at) WHERE (expires_at IS NOT NULL);
 
+-- System Credentials
+CREATE INDEX idx_system_credentials_type ON public.system_credentials USING btree (credential_type);
+CREATE INDEX idx_system_credentials_status ON public.system_credentials USING btree (status);
 
---
--- Name: idx_usage_budgets_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_usage_budgets_workflow ON public.usage_budgets USING btree (workflow_id);
-
-
---
--- Name: idx_usage_daily_tenant_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_usage_daily_tenant_date ON public.usage_daily_aggregates USING btree (tenant_id, date);
-
-
---
--- Name: idx_usage_daily_unique; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_usage_daily_unique ON public.usage_daily_aggregates USING btree (tenant_id, COALESCE(workflow_id, '00000000-0000-0000-0000-000000000000'::uuid), date, provider, model);
-
-
---
--- Name: idx_usage_daily_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_usage_daily_workflow ON public.usage_daily_aggregates USING btree (workflow_id);
-
-
---
--- Name: idx_usage_records_created_at; Type: INDEX; Schema: public; Owner: -
---
-
+-- Usage
+CREATE INDEX idx_usage_records_tenant_date ON public.usage_records USING btree (tenant_id, created_at);
+CREATE INDEX idx_usage_records_project ON public.usage_records USING btree (project_id);
+CREATE INDEX idx_usage_records_run ON public.usage_records USING btree (run_id);
+CREATE INDEX idx_usage_records_provider_model ON public.usage_records USING btree (provider, model);
 CREATE INDEX idx_usage_records_created_at ON public.usage_records USING btree (created_at);
 
+CREATE INDEX idx_usage_daily_tenant_date ON public.usage_daily_aggregates USING btree (tenant_id, date);
+CREATE INDEX idx_usage_daily_project ON public.usage_daily_aggregates USING btree (project_id);
 
---
--- Name: idx_usage_records_provider_model; Type: INDEX; Schema: public; Owner: -
---
+CREATE INDEX idx_usage_budgets_tenant ON public.usage_budgets USING btree (tenant_id);
+CREATE INDEX idx_usage_budgets_project ON public.usage_budgets USING btree (project_id);
 
-CREATE INDEX idx_usage_records_provider_model ON public.usage_records USING btree (provider, model);
+-- Audit
+CREATE INDEX idx_audit_logs_tenant ON public.audit_logs USING btree (tenant_id);
+CREATE INDEX idx_audit_logs_created ON public.audit_logs USING btree (created_at);
 
+-- Copilot
+CREATE INDEX idx_copilot_sessions_tenant ON public.copilot_sessions USING btree (tenant_id);
+CREATE INDEX idx_copilot_sessions_user_project ON public.copilot_sessions USING btree (tenant_id, user_id, project_id);
+CREATE INDEX idx_copilot_sessions_active ON public.copilot_sessions USING btree (tenant_id, user_id, project_id, is_active) WHERE (is_active = true);
+CREATE INDEX idx_copilot_messages_session ON public.copilot_messages USING btree (session_id);
+CREATE INDEX idx_copilot_messages_created ON public.copilot_messages USING btree (session_id, created_at);
 
---
--- Name: idx_usage_records_run; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_usage_records_run ON public.usage_records USING btree (run_id);
-
-
---
--- Name: idx_usage_records_tenant_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_usage_records_tenant_date ON public.usage_records USING btree (tenant_id, created_at);
-
-
---
--- Name: idx_usage_records_workflow; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_usage_records_workflow ON public.usage_records USING btree (workflow_id);
-
-
---
--- Name: idx_workflows_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_workflows_status ON public.workflows USING btree (status);
-
-
---
--- Name: idx_workflows_system_slug; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_workflows_system_slug ON public.workflows USING btree (system_slug) WHERE (system_slug IS NOT NULL);
-
-
---
--- Name: idx_workflows_tenant; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_workflows_tenant ON public.workflows USING btree (tenant_id);
-
-
---
+-- ============================================================================
 -- Trigger Functions
---
+-- ============================================================================
 
-CREATE OR REPLACE FUNCTION public.update_block_definitions_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION public.update_credentials_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION public.update_system_credentials_updated_at()
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -1643,10 +844,10 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION public.assign_run_number()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Get and increment the next run number for this workflow + triggered_by combination
-    INSERT INTO public.run_number_sequences (workflow_id, triggered_by, next_number)
-    VALUES (NEW.workflow_id, NEW.triggered_by, 2)
-    ON CONFLICT (workflow_id, triggered_by)
+    -- Get and increment the next run number for this project + triggered_by combination
+    INSERT INTO public.run_number_sequences (project_id, triggered_by, next_number)
+    VALUES (NEW.project_id, NEW.triggered_by, 2)
+    ON CONFLICT (project_id, triggered_by)
     DO UPDATE SET next_number = public.run_number_sequences.next_number + 1
     RETURNING next_number - 1 INTO NEW.run_number;
 
@@ -1654,464 +855,122 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---
--- Name: block_definitions trigger_block_definitions_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
+-- ============================================================================
+-- Triggers
+-- ============================================================================
 
-CREATE TRIGGER trigger_block_definitions_updated_at BEFORE UPDATE ON public.block_definitions FOR EACH ROW EXECUTE FUNCTION public.update_block_definitions_updated_at();
-
-
---
--- Name: credentials trigger_credentials_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_credentials_updated_at BEFORE UPDATE ON public.credentials FOR EACH ROW EXECUTE FUNCTION public.update_credentials_updated_at();
-
-
---
--- Name: system_credentials trigger_system_credentials_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trigger_system_credentials_updated_at BEFORE UPDATE ON public.system_credentials FOR EACH ROW EXECUTE FUNCTION public.update_system_credentials_updated_at();
-
-
---
--- Name: runs trigger_assign_run_number; Type: TRIGGER; Schema: public; Owner: -
---
+CREATE TRIGGER trigger_projects_updated_at BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_steps_updated_at BEFORE UPDATE ON public.steps FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_block_groups_updated_at BEFORE UPDATE ON public.block_groups FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_block_definitions_updated_at BEFORE UPDATE ON public.block_definitions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_credentials_updated_at BEFORE UPDATE ON public.credentials FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_system_credentials_updated_at BEFORE UPDATE ON public.system_credentials FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_schedules_updated_at BEFORE UPDATE ON public.schedules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TRIGGER trigger_copilot_sessions_updated_at BEFORE UPDATE ON public.copilot_sessions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER trigger_assign_run_number BEFORE INSERT ON public.runs FOR EACH ROW EXECUTE FUNCTION public.assign_run_number();
 
-
---
--- Name: adapters adapters_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.adapters
-    ADD CONSTRAINT adapters_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: audit_logs audit_logs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.audit_logs
-    ADD CONSTRAINT audit_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: block_definitions block_definitions_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_definitions
-    ADD CONSTRAINT block_definitions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
-
---
--- Name: block_definitions block_definitions_parent_block_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_definitions
-    ADD CONSTRAINT block_definitions_parent_block_id_fkey FOREIGN KEY (parent_block_id) REFERENCES public.block_definitions(id) ON DELETE SET NULL;
-
-
---
--- Name: block_group_runs block_group_runs_block_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_group_runs
-    ADD CONSTRAINT block_group_runs_block_group_id_fkey FOREIGN KEY (block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
-
-
---
--- Name: block_group_runs block_group_runs_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_group_runs
-    ADD CONSTRAINT block_group_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
-
-
---
--- Name: block_group_runs block_group_runs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_group_runs
-    ADD CONSTRAINT block_group_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: block_groups block_groups_parent_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_groups
-    ADD CONSTRAINT block_groups_parent_group_id_fkey FOREIGN KEY (parent_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
-
-
---
--- Name: block_groups block_groups_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_groups
-    ADD CONSTRAINT block_groups_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
-
-
---
--- Name: block_groups block_groups_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_groups
-    ADD CONSTRAINT block_groups_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: block_versions block_versions_block_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.block_versions
-    ADD CONSTRAINT block_versions_block_id_fkey FOREIGN KEY (block_id) REFERENCES public.block_definitions(id) ON DELETE CASCADE;
-
-
---
--- Name: copilot_messages copilot_messages_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.copilot_messages
-    ADD CONSTRAINT copilot_messages_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.copilot_sessions(id) ON DELETE CASCADE;
-
-
---
--- Name: copilot_sessions copilot_sessions_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.copilot_sessions
-    ADD CONSTRAINT copilot_sessions_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
-
-
---
--- Name: credentials credentials_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.credentials
-    ADD CONSTRAINT credentials_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
-
---
--- Name: edges edges_source_step_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_source_step_id_fkey FOREIGN KEY (source_step_id) REFERENCES public.steps(id) ON DELETE CASCADE;
-
-
---
--- Name: edges edges_target_step_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_target_step_id_fkey FOREIGN KEY (target_step_id) REFERENCES public.steps(id) ON DELETE CASCADE;
-
-
---
--- Name: edges edges_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
-
-
---
--- Name: edges edges_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: edges edges_source_block_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_source_block_group_id_fkey FOREIGN KEY (source_block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
-
-
---
--- Name: edges edges_target_block_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.edges
-    ADD CONSTRAINT edges_target_block_group_id_fkey FOREIGN KEY (target_block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
-
-
---
--- Name: runs runs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.runs
-    ADD CONSTRAINT runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: runs runs_triggered_by_user_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.runs
-    ADD CONSTRAINT runs_triggered_by_user_fkey FOREIGN KEY (triggered_by_user) REFERENCES public.users(id);
-
-
---
--- Name: runs runs_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.runs
-    ADD CONSTRAINT runs_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: run_number_sequences run_number_sequences_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.run_number_sequences
-    ADD CONSTRAINT run_number_sequences_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
-
-
---
--- Name: schedules schedules_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schedules
-    ADD CONSTRAINT schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: schedules schedules_last_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schedules
-    ADD CONSTRAINT schedules_last_run_id_fkey FOREIGN KEY (last_run_id) REFERENCES public.runs(id);
-
-
---
--- Name: schedules schedules_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schedules
-    ADD CONSTRAINT schedules_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: schedules schedules_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schedules
-    ADD CONSTRAINT schedules_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: secrets secrets_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.secrets
-    ADD CONSTRAINT secrets_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: secrets secrets_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.secrets
-    ADD CONSTRAINT secrets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: step_runs step_runs_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.step_runs
-    ADD CONSTRAINT step_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
-
-
---
--- Name: step_runs step_runs_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.step_runs
-    ADD CONSTRAINT step_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: steps steps_block_definition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.steps
-    ADD CONSTRAINT steps_block_definition_id_fkey FOREIGN KEY (block_definition_id) REFERENCES public.block_definitions(id) ON DELETE SET NULL;
-
-
---
--- Name: steps steps_block_group_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.steps
-    ADD CONSTRAINT steps_block_group_id_fkey FOREIGN KEY (block_group_id) REFERENCES public.block_groups(id) ON DELETE SET NULL;
-
-
---
--- Name: steps steps_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.steps
-    ADD CONSTRAINT steps_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id) ON DELETE CASCADE;
-
-
---
--- Name: steps steps_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.steps
-    ADD CONSTRAINT steps_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: usage_budgets usage_budgets_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_budgets
-    ADD CONSTRAINT usage_budgets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: usage_budgets usage_budgets_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_budgets
-    ADD CONSTRAINT usage_budgets_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: usage_daily_aggregates usage_daily_aggregates_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_daily_aggregates
-    ADD CONSTRAINT usage_daily_aggregates_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: usage_daily_aggregates usage_daily_aggregates_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_daily_aggregates
-    ADD CONSTRAINT usage_daily_aggregates_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: usage_records usage_records_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_records
-    ADD CONSTRAINT usage_records_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
-
-
---
--- Name: usage_records usage_records_step_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_records
-    ADD CONSTRAINT usage_records_step_run_id_fkey FOREIGN KEY (step_run_id) REFERENCES public.step_runs(id);
-
-
---
--- Name: usage_records usage_records_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_records
-    ADD CONSTRAINT usage_records_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: usage_records usage_records_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.usage_records
-    ADD CONSTRAINT usage_records_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: users users_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.users
-    ADD CONSTRAINT users_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: webhooks webhooks_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.webhooks
-    ADD CONSTRAINT webhooks_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: webhooks webhooks_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.webhooks
-    ADD CONSTRAINT webhooks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- Name: webhooks webhooks_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.webhooks
-    ADD CONSTRAINT webhooks_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: workflow_versions workflow_versions_saved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflow_versions
-    ADD CONSTRAINT workflow_versions_saved_by_fkey FOREIGN KEY (saved_by) REFERENCES public.users(id);
-
-
---
--- Name: workflow_versions workflow_versions_workflow_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflow_versions
-    ADD CONSTRAINT workflow_versions_workflow_id_fkey FOREIGN KEY (workflow_id) REFERENCES public.workflows(id);
-
-
---
--- Name: workflows workflows_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflows
-    ADD CONSTRAINT workflows_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-
---
--- Name: workflows workflows_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.workflows
-    ADD CONSTRAINT workflows_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
-
---
--- PostgreSQL database dump complete
---
+-- ============================================================================
+-- Foreign Keys
+-- ============================================================================
+
+-- Users
+ALTER TABLE ONLY public.users ADD CONSTRAINT users_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+-- Projects
+ALTER TABLE ONLY public.projects ADD CONSTRAINT projects_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.projects ADD CONSTRAINT projects_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+-- Project Versions
+ALTER TABLE ONLY public.project_versions ADD CONSTRAINT project_versions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.project_versions ADD CONSTRAINT project_versions_saved_by_fkey FOREIGN KEY (saved_by) REFERENCES public.users(id);
+
+-- Steps
+ALTER TABLE ONLY public.steps ADD CONSTRAINT steps_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.steps ADD CONSTRAINT steps_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.steps ADD CONSTRAINT steps_block_group_id_fkey FOREIGN KEY (block_group_id) REFERENCES public.block_groups(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.steps ADD CONSTRAINT steps_block_definition_id_fkey FOREIGN KEY (block_definition_id) REFERENCES public.block_definitions(id) ON DELETE SET NULL;
+
+-- Edges
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_source_step_id_fkey FOREIGN KEY (source_step_id) REFERENCES public.steps(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_target_step_id_fkey FOREIGN KEY (target_step_id) REFERENCES public.steps(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_source_block_group_id_fkey FOREIGN KEY (source_block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.edges ADD CONSTRAINT edges_target_block_group_id_fkey FOREIGN KEY (target_block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
+
+-- Block Groups
+ALTER TABLE ONLY public.block_groups ADD CONSTRAINT block_groups_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.block_groups ADD CONSTRAINT block_groups_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.block_groups ADD CONSTRAINT block_groups_parent_group_id_fkey FOREIGN KEY (parent_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
+
+-- Block Definitions
+ALTER TABLE ONLY public.block_definitions ADD CONSTRAINT block_definitions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.block_definitions ADD CONSTRAINT block_definitions_parent_block_id_fkey FOREIGN KEY (parent_block_id) REFERENCES public.block_definitions(id) ON DELETE SET NULL;
+
+-- Block Versions
+ALTER TABLE ONLY public.block_versions ADD CONSTRAINT block_versions_block_id_fkey FOREIGN KEY (block_id) REFERENCES public.block_definitions(id) ON DELETE CASCADE;
+
+-- Runs
+ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id);
+ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_start_step_id_fkey FOREIGN KEY (start_step_id) REFERENCES public.steps(id);
+ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_triggered_by_user_fkey FOREIGN KEY (triggered_by_user) REFERENCES public.users(id);
+
+-- Run Number Sequences
+ALTER TABLE ONLY public.run_number_sequences ADD CONSTRAINT run_number_sequences_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+-- Step Runs
+ALTER TABLE ONLY public.step_runs ADD CONSTRAINT step_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.step_runs ADD CONSTRAINT step_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
+
+-- Block Group Runs
+ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_block_group_id_fkey FOREIGN KEY (block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
+
+-- Schedules
+ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_start_step_id_fkey FOREIGN KEY (start_step_id) REFERENCES public.steps(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_last_run_id_fkey FOREIGN KEY (last_run_id) REFERENCES public.runs(id);
+
+-- Credentials
+ALTER TABLE ONLY public.credentials ADD CONSTRAINT credentials_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+-- Secrets
+ALTER TABLE ONLY public.secrets ADD CONSTRAINT secrets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.secrets ADD CONSTRAINT secrets_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+-- Usage
+ALTER TABLE ONLY public.usage_records ADD CONSTRAINT usage_records_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.usage_records ADD CONSTRAINT usage_records_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id);
+ALTER TABLE ONLY public.usage_records ADD CONSTRAINT usage_records_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id);
+ALTER TABLE ONLY public.usage_records ADD CONSTRAINT usage_records_step_run_id_fkey FOREIGN KEY (step_run_id) REFERENCES public.step_runs(id);
+
+ALTER TABLE ONLY public.usage_daily_aggregates ADD CONSTRAINT usage_daily_aggregates_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.usage_daily_aggregates ADD CONSTRAINT usage_daily_aggregates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id);
+
+ALTER TABLE ONLY public.usage_budgets ADD CONSTRAINT usage_budgets_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.usage_budgets ADD CONSTRAINT usage_budgets_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id);
+
+-- Audit
+ALTER TABLE ONLY public.audit_logs ADD CONSTRAINT audit_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+-- Adapters
+ALTER TABLE ONLY public.adapters ADD CONSTRAINT adapters_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+-- Copilot
+ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.copilot_messages ADD CONSTRAINT copilot_messages_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.copilot_sessions(id) ON DELETE CASCADE;
 
 -- ============================================================================
 -- RAG (Retrieval-Augmented Generation) Tables
 -- ============================================================================
 
---
--- Name: vector; Type: EXTENSION; Schema: -; Owner: -
---
-
 CREATE EXTENSION IF NOT EXISTS vector;
-
 
 --
 -- Name: vector_collections; Type: TABLE; Schema: public; Owner: -
@@ -2131,20 +990,8 @@ CREATE TABLE public.vector_collections (
     updated_at timestamp with time zone DEFAULT now()
 );
 
-
---
--- Name: TABLE vector_collections; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON TABLE public.vector_collections IS 'RAG vector collections with tenant isolation';
-
-
---
--- Name: COLUMN vector_collections.dimension; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.vector_collections.dimension IS 'Vector dimension (1536 for text-embedding-3-small, 3072 for text-embedding-3-large). Note: vector_documents.embedding is fixed at 1536d - use separate collections for different dimensions.';
-
 
 --
 -- Name: vector_documents; Type: TABLE; Schema: public; Owner: -
@@ -2164,98 +1011,26 @@ CREATE TABLE public.vector_documents (
     updated_at timestamp with time zone DEFAULT now()
 );
 
-
---
--- Name: TABLE vector_documents; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON TABLE public.vector_documents IS 'RAG vector documents with embeddings, tenant-isolated. Note: embedding column is fixed at 1536 dimensions (OpenAI text-embedding-3-small). For other dimensions, create separate tables or use dynamic column types in future versions.';
-
-
---
--- Name: COLUMN vector_documents.content; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.vector_documents.content IS 'Document content (LangChain Document.page_content equivalent)';
-
-
---
--- Name: COLUMN vector_documents.metadata; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.vector_documents.metadata IS 'Document metadata (LangChain Document.metadata equivalent)';
-
-
---
--- Name: COLUMN vector_documents.embedding; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.vector_documents.embedding IS 'Vector embedding from embedding model';
-
-
---
--- Name: COLUMN vector_documents.source_type; Type: COMMENT; Schema: public; Owner: -
---
-
 COMMENT ON COLUMN public.vector_documents.source_type IS 'Source type: url, file, text, api';
 
+-- Vector Collections Constraints
+ALTER TABLE ONLY public.vector_collections ADD CONSTRAINT vector_collections_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.vector_collections ADD CONSTRAINT unique_collection_per_tenant UNIQUE (tenant_id, name);
 
---
--- Name: vector_collections vector_collections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
+-- Vector Documents Constraints
+ALTER TABLE ONLY public.vector_documents ADD CONSTRAINT vector_documents_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.vector_collections
-    ADD CONSTRAINT vector_collections_pkey PRIMARY KEY (id);
-
-
---
--- Name: vector_collections unique_collection_per_tenant; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vector_collections
-    ADD CONSTRAINT unique_collection_per_tenant UNIQUE (tenant_id, name);
-
-
---
--- Name: vector_documents vector_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vector_documents
-    ADD CONSTRAINT vector_documents_pkey PRIMARY KEY (id);
-
-
---
--- Name: idx_vector_collections_tenant; Type: INDEX; Schema: public; Owner: -
---
-
+-- Vector Indexes
 CREATE INDEX idx_vector_collections_tenant ON public.vector_collections USING btree (tenant_id);
-
-
---
--- Name: idx_vector_documents_tenant_collection; Type: INDEX; Schema: public; Owner: -
---
-
 CREATE INDEX idx_vector_documents_tenant_collection ON public.vector_documents USING btree (tenant_id, collection_id);
-
-
---
--- Name: idx_vector_documents_embedding; Type: INDEX; Schema: public; Owner: -
---
-
 CREATE INDEX idx_vector_documents_embedding ON public.vector_documents USING ivfflat (embedding public.vector_cosine_ops) WITH (lists = 100);
-
-
---
--- Name: idx_vector_documents_metadata; Type: INDEX; Schema: public; Owner: -
---
-
 CREATE INDEX idx_vector_documents_metadata ON public.vector_documents USING gin (metadata);
 
-
---
--- Name: vector_collections trigger_vector_collections_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
+-- Vector Triggers
 CREATE OR REPLACE FUNCTION public.update_vector_collections_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -2265,11 +1040,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_vector_collections_updated_at BEFORE UPDATE ON public.vector_collections FOR EACH ROW EXECUTE FUNCTION public.update_vector_collections_updated_at();
-
-
---
--- Name: vector_documents trigger_vector_documents_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
 
 CREATE OR REPLACE FUNCTION public.update_vector_documents_updated_at()
 RETURNS TRIGGER AS $$
@@ -2281,30 +1051,11 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trigger_vector_documents_updated_at BEFORE UPDATE ON public.vector_documents FOR EACH ROW EXECUTE FUNCTION public.update_vector_documents_updated_at();
 
+-- Vector Foreign Keys
+ALTER TABLE ONLY public.vector_collections ADD CONSTRAINT vector_collections_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.vector_documents ADD CONSTRAINT vector_documents_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.vector_documents ADD CONSTRAINT vector_documents_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES public.vector_collections(id) ON DELETE CASCADE;
 
 --
--- Name: vector_collections vector_collections_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- PostgreSQL database dump complete
 --
-
-ALTER TABLE ONLY public.vector_collections
-    ADD CONSTRAINT vector_collections_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
-
---
--- Name: vector_documents vector_documents_tenant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vector_documents
-    ADD CONSTRAINT vector_documents_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
-
-
---
--- Name: vector_documents vector_documents_collection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.vector_documents
-    ADD CONSTRAINT vector_documents_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES public.vector_collections(id) ON DELETE CASCADE;
-
-
-\unrestrict qS68oUh7R0Ylf9hxaFCN1NsqAxjwYu48PFRRQDDRLom2r3jbe88asrCBhclQEWj
-

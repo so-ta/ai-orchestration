@@ -2,6 +2,8 @@
 
 REST API endpoints, request/response schemas, and authentication.
 
+> **Migration Note (2026-01)**: Workflow has been renamed to Project. Projects support multiple Start blocks, each with its own trigger configuration. The webhooks table has been removed; webhook functionality is now configured via Start block `trigger_config`.
+
 ## Quick Reference
 
 | Item | Value |
@@ -40,7 +42,7 @@ REST API endpoints, request/response schemas, and authentication.
 | `FORBIDDEN` | 403 | Insufficient permissions |
 | `NOT_FOUND` | 404 | Resource not found |
 | `VALIDATION_ERROR` | 400 | Invalid request body |
-| `SCHEMA_VALIDATION_ERROR` | 400 | Input does not match workflow's input_schema |
+| `SCHEMA_VALIDATION_ERROR` | 400 | Input does not match Start block's input_schema |
 | `CONFLICT` | 409 | Resource conflict |
 | `INVALID_STATE` | 409 | Resource is in invalid state for operation (e.g., run cannot be cancelled/resumed, schedule is disabled) |
 | `INTERNAL_ERROR` | 500 | Server error |
@@ -48,7 +50,7 @@ REST API endpoints, request/response schemas, and authentication.
 
 ### Schema Validation Error Response
 
-When the input data does not match the workflow's `input_schema` (defined in the Start step), the API returns a detailed validation error:
+When the input data does not match the Start block's `input_schema`, the API returns a detailed validation error:
 
 ```json
 {
@@ -72,8 +74,8 @@ When the input data does not match the workflow's `input_schema` (defined in the
 ```
 
 This error is returned by:
-- `POST /workflows/{workflow_id}/runs` - when run input doesn't match workflow's input_schema
-- `POST /webhooks/{webhook_id}` - when webhook payload (after input_mapping) doesn't match workflow's input_schema
+- `POST /projects/{project_id}/runs` - when run input doesn't match Start block's input_schema
+- Webhook triggers - when webhook payload (after input_mapping in Start block's trigger_config) doesn't match input_schema
 
 ---
 
@@ -86,7 +88,7 @@ API requests are rate limited at multiple scopes to ensure fair usage.
 | Scope | Default Limit | Window | Description |
 |-------|--------------|--------|-------------|
 | `tenant` | 1000 req | 1 min | Per-tenant limit across all endpoints |
-| `workflow` | 100 req | 1 min | Per-workflow limit for run creation |
+| `project` | 100 req | 1 min | Per-project limit for run creation |
 | `webhook` | 60 req | 1 min | Per-webhook-key limit for trigger endpoint |
 
 ### Rate Limit Headers
@@ -121,16 +123,18 @@ Rate limits can be configured via environment variables:
 |----------|---------|-------------|
 | `RATE_LIMIT_ENABLED` | `true` | Enable/disable rate limiting |
 | `RATE_LIMIT_TENANT` | `1000` | Requests per minute per tenant |
-| `RATE_LIMIT_WORKFLOW` | `100` | Requests per minute per workflow |
+| `RATE_LIMIT_PROJECT` | `100` | Requests per minute per project |
 | `RATE_LIMIT_WEBHOOK` | `60` | Requests per minute per webhook key |
 
 ---
 
-## Workflows
+## Projects
+
+Projects (formerly Workflows) are the main organizational unit for DAG definitions. A project can have multiple Start blocks, each with its own trigger type (manual, schedule, webhook).
 
 ### List
 ```
-GET /workflows
+GET /projects
 ```
 
 Query:
@@ -150,6 +154,7 @@ Response `200`:
       "description": "string",
       "status": "draft|published",
       "version": 1,
+      "variables": {},
       "created_at": "ISO8601",
       "updated_at": "ISO8601"
     }
@@ -164,7 +169,7 @@ Response `200`:
 
 ### Create
 ```
-POST /workflows
+POST /projects
 ```
 
 Request:
@@ -172,9 +177,11 @@ Request:
 {
   "name": "string (required)",
   "description": "string",
-  "input_schema": {}
+  "variables": {}
 }
 ```
+
+> **Note**: `input_schema` and `output_schema` have been replaced by `variables` at the project level. Input/output schemas are now defined per Start block.
 
 Response `201`:
 ```json
@@ -184,7 +191,7 @@ Response `201`:
   "description": "string",
   "status": "draft",
   "version": 1,
-  "input_schema": {},
+  "variables": {},
   "created_at": "ISO8601",
   "updated_at": "ISO8601"
 }
@@ -192,14 +199,14 @@ Response `201`:
 
 ### Get
 ```
-GET /workflows/{id}
+GET /projects/{id}
 ```
 
 Response `200`: Same as Create response
 
 ### Update
 ```
-PUT /workflows/{id}
+PUT /projects/{id}
 ```
 
 Constraint: Only `draft` status
@@ -209,22 +216,22 @@ Request:
 {
   "name": "string",
   "description": "string",
-  "input_schema": {}
+  "variables": {}
 }
 ```
 
-Response `200`: Updated workflow
+Response `200`: Updated project
 
 ### Delete
 ```
-DELETE /workflows/{id}
+DELETE /projects/{id}
 ```
 
 Response `204`: No content
 
 ### Publish
 ```
-POST /workflows/{id}/publish
+POST /projects/{id}/publish
 ```
 
 Constraint: Must be `draft` status
@@ -245,7 +252,7 @@ Response `200`:
 
 ### List
 ```
-GET /workflows/{workflow_id}/steps
+GET /projects/{project_id}/steps
 ```
 
 Response `200`:
@@ -254,9 +261,9 @@ Response `200`:
   "data": [
     {
       "id": "uuid",
-      "workflow_id": "uuid",
+      "project_id": "uuid",
       "name": "string",
-      "type": "llm|tool|condition|map|join|subflow",
+      "type": "start|llm|tool|condition|map|join|subflow",
       "config": {},
       "position": {"x": 0, "y": 0},
       "created_at": "ISO8601",
@@ -268,20 +275,38 @@ Response `200`:
 
 ### Create
 ```
-POST /workflows/{workflow_id}/steps
+POST /projects/{project_id}/steps
 ```
 
 Request:
 ```json
 {
   "name": "string (required)",
-  "type": "llm|tool|condition|map|join|subflow (required)",
+  "type": "start|llm|tool|condition|map|join|subflow (required)",
   "config": {},
   "position": {"x": 0, "y": 0}
 }
 ```
 
 Config by type:
+
+**start** (Multiple Start blocks per project supported):
+```json
+{
+  "trigger_type": "manual|schedule|webhook",
+  "trigger_config": {
+    "input_schema": {},
+    "input_mapping": {},
+    "webhook_secret": "string",
+    "cron": "0 9 * * *",
+    "timezone": "Asia/Tokyo"
+  },
+  "input_schema": {},
+  "output_schema": {}
+}
+```
+
+> **Note**: Each Start block can have a different trigger type. Webhook and schedule configurations are now part of the Start block's `trigger_config` rather than separate tables.
 
 **llm**:
 ```json
@@ -322,7 +347,7 @@ Response `201`: Created step
 
 ### Update
 ```
-PUT /workflows/{workflow_id}/steps/{step_id}
+PUT /projects/{project_id}/steps/{step_id}
 ```
 
 Request: Same as Create
@@ -330,7 +355,7 @@ Response `200`: Updated step
 
 ### Delete
 ```
-DELETE /workflows/{workflow_id}/steps/{step_id}
+DELETE /projects/{project_id}/steps/{step_id}
 ```
 
 Response `204`: No content
@@ -341,7 +366,7 @@ Response `204`: No content
 
 ### List
 ```
-GET /workflows/{workflow_id}/edges
+GET /projects/{project_id}/edges
 ```
 
 Response `200`:
@@ -350,7 +375,7 @@ Response `200`:
   "data": [
     {
       "id": "uuid",
-      "workflow_id": "uuid",
+      "project_id": "uuid",
       "source_step_id": "uuid",
       "target_step_id": "uuid",
       "condition": "string (optional)",
@@ -362,7 +387,7 @@ Response `200`:
 
 ### Create
 ```
-POST /workflows/{workflow_id}/edges
+POST /projects/{project_id}/edges
 ```
 
 Request:
@@ -382,7 +407,7 @@ Validation:
 
 ### Delete
 ```
-DELETE /workflows/{workflow_id}/edges/{edge_id}
+DELETE /projects/{project_id}/edges/{edge_id}
 ```
 
 Response `204`: No content
@@ -409,7 +434,7 @@ Block groups are control flow constructs that group multiple steps.
 
 ### List
 ```
-GET /workflows/{workflow_id}/block-groups
+GET /projects/{project_id}/block-groups
 ```
 
 Response `200`:
@@ -418,7 +443,7 @@ Response `200`:
   "data": [
     {
       "id": "uuid",
-      "workflow_id": "uuid",
+      "project_id": "uuid",
       "name": "Parallel Tasks",
       "type": "parallel",
       "config": { "max_concurrent": 10, "fail_fast": false },
@@ -434,7 +459,7 @@ Response `200`:
 
 ### Create
 ```
-POST /workflows/{workflow_id}/block-groups
+POST /projects/{project_id}/block-groups
 ```
 
 Request:
@@ -466,14 +491,14 @@ Response `201`: Created block group
 
 ### Get
 ```
-GET /workflows/{workflow_id}/block-groups/{group_id}
+GET /projects/{project_id}/block-groups/{group_id}
 ```
 
 Response `200`: Block group details
 
 ### Update
 ```
-PUT /workflows/{workflow_id}/block-groups/{group_id}
+PUT /projects/{project_id}/block-groups/{group_id}
 ```
 
 Request:
@@ -492,14 +517,14 @@ Response `200`: Updated block group
 
 ### Delete
 ```
-DELETE /workflows/{workflow_id}/block-groups/{group_id}
+DELETE /projects/{project_id}/block-groups/{group_id}
 ```
 
 Response `204`: No content
 
 ### Add Step to Group
 ```
-POST /workflows/{workflow_id}/block-groups/{group_id}/steps
+POST /projects/{project_id}/block-groups/{group_id}/steps
 ```
 
 Request:
@@ -524,18 +549,18 @@ Response `200`: Updated step
 | VALIDATION_ERROR | this step type cannot be added to a block group | Start nodes cannot be in groups |
 | VALIDATION_ERROR | invalid group role | Only `body` role is valid |
 | NOT_FOUND | block group not found | Block group does not exist |
-| CONFLICT | published workflow cannot be edited | Workflow is published |
+| CONFLICT | published project cannot be edited | Project is published |
 
 ### Get Steps in Group
 ```
-GET /workflows/{workflow_id}/block-groups/{group_id}/steps
+GET /projects/{project_id}/block-groups/{group_id}/steps
 ```
 
 Response `200`: Array of steps
 
 ### Remove Step from Group
 ```
-DELETE /workflows/{workflow_id}/block-groups/{group_id}/steps/{step_id}
+DELETE /projects/{project_id}/block-groups/{group_id}/steps/{step_id}
 ```
 
 Response `200`: Updated step (with null block_group_id)
@@ -546,13 +571,14 @@ Response `200`: Updated step (with null block_group_id)
 
 ### Execute
 ```
-POST /workflows/{workflow_id}/runs
+POST /projects/{project_id}/runs
 ```
 
 Request:
 ```json
 {
   "input": {},
+  "start_step_id": "uuid",
   "triggered_by": "manual|test|webhook|schedule|internal",
   "version": 0
 }
@@ -560,17 +586,21 @@ Request:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `input` | object | `{}` | Input data for the workflow |
+| `input` | object | `{}` | Input data for the run |
+| `start_step_id` | uuid | - | **Required for multi-start projects**: Specifies which Start block to trigger |
 | `triggered_by` | string | `manual` | Trigger type: `manual`, `test`, `webhook`, `schedule`, `internal` |
-| `version` | int | 0 | Workflow version to execute (0 = latest) |
+| `version` | int | 0 | Project version to execute (0 = latest) |
 | `mode` | string | - | **Deprecated**: Use `triggered_by` instead (`mode: "test"` maps to `triggered_by: "test"`) |
+
+> **Note**: Projects can have multiple Start blocks. When executing a run, you must specify which Start block to use via `start_step_id` if the project has more than one Start block.
 
 Response `201`:
 ```json
 {
   "id": "uuid",
-  "workflow_id": "uuid",
-  "workflow_version": 1,
+  "project_id": "uuid",
+  "project_version": 1,
+  "start_step_id": "uuid",
   "status": "pending",
   "triggered_by": "manual",
   "run_number": 1,
@@ -578,15 +608,16 @@ Response `201`:
 }
 ```
 
-### List by Workflow
+### List by Project
 ```
-GET /workflows/{workflow_id}/runs
+GET /projects/{project_id}/runs
 ```
 
 Query:
 | Param | Type | Default |
 |-------|------|---------|
 | `status` | string | - |
+| `start_step_id` | uuid | - |
 | `page` | int | 1 |
 | `limit` | int | 20 |
 
@@ -601,8 +632,9 @@ Response `200`:
 ```json
 {
   "id": "uuid",
-  "workflow_id": "uuid",
-  "workflow_version": 1,
+  "project_id": "uuid",
+  "project_version": 1,
+  "start_step_id": "uuid",
   "status": "completed",
   "mode": "production",
   "trigger_type": "manual",
@@ -754,7 +786,7 @@ Response `200`:
 
 ### Test Step Inline
 ```
-POST /workflows/{workflow_id}/steps/{step_id}/test
+POST /projects/{project_id}/steps/{step_id}/test
 ```
 
 Test a single step without requiring an existing run. Creates a temporary run and executes only the specified step.
@@ -772,7 +804,7 @@ Response `202`:
   "data": {
     "run": {
       "id": "uuid",
-      "workflow_id": "uuid",
+      "project_id": "uuid",
       "status": "running",
       "triggered_by": "test"
     },
@@ -792,9 +824,11 @@ Response `202`:
 
 ## Schedules
 
+Schedules are now linked to specific Start blocks within a project. When a schedule triggers, it executes the specified Start block.
+
 ### List
 ```
-GET /workflows/{workflow_id}/schedules
+GET /projects/{project_id}/schedules
 ```
 
 Response `200`:
@@ -803,7 +837,8 @@ Response `200`:
   "data": [
     {
       "id": "uuid",
-      "workflow_id": "uuid",
+      "project_id": "uuid",
+      "start_step_id": "uuid",
       "name": "string",
       "cron": "0 9 * * *",
       "timezone": "Asia/Tokyo",
@@ -818,13 +853,14 @@ Response `200`:
 
 ### Create
 ```
-POST /workflows/{workflow_id}/schedules
+POST /projects/{project_id}/schedules
 ```
 
 Request:
 ```json
 {
   "name": "string (required)",
+  "start_step_id": "uuid (required)",
   "cron": "0 9 * * * (required)",
   "timezone": "Asia/Tokyo",
   "input": {},
@@ -835,6 +871,8 @@ Request:
   }
 }
 ```
+
+> **Note**: `start_step_id` is required and must reference a Start block within the project. This determines which Start block will be triggered when the schedule fires.
 
 Response `201`: Created schedule
 
@@ -856,38 +894,33 @@ Response `204`: No content
 
 ## Webhooks
 
-### Create
-```
-POST /workflows/{workflow_id}/webhooks
-```
+> **Migration Note**: The standalone webhooks table has been removed. Webhook functionality is now configured directly in Start blocks via `trigger_type: "webhook"` and `trigger_config`.
 
-Request:
+### Webhook Configuration (via Start Block)
+
+To create a webhook trigger, create or update a Start block with:
+
 ```json
 {
-  "name": "string (required)",
-  "input_mapping": {
-    "event": "$.action",
-    "repo": "$.repository.name"
+  "name": "Webhook Trigger",
+  "type": "start",
+  "config": {
+    "trigger_type": "webhook",
+    "trigger_config": {
+      "webhook_secret": "whsec_xxx",
+      "input_mapping": {
+        "event": "$.action",
+        "repo": "$.repository.name"
+      }
+    },
+    "input_schema": {}
   }
 }
 ```
 
-Response `201`:
-```json
-{
-  "id": "uuid",
-  "workflow_id": "uuid",
-  "name": "string",
-  "url": "https://api.example.com/webhooks/{id}",
-  "secret": "whsec_xxx",
-  "input_mapping": {},
-  "created_at": "ISO8601"
-}
+### Receive Webhook (External)
 ```
-
-### Receive (External)
-```
-POST /webhooks/{webhook_id}
+POST /projects/{project_id}/webhook/{start_step_id}
 ```
 
 Headers:
@@ -1106,7 +1139,7 @@ Query:
 | Param | Type | Description |
 |-------|------|-------------|
 | `action` | string | `create`, `update`, `delete`, `publish`, `execute` |
-| `resource_type` | string | `workflow`, `run`, `secret` |
+| `resource_type` | string | `project`, `run`, `secret` |
 | `actor_id` | uuid | User ID |
 | `from` | ISO8601 | Start time |
 | `to` | ISO8601 | End time |
@@ -1120,7 +1153,7 @@ Response `200`:
     {
       "id": "uuid",
       "action": "publish",
-      "resource_type": "workflow",
+      "resource_type": "project",
       "resource_id": "uuid",
       "actor_id": "uuid",
       "actor_email": "user@example.com",
@@ -1191,9 +1224,9 @@ Response `200`:
 }
 ```
 
-### Get Usage by Workflow
+### Get Usage by Project
 ```
-GET /usage/by-workflow
+GET /usage/by-project
 ```
 
 Query:
@@ -1206,8 +1239,8 @@ Response `200`:
 {
   "data": [
     {
-      "workflow_id": "uuid",
-      "workflow_name": "My Workflow",
+      "project_id": "uuid",
+      "project_name": "My Project",
       "total_requests": 500,
       "total_tokens": 150000,
       "total_cost_usd": 5.25
@@ -1283,7 +1316,7 @@ Response `200`:
   "data": [
     {
       "id": "uuid",
-      "workflow_id": null,
+      "project_id": null,
       "budget_type": "monthly",
       "budget_amount_usd": 100.00,
       "alert_threshold": 0.80,
@@ -1303,7 +1336,7 @@ POST /usage/budgets
 Request:
 ```json
 {
-  "workflow_id": "uuid (optional)",
+  "project_id": "uuid (optional)",
   "budget_type": "monthly|daily",
   "budget_amount_usd": 100.00,
   "alert_threshold": 0.80
@@ -1519,17 +1552,17 @@ Response `503` (unhealthy):
 
 ## cURL Examples
 
-### Create Workflow
+### Create Project
 ```bash
-curl -X POST http://localhost:8080/api/v1/workflows \
+curl -X POST http://localhost:8080/api/v1/projects \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
-  -d '{"name": "Test Workflow"}'
+  -d '{"name": "Test Project"}'
 ```
 
 ### Add Step
 ```bash
-curl -X POST "http://localhost:8080/api/v1/workflows/{id}/steps" \
+curl -X POST "http://localhost:8080/api/v1/projects/{id}/steps" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
   -d '{
@@ -1539,12 +1572,12 @@ curl -X POST "http://localhost:8080/api/v1/workflows/{id}/steps" \
   }'
 ```
 
-### Execute Workflow
+### Execute Project
 ```bash
-curl -X POST "http://localhost:8080/api/v1/workflows/{id}/runs" \
+curl -X POST "http://localhost:8080/api/v1/projects/{id}/runs" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
-  -d '{"input": {"message": "Hello"}, "mode": "test"}'
+  -d '{"input": {"message": "Hello"}, "start_step_id": "{start_step_uuid}", "triggered_by": "test"}'
 ```
 
 ### With JWT Auth
@@ -1556,7 +1589,7 @@ TOKEN=$(curl -s -X POST http://localhost:8180/realms/ai-orchestration/protocol/o
   | jq -r .access_token)
 
 # Use token
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/workflows
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/projects
 ```
 
 ## Related Documents

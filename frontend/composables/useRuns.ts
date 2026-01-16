@@ -31,14 +31,14 @@ interface TestStepInlineResponse {
 export function useRuns() {
   const api = useApi()
 
-  // List runs for a workflow
-  async function list(workflowId: string, params?: { page?: number; limit?: number }) {
+  // List runs for a project
+  async function list(projectId: string, params?: { page?: number; limit?: number }) {
     const query = new URLSearchParams()
     if (params?.page) query.set('page', params.page.toString())
     if (params?.limit) query.set('limit', params.limit.toString())
 
     const queryString = query.toString()
-    const endpoint = `/workflows/${workflowId}/runs${queryString ? `?${queryString}` : ''}`
+    const endpoint = `/projects/${projectId}/runs${queryString ? `?${queryString}` : ''}`
 
     return api.get<PaginatedResponse<Run>>(endpoint)
   }
@@ -48,11 +48,11 @@ export function useRuns() {
     return api.get<ApiResponse<Run>>(`/runs/${runId}`)
   }
 
-  // Create run (execute workflow)
+  // Create run (execute project)
   // version: 0 or omitted means latest version
   // triggered_by: trigger type (manual, test, etc.)
-  async function create(workflowId: string, data: { input?: object; triggered_by?: TriggerType; version?: number }) {
-    return api.post<ApiResponse<Run>>(`/workflows/${workflowId}/runs`, data)
+  async function create(projectId: string, data: { input?: object; triggered_by?: TriggerType; version?: number }) {
+    return api.post<ApiResponse<Run>>(`/projects/${projectId}/runs`, data)
   }
 
   // Cancel run
@@ -80,8 +80,8 @@ export function useRuns() {
 
   // Test a single step inline (without requiring an existing run)
   // Creates a new test run and executes only the specified step
-  async function testStepInline(workflowId: string, stepId: string, input?: object) {
-    return api.post<TestStepInlineResponse>(`/workflows/${workflowId}/steps/${stepId}/test`, { input })
+  async function testStepInline(projectId: string, stepId: string, input?: object) {
+    return api.post<TestStepInlineResponse>(`/projects/${projectId}/steps/${stepId}/test`, { input })
   }
 
   return {

@@ -24,11 +24,11 @@ func NewBlockGroupRepository(pool *pgxpool.Pool) *BlockGroupRepository {
 // Create creates a new block group
 func (r *BlockGroupRepository) Create(ctx context.Context, g *domain.BlockGroup) error {
 	query := `
-		INSERT INTO block_groups (id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at)
+		INSERT INTO block_groups (id, tenant_id, project_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		g.ID, g.TenantID, g.WorkflowID, g.Name, g.Type, g.Config,
+		g.ID, g.TenantID, g.ProjectID, g.Name, g.Type, g.Config,
 		g.ParentGroupID, g.PreProcess, g.PostProcess,
 		g.PositionX, g.PositionY, g.Width, g.Height,
 		g.CreatedAt, g.UpdatedAt,
@@ -39,13 +39,13 @@ func (r *BlockGroupRepository) Create(ctx context.Context, g *domain.BlockGroup)
 // GetByID retrieves a block group by ID
 func (r *BlockGroupRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroup, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
+		SELECT id, tenant_id, project_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
 		WHERE id = $1 AND tenant_id = $2
 	`
 	var g domain.BlockGroup
 	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
-		&g.ID, &g.TenantID, &g.WorkflowID, &g.Name, &g.Type, &g.Config,
+		&g.ID, &g.TenantID, &g.ProjectID, &g.Name, &g.Type, &g.Config,
 		&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
 		&g.PositionX, &g.PositionY, &g.Width, &g.Height,
 		&g.CreatedAt, &g.UpdatedAt,
@@ -59,15 +59,15 @@ func (r *BlockGroupRepository) GetByID(ctx context.Context, tenantID, id uuid.UU
 	return &g, nil
 }
 
-// ListByWorkflow retrieves all block groups for a workflow
-func (r *BlockGroupRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.BlockGroup, error) {
+// ListByProject retrieves all block groups for a project
+func (r *BlockGroupRepository) ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.BlockGroup, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
+		SELECT id, tenant_id, project_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
-		WHERE workflow_id = $1 AND tenant_id = $2
+		WHERE project_id = $1 AND tenant_id = $2
 		ORDER BY created_at
 	`
-	rows, err := r.pool.Query(ctx, query, workflowID, tenantID)
+	rows, err := r.pool.Query(ctx, query, projectID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (r *BlockGroupRepository) ListByWorkflow(ctx context.Context, tenantID, wor
 	for rows.Next() {
 		var g domain.BlockGroup
 		if err := rows.Scan(
-			&g.ID, &g.TenantID, &g.WorkflowID, &g.Name, &g.Type, &g.Config,
+			&g.ID, &g.TenantID, &g.ProjectID, &g.Name, &g.Type, &g.Config,
 			&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
 			&g.PositionX, &g.PositionY, &g.Width, &g.Height,
 			&g.CreatedAt, &g.UpdatedAt,
@@ -93,7 +93,7 @@ func (r *BlockGroupRepository) ListByWorkflow(ctx context.Context, tenantID, wor
 // ListByParent retrieves all child block groups of a parent group
 func (r *BlockGroupRepository) ListByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*domain.BlockGroup, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
+		SELECT id, tenant_id, project_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
 		WHERE parent_group_id = $1 AND tenant_id = $2
 		ORDER BY created_at
@@ -108,7 +108,7 @@ func (r *BlockGroupRepository) ListByParent(ctx context.Context, tenantID, paren
 	for rows.Next() {
 		var g domain.BlockGroup
 		if err := rows.Scan(
-			&g.ID, &g.TenantID, &g.WorkflowID, &g.Name, &g.Type, &g.Config,
+			&g.ID, &g.TenantID, &g.ProjectID, &g.Name, &g.Type, &g.Config,
 			&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
 			&g.PositionX, &g.PositionY, &g.Width, &g.Height,
 			&g.CreatedAt, &g.UpdatedAt,

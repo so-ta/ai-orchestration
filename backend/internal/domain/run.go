@@ -29,22 +29,23 @@ const (
 	TriggerTypeInternal TriggerType = "internal" // Internal system calls (e.g., Copilot)
 )
 
-// Run represents a workflow execution
+// Run represents a project execution
 type Run struct {
-	ID              uuid.UUID       `json:"id"`
-	TenantID        uuid.UUID       `json:"tenant_id"`
-	WorkflowID      uuid.UUID       `json:"workflow_id"`
-	WorkflowVersion int             `json:"workflow_version"`
-	Status          RunStatus       `json:"status"`
-	Input           json.RawMessage `json:"input,omitempty"`
-	Output          json.RawMessage `json:"output,omitempty"`
-	Error           *string         `json:"error,omitempty"`
-	TriggeredBy     TriggerType     `json:"triggered_by"`
-	RunNumber       int             `json:"run_number"` // Sequential number per workflow + triggered_by
-	TriggeredByUser *uuid.UUID      `json:"triggered_by_user,omitempty"`
-	StartedAt       *time.Time      `json:"started_at,omitempty"`
-	CompletedAt     *time.Time      `json:"completed_at,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
+	ID             uuid.UUID       `json:"id"`
+	TenantID       uuid.UUID       `json:"tenant_id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	ProjectVersion int             `json:"project_version"`
+	StartStepID    *uuid.UUID      `json:"start_step_id,omitempty"` // Which Start block triggered this run
+	Status         RunStatus       `json:"status"`
+	Input          json.RawMessage `json:"input,omitempty"`
+	Output         json.RawMessage `json:"output,omitempty"`
+	Error          *string         `json:"error,omitempty"`
+	TriggeredBy    TriggerType     `json:"triggered_by"`
+	RunNumber      int             `json:"run_number"` // Sequential number per project + triggered_by
+	TriggeredByUser *uuid.UUID     `json:"triggered_by_user,omitempty"`
+	StartedAt       *time.Time     `json:"started_at,omitempty"`
+	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
 
 	// Internal trigger metadata (for TriggerTypeInternal)
 	TriggerSource   *string         `json:"trigger_source,omitempty"`   // e.g., "copilot", "audit-system"
@@ -55,16 +56,32 @@ type Run struct {
 }
 
 // NewRun creates a new run
-func NewRun(tenantID, workflowID uuid.UUID, workflowVersion int, input json.RawMessage, triggerType TriggerType) *Run {
+func NewRun(tenantID, projectID uuid.UUID, projectVersion int, input json.RawMessage, triggerType TriggerType) *Run {
 	return &Run{
-		ID:              uuid.New(),
-		TenantID:        tenantID,
-		WorkflowID:      workflowID,
-		WorkflowVersion: workflowVersion,
-		Status:          RunStatusPending,
-		Input:           input,
-		TriggeredBy:     triggerType,
-		CreatedAt:       time.Now().UTC(),
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		ProjectID:      projectID,
+		ProjectVersion: projectVersion,
+		Status:         RunStatusPending,
+		Input:          input,
+		TriggeredBy:    triggerType,
+		CreatedAt:      time.Now().UTC(),
+		// RunNumber is set by DB trigger
+	}
+}
+
+// NewRunWithStartStep creates a new run with a specific Start step
+func NewRunWithStartStep(tenantID, projectID uuid.UUID, projectVersion int, startStepID uuid.UUID, input json.RawMessage, triggerType TriggerType) *Run {
+	return &Run{
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		ProjectID:      projectID,
+		ProjectVersion: projectVersion,
+		StartStepID:    &startStepID,
+		Status:         RunStatusPending,
+		Input:          input,
+		TriggeredBy:    triggerType,
+		CreatedAt:      time.Now().UTC(),
 		// RunNumber is set by DB trigger
 	}
 }

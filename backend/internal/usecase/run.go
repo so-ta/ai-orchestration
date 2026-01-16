@@ -13,78 +13,79 @@ import (
 
 // RunUsecase handles run business logic
 type RunUsecase struct {
-	workflowRepo repository.WorkflowRepository
-	runRepo      repository.RunRepository
-	versionRepo  repository.WorkflowVersionRepository
-	stepRepo     repository.StepRepository
-	edgeRepo     repository.EdgeRepository
-	stepRunRepo  repository.StepRunRepository
-	queue        *engine.Queue
+	projectRepo repository.ProjectRepository
+	runRepo     repository.RunRepository
+	versionRepo repository.ProjectVersionRepository
+	stepRepo    repository.StepRepository
+	edgeRepo    repository.EdgeRepository
+	stepRunRepo repository.StepRunRepository
+	queue       *engine.Queue
 }
 
 // NewRunUsecase creates a new RunUsecase
 func NewRunUsecase(
-	workflowRepo repository.WorkflowRepository,
+	projectRepo repository.ProjectRepository,
 	runRepo repository.RunRepository,
-	versionRepo repository.WorkflowVersionRepository,
+	versionRepo repository.ProjectVersionRepository,
 	stepRepo repository.StepRepository,
 	edgeRepo repository.EdgeRepository,
 	stepRunRepo repository.StepRunRepository,
 	redisClient *redis.Client,
 ) *RunUsecase {
 	return &RunUsecase{
-		workflowRepo: workflowRepo,
-		runRepo:      runRepo,
-		versionRepo:  versionRepo,
-		stepRepo:     stepRepo,
-		edgeRepo:     edgeRepo,
-		stepRunRepo:  stepRunRepo,
-		queue:        engine.NewQueue(redisClient),
+		projectRepo: projectRepo,
+		runRepo:     runRepo,
+		versionRepo: versionRepo,
+		stepRepo:    stepRepo,
+		edgeRepo:    edgeRepo,
+		stepRunRepo: stepRunRepo,
+		queue:       engine.NewQueue(redisClient),
 	}
 }
 
 // CreateRunInput represents input for creating a run
 type CreateRunInput struct {
 	TenantID    uuid.UUID
-	WorkflowID  uuid.UUID
+	ProjectID   uuid.UUID
 	Version     int // 0 means latest version
 	Input       json.RawMessage
 	TriggeredBy domain.TriggerType // e.g., TriggerTypeManual, TriggerTypeTest
 	UserID      *uuid.UUID
+	StartStepID *uuid.UUID // Optional: specific start step for webhook triggers
 }
 
 // Create creates and enqueues a new run
 func (u *RunUsecase) Create(ctx context.Context, input CreateRunInput) (*domain.Run, error) {
-	// Get workflow
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
+	// Get project
+	project, err := u.projectRepo.GetByID(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Determine which version to use
-	// 0 means use latest (current workflow version)
+	// 0 means use latest (current project version)
 	version := input.Version
 	if version == 0 {
-		version = workflow.Version
+		version = project.Version
 	}
 
 	// Validate that the requested version exists (if specific version requested)
 	if input.Version > 0 && u.versionRepo != nil {
-		_, err := u.versionRepo.GetByWorkflowAndVersion(ctx, workflow.ID, version)
+		_, err := u.versionRepo.GetByProjectAndVersion(ctx, project.ID, version)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Validate input against Start step's input_schema
-	if err := u.validateWorkflowInput(ctx, input.TenantID, workflow.ID, input.Input); err != nil {
+	if err := u.validateProjectInput(ctx, input.TenantID, project.ID, input.Input); err != nil {
 		return nil, err
 	}
 
 	// Create run
 	run := domain.NewRun(
 		input.TenantID,
-		workflow.ID,
+		project.ID,
 		version,
 		input.Input,
 		input.TriggeredBy,
@@ -97,11 +98,12 @@ func (u *RunUsecase) Create(ctx context.Context, input CreateRunInput) (*domain.
 
 	// Enqueue job
 	job := &engine.Job{
-		TenantID:        input.TenantID,
-		WorkflowID:      workflow.ID,
-		WorkflowVersion: version,
-		RunID:           run.ID,
-		Input:           input.Input,
+		TenantID:       input.TenantID,
+		ProjectID:      project.ID,
+		ProjectVersion: version,
+		RunID:          run.ID,
+		Input:          input.Input,
+		TargetStepID:   input.StartStepID, // StartStepID is used as TargetStepID for execution
 	}
 	if err := u.queue.Enqueue(ctx, job); err != nil {
 		return nil, err
@@ -120,13 +122,13 @@ func (u *RunUsecase) GetWithDetails(ctx context.Context, tenantID, id uuid.UUID)
 	return u.runRepo.GetWithStepRuns(ctx, tenantID, id)
 }
 
-// RunWithDefinitionOutput represents a run with its workflow definition
+// RunWithDefinitionOutput represents a run with its project definition
 type RunWithDefinitionOutput struct {
-	Run                *domain.Run                `json:"run"`
-	WorkflowDefinition *domain.WorkflowDefinition `json:"workflow_definition,omitempty"`
+	Run               *domain.Run               `json:"run"`
+	ProjectDefinition *domain.ProjectDefinition `json:"project_definition,omitempty"`
 }
 
-// GetWithDetailsAndDefinition retrieves a run with step runs and workflow definition
+// GetWithDetailsAndDefinition retrieves a run with step runs and project definition
 func (u *RunUsecase) GetWithDetailsAndDefinition(ctx context.Context, tenantID, id uuid.UUID) (*RunWithDefinitionOutput, error) {
 	run, err := u.runRepo.GetWithStepRuns(ctx, tenantID, id)
 	if err != nil {
@@ -137,29 +139,29 @@ func (u *RunUsecase) GetWithDetailsAndDefinition(ctx context.Context, tenantID, 
 		Run: run,
 	}
 
-	// Try to get the workflow definition from the version snapshot
+	// Try to get the project definition from the version snapshot
 	if u.versionRepo != nil {
-		version, err := u.versionRepo.GetByWorkflowAndVersion(ctx, run.WorkflowID, run.WorkflowVersion)
+		version, err := u.versionRepo.GetByProjectAndVersion(ctx, run.ProjectID, run.ProjectVersion)
 		if err == nil && version != nil {
-			var definition domain.WorkflowDefinition
+			var definition domain.ProjectDefinition
 			if err := json.Unmarshal(version.Definition, &definition); err == nil {
-				output.WorkflowDefinition = &definition
+				output.ProjectDefinition = &definition
 				return output, nil
 			}
 		}
 	}
 
-	// Fallback: If version snapshot not found, fetch current workflow definition
+	// Fallback: If version snapshot not found, fetch current project definition
 	// This handles runs created before version snapshots were implemented
-	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, tenantID, run.WorkflowID)
-	if err == nil && workflow != nil {
-		output.WorkflowDefinition = &domain.WorkflowDefinition{
-			Name:        workflow.Name,
-			Description: workflow.Description,
-			InputSchema: workflow.InputSchema,
-			Steps:       workflow.Steps,
-			Edges:       workflow.Edges,
-			BlockGroups: workflow.BlockGroups,
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, tenantID, run.ProjectID)
+	if err == nil && project != nil {
+		output.ProjectDefinition = &domain.ProjectDefinition{
+			Name:        project.Name,
+			Description: project.Description,
+			Variables:   project.Variables,
+			Steps:       project.Steps,
+			Edges:       project.Edges,
+			BlockGroups: project.BlockGroups,
 		}
 	}
 
@@ -169,7 +171,7 @@ func (u *RunUsecase) GetWithDetailsAndDefinition(ctx context.Context, tenantID, 
 // ListRunsInput represents input for listing runs
 type ListRunsInput struct {
 	TenantID    uuid.UUID
-	WorkflowID  uuid.UUID
+	ProjectID   uuid.UUID
 	Status      *domain.RunStatus
 	TriggeredBy *domain.TriggerType // Optional filter by trigger type
 	Page        int
@@ -184,7 +186,7 @@ type ListRunsOutput struct {
 	Limit int
 }
 
-// List lists runs for a workflow
+// List lists runs for a project
 func (u *RunUsecase) List(ctx context.Context, input ListRunsInput) (*ListRunsOutput, error) {
 	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
@@ -195,7 +197,7 @@ func (u *RunUsecase) List(ctx context.Context, input ListRunsInput) (*ListRunsOu
 		Limit:       input.Limit,
 	}
 
-	runs, total, err := u.runRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID, filter)
+	runs, total, err := u.runRepo.ListByProject(ctx, input.TenantID, input.ProjectID, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +210,7 @@ func (u *RunUsecase) List(ctx context.Context, input ListRunsInput) (*ListRunsOu
 	}, nil
 }
 
-// Cancel cancels a running workflow
+// Cancel cancels a running project
 func (u *RunUsecase) Cancel(ctx context.Context, tenantID, id uuid.UUID) (*domain.Run, error) {
 	run, err := u.runRepo.GetByID(ctx, tenantID, id)
 	if err != nil {
@@ -247,13 +249,13 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 		return nil, domain.ErrRunNotResumable
 	}
 
-	// 2. Get workflow definition from version snapshot
-	version, err := u.versionRepo.GetByWorkflowAndVersion(ctx, run.WorkflowID, run.WorkflowVersion)
+	// 2. Get project definition from version snapshot
+	version, err := u.versionRepo.GetByProjectAndVersion(ctx, run.ProjectID, run.ProjectVersion)
 	if err != nil {
 		return nil, err
 	}
 
-	var definition domain.WorkflowDefinition
+	var definition domain.ProjectDefinition
 	if err := json.Unmarshal(version.Definition, &definition); err != nil {
 		return nil, err
 	}
@@ -267,9 +269,9 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 		}
 	}
 
-	// 4. If step not found in version snapshot, try current workflow (for steps not in flow)
+	// 4. If step not found in version snapshot, try current project (for steps not in flow)
 	if targetStep == nil {
-		currentSteps, err := u.stepRepo.ListByWorkflow(ctx, input.TenantID, run.WorkflowID)
+		currentSteps, err := u.stepRepo.ListByProject(ctx, input.TenantID, run.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -317,8 +319,8 @@ func (u *RunUsecase) ExecuteSingleStep(ctx context.Context, input ExecuteSingleS
 	// 7. Enqueue job
 	job := &engine.Job{
 		TenantID:        input.TenantID,
-		WorkflowID:      run.WorkflowID,
-		WorkflowVersion: run.WorkflowVersion,
+		ProjectID:       run.ProjectID,
+		ProjectVersion:  run.ProjectVersion,
 		RunID:           input.RunID,
 		ExecutionMode:   engine.ExecutionModeSingleStep,
 		TargetStepID:    &input.StepID,
@@ -360,13 +362,13 @@ func (u *RunUsecase) ResumeFromStep(ctx context.Context, input ResumeFromStepInp
 		return nil, domain.ErrRunNotResumable
 	}
 
-	// 2. Get workflow definition from version snapshot
-	version, err := u.versionRepo.GetByWorkflowAndVersion(ctx, run.WorkflowID, run.WorkflowVersion)
+	// 2. Get project definition from version snapshot
+	version, err := u.versionRepo.GetByProjectAndVersion(ctx, run.ProjectID, run.ProjectVersion)
 	if err != nil {
 		return nil, err
 	}
 
-	var definition domain.WorkflowDefinition
+	var definition domain.ProjectDefinition
 	if err := json.Unmarshal(version.Definition, &definition); err != nil {
 		return nil, err
 	}
@@ -418,8 +420,8 @@ func (u *RunUsecase) ResumeFromStep(ctx context.Context, input ResumeFromStepInp
 	// 7. Enqueue job
 	job := &engine.Job{
 		TenantID:        input.TenantID,
-		WorkflowID:      run.WorkflowID,
-		WorkflowVersion: run.WorkflowVersion,
+		ProjectID:       run.ProjectID,
+		ProjectVersion:  run.ProjectVersion,
 		RunID:           input.RunID,
 		ExecutionMode:   engine.ExecutionModeResume,
 		TargetStepID:    &input.FromStepID,
@@ -448,43 +450,43 @@ func (u *RunUsecase) GetStepHistory(ctx context.Context, tenantID, runID, stepID
 	return u.stepRunRepo.ListByStep(ctx, tenantID, runID, stepID)
 }
 
-// ExecuteSystemWorkflowInput represents input for executing a system workflow
-type ExecuteSystemWorkflowInput struct {
+// ExecuteSystemProjectInput represents input for executing a system project
+type ExecuteSystemProjectInput struct {
 	TenantID        uuid.UUID              // Tenant context for the run
-	SystemSlug      string                 // System workflow slug (e.g., "copilot-generate")
-	Input           json.RawMessage        // Workflow input
+	SystemSlug      string                 // System project slug (e.g., "copilot-generate")
+	Input           json.RawMessage        // Project input
 	TriggerSource   string                 // Internal caller identifier (e.g., "copilot")
 	TriggerMetadata map[string]interface{} // Additional metadata (feature, user_id, session_id, etc.)
 	UserID          *uuid.UUID             // User who triggered the execution
 }
 
-// ExecuteSystemWorkflowOutput represents output for system workflow execution
-type ExecuteSystemWorkflowOutput struct {
-	RunID      uuid.UUID `json:"run_id"`
-	WorkflowID uuid.UUID `json:"workflow_id"`
-	Version    int       `json:"version"`
+// ExecuteSystemProjectOutput represents output for system project execution
+type ExecuteSystemProjectOutput struct {
+	RunID     uuid.UUID `json:"run_id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	Version   int       `json:"version"`
 }
 
-// ExecuteSystemWorkflow executes a system workflow by its slug
-// This is used for internal system calls (e.g., Copilot meta-workflow)
+// ExecuteSystemProject executes a system project by its slug
+// This is used for internal system calls (e.g., Copilot meta-project)
 // Returns immediately after creating the run - execution happens asynchronously
-func (u *RunUsecase) ExecuteSystemWorkflow(ctx context.Context, input ExecuteSystemWorkflowInput) (*ExecuteSystemWorkflowOutput, error) {
-	// 1. Look up system workflow by slug
-	workflow, err := u.workflowRepo.GetSystemBySlug(ctx, input.SystemSlug)
+func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSystemProjectInput) (*ExecuteSystemProjectOutput, error) {
+	// 1. Look up system project by slug
+	project, err := u.projectRepo.GetSystemBySlug(ctx, input.SystemSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Validate workflow is published
-	if workflow.Status != domain.WorkflowStatusPublished || workflow.Version < 1 {
-		return nil, domain.ErrWorkflowNotPublished
+	// 2. Validate project is published
+	if project.Status != domain.ProjectStatusPublished || project.Version < 1 {
+		return nil, domain.ErrProjectNotPublished
 	}
 
 	// 3. Create run with internal trigger type
 	run := domain.NewRun(
 		input.TenantID,
-		workflow.ID,
-		workflow.Version,
+		project.ID,
+		project.Version,
 		input.Input,
 		domain.TriggerTypeInternal,
 	)
@@ -502,51 +504,51 @@ func (u *RunUsecase) ExecuteSystemWorkflow(ctx context.Context, input ExecuteSys
 
 	// 6. Enqueue job for async execution
 	job := &engine.Job{
-		TenantID:        input.TenantID,
-		WorkflowID:      workflow.ID,
-		WorkflowVersion: workflow.Version,
-		RunID:           run.ID,
-		Input:           input.Input,
+		TenantID:       input.TenantID,
+		ProjectID:      project.ID,
+		ProjectVersion: project.Version,
+		RunID:          run.ID,
+		Input:          input.Input,
 	}
 	if err := u.queue.Enqueue(ctx, job); err != nil {
 		return nil, err
 	}
 
-	return &ExecuteSystemWorkflowOutput{
-		RunID:      run.ID,
-		WorkflowID: workflow.ID,
-		Version:    workflow.Version,
+	return &ExecuteSystemProjectOutput{
+		RunID:     run.ID,
+		ProjectID: project.ID,
+		Version:   project.Version,
 	}, nil
 }
 
 // TestStepInlineInput represents input for inline step testing
 type TestStepInlineInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	StepID     uuid.UUID
-	Input      json.RawMessage // Custom input for testing
-	UserID     *uuid.UUID
+	TenantID  uuid.UUID
+	ProjectID uuid.UUID
+	StepID    uuid.UUID
+	Input     json.RawMessage // Custom input for testing
+	UserID    *uuid.UUID
 }
 
 // TestStepInlineOutput represents output for inline step testing
 type TestStepInlineOutput struct {
-	RunID     uuid.UUID `json:"run_id"`
-	StepID    uuid.UUID `json:"step_id"`
-	StepName  string    `json:"step_name"`
-	IsQueued  bool      `json:"is_queued"`
+	RunID    uuid.UUID `json:"run_id"`
+	StepID   uuid.UUID `json:"step_id"`
+	StepName string    `json:"step_name"`
+	IsQueued bool      `json:"is_queued"`
 }
 
 // TestStepInline creates a test run and executes only a single step
 // This allows testing a step without requiring an existing run
 func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInput) (*TestStepInlineOutput, error) {
-	// 1. Get the current workflow (draft state)
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
+	// 1. Get the current project (draft state)
+	project, err := u.projectRepo.GetByID(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Get current steps from the workflow
-	steps, err := u.stepRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
+	// 2. Get current steps from the project
+	steps, err := u.stepRepo.ListByProject(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -564,11 +566,11 @@ func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInp
 	}
 
 	// 4. Create a test run with version 0
-	// The worker will automatically fall back to current workflow definition
+	// The worker will automatically fall back to current project definition
 	// when version 0 is not found (see worker/main.go processJob function)
 	run := domain.NewRun(
 		input.TenantID,
-		workflow.ID,
+		project.ID,
 		0, // Version 0 indicates inline test with current draft
 		input.Input,
 		domain.TriggerTypeTest,
@@ -582,12 +584,12 @@ func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInp
 	// 5. Enqueue the job for single step execution
 	// The worker will:
 	// - Try to find version 0 (won't exist)
-	// - Fall back to current workflow definition
+	// - Fall back to current project definition
 	// - Execute only the target step
 	job := &engine.Job{
 		TenantID:        input.TenantID,
-		WorkflowID:      workflow.ID,
-		WorkflowVersion: 0, // Worker will fall back to current workflow
+		ProjectID:       project.ID,
+		ProjectVersion:  0, // Worker will fall back to current project
 		RunID:           run.ID,
 		ExecutionMode:   engine.ExecutionModeSingleStep,
 		TargetStepID:    &input.StepID,
@@ -607,7 +609,7 @@ func (u *RunUsecase) TestStepInline(ctx context.Context, input TestStepInlineInp
 }
 
 // collectDownstreamSteps collects all steps reachable from the starting step (BFS)
-func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUID) []uuid.UUID {
+func collectDownstreamSteps(def *domain.ProjectDefinition, startStepID uuid.UUID) []uuid.UUID {
 	// Build adjacency list (only for step-to-step edges)
 	outEdges := make(map[uuid.UUID][]uuid.UUID)
 	for _, edge := range def.Edges {
@@ -638,22 +640,13 @@ func collectDownstreamSteps(def *domain.WorkflowDefinition, startStepID uuid.UUI
 	return result
 }
 
-// validateWorkflowInput validates workflow input against the workflow's input_schema
+// validateProjectInput validates project input against the project's input_schema
 // The input_schema is derived from the first executable step's block definition at save time
-func (u *RunUsecase) validateWorkflowInput(ctx context.Context, tenantID, workflowID uuid.UUID, input json.RawMessage) error {
-	// Get workflow to access its input_schema
-	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID)
-	if err != nil {
-		return nil // Skip validation if we can't get workflow
-	}
-
-	// Use workflow's input_schema (derived from first step's block definition at save time)
-	if workflow.InputSchema == nil || len(workflow.InputSchema) == 0 {
-		return nil // No input_schema defined, skip validation
-	}
-
-	// Validate input against schema
-	return domain.ValidateInputSchema(input, workflow.InputSchema)
+func (u *RunUsecase) validateProjectInput(ctx context.Context, tenantID, projectID uuid.UUID, input json.RawMessage) error {
+	// In the multi-start project model, input validation is handled by each Start block's trigger_config
+	// Project-level Variables are shared across all flows, not input schema
+	// TODO: Implement input validation based on the target Start block's trigger_config.input_schema
+	return nil
 }
 
 // Note: extractInputSchemaFromConfig has been moved to helpers.go as ExtractInputSchemaFromConfig

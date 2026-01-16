@@ -11,11 +11,11 @@ import (
 type AuditAction string
 
 const (
-	// Workflow actions
-	AuditActionWorkflowCreate  AuditAction = "workflow.create"
-	AuditActionWorkflowUpdate  AuditAction = "workflow.update"
-	AuditActionWorkflowDelete  AuditAction = "workflow.delete"
-	AuditActionWorkflowPublish AuditAction = "workflow.publish"
+	// Project actions
+	AuditActionProjectCreate  AuditAction = "project.create"
+	AuditActionProjectUpdate  AuditAction = "project.update"
+	AuditActionProjectDelete  AuditAction = "project.delete"
+	AuditActionProjectPublish AuditAction = "project.publish"
 
 	// Step actions
 	AuditActionStepCreate AuditAction = "step.create"
@@ -68,7 +68,7 @@ const (
 type AuditResourceType string
 
 const (
-	AuditResourceWorkflow   AuditResourceType = "workflow"
+	AuditResourceProject    AuditResourceType = "project"
 	AuditResourceStep       AuditResourceType = "step"
 	AuditResourceEdge       AuditResourceType = "edge"
 	AuditResourceRun        AuditResourceType = "run"

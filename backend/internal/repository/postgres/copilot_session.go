@@ -26,14 +26,14 @@ func NewCopilotSessionRepository(pool *pgxpool.Pool) repository.CopilotSessionRe
 // Create creates a new copilot session
 func (r *CopilotSessionRepository) Create(ctx context.Context, session *domain.CopilotSession) error {
 	query := `
-		INSERT INTO copilot_sessions (id, tenant_id, user_id, workflow_id, title, is_active, created_at, updated_at)
+		INSERT INTO copilot_sessions (id, tenant_id, user_id, project_id, title, is_active, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 	_, err := r.pool.Exec(ctx, query,
 		session.ID,
 		session.TenantID,
 		session.UserID,
-		session.WorkflowID,
+		session.ProjectID,
 		session.Title,
 		session.IsActive,
 		session.CreatedAt,
@@ -48,7 +48,7 @@ func (r *CopilotSessionRepository) Create(ctx context.Context, session *domain.C
 // GetByID retrieves a copilot session by ID
 func (r *CopilotSessionRepository) GetByID(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.CopilotSession, error) {
 	query := `
-		SELECT id, tenant_id, user_id, workflow_id, title, is_active, created_at, updated_at
+		SELECT id, tenant_id, user_id, project_id, title, is_active, created_at, updated_at
 		FROM copilot_sessions
 		WHERE id = $1 AND tenant_id = $2
 	`
@@ -58,7 +58,7 @@ func (r *CopilotSessionRepository) GetByID(ctx context.Context, tenantID uuid.UU
 		&session.ID,
 		&session.TenantID,
 		&session.UserID,
-		&session.WorkflowID,
+		&session.ProjectID,
 		&title,
 		&session.IsActive,
 		&session.CreatedAt,
@@ -76,22 +76,22 @@ func (r *CopilotSessionRepository) GetByID(ctx context.Context, tenantID uuid.UU
 	return &session, nil
 }
 
-// GetActiveByUserAndWorkflow retrieves the active session for a user and workflow
-func (r *CopilotSessionRepository) GetActiveByUserAndWorkflow(ctx context.Context, tenantID uuid.UUID, userID string, workflowID uuid.UUID) (*domain.CopilotSession, error) {
+// GetActiveByUserAndProject retrieves the active session for a user and project
+func (r *CopilotSessionRepository) GetActiveByUserAndProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error) {
 	query := `
-		SELECT id, tenant_id, user_id, workflow_id, title, is_active, created_at, updated_at
+		SELECT id, tenant_id, user_id, project_id, title, is_active, created_at, updated_at
 		FROM copilot_sessions
-		WHERE tenant_id = $1 AND user_id = $2 AND workflow_id = $3 AND is_active = true
+		WHERE tenant_id = $1 AND user_id = $2 AND project_id = $3 AND is_active = true
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
 	var session domain.CopilotSession
 	var title sql.NullString
-	err := r.pool.QueryRow(ctx, query, tenantID, userID, workflowID).Scan(
+	err := r.pool.QueryRow(ctx, query, tenantID, userID, projectID).Scan(
 		&session.ID,
 		&session.TenantID,
 		&session.UserID,
-		&session.WorkflowID,
+		&session.ProjectID,
 		&title,
 		&session.IsActive,
 		&session.CreatedAt,
@@ -154,15 +154,15 @@ func (r *CopilotSessionRepository) GetWithMessages(ctx context.Context, tenantID
 	return session, nil
 }
 
-// ListByUserAndWorkflow retrieves all sessions for a user and workflow
-func (r *CopilotSessionRepository) ListByUserAndWorkflow(ctx context.Context, tenantID uuid.UUID, userID string, workflowID uuid.UUID) ([]*domain.CopilotSession, error) {
+// ListByUserAndProject retrieves all sessions for a user and project
+func (r *CopilotSessionRepository) ListByUserAndProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) ([]*domain.CopilotSession, error) {
 	query := `
-		SELECT id, tenant_id, user_id, workflow_id, title, is_active, created_at, updated_at
+		SELECT id, tenant_id, user_id, project_id, title, is_active, created_at, updated_at
 		FROM copilot_sessions
-		WHERE tenant_id = $1 AND user_id = $2 AND workflow_id = $3
+		WHERE tenant_id = $1 AND user_id = $2 AND project_id = $3
 		ORDER BY created_at DESC
 	`
-	rows, err := r.pool.Query(ctx, query, tenantID, userID, workflowID)
+	rows, err := r.pool.Query(ctx, query, tenantID, userID, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list copilot sessions: %w", err)
 	}
@@ -176,7 +176,7 @@ func (r *CopilotSessionRepository) ListByUserAndWorkflow(ctx context.Context, te
 			&session.ID,
 			&session.TenantID,
 			&session.UserID,
-			&session.WorkflowID,
+			&session.ProjectID,
 			&title,
 			&session.IsActive,
 			&session.CreatedAt,

@@ -11,41 +11,43 @@ import (
 
 // StepUsecase handles step business logic
 type StepUsecase struct {
-	workflowRepo     repository.WorkflowRepository
-	stepRepo         repository.StepRepository
-	blockDefRepo     repository.BlockDefinitionRepository
-	workflowChecker  *WorkflowChecker
+	projectRepo     repository.ProjectRepository
+	stepRepo        repository.StepRepository
+	blockDefRepo    repository.BlockDefinitionRepository
+	projectChecker  *ProjectChecker
 }
 
 // NewStepUsecase creates a new StepUsecase
 func NewStepUsecase(
-	workflowRepo repository.WorkflowRepository,
+	projectRepo repository.ProjectRepository,
 	stepRepo repository.StepRepository,
 	blockDefRepo repository.BlockDefinitionRepository,
 ) *StepUsecase {
 	return &StepUsecase{
-		workflowRepo:    workflowRepo,
-		stepRepo:        stepRepo,
-		blockDefRepo:    blockDefRepo,
-		workflowChecker: NewWorkflowChecker(workflowRepo),
+		projectRepo:    projectRepo,
+		stepRepo:       stepRepo,
+		blockDefRepo:   blockDefRepo,
+		projectChecker: NewProjectChecker(projectRepo),
 	}
 }
 
 // CreateStepInput represents input for creating a step
 type CreateStepInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	Name       string
-	Type       domain.StepType
-	Config     json.RawMessage
-	PositionX  int
-	PositionY  int
+	TenantID      uuid.UUID
+	ProjectID     uuid.UUID
+	Name          string
+	Type          domain.StepType
+	Config        json.RawMessage
+	TriggerType   string          // For start blocks: manual, webhook, schedule, etc.
+	TriggerConfig json.RawMessage // Configuration for the trigger
+	PositionX     int
+	PositionY     int
 }
 
 // Create creates a new step
 func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domain.Step, error) {
-	// Verify workflow exists and is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
+	// Verify project exists and is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -69,11 +71,20 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 		}
 	}
 
-	step := domain.NewStep(input.TenantID, input.WorkflowID, input.Name, input.Type, input.Config)
+	step := domain.NewStep(input.TenantID, input.ProjectID, input.Name, input.Type, input.Config)
 	if blockDef != nil {
 		step.BlockDefinitionID = &blockDef.ID
 	}
 	step.SetPosition(input.PositionX, input.PositionY)
+
+	// Set trigger type/config for start blocks
+	if input.TriggerType != "" {
+		tt := domain.StepTriggerType(input.TriggerType)
+		step.TriggerType = &tt
+	}
+	if len(input.TriggerConfig) > 0 {
+		step.TriggerConfig = input.TriggerConfig
+	}
 
 	if err := u.stepRepo.Create(ctx, step); err != nil {
 		return nil, err
@@ -83,43 +94,45 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 }
 
 // GetByID retrieves a step by ID
-func (u *StepUsecase) GetByID(ctx context.Context, tenantID, workflowID, stepID uuid.UUID) (*domain.Step, error) {
-	// Verify workflow exists
-	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
+func (u *StepUsecase) GetByID(ctx context.Context, tenantID, projectID, stepID uuid.UUID) (*domain.Step, error) {
+	// Verify project exists
+	if _, err := u.projectChecker.CheckExists(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
-	return u.stepRepo.GetByID(ctx, tenantID, workflowID, stepID)
+	return u.stepRepo.GetByID(ctx, tenantID, projectID, stepID)
 }
 
-// List lists steps for a workflow
-func (u *StepUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error) {
-	// Verify workflow exists
-	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
+// List lists steps for a project
+func (u *StepUsecase) List(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error) {
+	// Verify project exists
+	if _, err := u.projectChecker.CheckExists(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
-	return u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	return u.stepRepo.ListByProject(ctx, tenantID, projectID)
 }
 
 // UpdateStepInput represents input for updating a step
 type UpdateStepInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	StepID     uuid.UUID
-	Name       string
-	Type       domain.StepType
-	Config     json.RawMessage
-	PositionX  *int
-	PositionY  *int
+	TenantID      uuid.UUID
+	ProjectID     uuid.UUID
+	StepID        uuid.UUID
+	Name          string
+	Type          domain.StepType
+	Config        json.RawMessage
+	TriggerType   string          // For start blocks: manual, webhook, schedule, etc.
+	TriggerConfig json.RawMessage // Configuration for the trigger
+	PositionX     *int
+	PositionY     *int
 }
 
 // Update updates a step
 func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domain.Step, error) {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
-	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.StepID)
+	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, input.StepID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +152,14 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 	if input.PositionY != nil {
 		step.PositionY = *input.PositionY
 	}
+	// Update trigger type/config for start blocks
+	if input.TriggerType != "" {
+		tt := domain.StepTriggerType(input.TriggerType)
+		step.TriggerType = &tt
+	}
+	if len(input.TriggerConfig) > 0 {
+		step.TriggerConfig = input.TriggerConfig
+	}
 
 	if err := u.stepRepo.Update(ctx, step); err != nil {
 		return nil, err
@@ -148,11 +169,11 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 }
 
 // Delete deletes a step
-func (u *StepUsecase) Delete(ctx context.Context, tenantID, workflowID, stepID uuid.UUID) error {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
+func (u *StepUsecase) Delete(ctx context.Context, tenantID, projectID, stepID uuid.UUID) error {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, tenantID, projectID); err != nil {
 		return err
 	}
 
-	return u.stepRepo.Delete(ctx, tenantID, workflowID, stepID)
+	return u.stepRepo.Delete(ctx, tenantID, projectID, stepID)
 }

@@ -31,18 +31,19 @@ type CreateRunRequest struct {
 	TriggeredBy string          `json:"triggered_by,omitempty"` // manual, webhook, schedule, test, internal
 	Mode        string          `json:"mode,omitempty"`         // Deprecated: use triggered_by instead (backward compat: "test" maps to triggered_by="test")
 	Version     int             `json:"version,omitempty"`      // 0 or omitted means latest
+	StartStepID *string         `json:"start_step_id,omitempty"` // Optional: start execution from a specific step
 }
 
-// RunWithDefinitionResponse represents a run response with workflow definition
+// RunWithDefinitionResponse represents a run response with project definition
 type RunWithDefinitionResponse struct {
 	*domain.Run
-	WorkflowDefinition interface{} `json:"workflow_definition,omitempty"`
+	ProjectDefinition interface{} `json:"project_definition,omitempty"`
 }
 
-// Create handles POST /api/v1/workflows/{workflow_id}/runs
+// Create handles POST /api/v1/projects/{project_id}/runs
 func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -78,13 +79,24 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		userIDPtr = &userID
 	}
 
+	// Parse start_step_id if provided
+	var startStepID *uuid.UUID
+	if req.StartStepID != nil && *req.StartStepID != "" {
+		id, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
+		if !ok {
+			return
+		}
+		startStepID = &id
+	}
+
 	run, err := h.runUsecase.Create(r.Context(), usecase.CreateRunInput{
 		TenantID:    tenantID,
-		WorkflowID:  workflowID,
+		ProjectID:   projectID,
 		Version:     req.Version,
 		Input:       req.Input,
 		TriggeredBy: triggeredBy,
 		UserID:      userIDPtr,
+		StartStepID: startStepID,
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -93,17 +105,17 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Log audit event
 	logAudit(r.Context(), h.auditService, r, domain.AuditActionRunCreate, domain.AuditResourceRun, &run.ID, map[string]interface{}{
-		"workflow_id":  workflowID,
+		"project_id":   projectID,
 		"triggered_by": string(triggeredBy),
 	})
 
 	JSONData(w, http.StatusCreated, run)
 }
 
-// List handles GET /api/v1/workflows/{workflow_id}/runs
+// List handles GET /api/v1/projects/{project_id}/runs
 func (h *RunHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -112,10 +124,10 @@ func (h *RunHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := parseIntQuery(r, "limit", 20)
 
 	output, err := h.runUsecase.List(r.Context(), usecase.ListRunsInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		Page:       page,
-		Limit:      limit,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		Page:      page,
+		Limit:     limit,
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -140,8 +152,8 @@ func (h *RunHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := &RunWithDefinitionResponse{
-		Run:                output.Run,
-		WorkflowDefinition: output.WorkflowDefinition,
+		Run:               output.Run,
+		ProjectDefinition: output.ProjectDefinition,
 	}
 
 	JSONData(w, http.StatusOK, response)
@@ -206,8 +218,8 @@ func (h *RunHandler) ExecuteSingleStep(w http.ResponseWriter, r *http.Request) {
 
 // ResumeFromStepRequest represents a request to resume execution from a step
 type ResumeFromStepRequest struct {
-	FromStepID    string          `json:"from_step_id"`               // Starting step ID
-	InputOverride json.RawMessage `json:"input_override,omitempty"`   // Optional: override input for the starting step
+	FromStepID    string          `json:"from_step_id"`             // Starting step ID
+	InputOverride json.RawMessage `json:"input_override,omitempty"` // Optional: override input for the starting step
 }
 
 // ResumeFromStep handles POST /api/v1/runs/{run_id}/resume
@@ -268,11 +280,11 @@ type TestStepInlineRequest struct {
 	Input json.RawMessage `json:"input"` // Custom input for testing
 }
 
-// TestStepInline handles POST /api/v1/workflows/{id}/steps/{step_id}/test
+// TestStepInline handles POST /api/v1/projects/{id}/steps/{step_id}/test
 // This allows testing a single step without requiring an existing run
 func (h *RunHandler) TestStepInline(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -299,11 +311,11 @@ func (h *RunHandler) TestStepInline(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output, err := h.runUsecase.TestStepInline(r.Context(), usecase.TestStepInlineInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     stepID,
-		Input:      input,
-		UserID:     userIDPtr,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    stepID,
+		Input:     input,
+		UserID:    userIDPtr,
 	})
 	if err != nil {
 		HandleError(w, err)

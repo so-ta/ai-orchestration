@@ -41,47 +41,47 @@ func NormalizePaginationWithLimit(page, limit, defaultLimit int) (int, int) {
 	return page, limit
 }
 
-// WorkflowChecker provides common workflow-related validation methods
-type WorkflowChecker struct {
-	workflowRepo repository.WorkflowRepository
+// ProjectChecker provides common project-related validation methods
+type ProjectChecker struct {
+	projectRepo repository.ProjectRepository
 }
 
-// NewWorkflowChecker creates a new WorkflowChecker
-func NewWorkflowChecker(repo repository.WorkflowRepository) *WorkflowChecker {
-	return &WorkflowChecker{workflowRepo: repo}
+// NewProjectChecker creates a new ProjectChecker
+func NewProjectChecker(repo repository.ProjectRepository) *ProjectChecker {
+	return &ProjectChecker{projectRepo: repo}
 }
 
-// CheckExists verifies that a workflow exists
-func (c *WorkflowChecker) CheckExists(ctx context.Context, tenantID, workflowID uuid.UUID) (*domain.Workflow, error) {
-	workflow, err := c.workflowRepo.GetByID(ctx, tenantID, workflowID)
+// CheckExists verifies that a project exists
+func (c *ProjectChecker) CheckExists(ctx context.Context, tenantID, projectID uuid.UUID) (*domain.Project, error) {
+	project, err := c.projectRepo.GetByID(ctx, tenantID, projectID)
 	if err != nil {
 		return nil, err
 	}
-	return workflow, nil
+	return project, nil
 }
 
-// CheckEditable verifies that a workflow exists and can be edited
-func (c *WorkflowChecker) CheckEditable(ctx context.Context, tenantID, workflowID uuid.UUID) (*domain.Workflow, error) {
-	workflow, err := c.workflowRepo.GetByID(ctx, tenantID, workflowID)
+// CheckEditable verifies that a project exists and can be edited
+func (c *ProjectChecker) CheckEditable(ctx context.Context, tenantID, projectID uuid.UUID) (*domain.Project, error) {
+	project, err := c.projectRepo.GetByID(ctx, tenantID, projectID)
 	if err != nil {
 		return nil, err
 	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
+	if !project.CanEdit() {
+		return nil, domain.ErrProjectNotEditable
 	}
-	return workflow, nil
+	return project, nil
 }
 
-// CheckPublished verifies that a workflow exists and is published
-func (c *WorkflowChecker) CheckPublished(ctx context.Context, tenantID, workflowID uuid.UUID) (*domain.Workflow, error) {
-	workflow, err := c.workflowRepo.GetByID(ctx, tenantID, workflowID)
+// CheckPublished verifies that a project exists and is published
+func (c *ProjectChecker) CheckPublished(ctx context.Context, tenantID, projectID uuid.UUID) (*domain.Project, error) {
+	project, err := c.projectRepo.GetByID(ctx, tenantID, projectID)
 	if err != nil {
 		return nil, err
 	}
-	if workflow.Status != domain.WorkflowStatusPublished {
-		return nil, domain.ErrWorkflowNotPublished
+	if project.Status != domain.ProjectStatusPublished {
+		return nil, domain.ErrProjectNotPublished
 	}
-	return workflow, nil
+	return project, nil
 }
 
 // CredentialDecryptor provides common credential decryption methods

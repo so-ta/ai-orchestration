@@ -13,19 +13,19 @@ import (
 // ScheduleUsecase handles schedule business logic
 type ScheduleUsecase struct {
 	scheduleRepo repository.ScheduleRepository
-	workflowRepo repository.WorkflowRepository
+	projectRepo  repository.ProjectRepository
 	runRepo      repository.RunRepository
 }
 
 // NewScheduleUsecase creates a new ScheduleUsecase
 func NewScheduleUsecase(
 	scheduleRepo repository.ScheduleRepository,
-	workflowRepo repository.WorkflowRepository,
+	projectRepo repository.ProjectRepository,
 	runRepo repository.RunRepository,
 ) *ScheduleUsecase {
 	return &ScheduleUsecase{
 		scheduleRepo: scheduleRepo,
-		workflowRepo: workflowRepo,
+		projectRepo:  projectRepo,
 		runRepo:      runRepo,
 	}
 }
@@ -33,7 +33,8 @@ func NewScheduleUsecase(
 // CreateScheduleInput represents input for creating a schedule
 type CreateScheduleInput struct {
 	TenantID       uuid.UUID
-	WorkflowID     uuid.UUID
+	ProjectID      uuid.UUID
+	StartStepID    uuid.UUID // Required: which Start block this schedule triggers
 	Name           string
 	Description    string
 	CronExpression string
@@ -58,13 +59,13 @@ func (u *ScheduleUsecase) Create(ctx context.Context, input CreateScheduleInput)
 		return nil, domain.ErrScheduleInvalidCron
 	}
 
-	// Verify workflow exists and is published
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
+	// Verify project exists and is published
+	project, err := u.projectRepo.GetByID(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	if workflow.Status != domain.WorkflowStatusPublished {
-		return nil, domain.NewValidationError("workflow_id", "workflow must be published")
+	if project.Status != domain.ProjectStatusPublished {
+		return nil, domain.NewValidationError("project_id", "project must be published")
 	}
 
 	// Set default timezone
@@ -74,8 +75,9 @@ func (u *ScheduleUsecase) Create(ctx context.Context, input CreateScheduleInput)
 
 	schedule := domain.NewSchedule(
 		input.TenantID,
-		input.WorkflowID,
-		workflow.Version,
+		input.ProjectID,
+		input.StartStepID,
+		project.Version,
 		input.Name,
 		input.CronExpression,
 		input.Timezone,
@@ -99,11 +101,11 @@ func (u *ScheduleUsecase) GetByID(ctx context.Context, tenantID, id uuid.UUID) (
 
 // ListSchedulesInput represents input for listing schedules
 type ListSchedulesInput struct {
-	TenantID   uuid.UUID
-	WorkflowID *uuid.UUID
-	Status     *domain.ScheduleStatus
-	Page       int
-	Limit      int
+	TenantID  uuid.UUID
+	ProjectID *uuid.UUID
+	Status    *domain.ScheduleStatus
+	Page      int
+	Limit     int
 }
 
 // ListSchedulesOutput represents output for listing schedules
@@ -119,10 +121,10 @@ func (u *ScheduleUsecase) List(ctx context.Context, input ListSchedulesInput) (*
 	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
 	filter := repository.ScheduleFilter{
-		WorkflowID: input.WorkflowID,
-		Status:     input.Status,
-		Page:       input.Page,
-		Limit:      input.Limit,
+		ProjectID: input.ProjectID,
+		Status:    input.Status,
+		Page:      input.Page,
+		Limit:     input.Limit,
 	}
 
 	schedules, total, err := u.scheduleRepo.ListByTenant(ctx, input.TenantID, filter)
@@ -147,6 +149,7 @@ type UpdateScheduleInput struct {
 	CronExpression string
 	Timezone       string
 	Input          json.RawMessage
+	StartStepID    *uuid.UUID // Optional: update the start step ID (nil means no change)
 }
 
 // Update updates a schedule
@@ -184,6 +187,10 @@ func (u *ScheduleUsecase) Update(ctx context.Context, input UpdateScheduleInput)
 
 	if input.Input != nil {
 		schedule.Input = input.Input
+	}
+
+	if input.StartStepID != nil {
+		schedule.StartStepID = *input.StartStepID
 	}
 
 	schedule.UpdatedAt = time.Now().UTC()
@@ -246,8 +253,8 @@ func (u *ScheduleUsecase) Trigger(ctx context.Context, tenantID, id uuid.UUID) (
 	// Create a new run
 	run := domain.NewRun(
 		schedule.TenantID,
-		schedule.WorkflowID,
-		schedule.WorkflowVersion,
+		schedule.ProjectID,
+		schedule.ProjectVersion,
 		schedule.Input,
 		domain.TriggerTypeSchedule,
 	)

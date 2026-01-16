@@ -13,184 +13,176 @@ import (
 	"github.com/souta/ai-orchestration/internal/seed/workflows"
 )
 
-// WorkflowMigrationResult tracks what happened during workflow migration
-type WorkflowMigrationResult struct {
-	Created   []string // SystemSlugs of newly created workflows
-	Updated   []string // SystemSlugs of updated workflows
-	Unchanged []string // SystemSlugs of unchanged workflows
+// ProjectMigrationResult tracks what happened during project migration
+type ProjectMigrationResult struct {
+	Created   []string // SystemSlugs of newly created projects
+	Updated   []string // SystemSlugs of updated projects
+	Unchanged []string // SystemSlugs of unchanged projects
 	Errors    []error
 }
 
-// WorkflowDryRunResult shows what would happen during migration without applying
-type WorkflowDryRunResult struct {
-	ToCreate  []string             // SystemSlugs of workflows to create
-	ToUpdate  []WorkflowUpdateInfo // Info about workflows to update
-	Unchanged []string             // SystemSlugs of unchanged workflows
+// ProjectDryRunResult shows what would happen during migration without applying
+type ProjectDryRunResult struct {
+	ToCreate  []string            // SystemSlugs of projects to create
+	ToUpdate  []ProjectUpdateInfo // Info about projects to update
+	Unchanged []string            // SystemSlugs of unchanged projects
 }
 
-// WorkflowUpdateInfo provides details about a workflow update
-type WorkflowUpdateInfo struct {
+// ProjectUpdateInfo provides details about a project update
+type ProjectUpdateInfo struct {
 	SystemSlug string
 	OldVersion int
 	NewVersion int
 	Reason     string
 }
 
-// WorkflowMigrator handles workflow definition migration
-type WorkflowMigrator struct {
-	workflowRepo   repository.WorkflowRepository
+// ProjectMigrator handles project definition migration
+type ProjectMigrator struct {
+	projectRepo    repository.ProjectRepository
 	stepRepo       repository.StepRepository
 	edgeRepo       repository.EdgeRepository
 	blockRepo      repository.BlockDefinitionRepository
 	blockGroupRepo repository.BlockGroupRepository
 }
 
-// NewWorkflowMigrator creates a new workflow migrator
-func NewWorkflowMigrator(
-	workflowRepo repository.WorkflowRepository,
+// NewProjectMigrator creates a new project migrator
+func NewProjectMigrator(
+	projectRepo repository.ProjectRepository,
 	stepRepo repository.StepRepository,
 	edgeRepo repository.EdgeRepository,
-) *WorkflowMigrator {
-	return &WorkflowMigrator{
-		workflowRepo: workflowRepo,
-		stepRepo:     stepRepo,
-		edgeRepo:     edgeRepo,
+) *ProjectMigrator {
+	return &ProjectMigrator{
+		projectRepo: projectRepo,
+		stepRepo:    stepRepo,
+		edgeRepo:    edgeRepo,
 	}
 }
 
 // WithBlockRepo sets the block definition repository for resolving block slugs
-func (m *WorkflowMigrator) WithBlockRepo(blockRepo repository.BlockDefinitionRepository) *WorkflowMigrator {
+func (m *ProjectMigrator) WithBlockRepo(blockRepo repository.BlockDefinitionRepository) *ProjectMigrator {
 	m.blockRepo = blockRepo
 	return m
 }
 
 // WithBlockGroupRepo sets the block group repository for creating block groups
-func (m *WorkflowMigrator) WithBlockGroupRepo(blockGroupRepo repository.BlockGroupRepository) *WorkflowMigrator {
+func (m *ProjectMigrator) WithBlockGroupRepo(blockGroupRepo repository.BlockGroupRepository) *ProjectMigrator {
 	m.blockGroupRepo = blockGroupRepo
 	return m
 }
 
-// Migrate performs UPSERT for all workflows in the registry
-func (m *WorkflowMigrator) Migrate(ctx context.Context, registry *workflows.Registry, tenantID uuid.UUID) (*WorkflowMigrationResult, error) {
-	result := &WorkflowMigrationResult{
+// Migrate performs UPSERT for all projects in the registry
+func (m *ProjectMigrator) Migrate(ctx context.Context, registry *workflows.Registry, tenantID uuid.UUID) (*ProjectMigrationResult, error) {
+	result := &ProjectMigrationResult{
 		Created:   make([]string, 0),
 		Updated:   make([]string, 0),
 		Unchanged: make([]string, 0),
 		Errors:    make([]error, 0),
 	}
 
-	for _, seedWorkflow := range registry.GetAll() {
-		action, err := m.upsertWorkflow(ctx, seedWorkflow, tenantID)
+	for _, seedProject := range registry.GetAll() {
+		action, err := m.upsertProject(ctx, seedProject, tenantID)
 		if err != nil {
 			result.Errors = append(result.Errors,
-				fmt.Errorf("workflow %s: %w", seedWorkflow.SystemSlug, err))
+				fmt.Errorf("project %s: %w", seedProject.SystemSlug, err))
 			continue
 		}
 
 		switch action {
 		case "created":
-			result.Created = append(result.Created, seedWorkflow.SystemSlug)
+			result.Created = append(result.Created, seedProject.SystemSlug)
 		case "updated":
-			result.Updated = append(result.Updated, seedWorkflow.SystemSlug)
+			result.Updated = append(result.Updated, seedProject.SystemSlug)
 		case "unchanged":
-			result.Unchanged = append(result.Unchanged, seedWorkflow.SystemSlug)
+			result.Unchanged = append(result.Unchanged, seedProject.SystemSlug)
 		}
 	}
 
 	return result, nil
 }
 
-// upsertWorkflow creates or updates a single workflow with its steps and edges
-func (m *WorkflowMigrator) upsertWorkflow(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID) (string, error) {
-	// Parse the workflow ID from the seed
-	workflowID, err := uuid.Parse(seedWorkflow.ID)
+// upsertProject creates or updates a single project with its steps and edges
+func (m *ProjectMigrator) upsertProject(ctx context.Context, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID) (string, error) {
+	// Parse the project ID from the seed
+	projectID, err := uuid.Parse(seedProject.ID)
 	if err != nil {
-		return "", fmt.Errorf("invalid workflow ID: %w", err)
+		return "", fmt.Errorf("invalid project ID: %w", err)
 	}
 
-	// Look up existing workflow by ID
-	existing, err := m.workflowRepo.GetByID(ctx, tenantID, workflowID)
+	// Look up existing project by ID
+	existing, err := m.projectRepo.GetByID(ctx, tenantID, projectID)
 	if err != nil {
-		if errors.Is(err, domain.ErrWorkflowNotFound) {
-			// Workflow doesn't exist, create it
-			return m.createWorkflow(ctx, seedWorkflow, tenantID, workflowID)
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			// Project doesn't exist, create it
+			return m.createProject(ctx, seedProject, tenantID, projectID)
 		}
-		return "", fmt.Errorf("failed to get existing workflow: %w", err)
+		return "", fmt.Errorf("failed to get existing project: %w", err)
 	}
 
 	// Check if update is needed
-	if m.hasChanges(existing, seedWorkflow) {
-		// UPDATE existing workflow
-		return m.updateWorkflow(ctx, existing, seedWorkflow, tenantID)
+	if m.hasChanges(existing, seedProject) {
+		// UPDATE existing project
+		return m.updateProject(ctx, existing, seedProject, tenantID)
 	}
 
 	return "unchanged", nil
 }
 
-// createWorkflow creates a new system workflow with steps and edges
-func (m *WorkflowMigrator) createWorkflow(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID) (string, error) {
+// createProject creates a new system project with steps and edges
+func (m *ProjectMigrator) createProject(ctx context.Context, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, projectID uuid.UUID) (string, error) {
 	now := time.Now().UTC()
 
-	// Derive input_schema from first executable step's block definition
-	inputSchema := m.deriveInputSchemaFromSeed(ctx, seedWorkflow)
-	if inputSchema == nil {
-		// Fallback to seed's input_schema if derivation fails
-		inputSchema = seedWorkflow.InputSchema
+	// Create project
+	project := &domain.Project{
+		ID:          projectID,
+		TenantID:    tenantID,
+		Name:        seedProject.Name,
+		Description: seedProject.Description,
+		Status:      domain.ProjectStatusPublished,
+		Version:     seedProject.Version,
+		Variables:   seedProject.InputSchema, // Use InputSchema as Variables for backward compat
+		IsSystem:    true,
+		SystemSlug:  &seedProject.SystemSlug,
+		PublishedAt: &now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
-	// Create workflow
-	workflow := &domain.Workflow{
-		ID:           workflowID,
-		TenantID:     tenantID,
-		Name:         seedWorkflow.Name,
-		Description:  seedWorkflow.Description,
-		Status:       domain.WorkflowStatusPublished,
-		Version:      seedWorkflow.Version,
-		InputSchema:  inputSchema,
-		OutputSchema: seedWorkflow.OutputSchema,
-		IsSystem:     true,
-		SystemSlug:   &seedWorkflow.SystemSlug,
-		PublishedAt:  &now,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-
-	if err := m.workflowRepo.Create(ctx, workflow); err != nil {
-		return "", fmt.Errorf("failed to create workflow: %w", err)
+	if err := m.projectRepo.Create(ctx, project); err != nil {
+		return "", fmt.Errorf("failed to create project: %w", err)
 	}
 
 	// Create block groups and build temp_id -> actual_id mapping
-	groupIDMap, err := m.createBlockGroups(ctx, seedWorkflow, tenantID, workflowID)
+	groupIDMap, err := m.createBlockGroups(ctx, seedProject, tenantID, projectID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create block groups: %w", err)
 	}
 
 	// Create steps and build temp_id -> actual_id mapping
-	stepIDMap, err := m.createSteps(ctx, seedWorkflow, tenantID, workflowID, groupIDMap)
+	stepIDMap, err := m.createSteps(ctx, seedProject, tenantID, projectID, groupIDMap)
 	if err != nil {
 		return "", fmt.Errorf("failed to create steps: %w", err)
 	}
 
 	// Create edges using the step ID and group ID mappings
-	if err := m.createEdgesWithGroupMap(ctx, seedWorkflow, tenantID, workflowID, stepIDMap, groupIDMap); err != nil {
+	if err := m.createEdgesWithGroupMap(ctx, seedProject, tenantID, projectID, stepIDMap, groupIDMap); err != nil {
 		return "", fmt.Errorf("failed to create edges: %w", err)
 	}
 
 	return "created", nil
 }
 
-// createBlockGroups creates all block groups for a workflow and returns a temp_id -> group_id mapping
-func (m *WorkflowMigrator) createBlockGroups(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID) (map[string]uuid.UUID, error) {
+// createBlockGroups creates all block groups for a project and returns a temp_id -> group_id mapping
+func (m *ProjectMigrator) createBlockGroups(ctx context.Context, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, projectID uuid.UUID) (map[string]uuid.UUID, error) {
 	groupIDMap := make(map[string]uuid.UUID)
 
-	if len(seedWorkflow.BlockGroups) == 0 || m.blockGroupRepo == nil {
+	if len(seedProject.BlockGroups) == 0 || m.blockGroupRepo == nil {
 		return groupIDMap, nil
 	}
 
 	now := time.Now().UTC()
 
 	// First pass: create all groups without parent references
-	for _, seedGroup := range seedWorkflow.BlockGroups {
+	for _, seedGroup := range seedProject.BlockGroups {
 		groupID := uuid.New()
 		groupIDMap[seedGroup.TempID] = groupID
 
@@ -214,7 +206,7 @@ func (m *WorkflowMigrator) createBlockGroups(ctx context.Context, seedWorkflow *
 		group := &domain.BlockGroup{
 			ID:          groupID,
 			TenantID:    tenantID,
-			WorkflowID:  workflowID,
+			ProjectID:   projectID,
 			Name:        seedGroup.Name,
 			Type:        domain.BlockGroupType(seedGroup.Type),
 			Config:      seedGroup.Config,
@@ -243,12 +235,12 @@ func (m *WorkflowMigrator) createBlockGroups(ctx context.Context, seedWorkflow *
 	return groupIDMap, nil
 }
 
-// createSteps creates all steps for a workflow and returns a temp_id -> step_id mapping
-func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, groupIDMap map[string]uuid.UUID) (map[string]uuid.UUID, error) {
+// createSteps creates all steps for a project and returns a temp_id -> step_id mapping
+func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, projectID uuid.UUID, groupIDMap map[string]uuid.UUID) (map[string]uuid.UUID, error) {
 	stepIDMap := make(map[string]uuid.UUID)
 	now := time.Now().UTC()
 
-	for _, seedStep := range seedWorkflow.Steps {
+	for _, seedStep := range seedProject.Steps {
 		stepID := uuid.New()
 		stepIDMap[seedStep.TempID] = stepID
 
@@ -283,7 +275,7 @@ func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workfl
 		step := &domain.Step{
 			ID:                 stepID,
 			TenantID:           tenantID,
-			WorkflowID:         workflowID,
+			ProjectID:          projectID,
 			Name:               seedStep.Name,
 			Type:               domain.StepType(seedStep.Type),
 			Config:             seedStep.Config,
@@ -305,16 +297,16 @@ func (m *WorkflowMigrator) createSteps(ctx context.Context, seedWorkflow *workfl
 	return stepIDMap, nil
 }
 
-// createEdges creates all edges for a workflow
-func (m *WorkflowMigrator) createEdges(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, stepIDMap map[string]uuid.UUID) error {
-	// Build group ID map from current workflow's block groups
+// createEdges creates all edges for a project
+func (m *ProjectMigrator) createEdges(ctx context.Context, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, projectID uuid.UUID, stepIDMap map[string]uuid.UUID) error {
+	// Build group ID map from current project's block groups
 	groupIDMap := make(map[string]uuid.UUID)
 	if m.blockGroupRepo != nil {
-		groups, err := m.blockGroupRepo.ListByWorkflow(ctx, tenantID, workflowID)
+		groups, err := m.blockGroupRepo.ListByProject(ctx, tenantID, projectID)
 		if err == nil {
 			for _, group := range groups {
 				// Match by name to find temp_id (from seed)
-				for _, seedGroup := range seedWorkflow.BlockGroups {
+				for _, seedGroup := range seedProject.BlockGroups {
 					if seedGroup.Name == group.Name {
 						groupIDMap[seedGroup.TempID] = group.ID
 						break
@@ -324,26 +316,26 @@ func (m *WorkflowMigrator) createEdges(ctx context.Context, seedWorkflow *workfl
 		}
 	}
 
-	return m.createEdgesWithGroupMap(ctx, seedWorkflow, tenantID, workflowID, stepIDMap, groupIDMap)
+	return m.createEdgesWithGroupMap(ctx, seedProject, tenantID, projectID, stepIDMap, groupIDMap)
 }
 
-// createEdgesWithGroupMap creates all edges for a workflow with explicit group ID mapping
-func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, workflowID uuid.UUID, stepIDMap map[string]uuid.UUID, groupIDMap map[string]uuid.UUID) error {
+// createEdgesWithGroupMap creates all edges for a project with explicit group ID mapping
+func (m *ProjectMigrator) createEdgesWithGroupMap(ctx context.Context, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID, projectID uuid.UUID, stepIDMap map[string]uuid.UUID, groupIDMap map[string]uuid.UUID) error {
 	now := time.Now().UTC()
 
 	// Build step type map for port validation
 	stepTypeMap := make(map[string]string) // tempID -> type
-	for _, step := range seedWorkflow.Steps {
+	for _, step := range seedProject.Steps {
 		stepTypeMap[step.TempID] = step.Type
 	}
 
 	// Build group type map for port validation
 	groupTypeMap := make(map[string]string) // tempID -> type
-	for _, group := range seedWorkflow.BlockGroups {
+	for _, group := range seedProject.BlockGroups {
 		groupTypeMap[group.TempID] = group.Type
 	}
 
-	for _, seedEdge := range seedWorkflow.Edges {
+	for _, seedEdge := range seedProject.Edges {
 		var sourceStepID, targetStepID *uuid.UUID
 		var sourceGroupID, targetGroupID *uuid.UUID
 
@@ -415,7 +407,7 @@ func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWork
 		edge := &domain.Edge{
 			ID:                 uuid.New(),
 			TenantID:           tenantID,
-			WorkflowID:         workflowID,
+			ProjectID:          projectID,
 			SourceStepID:       sourceStepID,
 			TargetStepID:       targetStepID,
 			SourceBlockGroupID: sourceGroupID,
@@ -435,7 +427,7 @@ func (m *WorkflowMigrator) createEdgesWithGroupMap(ctx context.Context, seedWork
 }
 
 // validateSourcePort validates that the source port exists in the block definition
-func (m *WorkflowMigrator) validateSourcePort(ctx context.Context, sourcePort, blockSlug string) error {
+func (m *ProjectMigrator) validateSourcePort(ctx context.Context, sourcePort, blockSlug string) error {
 	blockDef, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
 	if err != nil {
 		// If block definition not found, skip validation (legacy blocks)
@@ -455,7 +447,7 @@ func (m *WorkflowMigrator) validateSourcePort(ctx context.Context, sourcePort, b
 }
 
 // validateTargetPort validates that the target port exists in the block definition
-func (m *WorkflowMigrator) validateTargetPort(ctx context.Context, targetPort, blockSlug string) error {
+func (m *ProjectMigrator) validateTargetPort(ctx context.Context, targetPort, blockSlug string) error {
 	blockDef, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
 	if err != nil {
 		// If block definition not found, skip validation (legacy blocks)
@@ -492,37 +484,29 @@ func getInputPortNames(ports []domain.InputPort) []string {
 	return names
 }
 
-// updateWorkflow updates an existing system workflow
-func (m *WorkflowMigrator) updateWorkflow(ctx context.Context, existing *domain.Workflow, seedWorkflow *workflows.SystemWorkflowDefinition, tenantID uuid.UUID) (string, error) {
+// updateProject updates an existing system project
+func (m *ProjectMigrator) updateProject(ctx context.Context, existing *domain.Project, seedProject *workflows.SystemWorkflowDefinition, tenantID uuid.UUID) (string, error) {
 	now := time.Now().UTC()
 
-	// Derive input_schema from first executable step's block definition
-	inputSchema := m.deriveInputSchemaFromSeed(ctx, seedWorkflow)
-	if inputSchema == nil {
-		// Fallback to seed's input_schema if derivation fails
-		inputSchema = seedWorkflow.InputSchema
-	}
-
-	// Update workflow fields
-	existing.Name = seedWorkflow.Name
-	existing.Description = seedWorkflow.Description
-	existing.Version = seedWorkflow.Version
-	existing.InputSchema = inputSchema
-	existing.OutputSchema = seedWorkflow.OutputSchema
+	// Update project fields
+	existing.Name = seedProject.Name
+	existing.Description = seedProject.Description
+	existing.Version = seedProject.Version
+	existing.Variables = seedProject.InputSchema // Use InputSchema as Variables for backward compat
 	existing.UpdatedAt = now
 
-	if err := m.workflowRepo.Update(ctx, existing); err != nil {
-		return "", fmt.Errorf("failed to update workflow: %w", err)
+	if err := m.projectRepo.Update(ctx, existing); err != nil {
+		return "", fmt.Errorf("failed to update project: %w", err)
 	}
 
 	// Delete existing steps, edges, and block groups, then recreate
 	// This is simpler than trying to diff and update individual items
-	existingSteps, err := m.stepRepo.ListByWorkflow(ctx, tenantID, existing.ID)
+	existingSteps, err := m.stepRepo.ListByProject(ctx, tenantID, existing.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to list existing steps: %w", err)
 	}
 
-	existingEdges, err := m.edgeRepo.ListByWorkflow(ctx, tenantID, existing.ID)
+	existingEdges, err := m.edgeRepo.ListByProject(ctx, tenantID, existing.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to list existing edges: %w", err)
 	}
@@ -543,7 +527,7 @@ func (m *WorkflowMigrator) updateWorkflow(ctx context.Context, existing *domain.
 
 	// Delete existing block groups
 	if m.blockGroupRepo != nil {
-		existingGroups, err := m.blockGroupRepo.ListByWorkflow(ctx, tenantID, existing.ID)
+		existingGroups, err := m.blockGroupRepo.ListByProject(ctx, tenantID, existing.ID)
 		if err != nil {
 			return "", fmt.Errorf("failed to list existing block groups: %w", err)
 		}
@@ -555,25 +539,25 @@ func (m *WorkflowMigrator) updateWorkflow(ctx context.Context, existing *domain.
 	}
 
 	// Recreate block groups, steps, and edges
-	groupIDMap, err := m.createBlockGroups(ctx, seedWorkflow, tenantID, existing.ID)
+	groupIDMap, err := m.createBlockGroups(ctx, seedProject, tenantID, existing.ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create block groups: %w", err)
 	}
 
-	stepIDMap, err := m.createSteps(ctx, seedWorkflow, tenantID, existing.ID, groupIDMap)
+	stepIDMap, err := m.createSteps(ctx, seedProject, tenantID, existing.ID, groupIDMap)
 	if err != nil {
 		return "", fmt.Errorf("failed to create steps: %w", err)
 	}
 
-	if err := m.createEdgesWithGroupMap(ctx, seedWorkflow, tenantID, existing.ID, stepIDMap, groupIDMap); err != nil {
+	if err := m.createEdgesWithGroupMap(ctx, seedProject, tenantID, existing.ID, stepIDMap, groupIDMap); err != nil {
 		return "", fmt.Errorf("failed to create edges: %w", err)
 	}
 
 	return "updated", nil
 }
 
-// hasChanges compares existing workflow with seed definition
-func (m *WorkflowMigrator) hasChanges(existing *domain.Workflow, seed *workflows.SystemWorkflowDefinition) bool {
+// hasChanges compares existing project with seed definition
+func (m *ProjectMigrator) hasChanges(existing *domain.Project, seed *workflows.SystemWorkflowDefinition) bool {
 	// Compare version first
 	if existing.Version != seed.Version {
 		return true
@@ -587,11 +571,8 @@ func (m *WorkflowMigrator) hasChanges(existing *domain.Workflow, seed *workflows
 		return true
 	}
 
-	// Compare JSON fields
-	if !jsonEqual(existing.InputSchema, seed.InputSchema) {
-		return true
-	}
-	if !jsonEqual(existing.OutputSchema, seed.OutputSchema) {
+	// Compare JSON fields (Variables vs InputSchema)
+	if !jsonEqual(existing.Variables, seed.InputSchema) {
 		return true
 	}
 
@@ -599,38 +580,38 @@ func (m *WorkflowMigrator) hasChanges(existing *domain.Workflow, seed *workflows
 }
 
 // DryRun checks what would happen during migration without applying
-func (m *WorkflowMigrator) DryRun(ctx context.Context, registry *workflows.Registry, tenantID uuid.UUID) (*WorkflowDryRunResult, error) {
-	result := &WorkflowDryRunResult{
+func (m *ProjectMigrator) DryRun(ctx context.Context, registry *workflows.Registry, tenantID uuid.UUID) (*ProjectDryRunResult, error) {
+	result := &ProjectDryRunResult{
 		ToCreate:  make([]string, 0),
-		ToUpdate:  make([]WorkflowUpdateInfo, 0),
+		ToUpdate:  make([]ProjectUpdateInfo, 0),
 		Unchanged: make([]string, 0),
 	}
 
-	for _, seedWorkflow := range registry.GetAll() {
-		workflowID, err := uuid.Parse(seedWorkflow.ID)
+	for _, seedProject := range registry.GetAll() {
+		projectID, err := uuid.Parse(seedProject.ID)
 		if err != nil {
-			return nil, fmt.Errorf("invalid workflow ID for %s: %w", seedWorkflow.SystemSlug, err)
+			return nil, fmt.Errorf("invalid project ID for %s: %w", seedProject.SystemSlug, err)
 		}
 
-		existing, err := m.workflowRepo.GetByID(ctx, tenantID, workflowID)
+		existing, err := m.projectRepo.GetByID(ctx, tenantID, projectID)
 		if err != nil {
-			if errors.Is(err, domain.ErrWorkflowNotFound) {
-				result.ToCreate = append(result.ToCreate, seedWorkflow.SystemSlug)
+			if errors.Is(err, domain.ErrProjectNotFound) {
+				result.ToCreate = append(result.ToCreate, seedProject.SystemSlug)
 				continue
 			}
-			return nil, fmt.Errorf("failed to get existing workflow %s: %w", seedWorkflow.SystemSlug, err)
+			return nil, fmt.Errorf("failed to get existing project %s: %w", seedProject.SystemSlug, err)
 		}
 
-		if m.hasChanges(existing, seedWorkflow) {
-			reason := m.describeChanges(existing, seedWorkflow)
-			result.ToUpdate = append(result.ToUpdate, WorkflowUpdateInfo{
-				SystemSlug: seedWorkflow.SystemSlug,
+		if m.hasChanges(existing, seedProject) {
+			reason := m.describeChanges(existing, seedProject)
+			result.ToUpdate = append(result.ToUpdate, ProjectUpdateInfo{
+				SystemSlug: seedProject.SystemSlug,
 				OldVersion: existing.Version,
-				NewVersion: seedWorkflow.Version,
+				NewVersion: seedProject.Version,
 				Reason:     reason,
 			})
 		} else {
-			result.Unchanged = append(result.Unchanged, seedWorkflow.SystemSlug)
+			result.Unchanged = append(result.Unchanged, seedProject.SystemSlug)
 		}
 	}
 
@@ -638,7 +619,7 @@ func (m *WorkflowMigrator) DryRun(ctx context.Context, registry *workflows.Regis
 }
 
 // describeChanges returns a human-readable description of what changed
-func (m *WorkflowMigrator) describeChanges(existing *domain.Workflow, seed *workflows.SystemWorkflowDefinition) string {
+func (m *ProjectMigrator) describeChanges(existing *domain.Project, seed *workflows.SystemWorkflowDefinition) string {
 	changes := make([]string, 0)
 
 	if existing.Version != seed.Version {
@@ -650,11 +631,8 @@ func (m *WorkflowMigrator) describeChanges(existing *domain.Workflow, seed *work
 	if existing.Description != seed.Description {
 		changes = append(changes, "description")
 	}
-	if !jsonEqual(existing.InputSchema, seed.InputSchema) {
-		changes = append(changes, "input_schema")
-	}
-	if !jsonEqual(existing.OutputSchema, seed.OutputSchema) {
-		changes = append(changes, "output_schema")
+	if !jsonEqual(existing.Variables, seed.InputSchema) {
+		changes = append(changes, "variables")
 	}
 
 	if len(changes) == 0 {
@@ -666,59 +644,4 @@ func (m *WorkflowMigrator) describeChanges(existing *domain.Workflow, seed *work
 		result += ", " + changes[i]
 	}
 	return result
-}
-
-// deriveInputSchemaFromSeed derives input_schema from the first executable step's block definition
-// This ensures workflow.InputSchema always reflects the actual first step's requirements
-func (m *WorkflowMigrator) deriveInputSchemaFromSeed(ctx context.Context, seedWorkflow *workflows.SystemWorkflowDefinition) json.RawMessage {
-	if m.blockRepo == nil {
-		return nil
-	}
-
-	// 1. Find Start step
-	var startStepTempID string
-	for _, step := range seedWorkflow.Steps {
-		if step.Type == "start" {
-			startStepTempID = step.TempID
-			break
-		}
-	}
-	if startStepTempID == "" {
-		return nil
-	}
-
-	// 2. Find first step after Start (via edge)
-	var firstStepTempID string
-	for _, edge := range seedWorkflow.Edges {
-		if edge.SourceTempID == startStepTempID {
-			firstStepTempID = edge.TargetTempID
-			break
-		}
-	}
-	if firstStepTempID == "" {
-		return nil
-	}
-
-	// 3. Get block slug from step
-	var blockSlug string
-	for _, step := range seedWorkflow.Steps {
-		if step.TempID == firstStepTempID {
-			blockSlug = step.BlockSlug
-			if blockSlug == "" {
-				blockSlug = step.Type
-			}
-			break
-		}
-	}
-	if blockSlug == "" || blockSlug == "start" || blockSlug == "end" {
-		return nil
-	}
-
-	// 4. Get block definition from repository
-	block, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
-	if err != nil || block == nil {
-		return nil
-	}
-
-	return block.InputSchema
 }

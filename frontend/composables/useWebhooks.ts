@@ -1,3 +1,8 @@
+/**
+ * @deprecated Webhooks are now configured in Start block trigger_config.
+ * This composable is kept for backward compatibility but should not be used for new implementations.
+ * Use the Start block with trigger_type: 'webhook' instead.
+ */
 import type { Webhook, CreateWebhookRequest, UpdateWebhookRequest, ApiResponse, PaginatedResponse } from '~/types/api'
 import { useListState } from './useAsyncState'
 
@@ -17,11 +22,11 @@ export function useWebhooks() {
     removeItem,
   } = useListState<Webhook>()
 
-  async function list(workflowId?: string): Promise<Webhook[]> {
+  async function list(projectId?: string): Promise<Webhook[]> {
     return execute(async () => {
       const params = new URLSearchParams()
-      if (workflowId) {
-        params.append('workflow_id', workflowId)
+      if (projectId) {
+        params.append('project_id', projectId)
       }
       const queryString = params.toString()
       const endpoint = `/webhooks${queryString ? `?${queryString}` : ''}`

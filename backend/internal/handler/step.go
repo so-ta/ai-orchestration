@@ -20,19 +20,21 @@ func NewStepHandler(stepUsecase *usecase.StepUsecase) *StepHandler {
 
 // CreateStepRequest represents a create step request
 type CreateStepRequest struct {
-	Name     string          `json:"name"`
-	Type     string          `json:"type"`
-	Config   json.RawMessage `json:"config"`
-	Position struct {
+	Name          string          `json:"name"`
+	Type          string          `json:"type"`
+	Config        json.RawMessage `json:"config"`
+	TriggerType   string          `json:"trigger_type,omitempty"`   // For start blocks: manual, webhook, schedule
+	TriggerConfig json.RawMessage `json:"trigger_config,omitempty"` // Configuration for the trigger
+	Position      struct {
 		X int `json:"x"`
 		Y int `json:"y"`
 	} `json:"position"`
 }
 
-// Create handles POST /api/v1/workflows/{id}/steps
+// Create handles POST /api/v1/projects/{id}/steps
 func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -43,13 +45,15 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	step, err := h.stepUsecase.Create(r.Context(), usecase.CreateStepInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		Name:       req.Name,
-		Type:       domain.StepType(req.Type),
-		Config:     req.Config,
-		PositionX:  req.Position.X,
-		PositionY:  req.Position.Y,
+		TenantID:      tenantID,
+		ProjectID:     projectID,
+		Name:          req.Name,
+		Type:          domain.StepType(req.Type),
+		Config:        req.Config,
+		TriggerType:   req.TriggerType,
+		TriggerConfig: req.TriggerConfig,
+		PositionX:     req.Position.X,
+		PositionY:     req.Position.Y,
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -59,15 +63,15 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusCreated, step)
 }
 
-// List handles GET /api/v1/workflows/{workflow_id}/steps
+// List handles GET /api/v1/projects/{project_id}/steps
 func (h *StepHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
 
-	steps, err := h.stepUsecase.List(r.Context(), tenantID, workflowID)
+	steps, err := h.stepUsecase.List(r.Context(), tenantID, projectID)
 	if err != nil {
 		HandleError(w, err)
 		return
@@ -78,19 +82,21 @@ func (h *StepHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // UpdateStepRequest represents an update step request
 type UpdateStepRequest struct {
-	Name     string          `json:"name"`
-	Type     string          `json:"type"`
-	Config   json.RawMessage `json:"config"`
-	Position *struct {
+	Name          string          `json:"name"`
+	Type          string          `json:"type"`
+	Config        json.RawMessage `json:"config"`
+	TriggerType   string          `json:"trigger_type,omitempty"`   // For start blocks: manual, webhook, schedule
+	TriggerConfig json.RawMessage `json:"trigger_config,omitempty"` // Configuration for the trigger
+	Position      *struct {
 		X int `json:"x"`
 		Y int `json:"y"`
 	} `json:"position"`
 }
 
-// Update handles PUT /api/v1/workflows/{workflow_id}/steps/{step_id}
+// Update handles PUT /api/v1/projects/{project_id}/steps/{step_id}
 func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -105,12 +111,14 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := usecase.UpdateStepInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     stepID,
-		Name:       req.Name,
-		Type:       domain.StepType(req.Type),
-		Config:     req.Config,
+		TenantID:      tenantID,
+		ProjectID:     projectID,
+		StepID:        stepID,
+		Name:          req.Name,
+		Type:          domain.StepType(req.Type),
+		Config:        req.Config,
+		TriggerType:   req.TriggerType,
+		TriggerConfig: req.TriggerConfig,
 	}
 	if req.Position != nil {
 		input.PositionX = &req.Position.X
@@ -126,10 +134,10 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusOK, step)
 }
 
-// Delete handles DELETE /api/v1/workflows/{workflow_id}/steps/{step_id}
+// Delete handles DELETE /api/v1/projects/{project_id}/steps/{step_id}
 func (h *StepHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -138,7 +146,7 @@ func (h *StepHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.stepUsecase.Delete(r.Context(), tenantID, workflowID, stepID); err != nil {
+	if err := h.stepUsecase.Delete(r.Context(), tenantID, projectID, stepID); err != nil {
 		HandleError(w, err)
 		return
 	}

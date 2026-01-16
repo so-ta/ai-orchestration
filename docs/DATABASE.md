@@ -2,6 +2,8 @@
 
 PostgreSQL schema, migrations, and query patterns.
 
+> **Migration Note (2026-01)**: The `workflows` table has been renamed to `projects`. Projects now support multiple Start blocks, each with its own `trigger_type` and `trigger_config`. The `webhooks` table has been removed; webhook functionality is now part of Start block configuration. The `input_schema`/`output_schema` columns have been replaced with `variables` at the project level.
+
 ## Quick Reference
 
 | Item | Value |
@@ -18,14 +20,13 @@ PostgreSQL schema, migrations, and query patterns.
 ```
 tenants
   └── users
-  └── workflows
-        └── workflow_versions
-        └── steps
+  └── projects (formerly workflows)
+        └── project_versions (formerly workflow_versions)
+        └── steps (multiple start blocks supported)
         └── edges
         └── block_groups
-        └── schedules
-        └── webhooks
-  └── runs
+        └── schedules (now requires start_step_id)
+  └── runs (now includes start_step_id)
         └── step_runs
         └── block_group_runs
         └── usage_records
@@ -39,6 +40,8 @@ tenants
   └── vector_collections (RAG)
         └── vector_documents (RAG)
 ```
+
+> **Note**: The `webhooks` table has been removed. Webhook functionality is now configured via Start block's `trigger_type` and `trigger_config`.
 
 ## Tables
 
@@ -71,7 +74,7 @@ Default tenant: `00000000-0000-0000-0000-000000000001`
 
 Unique: (tenant_id, email)
 
-### workflows
+### projects (formerly workflows)
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -81,30 +84,31 @@ Unique: (tenant_id, email)
 | description | TEXT | | |
 | status | VARCHAR(50) | NOT NULL DEFAULT 'draft' | draft, published |
 | version | INTEGER | NOT NULL DEFAULT 1 | Increments on publish |
-| input_schema | JSONB | | JSON Schema |
-| output_schema | JSONB | | JSON Schema |
+| variables | JSONB | | Project-level variables (replaces input_schema/output_schema) |
 | created_by | UUID | FK users(id) | |
 | published_at | TIMESTAMPTZ | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | deleted_at | TIMESTAMPTZ | | Soft delete |
 
-Indexes:
-- `idx_workflows_tenant` ON (tenant_id)
-- `idx_workflows_status` ON (status)
+> **Migration Note**: `input_schema` and `output_schema` have been removed. Input/output schemas are now defined per Start block in the `steps` table config.
 
-### workflow_versions
+Indexes:
+- `idx_projects_tenant` ON (tenant_id)
+- `idx_projects_status` ON (status)
+
+### project_versions (formerly workflow_versions)
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
-| workflow_id | UUID | FK workflows(id), NOT NULL | |
+| project_id | UUID | FK projects(id), NOT NULL | |
 | version | INTEGER | NOT NULL | |
 | definition | JSONB | NOT NULL | Full snapshot (steps, edges) |
 | published_by | UUID | FK users(id) | |
 | published_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (workflow_id, version)
+Unique: (project_id, version)
 
 ### steps
 
@@ -112,10 +116,10 @@ Unique: (workflow_id, version)
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
+| project_id | UUID | FK projects(id) ON DELETE CASCADE, NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | |
 | type | VARCHAR(50) | NOT NULL | start, llm, tool, condition, switch, map, join, subflow, wait, function, router, human_in_loop, filter, split, aggregate, error, note, log |
-| config | JSONB | NOT NULL DEFAULT '{}' | Type-specific config |
+| config | JSONB | NOT NULL DEFAULT '{}' | Type-specific config (see below for Start block) |
 | block_group_id | UUID | FK block_groups(id) ON DELETE SET NULL | Parent block group |
 | group_role | VARCHAR(50) | | Role within block group (body only) |
 | block_definition_id | UUID | FK block_definitions(id) | Registry block reference |
@@ -125,6 +129,30 @@ Unique: (workflow_id, version)
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
+**Start Block Config Schema** (for `type = 'start'`):
+
+A project can have multiple Start blocks, each with its own trigger configuration:
+
+```json
+{
+  "trigger_type": "manual|schedule|webhook",
+  "trigger_config": {
+    "input_mapping": {},
+    "webhook_secret": "string",
+    "cron": "0 9 * * *",
+    "timezone": "Asia/Tokyo"
+  },
+  "input_schema": {},
+  "output_schema": {}
+}
+```
+
+| Trigger Type | trigger_config Fields |
+|--------------|----------------------|
+| `manual` | None required |
+| `schedule` | `cron`, `timezone` (schedule also requires entry in schedules table) |
+| `webhook` | `webhook_secret`, `input_mapping` |
+
 ### edges
 
 Connects steps and/or block groups. Either source/target can be a step or a block group.
@@ -132,7 +160,7 @@ Connects steps and/or block groups. Either source/target can be a step or a bloc
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
-| workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
+| project_id | UUID | FK projects(id) ON DELETE CASCADE, NOT NULL | |
 | source_step_id | UUID | FK steps(id) ON DELETE CASCADE | Nullable if source is a group |
 | target_step_id | UUID | FK steps(id) ON DELETE CASCADE | Nullable if target is a group |
 | source_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | Nullable if source is a step |
@@ -153,7 +181,7 @@ Control flow constructs that group multiple steps.
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
-| workflow_id | UUID | FK workflows(id) ON DELETE CASCADE, NOT NULL | |
+| project_id | UUID | FK projects(id) ON DELETE CASCADE, NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | Display name |
 | type | VARCHAR(50) | NOT NULL, CHECK | **4 types only**: parallel, try_catch, foreach, while |
 | config | JSONB | NOT NULL DEFAULT '{}' | Type-specific configuration |
@@ -168,7 +196,7 @@ Control flow constructs that group multiple steps.
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
 Indexes:
-- `idx_block_groups_workflow` ON (workflow_id)
+- `idx_block_groups_project` ON (project_id)
 - `idx_block_groups_parent` ON (parent_group_id)
 
 **Type CHECK constraint**: `type IN ('parallel', 'try_catch', 'foreach', 'while')`
@@ -205,8 +233,9 @@ Indexes:
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id), NOT NULL | |
-| workflow_version | INTEGER | NOT NULL | Snapshot version |
+| project_id | UUID | FK projects(id), NOT NULL | |
+| project_version | INTEGER | NOT NULL | Snapshot version |
+| start_step_id | UUID | FK steps(id) | Which Start block triggered this run |
 | status | VARCHAR(50) | NOT NULL DEFAULT 'pending' | pending, running, completed, failed, cancelled |
 | mode | VARCHAR(50) | NOT NULL DEFAULT 'production' | test, production |
 | input | JSONB | | |
@@ -218,9 +247,12 @@ Indexes:
 | completed_at | TIMESTAMPTZ | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
+> **Migration Note**: `start_step_id` is now required to identify which Start block triggered the run, since projects can have multiple Start blocks.
+
 Indexes:
 - `idx_runs_tenant` ON (tenant_id)
-- `idx_runs_workflow` ON (workflow_id)
+- `idx_runs_project` ON (project_id)
+- `idx_runs_start_step` ON (start_step_id)
 - `idx_runs_status` ON (status)
 
 ### step_runs
@@ -250,8 +282,9 @@ Indexes:
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id), NOT NULL | |
-| workflow_version | INTEGER | NOT NULL DEFAULT 1 | |
+| project_id | UUID | FK projects(id), NOT NULL | |
+| start_step_id | UUID | FK steps(id), NOT NULL | Which Start block to trigger |
+| project_version | INTEGER | NOT NULL DEFAULT 1 | |
 | name | VARCHAR(255) | NOT NULL | |
 | description | TEXT | | |
 | cron_expression | VARCHAR(100) | NOT NULL | Standard cron format |
@@ -266,27 +299,23 @@ Indexes:
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
+> **Migration Note**: `start_step_id` is now required to specify which Start block the schedule should trigger when it fires.
+
 Indexes:
 - `idx_schedules_tenant` ON (tenant_id)
+- `idx_schedules_project` ON (project_id)
+- `idx_schedules_start_step` ON (start_step_id)
 - `idx_schedules_next_run` ON (next_run_at) WHERE status = 'active'
 
-### webhooks
+### webhooks (REMOVED)
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| id | UUID | PK, DEFAULT uuid_generate_v4() | |
-| tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id), NOT NULL | |
-| name | VARCHAR(255) | NOT NULL | |
-| description | TEXT | | |
-| secret | VARCHAR(255) | NOT NULL | HMAC signing key |
-| input_mapping | JSONB | | JSONPath mapping |
-| enabled | BOOLEAN | NOT NULL DEFAULT true | |
-| last_triggered_at | TIMESTAMPTZ | | |
-| trigger_count | INTEGER | NOT NULL DEFAULT 0 | |
-| created_by | UUID | FK users(id) | |
-| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
-| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+> **Migration Note**: The `webhooks` table has been removed. Webhook functionality is now configured directly in Start blocks via the `trigger_type` and `trigger_config` fields.
+>
+> To migrate existing webhooks:
+> 1. Create a Start block with `type: 'start'` and `config.trigger_type: 'webhook'`
+> 2. Move `secret` to `config.trigger_config.webhook_secret`
+> 3. Move `input_mapping` to `config.trigger_config.input_mapping`
+> 4. The webhook endpoint becomes `/projects/{project_id}/webhook/{start_step_id}`
 
 ### adapters
 
@@ -433,7 +462,7 @@ Individual LLM API call records for cost tracking.
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id) | Nullable for non-workflow calls |
+| project_id | UUID | FK projects(id) | Nullable for non-project calls |
 | run_id | UUID | FK runs(id) | |
 | step_run_id | UUID | FK step_runs(id) | |
 | provider | VARCHAR(50) | NOT NULL | openai, anthropic, google |
@@ -452,7 +481,7 @@ Individual LLM API call records for cost tracking.
 
 Indexes:
 - `idx_usage_records_tenant_created` ON (tenant_id, created_at DESC)
-- `idx_usage_records_workflow` ON (workflow_id) WHERE workflow_id IS NOT NULL
+- `idx_usage_records_project` ON (project_id) WHERE project_id IS NOT NULL
 - `idx_usage_records_run` ON (run_id) WHERE run_id IS NOT NULL
 
 ### usage_daily_aggregates
@@ -463,7 +492,7 @@ Pre-aggregated daily usage for dashboard performance.
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id) | NULL for tenant-wide aggregate |
+| project_id | UUID | FK projects(id) | NULL for tenant-wide aggregate |
 | date | DATE | NOT NULL | Aggregation date |
 | provider | VARCHAR(50) | NOT NULL | |
 | model | VARCHAR(100) | NOT NULL | |
@@ -475,7 +504,7 @@ Pre-aggregated daily usage for dashboard performance.
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 
-Unique: (tenant_id, workflow_id, date, provider, model)
+Unique: (tenant_id, project_id, date, provider, model)
 
 Indexes:
 - `idx_usage_daily_tenant_date` ON (tenant_id, date DESC)
@@ -488,7 +517,7 @@ Budget limits and alert thresholds.
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| workflow_id | UUID | FK workflows(id) | NULL for tenant-wide budget |
+| project_id | UUID | FK projects(id) | NULL for tenant-wide budget |
 | budget_type | VARCHAR(50) | NOT NULL | monthly, daily |
 | budget_amount_usd | DECIMAL(12, 2) | NOT NULL | Budget limit |
 | alert_threshold | DECIMAL(3, 2) | NOT NULL DEFAULT 0.80 | 0.0-1.0, triggers alert |
@@ -498,7 +527,7 @@ Budget limits and alert thresholds.
 
 Indexes:
 - `idx_usage_budgets_tenant` ON (tenant_id)
-- `idx_usage_budgets_workflow` ON (workflow_id) WHERE workflow_id IS NOT NULL
+- `idx_usage_budgets_project` ON (project_id) WHERE project_id IS NOT NULL
 
 ### secrets
 
@@ -523,7 +552,7 @@ Unique: (tenant_id, name)
 | actor_id | UUID | | User who performed action |
 | actor_email | VARCHAR(255) | | |
 | action | VARCHAR(100) | NOT NULL | create, update, delete, publish, execute |
-| resource_type | VARCHAR(100) | NOT NULL | workflow, run, secret |
+| resource_type | VARCHAR(100) | NOT NULL | project, run, secret |
 | resource_id | UUID | | |
 | metadata | JSONB | | Additional context |
 | ip_address | INET | | |
@@ -552,11 +581,11 @@ Claude Code はこのセクションのパターンに従ってクエリを書�
 ```sql
 -- ✅ 正しいパターン
 SELECT id, tenant_id, name, status, created_at, updated_at
-FROM workflows
+FROM projects
 WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL;
 
 -- ❌ 禁止パターン
-SELECT * FROM workflows WHERE id = $1;
+SELECT * FROM projects WHERE id = $1;
 -- 問題: SELECT *, tenant_id なし, deleted_at なし
 ```
 
@@ -564,28 +593,39 @@ SELECT * FROM workflows WHERE id = $1;
 
 ## Query Patterns
 
-### List Workflows (with tenant isolation)
+### List Projects (with tenant isolation)
 
 ```sql
 SELECT *
-FROM workflows
+FROM projects
 WHERE tenant_id = $1
   AND deleted_at IS NULL
 ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3;
 ```
 
-### Get Workflow with Steps and Edges
+### Get Project with Steps and Edges
 
 ```sql
--- Workflow
-SELECT * FROM workflows WHERE id = $1 AND tenant_id = $2;
+-- Project
+SELECT * FROM projects WHERE id = $1 AND tenant_id = $2;
 
--- Steps
-SELECT * FROM steps WHERE workflow_id = $1 ORDER BY created_at;
+-- Steps (including multiple Start blocks)
+SELECT * FROM steps WHERE project_id = $1 ORDER BY created_at;
 
 -- Edges
-SELECT * FROM edges WHERE workflow_id = $1;
+SELECT * FROM edges WHERE project_id = $1;
+```
+
+### Get Start Blocks for Project
+
+```sql
+-- Get all Start blocks with their trigger configurations
+SELECT id, name, config
+FROM steps
+WHERE project_id = $1
+  AND type = 'start'
+ORDER BY created_at;
 ```
 
 ### Get Run with StepRuns
@@ -710,13 +750,13 @@ All tenant-owned tables support soft delete via `deleted_at` column:
 
 ```sql
 -- "Delete"
-UPDATE workflows SET deleted_at = NOW() WHERE id = $1;
+UPDATE projects SET deleted_at = NOW() WHERE id = $1;
 
 -- Query (exclude deleted)
-SELECT * FROM workflows WHERE deleted_at IS NULL;
+SELECT * FROM projects WHERE deleted_at IS NULL;
 
 -- Hard delete (admin only)
-DELETE FROM workflows WHERE id = $1;
+DELETE FROM projects WHERE id = $1;
 ```
 
 ## Multi-Tenancy Pattern
@@ -724,9 +764,9 @@ DELETE FROM workflows WHERE id = $1;
 All queries MUST include `tenant_id`:
 
 ```go
-func (r *WorkflowRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error) {
+func (r *ProjectRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error) {
     return r.db.QueryRow(ctx,
-        `SELECT * FROM workflows WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        `SELECT * FROM projects WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         id, tenantID,
     ).Scan(...)
 }
@@ -737,12 +777,10 @@ func (r *WorkflowRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*do
 | Table | Column | Content |
 |-------|--------|---------|
 | tenants | settings | `{"data_retention_days": 30, "max_concurrent_runs": 10}` |
-| workflows | input_schema | JSON Schema |
-| workflows | output_schema | JSON Schema |
-| steps | config | Step type-specific config |
+| projects | variables | Project-level variables |
+| steps | config | Step type-specific config (Start blocks include trigger_type, trigger_config, input_schema, output_schema) |
 | runs | input | Execution input |
 | runs | output | Execution result |
-| webhooks | input_mapping | JSONPath mappings |
 | audit_logs | metadata | Action-specific details |
 
 ## Connection Pool Settings

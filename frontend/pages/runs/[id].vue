@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Run, WorkflowDefinition, StepRun } from '~/types/api'
+import type { Run, ProjectDefinition, StepRun } from '~/types/api'
 
 const route = useRoute()
 const runId = route.params.id as string
@@ -45,9 +45,9 @@ const selectedStepOutputMarkdown = computed(() => {
   return output.markdown as string
 })
 
-// Computed workflow definition from API response
-const workflowDefinition = computed<WorkflowDefinition | null>(() => {
-  return run.value?.workflow_definition || null
+// Computed project definition from API response
+const projectDefinition = computed<ProjectDefinition | null>(() => {
+  return run.value?.project_definition || null
 })
 const expandedSteps = ref<Set<string>>(new Set())
 
@@ -109,7 +109,7 @@ async function handleRerun() {
   if (!run.value) return
 
   try {
-    const response = await runsApi.create(run.value.workflow_id, {
+    const response = await runsApi.create(run.value.project_id, {
       triggered_by: run.value.triggered_by,
       input: run.value.input || {},
     })
@@ -431,7 +431,7 @@ onUnmounted(() => {
             </svg>
           </div>
           <div class="stat-info">
-            <div class="stat-value">v{{ run.workflow_version }}</div>
+            <div class="stat-value">v{{ run.project_version }}</div>
             <div class="stat-label">Workflow Version</div>
           </div>
         </div>
@@ -452,7 +452,7 @@ onUnmounted(() => {
       <!-- Actions Bar -->
       <div class="actions-bar">
         <div class="actions-left">
-          <NuxtLink :to="`/workflows/${run.workflow_id}`" class="btn btn-outline">
+          <NuxtLink :to="`/workflows/${run.project_id}`" class="btn btn-outline">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             </svg>
@@ -537,21 +537,21 @@ onUnmounted(() => {
 
             <!-- Workflow DAG Visualization -->
             <div class="execution-workflow">
-              <div v-if="workflowDefinition" class="workflow-dag-wrapper">
+              <div v-if="projectDefinition" class="workflow-dag-wrapper">
                 <div class="workflow-dag-header">
                   <div class="workflow-title-area">
-                    <h3 class="workflow-name">{{ workflowDefinition.name }}</h3>
-                    <span class="version-badge">v{{ run.workflow_version }}</span>
+                    <h3 class="workflow-name">{{ projectDefinition.name }}</h3>
+                    <span class="version-badge">v{{ run.project_version }}</span>
                   </div>
-                  <p v-if="workflowDefinition.description" class="workflow-description">
-                    {{ workflowDefinition.description }}
+                  <p v-if="projectDefinition.description" class="workflow-description">
+                    {{ projectDefinition.description }}
                   </p>
                 </div>
                 <div class="workflow-dag-container">
                   <DagEditor
-                    :steps="workflowDefinition.steps || []"
-                    :edges="workflowDefinition.edges || []"
-                    :block-groups="workflowDefinition.block_groups || []"
+                    :steps="projectDefinition.steps || []"
+                    :edges="projectDefinition.edges || []"
+                    :block-groups="projectDefinition.block_groups || []"
                     :readonly="true"
                     :selected-step-id="selectedStepRun?.step_id || null"
                     :step-runs="run?.step_runs || []"
@@ -569,7 +569,7 @@ onUnmounted(() => {
                     </svg>
                   </div>
                   <p class="empty-title">Workflow definition not available</p>
-                  <NuxtLink :to="`/workflows/${run.workflow_id}`" class="btn btn-outline btn-sm">
+                  <NuxtLink :to="`/workflows/${run.project_id}`" class="btn btn-outline btn-sm">
                     View Current Workflow
                   </NuxtLink>
                 </div>

@@ -6,7 +6,7 @@
  * DynamicConfigFormで入力フォームを表示し、ワークフローを実行する。
  */
 import { ref, computed, watch } from 'vue'
-import type { Workflow } from '~/types/api'
+import type { Project } from '~/types/api'
 import type { ConfigSchema } from '~/components/workflow-editor/config/types/config-schema'
 import DynamicConfigForm from '~/components/workflow-editor/config/DynamicConfigForm.vue'
 
@@ -22,12 +22,12 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const workflowsApi = useWorkflows()
+const projectsApi = useProjects()
 const runsApi = useRuns()
 const toast = useToast()
 
 // Data state
-const workflow = ref<Workflow | null>(null)
+const project = ref<Project | null>(null)
 const loading = ref(false)
 const dataLoading = ref(false)
 const dataError = ref<string | null>(null)
@@ -36,9 +36,14 @@ const dataError = ref<string | null>(null)
 const inputValues = ref<Record<string, unknown>>({})
 const isValid = ref(true)
 
-// Convert workflow's input_schema to ConfigSchema format
+// Derive input schema from Start step's trigger_config.input_schema
 const inputSchema = computed<ConfigSchema | null>(() => {
-  const schema = workflow.value?.input_schema as Record<string, unknown> | undefined
+  // Find Start step and get its trigger_config.input_schema
+  const startStep = project.value?.steps?.find(s => s.type === 'start')
+  if (!startStep) return null
+
+  const triggerConfig = startStep.trigger_config as Record<string, unknown> | undefined
+  const schema = triggerConfig?.input_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
 
   const properties = schema.properties as Record<string, unknown> | undefined
@@ -57,28 +62,28 @@ const hasInputFields = computed(() => {
   return Object.keys(inputSchema.value.properties).length > 0
 })
 
-// Fetch workflow data when dialog opens
+// Fetch project data when dialog opens
 watch(() => props.show, async (show) => {
   if (show && props.workflowId) {
-    await loadWorkflowData()
+    await loadProjectData()
   } else {
     // Reset state when closed
-    workflow.value = null
+    project.value = null
     inputValues.value = {}
     dataError.value = null
     isValid.value = true // Reset validation state
   }
 })
 
-async function loadWorkflowData() {
+async function loadProjectData() {
   dataLoading.value = true
   dataError.value = null
 
   try {
-    const workflowRes = await workflowsApi.get(props.workflowId)
-    workflow.value = workflowRes.data
+    const projectRes = await projectsApi.get(props.workflowId)
+    project.value = projectRes.data
   } catch (e) {
-    dataError.value = e instanceof Error ? e.message : 'Failed to load workflow data'
+    dataError.value = e instanceof Error ? e.message : 'Failed to load project data'
   } finally {
     dataLoading.value = false
   }

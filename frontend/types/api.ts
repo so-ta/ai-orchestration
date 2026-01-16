@@ -13,15 +13,16 @@ export interface PaginatedResponse<T> {
   }
 }
 
-export interface Workflow {
+export interface Project {
   id: string
   tenant_id: string
   name: string
   description?: string
   status: 'draft' | 'published'
   version: number
-  input_schema?: object
-  output_schema?: object
+  variables?: object // Project-level shared variables
+  is_system?: boolean
+  system_slug?: string
   draft?: object // Draft state (unsaved changes)
   has_draft: boolean // Indicates if current state is from draft
   created_by?: string
@@ -30,16 +31,22 @@ export interface Workflow {
   updated_at: string
   steps?: Step[]
   edges?: Edge[]
+  block_groups?: BlockGroup[]
 }
+
+// Backward compatibility alias
+export type Workflow = Project
 
 export interface Step {
   id: string
-  workflow_id: string
+  project_id: string
   name: string
   type: StepType
   config: object
   block_group_id?: string      // Reference to containing block group
   group_role?: GroupRole       // Role within block group
+  trigger_type?: 'manual' | 'webhook' | 'schedule' | 'slack' | 'email' // Start block trigger type
+  trigger_config?: object      // Start block trigger configuration
   position_x: number
   position_y: number
   created_at: string
@@ -68,7 +75,7 @@ export type StepType =
 
 export interface Edge {
   id: string
-  workflow_id: string
+  project_id: string
   source_step_id?: string | null // Source step (null if from group)
   target_step_id?: string | null // Target step (null if to group)
   source_block_group_id?: string | null // Source group (null if from step)
@@ -84,8 +91,8 @@ export type TriggerType = 'manual' | 'schedule' | 'webhook' | 'test' | 'internal
 export interface Run {
   id: string
   tenant_id: string
-  workflow_id: string
-  workflow_version: number
+  project_id: string
+  project_version: number
   status: RunStatus
   run_number: number
   input?: object
@@ -93,31 +100,37 @@ export interface Run {
   error?: string
   triggered_by: TriggerType
   triggered_by_user?: string
+  start_step_id?: string // Which Start block triggered this run
   started_at?: string
   completed_at?: string
   created_at: string
   step_runs?: StepRun[]
-  workflow_definition?: WorkflowDefinition
+  project_definition?: ProjectDefinition
 }
 
-export interface WorkflowVersion {
+export interface ProjectVersion {
   id: string
-  workflow_id: string
+  project_id: string
   version: number
-  definition: WorkflowDefinition
+  definition: ProjectDefinition
   saved_by?: string
   saved_at: string
 }
 
-export interface WorkflowDefinition {
+// Backward compatibility alias
+export type WorkflowVersion = ProjectVersion
+
+export interface ProjectDefinition {
   name: string
   description: string
-  input_schema?: object
-  output_schema?: object
+  variables?: object // Project-level shared variables
   steps: Step[]
   edges: Edge[]
   block_groups?: BlockGroup[]
 }
+
+// Backward compatibility alias
+export type WorkflowDefinition = ProjectDefinition
 
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -259,7 +272,7 @@ export type GroupRole = 'body'
 
 export interface BlockGroup {
   id: string
-  workflow_id: string
+  project_id: string
   name: string
   type: BlockGroupType
   config: BlockGroupConfig
@@ -457,7 +470,7 @@ export interface TenantFeatureFlags {
 }
 
 export interface TenantLimits {
-  max_workflows: number
+  max_projects: number
   max_runs_per_day: number
   max_users: number
   max_credentials: number
@@ -474,8 +487,8 @@ export interface TenantMetadata {
 }
 
 export interface TenantStats {
-  workflow_count: number
-  published_workflows: number
+  project_count: number
+  published_projects: number
   run_count: number
   runs_this_month: number
   user_count: number
@@ -536,7 +549,7 @@ export interface TenantOverviewStats {
   total_tenants: number
   status_counts: Record<TenantStatus, number>
   plan_counts: Record<TenantPlan, number>
-  total_workflows: number
+  total_projects: number
   total_runs: number
   total_runs_this_month: number
   total_cost_usd: number
@@ -549,8 +562,9 @@ export type ScheduleStatus = 'active' | 'paused' | 'disabled'
 export interface Schedule {
   id: string
   tenant_id: string
-  workflow_id: string
-  workflow_version: number
+  project_id: string
+  project_version: number
+  start_step_id: string // Which Start block to trigger (required)
   name: string
   description?: string
   cron_expression: string
@@ -567,7 +581,8 @@ export interface Schedule {
 }
 
 export interface CreateScheduleRequest {
-  workflow_id: string
+  project_id: string
+  start_step_id: string // Which Start block to trigger (required)
   name: string
   description?: string
   cron_expression: string
@@ -584,11 +599,13 @@ export interface UpdateScheduleRequest {
 }
 
 // Webhook Types
+// @deprecated Webhooks are now part of Start block trigger_config in the Multi-Start Project Model.
+// These types are kept for backward compatibility but should not be used for new implementations.
 export interface Webhook {
   id: string
   tenant_id: string
-  workflow_id: string
-  workflow_version: number
+  project_id: string
+  project_version: number
   name: string
   description?: string
   secret: string
@@ -601,13 +618,15 @@ export interface Webhook {
   updated_at: string
 }
 
+// @deprecated Use Start block trigger_config instead
 export interface CreateWebhookRequest {
-  workflow_id: string
+  project_id: string
   name: string
   description?: string
   input_mapping?: object
 }
 
+// @deprecated Use Start block trigger_config instead
 export interface UpdateWebhookRequest {
   name?: string
   description?: string

@@ -28,7 +28,7 @@ type BlockDefinitionGetter interface {
 	GetBySlug(ctx context.Context, tenantID *uuid.UUID, slug string) (*domain.BlockDefinition, error)
 }
 
-// Executor executes a workflow DAG
+// Executor executes a project DAG
 type Executor struct {
 	registry      *adapter.Registry
 	logger        *slog.Logger
@@ -77,10 +77,10 @@ func NewExecutor(registry *adapter.Registry, logger *slog.Logger, opts ...Execut
 	return e
 }
 
-// ExecutionContext holds the context for a workflow execution
+// ExecutionContext holds the context for a project execution
 type ExecutionContext struct {
 	Run             *domain.Run
-	Definition      *domain.WorkflowDefinition
+	Definition      *domain.ProjectDefinition
 	StepRuns        map[uuid.UUID]*domain.StepRun
 	StepData        map[uuid.UUID]json.RawMessage // step outputs
 	StepOutputPorts map[uuid.UUID]string          // output port used by each step (for port-based routing)
@@ -91,7 +91,7 @@ type ExecutionContext struct {
 }
 
 // NewExecutionContext creates a new execution context
-func NewExecutionContext(run *domain.Run, def *domain.WorkflowDefinition) *ExecutionContext {
+func NewExecutionContext(run *domain.Run, def *domain.ProjectDefinition) *ExecutionContext {
 	return &ExecutionContext{
 		Run:             run,
 		Definition:      def,
@@ -303,10 +303,10 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	case domain.StepTypeLog:
 		return e.executeLogStep(ctx, step, input)
 	case domain.StepTypeSubflow:
-		// Subflow not yet implemented - return error to ensure workflow fails explicitly.
+		// Subflow not yet implemented - return error to ensure project fails explicitly.
 		// BREAKING CHANGE: Previously passed through input silently. Now returns error
 		// to prevent unintended success when subflow execution is expected but not available.
-		// TODO: Implement subflow execution when workflow nesting feature is added
+		// TODO: Implement subflow execution when project nesting feature is added
 		e.logger.Error("Subflow step type is not yet implemented",
 			"step_id", step.ID,
 			"step_name", step.Name,
@@ -327,7 +327,7 @@ func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *Exec
 	if e.blockDefRepo != nil {
 		return e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
 	}
-	// Unknown step type without block definition - return error to fail workflow explicitly
+	// Unknown step type without block definition - return error to fail project explicitly
 	e.logger.Error("Unknown step type without block definition",
 		"step_id", step.ID,
 		"step_name", step.Name,
@@ -336,20 +336,20 @@ func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *Exec
 	return nil, fmt.Errorf("unknown step type %q without block definition: step %s (%s)", step.Type, step.Name, step.ID)
 }
 
-// Execute executes the workflow
+// Execute executes the project
 func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error {
-	ctx, span := tracer.Start(ctx, "workflow.execute",
+	ctx, span := tracer.Start(ctx, "project.execute",
 		trace.WithAttributes(
 			attribute.String("run_id", execCtx.Run.ID.String()),
-			attribute.String("workflow_id", execCtx.Run.WorkflowID.String()),
+			attribute.String("project_id", execCtx.Run.ProjectID.String()),
 			attribute.String("triggered_by", string(execCtx.Run.TriggeredBy)),
 		),
 	)
 	defer span.End()
 
-	e.logger.Info("Starting workflow execution",
+	e.logger.Info("Starting project execution",
 		"run_id", execCtx.Run.ID,
-		"workflow_id", execCtx.Run.WorkflowID,
+		"project_id", execCtx.Run.ProjectID,
 	)
 
 	// Build execution graph
@@ -358,7 +358,7 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 	// Find start nodes (nodes with no incoming edges)
 	startNodes := e.findStartNodes(graph)
 	if len(startNodes) == 0 {
-		err := fmt.Errorf("no start nodes found in workflow")
+		err := fmt.Errorf("no start nodes found in project")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
@@ -373,7 +373,7 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 		return err
 	}
 
-	span.SetStatus(codes.Ok, "workflow completed")
+	span.SetStatus(codes.Ok, "project completed")
 	return nil
 }
 
@@ -387,7 +387,7 @@ type Graph struct {
 	GroupOutEdges map[uuid.UUID][]domain.Edge // outgoing edges from groups
 }
 
-func (e *Executor) buildGraph(def *domain.WorkflowDefinition) *Graph {
+func (e *Executor) buildGraph(def *domain.ProjectDefinition) *Graph {
 	graph := &Graph{
 		Steps:         make(map[uuid.UUID]domain.Step),
 		BlockGroups:   make(map[uuid.UUID]domain.BlockGroup),
@@ -1247,7 +1247,7 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 	execCtx.mu.RLock()
 	defer execCtx.mu.RUnlock()
 
-	// No previous step outputs - use workflow input
+	// No previous step outputs - use project input
 	if len(execCtx.StepData) == 0 && len(execCtx.GroupData) == 0 {
 		return execCtx.Run.Input, nil
 	}
@@ -1283,13 +1283,13 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 				return data, nil
 			}
 		}
-		// Fallback to workflow input if source has no data
+		// Fallback to project input if source has no data
 		return execCtx.Run.Input, nil
 	}
 
 	// Multiple sources or no edge info: merge all outputs (for join steps, etc.)
 	merged := make(map[string]interface{})
-	merged["workflow_input"] = json.RawMessage(execCtx.Run.Input)
+	merged["project_input"] = json.RawMessage(execCtx.Run.Input)
 
 	for stepID, data := range execCtx.StepData {
 		var stepOutput interface{}
@@ -1318,7 +1318,7 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 
 func (e *Executor) executeStartStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
 	// Start step simply passes through the input data
-	// This serves as the entry point for the workflow
+	// This serves as the entry point for the project
 	e.logger.Debug("Executing start step", "step_id", step.ID)
 	return input, nil
 }
@@ -1352,7 +1352,7 @@ func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContex
 	if e.usageRecorder != nil && resp != nil && resp.Metadata != nil {
 		// Only record if we have token information (indicates LLM call)
 		if _, hasTokens := resp.Metadata["prompt_tokens"]; hasTokens {
-			workflowID := execCtx.Run.WorkflowID
+			projectID := execCtx.Run.ProjectID
 			runID := execCtx.Run.ID
 			stepRunID := stepRun.ID
 			errorMsg := ""
@@ -1362,7 +1362,7 @@ func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContex
 			e.usageRecorder.RecordFromMetadata(
 				ctx,
 				execCtx.Run.TenantID,
-				&workflowID,
+				&projectID,
 				&runID,
 				&stepRunID,
 				resp.Metadata,
@@ -1417,7 +1417,7 @@ func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext
 
 	// Record usage regardless of success/failure
 	if e.usageRecorder != nil && resp != nil {
-		workflowID := execCtx.Run.WorkflowID
+		projectID := execCtx.Run.ProjectID
 		runID := execCtx.Run.ID
 		stepRunID := stepRun.ID
 		errorMsg := ""
@@ -1427,7 +1427,7 @@ func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext
 		e.usageRecorder.RecordFromMetadata(
 			ctx,
 			execCtx.Run.TenantID,
-			&workflowID,
+			&projectID,
 			&runID,
 			&stepRunID,
 			resp.Metadata,
@@ -1732,7 +1732,7 @@ func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionCo
 		},
 	}
 
-	// Add sandbox services if database pool is available (for Copilot/meta-workflow features)
+	// Add sandbox services if database pool is available (for Copilot/meta-project features)
 	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
 		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
@@ -1906,7 +1906,7 @@ func (e *Executor) executeHumanInLoopStep(ctx context.Context, execCtx *Executio
 	// 1. Store the pending approval in the database
 	// 2. Send notification if configured
 	// 3. Update run status to "waiting_approval"
-	// 4. Return and let the workflow pause
+	// 4. Return and let the project pause
 	// 5. Resume when approval is received
 
 	// For now, auto-approve in test mode
@@ -2947,7 +2947,7 @@ func extractLogJSONPath(data interface{}, path string) interface{} {
 	return current
 }
 
-// WorkflowError represents a custom workflow error from error step
+// ProjectError represents a custom project error from error step
 type WorkflowError struct {
 	Type    string
 	Code    string

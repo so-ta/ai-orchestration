@@ -30,7 +30,7 @@ func NewUsageRecorder(repo repository.UsageRepository, logger *slog.Logger) *Usa
 // RecordParams contains parameters for recording usage
 type RecordParams struct {
 	TenantID     uuid.UUID
-	WorkflowID   *uuid.UUID
+	ProjectID    *uuid.UUID
 	RunID        *uuid.UUID
 	StepRunID    *uuid.UUID
 	Provider     string
@@ -56,7 +56,7 @@ func (r *UsageRecorder) Record(ctx context.Context, params RecordParams) error {
 
 	record := domain.NewUsageRecord(
 		params.TenantID,
-		params.WorkflowID,
+		params.ProjectID,
 		params.RunID,
 		params.StepRunID,
 		params.Provider,
@@ -96,7 +96,7 @@ func (r *UsageRecorder) Record(ctx context.Context, params RecordParams) error {
 func (r *UsageRecorder) RecordFromMetadata(
 	ctx context.Context,
 	tenantID uuid.UUID,
-	workflowID, runID, stepRunID *uuid.UUID,
+	projectID, runID, stepRunID *uuid.UUID,
 	metadata map[string]string,
 	latencyMs int,
 	success bool,
@@ -128,7 +128,7 @@ func (r *UsageRecorder) RecordFromMetadata(
 
 	return r.Record(ctx, RecordParams{
 		TenantID:     tenantID,
-		WorkflowID:   workflowID,
+		ProjectID:    projectID,
 		RunID:        runID,
 		StepRunID:    stepRunID,
 		Provider:     provider,

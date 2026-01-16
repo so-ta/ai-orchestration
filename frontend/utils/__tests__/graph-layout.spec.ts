@@ -6,7 +6,7 @@ import type { Step, Edge, OutputPort, StepType, BlockGroup, BlockGroupType } fro
 function createStep(id: string, type: string, x = 0, y = 0): Step {
   return {
     id,
-    workflow_id: 'test-workflow',
+    project_id: 'test-project',
     name: `Step ${id}`,
     type: type as Step['type'],
     config: {},
@@ -21,7 +21,7 @@ function createStep(id: string, type: string, x = 0, y = 0): Step {
 function createEdge(sourceId: string, targetId: string, sourcePort?: string): Edge {
   return {
     id: `edge-${sourceId}-${targetId}`,
-    workflow_id: 'test-workflow',
+    project_id: 'test-project',
     source_step_id: sourceId,
     target_step_id: targetId,
     source_port: sourcePort,
@@ -33,7 +33,7 @@ function createEdge(sourceId: string, targetId: string, sourcePort?: string): Ed
 function createGroupEdge(sourceGroupId: string, targetId: string, sourcePort: string): Edge {
   return {
     id: `edge-group-${sourceGroupId}-${targetId}`,
-    workflow_id: 'test-workflow',
+    project_id: 'test-project',
     source_block_group_id: sourceGroupId,
     target_step_id: targetId,
     source_port: sourcePort,
@@ -45,7 +45,7 @@ function createGroupEdge(sourceGroupId: string, targetId: string, sourcePort: st
 function createGroupToGroupEdge(sourceGroupId: string, targetGroupId: string, sourcePort: string): Edge {
   return {
     id: `edge-group-${sourceGroupId}-group-${targetGroupId}`,
-    workflow_id: 'test-workflow',
+    project_id: 'test-project',
     source_block_group_id: sourceGroupId,
     target_block_group_id: targetGroupId,
     source_port: sourcePort,
@@ -57,7 +57,7 @@ function createGroupToGroupEdge(sourceGroupId: string, targetGroupId: string, so
 function createBlockGroup(id: string, type: BlockGroupType): BlockGroup {
   return {
     id,
-    workflow_id: 'test-workflow',
+    project_id: 'test-project',
     name: `Group ${id}`,
     type,
     config: {},

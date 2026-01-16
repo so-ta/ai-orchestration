@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import type { Workflow } from '~/types/api'
+import type { Project } from '~/types/api'
 
 const { t } = useI18n()
-const { list: listWorkflows } = useWorkflows()
+const { list: listProjects } = useProjects()
 const toast = useToast()
 
 // State
-const workflows = ref<Workflow[]>([])
+const workflows = ref<Project[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
 // Run modal state
 const showRunModal = ref(false)
-const selectedWorkflow = ref<Workflow | null>(null)
+const selectedWorkflow = ref<Project | null>(null)
 
 // Filters
 const statusFilter = ref<string>('all')
@@ -23,7 +23,7 @@ async function fetchWorkflows() {
   loading.value = true
   error.value = null
   try {
-    const response = await listWorkflows()
+    const response = await listProjects()
     workflows.value = response.data || []
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to fetch workflows'
@@ -61,7 +61,7 @@ const stats = computed(() => ({
 }))
 
 // Open run modal
-function openRunModal(workflow: Workflow) {
+function openRunModal(workflow: Project) {
   if (workflow.status !== 'published') {
     return
   }

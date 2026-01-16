@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort } from '~/types/api'
+import type { Project, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import { calculateLayout, calculateLayoutWithGroups, parseNodeId } from '~/utils/graph-layout'
 
@@ -7,14 +7,14 @@ const { t } = useI18n()
 const route = useRoute()
 const workflowId = route.params.id as string
 
-const workflows = useWorkflows()
+const projects = useProjects()
 const runs = useRuns()
 const blocksApi = useBlocks()
 const blockGroupsApi = useBlockGroups()
 const toast = useToast()
 const { confirm } = useConfirm()
 
-const workflow = ref<Workflow | null>(null)
+const workflow = ref<Project | null>(null)
 const blockDefinitions = ref<BlockDefinition[]>([])
 const blockGroups = ref<BlockGroup[]>([])
 const loading = ref(true)
@@ -72,7 +72,7 @@ async function loadWorkflow() {
     loading.value = true
     error.value = null
     const [workflowResponse, groupsResponse] = await Promise.all([
-      workflows.get(workflowId),
+      projects.get(workflowId),
       blockGroupsApi.list(workflowId).catch(() => ({ data: [] })),
     ])
     workflow.value = workflowResponse.data
@@ -103,7 +103,7 @@ async function handleStepDrop(data: { type: StepType; name: string; position: { 
   }
 
   try {
-    const response = await workflows.createStep(workflowId, {
+    const response = await projects.createStep(workflowId, {
       name: data.name,
       type: data.type,
       config: defaultConfigs[data.type] || {},
@@ -317,21 +317,21 @@ async function handleGroupMoveComplete(
 
     // Update blocks inside group (position only)
     for (const step of stepsInGroup) {
-      updatePromises.push(workflows.updateStep(workflowId, step.id, {
+      updatePromises.push(projects.updateStep(workflowId, step.id, {
         position: { x: step.position_x, y: step.position_y },
       }))
     }
 
     // Update pushed blocks
     for (const pushed of data.pushedBlocks) {
-      updatePromises.push(workflows.updateStep(workflowId, pushed.stepId, {
+      updatePromises.push(projects.updateStep(workflowId, pushed.stepId, {
         position: pushed.position,
       }))
     }
 
     // Delete edges for added blocks
     for (const edgeId of edgesToDelete) {
-      updatePromises.push(workflows.deleteEdge(workflowId, edgeId).catch(() => {
+      updatePromises.push(projects.deleteEdge(workflowId, edgeId).catch(() => {
         // Ignore edge deletion errors
       }))
     }
@@ -344,7 +344,7 @@ async function handleGroupMoveComplete(
           group_role: added.role,
         }).then(() => {
           // Also update position
-          return workflows.updateStep(workflowId, added.stepId, {
+          return projects.updateStep(workflowId, added.stepId, {
             position: added.position,
           })
         })
@@ -360,7 +360,7 @@ async function handleGroupMoveComplete(
 
     // Update steps inside moved groups
     for (const { step } of stepsInMovedGroups) {
-      updatePromises.push(workflows.updateStep(workflowId, step.id, {
+      updatePromises.push(projects.updateStep(workflowId, step.id, {
         position: { x: step.position_x, y: step.position_y },
       }))
     }
@@ -452,7 +452,7 @@ async function handleGroupResizeComplete(
         blockGroupsApi.removeStep(workflowId, groupId, pushed.stepId).catch(() => {
           // May fail if already removed
         }).then(() => {
-          return workflows.updateStep(workflowId, pushed.stepId, {
+          return projects.updateStep(workflowId, pushed.stepId, {
             position: pushed.position,
           })
         })
@@ -461,7 +461,7 @@ async function handleGroupResizeComplete(
 
     // Delete edges for added blocks
     for (const edgeId of edgesToDelete) {
-      updatePromises.push(workflows.deleteEdge(workflowId, edgeId).catch(() => {
+      updatePromises.push(projects.deleteEdge(workflowId, edgeId).catch(() => {
         // Ignore edge deletion errors
       }))
     }
@@ -473,7 +473,7 @@ async function handleGroupResizeComplete(
           step_id: added.stepId,
           group_role: added.role,
         }).then(() => {
-          return workflows.updateStep(workflowId, added.stepId, {
+          return projects.updateStep(workflowId, added.stepId, {
             position: added.position,
           })
         })
@@ -489,7 +489,7 @@ async function handleGroupResizeComplete(
 
     // Update steps inside moved groups
     for (const { step } of stepsInMovedGroups) {
-      updatePromises.push(workflows.updateStep(workflowId, step.id, {
+      updatePromises.push(projects.updateStep(workflowId, step.id, {
         position: { x: step.position_x, y: step.position_y },
       }))
     }
@@ -536,7 +536,7 @@ async function handleStepAssignGroup(
       // Delete edges from API
       for (const edge of connectedEdges) {
         try {
-          await workflows.deleteEdge(workflowId, edge.id)
+          await projects.deleteEdge(workflowId, edge.id)
         } catch {
           console.warn(`Failed to delete edge ${edge.id}`)
         }
@@ -565,7 +565,7 @@ async function handleStepAssignGroup(
     }
 
     // Update step position (position is already in absolute coordinates from DagEditor)
-    updatePromises.push(workflows.updateStep(workflowId, stepId, { position }))
+    updatePromises.push(projects.updateStep(workflowId, stepId, { position }))
 
     // Handle cascading group movements (if any)
     if (movedGroups && movedGroups.length > 0) {
@@ -583,7 +583,7 @@ async function handleStepAssignGroup(
           groupStep.position_x += movedGroup.delta.x
           groupStep.position_y += movedGroup.delta.y
           // Save step position
-          updatePromises.push(workflows.updateStep(workflowId, groupStep.id, {
+          updatePromises.push(projects.updateStep(workflowId, groupStep.id, {
             position: { x: groupStep.position_x, y: groupStep.position_y },
           }))
         }
@@ -624,7 +624,7 @@ async function handleUpdateStepPosition(
     const updatePromises: Promise<unknown>[] = []
 
     // Save step position to API
-    updatePromises.push(workflows.updateStep(workflowId, stepId, { position }))
+    updatePromises.push(projects.updateStep(workflowId, stepId, { position }))
 
     // Handle cascading group movements (if any)
     if (movedGroups && movedGroups.length > 0) {
@@ -642,7 +642,7 @@ async function handleUpdateStepPosition(
           groupStep.position_x += movedGroup.delta.x
           groupStep.position_y += movedGroup.delta.y
           // Save step position
-          updatePromises.push(workflows.updateStep(workflowId, groupStep.id, {
+          updatePromises.push(projects.updateStep(workflowId, groupStep.id, {
             position: { x: groupStep.position_x, y: groupStep.position_y },
           }))
         }
@@ -671,7 +671,7 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
 
   try {
     // Build edge request, only including defined fields
-    const edgeRequest: Parameters<typeof workflows.createEdge>[1] = {
+    const edgeRequest: Parameters<typeof projects.createEdge>[1] = {
       source_port: sourcePort,
       target_port: targetPort,
     }
@@ -690,7 +690,7 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
       edgeRequest.target_step_id = targetInfo.id
     }
 
-    const response = await workflows.createEdge(workflowId, edgeRequest)
+    const response = await projects.createEdge(workflowId, edgeRequest as Parameters<typeof projects.createEdge>[1])
     // Add edge to local state instead of reloading entire workflow
     if (workflow.value && response?.data) {
       workflow.value.edges = [...(workflow.value.edges || []), response.data]
@@ -705,7 +705,7 @@ async function handleDeleteEdge(edgeId: string) {
   if (!workflow.value || isReadonly.value) return
 
   try {
-    await workflows.deleteEdge(workflowId, edgeId)
+    await projects.deleteEdge(workflowId, edgeId)
     // Remove edge from local state
     if (workflow.value?.edges) {
       workflow.value.edges = workflow.value.edges.filter(e => e.id !== edgeId)
@@ -722,7 +722,7 @@ function prepareWorkflowData() {
   return {
     name: workflow.value.name,
     description: workflow.value.description,
-    input_schema: workflow.value.input_schema,
+    variables: workflow.value.variables,
     steps: (workflow.value.steps || []).map(s => ({
       id: s.id,
       name: s.name,
@@ -760,7 +760,7 @@ async function handleSave() {
 
   try {
     saving.value = true
-    const response = await workflows.save(workflowId, data)
+    const response = await projects.save(workflowId, data)
     // Update local state with response data instead of reloading
     if (response?.data && workflow.value) {
       workflow.value.version = response.data.version
@@ -783,7 +783,7 @@ async function handleSaveDraft() {
 
   try {
     saving.value = true
-    const response = await workflows.saveDraft(workflowId, data)
+    const response = await projects.saveDraft(workflowId, data)
     // Update local state with response data instead of reloading
     if (response?.data && workflow.value) {
       workflow.value.has_draft = true
@@ -812,7 +812,7 @@ async function handleDiscardDraft() {
 
   try {
     saving.value = true
-    const response = await workflows.discardDraft(workflowId)
+    const response = await projects.discardDraft(workflowId)
     // Update local state with response data instead of reloading
     // discardDraft returns the published version, so we need to update steps and edges
     if (response?.data && workflow.value) {
@@ -821,7 +821,7 @@ async function handleDiscardDraft() {
       workflow.value.edges = response.data.edges || []
       workflow.value.name = response.data.name
       workflow.value.description = response.data.description
-      workflow.value.input_schema = response.data.input_schema
+      workflow.value.variables = response.data.variables
       workflow.value.updated_at = response.data.updated_at
     }
     toast.success(t('workflows.draftDiscarded'))
@@ -885,7 +885,7 @@ async function handleSaveStep(formData: { name: string; type: string; config: Re
     }
 
     // Save to API (no reload needed)
-    await workflows.updateStep(workflowId, stepId, formData)
+    await projects.updateStep(workflowId, stepId, formData)
   } catch (e) {
     toast.error('Failed to save step', e instanceof Error ? e.message : undefined)
     // On error, reload to get correct state
@@ -903,7 +903,7 @@ async function handleDeleteStep() {
     saving.value = true
     const stepId = selectedStep.value.id
     clearSelection()
-    await workflows.deleteStep(workflowId, stepId)
+    await projects.deleteStep(workflowId, stepId)
 
     // Remove step and related edges from local state instead of reloading
     // Only removes edges directly connected to this step (source_step_id/target_step_id)
@@ -925,7 +925,7 @@ async function handlePasteStep(data: { type: StepType; name: string; config: Rec
   if (!workflow.value || isReadonly.value) return
 
   try {
-    const response = await workflows.createStep(workflowId, {
+    const response = await projects.createStep(workflowId, {
       name: data.name,
       type: data.type,
       config: data.config,
@@ -1051,7 +1051,7 @@ async function handleAutoLayout() {
 
       // Save to API
       const stepUpdatePromises = layoutResults.steps.map(result =>
-        workflows.updateStep(workflowId, result.stepId, {
+        projects.updateStep(workflowId, result.stepId, {
           position: { x: result.x, y: result.y },
         })
       )
@@ -1080,7 +1080,7 @@ async function handleAutoLayout() {
 
       // Save to API
       const updatePromises = layoutResults.map(result =>
-        workflows.updateStep(workflowId, result.stepId, {
+        projects.updateStep(workflowId, result.stepId, {
           position: { x: result.x, y: result.y },
         })
       )
@@ -1120,7 +1120,7 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
         }
       }
 
-      const response = await workflows.createStep(workflowId, {
+      const response = await projects.createStep(workflowId, {
         name: genStep.name,
         type: genStep.type as StepType,
         config: genStep.config || {},
@@ -1143,7 +1143,7 @@ async function handleApplyWorkflow(generatedWorkflow: GenerateWorkflowResponse) 
       console.log(`  Resolved: ${sourceId} -> ${targetId}`)
 
       if (sourceId && targetId) {
-        const edgeResponse = await workflows.createEdge(workflowId, {
+        const edgeResponse = await projects.createEdge(workflowId, {
           source_step_id: sourceId,
           target_step_id: targetId,
           source_port: genEdge.source_port,

@@ -336,7 +336,7 @@ function getPlanBadgeClass(plan: TenantPlan): string {
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ $t('admin.tenants.stats.totalWorkflows') }}</div>
-        <div class="stat-value">{{ overviewStats.total_workflows }}</div>
+        <div class="stat-value">{{ overviewStats.total_projects }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ $t('admin.tenants.stats.runsThisMonth') }}</div>
@@ -408,7 +408,7 @@ function getPlanBadgeClass(plan: TenantPlan): string {
               <div v-if="tenant.owner_email">{{ tenant.owner_email }}</div>
               <div v-else class="text-secondary">-</div>
             </td>
-            <td>{{ tenant.stats?.workflow_count || 0 }}</td>
+            <td>{{ tenant.stats?.project_count || 0 }}</td>
             <td>{{ tenant.stats?.runs_this_month || 0 }}</td>
             <td>{{ formatCost(tenant.stats?.cost_this_month || 0) }}</td>
             <td>

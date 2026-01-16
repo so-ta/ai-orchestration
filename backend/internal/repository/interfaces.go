@@ -8,21 +8,21 @@ import (
 	"github.com/souta/ai-orchestration/internal/domain"
 )
 
-// WorkflowRepository defines the interface for workflow persistence
-type WorkflowRepository interface {
-	Create(ctx context.Context, workflow *domain.Workflow) error
-	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
-	List(ctx context.Context, tenantID uuid.UUID, filter WorkflowFilter) ([]*domain.Workflow, int, error)
-	Update(ctx context.Context, workflow *domain.Workflow) error
+// ProjectRepository defines the interface for project persistence
+type ProjectRepository interface {
+	Create(ctx context.Context, project *domain.Project) error
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error)
+	List(ctx context.Context, tenantID uuid.UUID, filter ProjectFilter) ([]*domain.Project, int, error)
+	Update(ctx context.Context, project *domain.Project) error
 	Delete(ctx context.Context, tenantID, id uuid.UUID) error
-	GetWithStepsAndEdges(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
-	// GetSystemBySlug retrieves a system workflow by its slug (accessible across all tenants)
-	GetSystemBySlug(ctx context.Context, slug string) (*domain.Workflow, error)
+	GetWithStepsAndEdges(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error)
+	// GetSystemBySlug retrieves a system project by its slug (accessible across all tenants)
+	GetSystemBySlug(ctx context.Context, slug string) (*domain.Project, error)
 }
 
-// WorkflowFilter defines filtering options for workflow list
-type WorkflowFilter struct {
-	Status *domain.WorkflowStatus
+// ProjectFilter defines filtering options for project list
+type ProjectFilter struct {
+	Status *domain.ProjectStatus
 	Page   int
 	Limit  int
 }
@@ -30,27 +30,33 @@ type WorkflowFilter struct {
 // StepRepository defines the interface for step persistence
 type StepRepository interface {
 	Create(ctx context.Context, step *domain.Step) error
-	GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Step, error)
-	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error)
+	GetByID(ctx context.Context, tenantID, projectID, id uuid.UUID) (*domain.Step, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error)
 	ListByBlockGroup(ctx context.Context, tenantID, blockGroupID uuid.UUID) ([]*domain.Step, error)
+	// ListStartSteps returns all Start blocks in a project
+	ListStartSteps(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error)
+	// GetStartStepByTriggerType returns a Start block by its trigger type
+	GetStartStepByTriggerType(ctx context.Context, tenantID, projectID uuid.UUID, triggerType domain.StepTriggerType) (*domain.Step, error)
 	Update(ctx context.Context, step *domain.Step) error
-	Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error
+	Delete(ctx context.Context, tenantID, projectID, id uuid.UUID) error
 }
 
 // EdgeRepository defines the interface for edge persistence
 type EdgeRepository interface {
 	Create(ctx context.Context, edge *domain.Edge) error
-	GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Edge, error)
-	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error)
-	Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error
-	Exists(ctx context.Context, tenantID, workflowID, sourceID, targetID uuid.UUID) (bool, error)
+	GetByID(ctx context.Context, tenantID, projectID, id uuid.UUID) (*domain.Edge, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Edge, error)
+	Delete(ctx context.Context, tenantID, projectID, id uuid.UUID) error
+	Exists(ctx context.Context, tenantID, projectID, sourceID, targetID uuid.UUID) (bool, error)
 }
 
 // RunRepository defines the interface for run persistence
 type RunRepository interface {
 	Create(ctx context.Context, run *domain.Run) error
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Run, error)
-	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID, filter RunFilter) ([]*domain.Run, int, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID, filter RunFilter) ([]*domain.Run, int, error)
+	// ListByStartStep returns runs for a specific Start block
+	ListByStartStep(ctx context.Context, tenantID, projectID, startStepID uuid.UUID, filter RunFilter) ([]*domain.Run, int, error)
 	Update(ctx context.Context, run *domain.Run) error
 	GetWithStepRuns(ctx context.Context, tenantID, id uuid.UUID) (*domain.Run, error)
 }
@@ -59,6 +65,7 @@ type RunRepository interface {
 type RunFilter struct {
 	Status      *domain.RunStatus
 	TriggeredBy *domain.TriggerType
+	StartStepID *uuid.UUID // Filter by specific Start block
 	Page        int
 	Limit       int
 }
@@ -84,12 +91,12 @@ type StepRunRepository interface {
 	ListByStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.StepRun, error)
 }
 
-// WorkflowVersionRepository defines the interface for workflow version persistence
-type WorkflowVersionRepository interface {
-	Create(ctx context.Context, version *domain.WorkflowVersion) error
-	GetByWorkflowAndVersion(ctx context.Context, workflowID uuid.UUID, version int) (*domain.WorkflowVersion, error)
-	GetLatestByWorkflow(ctx context.Context, workflowID uuid.UUID) (*domain.WorkflowVersion, error)
-	ListByWorkflow(ctx context.Context, workflowID uuid.UUID) ([]*domain.WorkflowVersion, error)
+// ProjectVersionRepository defines the interface for project version persistence
+type ProjectVersionRepository interface {
+	Create(ctx context.Context, version *domain.ProjectVersion) error
+	GetByProjectAndVersion(ctx context.Context, projectID uuid.UUID, version int) (*domain.ProjectVersion, error)
+	GetLatestByProject(ctx context.Context, projectID uuid.UUID) (*domain.ProjectVersion, error)
+	ListByProject(ctx context.Context, projectID uuid.UUID) ([]*domain.ProjectVersion, error)
 }
 
 // ScheduleRepository defines the interface for schedule persistence
@@ -97,7 +104,9 @@ type ScheduleRepository interface {
 	Create(ctx context.Context, schedule *domain.Schedule) error
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Schedule, error)
 	ListByTenant(ctx context.Context, tenantID uuid.UUID, filter ScheduleFilter) ([]*domain.Schedule, int, error)
-	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Schedule, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Schedule, error)
+	// ListByStartStep returns schedules for a specific Start block
+	ListByStartStep(ctx context.Context, tenantID, projectID, startStepID uuid.UUID) ([]*domain.Schedule, error)
 	Update(ctx context.Context, schedule *domain.Schedule) error
 	Delete(ctx context.Context, tenantID, id uuid.UUID) error
 	// GetDueSchedules returns schedules that are due to run
@@ -106,30 +115,11 @@ type ScheduleRepository interface {
 
 // ScheduleFilter defines filtering options for schedule list
 type ScheduleFilter struct {
-	WorkflowID *uuid.UUID
-	Status     *domain.ScheduleStatus
-	Page       int
-	Limit      int
-}
-
-// WebhookRepository defines the interface for webhook persistence
-type WebhookRepository interface {
-	Create(ctx context.Context, webhook *domain.Webhook) error
-	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Webhook, error)
-	// GetByIDForTrigger retrieves webhook by ID without tenant check (for public trigger endpoint)
-	GetByIDForTrigger(ctx context.Context, id uuid.UUID) (*domain.Webhook, error)
-	ListByTenant(ctx context.Context, tenantID uuid.UUID, filter WebhookFilter) ([]*domain.Webhook, int, error)
-	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Webhook, error)
-	Update(ctx context.Context, webhook *domain.Webhook) error
-	Delete(ctx context.Context, tenantID, id uuid.UUID) error
-}
-
-// WebhookFilter defines filtering options for webhook list
-type WebhookFilter struct {
-	WorkflowID *uuid.UUID
-	Enabled    *bool
-	Page       int
-	Limit      int
+	ProjectID   *uuid.UUID
+	StartStepID *uuid.UUID // Filter by specific Start block
+	Status      *domain.ScheduleStatus
+	Page        int
+	Limit       int
 }
 
 // AuditLogRepository defines the interface for audit log persistence
@@ -196,7 +186,7 @@ type BlockVersionRepository interface {
 type BlockGroupRepository interface {
 	Create(ctx context.Context, group *domain.BlockGroup) error
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroup, error)
-	ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.BlockGroup, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.BlockGroup, error)
 	ListByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*domain.BlockGroup, error)
 	Update(ctx context.Context, group *domain.BlockGroup) error
 	Delete(ctx context.Context, tenantID, id uuid.UUID) error
@@ -263,12 +253,12 @@ type CopilotSessionRepository interface {
 	Create(ctx context.Context, session *domain.CopilotSession) error
 	// GetByID retrieves a copilot session by ID
 	GetByID(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.CopilotSession, error)
-	// GetActiveByUserAndWorkflow retrieves the active session for a user and workflow
-	GetActiveByUserAndWorkflow(ctx context.Context, tenantID uuid.UUID, userID string, workflowID uuid.UUID) (*domain.CopilotSession, error)
+	// GetActiveByUserAndProject retrieves the active session for a user and project
+	GetActiveByUserAndProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error)
 	// GetWithMessages retrieves a session with all its messages
 	GetWithMessages(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.CopilotSession, error)
-	// ListByUserAndWorkflow retrieves all sessions for a user and workflow
-	ListByUserAndWorkflow(ctx context.Context, tenantID uuid.UUID, userID string, workflowID uuid.UUID) ([]*domain.CopilotSession, error)
+	// ListByUserAndProject retrieves all sessions for a user and project
+	ListByUserAndProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) ([]*domain.CopilotSession, error)
 	// Update updates a copilot session
 	Update(ctx context.Context, session *domain.CopilotSession) error
 	// AddMessage adds a message to a session
@@ -287,8 +277,8 @@ type UsageRepository interface {
 	GetSummary(ctx context.Context, tenantID uuid.UUID, period string) (*domain.UsageSummary, error)
 	// GetDaily retrieves daily usage data for a date range
 	GetDaily(ctx context.Context, tenantID uuid.UUID, start, end time.Time) ([]domain.DailyUsage, error)
-	// GetByWorkflow retrieves usage data grouped by workflow
-	GetByWorkflow(ctx context.Context, tenantID uuid.UUID, period string) ([]domain.WorkflowUsage, error)
+	// GetByProject retrieves usage data grouped by project
+	GetByProject(ctx context.Context, tenantID uuid.UUID, period string) ([]domain.ProjectUsage, error)
 	// GetByModel retrieves usage data grouped by model
 	GetByModel(ctx context.Context, tenantID uuid.UUID, period string) (map[string]domain.ModelUsage, error)
 	// GetByRun retrieves all usage records for a specific run
@@ -296,7 +286,7 @@ type UsageRepository interface {
 	// AggregateDailyData aggregates raw usage data into daily aggregates
 	AggregateDailyData(ctx context.Context, date time.Time) error
 	// GetCurrentSpend retrieves current spend for budget checking
-	GetCurrentSpend(ctx context.Context, tenantID uuid.UUID, workflowID *uuid.UUID, budgetType domain.BudgetType) (float64, error)
+	GetCurrentSpend(ctx context.Context, tenantID uuid.UUID, projectID *uuid.UUID, budgetType domain.BudgetType) (float64, error)
 }
 
 // BudgetRepository defines the interface for budget persistence
@@ -307,8 +297,8 @@ type BudgetRepository interface {
 	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.UsageBudget, error)
 	// List retrieves all budgets for a tenant
 	List(ctx context.Context, tenantID uuid.UUID) ([]*domain.UsageBudget, error)
-	// GetByWorkflow retrieves budget for a specific workflow
-	GetByWorkflow(ctx context.Context, tenantID uuid.UUID, workflowID *uuid.UUID, budgetType domain.BudgetType) (*domain.UsageBudget, error)
+	// GetByProject retrieves budget for a specific project
+	GetByProject(ctx context.Context, tenantID uuid.UUID, projectID *uuid.UUID, budgetType domain.BudgetType) (*domain.UsageBudget, error)
 	// Update updates a budget
 	Update(ctx context.Context, budget *domain.UsageBudget) error
 	// Delete deletes a budget

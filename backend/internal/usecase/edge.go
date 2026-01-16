@@ -10,25 +10,25 @@ import (
 
 // EdgeUsecase handles edge business logic
 type EdgeUsecase struct {
-	workflowRepo        repository.WorkflowRepository
+	projectRepo         repository.ProjectRepository
 	stepRepo            repository.StepRepository
 	edgeRepo            repository.EdgeRepository
 	blockGroupRepo      repository.BlockGroupRepository
 	blockDefinitionRepo repository.BlockDefinitionRepository
-	workflowChecker     *WorkflowChecker
+	projectChecker      *ProjectChecker
 }
 
 // NewEdgeUsecase creates a new EdgeUsecase
 func NewEdgeUsecase(
-	workflowRepo repository.WorkflowRepository,
+	projectRepo repository.ProjectRepository,
 	stepRepo repository.StepRepository,
 	edgeRepo repository.EdgeRepository,
 ) *EdgeUsecase {
 	return &EdgeUsecase{
-		workflowRepo:    workflowRepo,
-		stepRepo:        stepRepo,
-		edgeRepo:        edgeRepo,
-		workflowChecker: NewWorkflowChecker(workflowRepo),
+		projectRepo:    projectRepo,
+		stepRepo:       stepRepo,
+		edgeRepo:       edgeRepo,
+		projectChecker: NewProjectChecker(projectRepo),
 	}
 }
 
@@ -49,7 +49,7 @@ func (u *EdgeUsecase) WithBlockDefinitionRepo(repo repository.BlockDefinitionRep
 // Either TargetStepID or TargetBlockGroupID must be provided
 type CreateEdgeInput struct {
 	TenantID           uuid.UUID
-	WorkflowID         uuid.UUID
+	ProjectID          uuid.UUID
 	SourceStepID       *uuid.UUID
 	TargetStepID       *uuid.UUID
 	SourceBlockGroupID *uuid.UUID
@@ -61,8 +61,8 @@ type CreateEdgeInput struct {
 
 // Create creates a new edge
 func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domain.Edge, error) {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -80,7 +80,7 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 	var sourceStep *domain.Step
 	var sourceBlockGroup *domain.BlockGroup
 	if input.SourceStepID != nil {
-		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, *input.SourceStepID)
+		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.SourceStepID)
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +97,7 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 	var targetStep *domain.Step
 	var targetBlockGroup *domain.BlockGroup
 	if input.TargetStepID != nil {
-		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, *input.TargetStepID)
+		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.TargetStepID)
 		if err != nil {
 			return nil, err
 		}
@@ -127,29 +127,29 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 	var newEdge *domain.Edge
 	if input.SourceStepID != nil && input.TargetStepID != nil {
 		// Step to step
-		newEdge = domain.NewEdgeWithPort(input.TenantID, input.WorkflowID, *input.SourceStepID, *input.TargetStepID, input.SourcePort, input.TargetPort, input.Condition)
+		newEdge = domain.NewEdgeWithPort(input.TenantID, input.ProjectID, *input.SourceStepID, *input.TargetStepID, input.SourcePort, input.TargetPort, input.Condition)
 	} else if input.SourceStepID != nil && input.TargetBlockGroupID != nil {
 		// Step to group
-		newEdge = domain.NewEdgeToGroup(input.TenantID, input.WorkflowID, *input.SourceStepID, *input.TargetBlockGroupID, input.SourcePort)
+		newEdge = domain.NewEdgeToGroup(input.TenantID, input.ProjectID, *input.SourceStepID, *input.TargetBlockGroupID, input.SourcePort)
 	} else if input.SourceBlockGroupID != nil && input.TargetStepID != nil {
 		// Group to step
-		newEdge = domain.NewEdgeFromGroup(input.TenantID, input.WorkflowID, *input.SourceBlockGroupID, *input.TargetStepID, input.TargetPort)
+		newEdge = domain.NewEdgeFromGroup(input.TenantID, input.ProjectID, *input.SourceBlockGroupID, *input.TargetStepID, input.TargetPort)
 	} else if input.SourceBlockGroupID != nil && input.TargetBlockGroupID != nil {
 		// Group to group
-		newEdge = domain.NewGroupToGroupEdge(input.TenantID, input.WorkflowID, *input.SourceBlockGroupID, *input.TargetBlockGroupID)
+		newEdge = domain.NewGroupToGroupEdge(input.TenantID, input.ProjectID, *input.SourceBlockGroupID, *input.TargetBlockGroupID)
 	}
 
 	// Only check for cycles on step-to-step edges for now
 	// TODO: Extend cycle detection to handle groups
 	if input.SourceStepID != nil && input.TargetStepID != nil {
-		edges, err := u.edgeRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
+		edges, err := u.edgeRepo.ListByProject(ctx, input.TenantID, input.ProjectID)
 		if err != nil {
 			return nil, err
 		}
 
 		allEdges := append(edges, newEdge)
 
-		steps, err := u.stepRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
+		steps, err := u.stepRepo.ListByProject(ctx, input.TenantID, input.ProjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -207,23 +207,23 @@ func wouldCreateCycle(steps []domain.Step, edges []domain.Edge, source, target u
 	return dfs(target)
 }
 
-// List lists edges for a workflow
-func (u *EdgeUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error) {
-	// Verify workflow exists
-	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
+// List lists edges for a project
+func (u *EdgeUsecase) List(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Edge, error) {
+	// Verify project exists
+	if _, err := u.projectChecker.CheckExists(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
-	return u.edgeRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	return u.edgeRepo.ListByProject(ctx, tenantID, projectID)
 }
 
 // Delete deletes an edge
-func (u *EdgeUsecase) Delete(ctx context.Context, tenantID, workflowID, edgeID uuid.UUID) error {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
+func (u *EdgeUsecase) Delete(ctx context.Context, tenantID, projectID, edgeID uuid.UUID) error {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, tenantID, projectID); err != nil {
 		return err
 	}
 
-	return u.edgeRepo.Delete(ctx, tenantID, workflowID, edgeID)
+	return u.edgeRepo.Delete(ctx, tenantID, projectID, edgeID)
 }
 
 // validateSourcePort validates that the source port exists in the block definition

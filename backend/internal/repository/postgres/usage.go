@@ -26,7 +26,7 @@ func NewUsageRepository(pool *pgxpool.Pool) *UsageRepository {
 func (r *UsageRepository) Create(ctx context.Context, record *domain.UsageRecord) error {
 	query := `
 		INSERT INTO usage_records (
-			id, tenant_id, workflow_id, run_id, step_run_id,
+			id, tenant_id, project_id, run_id, step_run_id,
 			provider, model, operation,
 			input_tokens, output_tokens, total_tokens,
 			input_cost_usd, output_cost_usd, total_cost_usd,
@@ -35,7 +35,7 @@ func (r *UsageRepository) Create(ctx context.Context, record *domain.UsageRecord
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		record.ID, record.TenantID, record.WorkflowID, record.RunID, record.StepRunID,
+		record.ID, record.TenantID, record.ProjectID, record.RunID, record.StepRunID,
 		record.Provider, record.Model, record.Operation,
 		record.InputTokens, record.OutputTokens, record.TotalTokens,
 		record.InputCostUSD, record.OutputCostUSD, record.TotalCostUSD,
@@ -47,7 +47,7 @@ func (r *UsageRepository) Create(ctx context.Context, record *domain.UsageRecord
 // GetByID retrieves a usage record by ID
 func (r *UsageRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.UsageRecord, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, run_id, step_run_id,
+		SELECT id, tenant_id, project_id, run_id, step_run_id,
 		       provider, model, operation,
 		       input_tokens, output_tokens, total_tokens,
 		       input_cost_usd, output_cost_usd, total_cost_usd,
@@ -57,7 +57,7 @@ func (r *UsageRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Us
 	`
 	var record domain.UsageRecord
 	err := r.pool.QueryRow(ctx, query, id).Scan(
-		&record.ID, &record.TenantID, &record.WorkflowID, &record.RunID, &record.StepRunID,
+		&record.ID, &record.TenantID, &record.ProjectID, &record.RunID, &record.StepRunID,
 		&record.Provider, &record.Model, &record.Operation,
 		&record.InputTokens, &record.OutputTokens, &record.TotalTokens,
 		&record.InputCostUSD, &record.OutputCostUSD, &record.TotalCostUSD,
@@ -182,19 +182,19 @@ func (r *UsageRepository) GetDaily(ctx context.Context, tenantID uuid.UUID, star
 	return results, nil
 }
 
-// GetByWorkflow retrieves usage data grouped by workflow
-func (r *UsageRepository) GetByWorkflow(ctx context.Context, tenantID uuid.UUID, period string) ([]domain.WorkflowUsage, error) {
+// GetByProject retrieves usage data grouped by project
+func (r *UsageRepository) GetByProject(ctx context.Context, tenantID uuid.UUID, period string) ([]domain.ProjectUsage, error) {
 	start, end := getPeriodRange(period)
 
 	query := `
-		SELECT u.workflow_id, COALESCE(w.name, 'Unknown') as workflow_name,
+		SELECT u.project_id, COALESCE(p.name, 'Unknown') as project_name,
 		       COALESCE(SUM(u.total_cost_usd), 0) as total_cost,
 		       COUNT(*) as total_requests,
 		       COALESCE(SUM(u.total_tokens), 0) as total_tokens
 		FROM usage_records u
-		LEFT JOIN workflows w ON u.workflow_id = w.id
-		WHERE u.tenant_id = $1 AND u.created_at >= $2 AND u.created_at < $3 AND u.workflow_id IS NOT NULL
-		GROUP BY u.workflow_id, w.name
+		LEFT JOIN projects p ON u.project_id = p.id
+		WHERE u.tenant_id = $1 AND u.created_at >= $2 AND u.created_at < $3 AND u.project_id IS NOT NULL
+		GROUP BY u.project_id, p.name
 		ORDER BY total_cost DESC
 	`
 
@@ -204,10 +204,10 @@ func (r *UsageRepository) GetByWorkflow(ctx context.Context, tenantID uuid.UUID,
 	}
 	defer rows.Close()
 
-	var results []domain.WorkflowUsage
+	var results []domain.ProjectUsage
 	for rows.Next() {
-		var usage domain.WorkflowUsage
-		if err := rows.Scan(&usage.WorkflowID, &usage.WorkflowName, &usage.TotalCostUSD, &usage.TotalRequests, &usage.TotalTokens); err != nil {
+		var usage domain.ProjectUsage
+		if err := rows.Scan(&usage.ProjectID, &usage.ProjectName, &usage.TotalCostUSD, &usage.TotalRequests, &usage.TotalTokens); err != nil {
 			return nil, err
 		}
 		results = append(results, usage)
@@ -254,7 +254,7 @@ func (r *UsageRepository) GetByModel(ctx context.Context, tenantID uuid.UUID, pe
 // GetByRun retrieves all usage records for a specific run
 func (r *UsageRepository) GetByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]domain.UsageRecord, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, run_id, step_run_id,
+		SELECT id, tenant_id, project_id, run_id, step_run_id,
 		       provider, model, operation,
 		       input_tokens, output_tokens, total_tokens,
 		       input_cost_usd, output_cost_usd, total_cost_usd,
@@ -274,7 +274,7 @@ func (r *UsageRepository) GetByRun(ctx context.Context, tenantID, runID uuid.UUI
 	for rows.Next() {
 		var record domain.UsageRecord
 		if err := rows.Scan(
-			&record.ID, &record.TenantID, &record.WorkflowID, &record.RunID, &record.StepRunID,
+			&record.ID, &record.TenantID, &record.ProjectID, &record.RunID, &record.StepRunID,
 			&record.Provider, &record.Model, &record.Operation,
 			&record.InputTokens, &record.OutputTokens, &record.TotalTokens,
 			&record.InputCostUSD, &record.OutputCostUSD, &record.TotalCostUSD,
@@ -294,7 +294,7 @@ func (r *UsageRepository) AggregateDailyData(ctx context.Context, date time.Time
 
 	query := `
 		INSERT INTO usage_daily_aggregates (
-			id, tenant_id, workflow_id, date, provider, model,
+			id, tenant_id, project_id, date, provider, model,
 			total_requests, successful_requests, failed_requests,
 			total_input_tokens, total_output_tokens, total_cost_usd,
 			avg_latency_ms, min_latency_ms, max_latency_ms,
@@ -303,7 +303,7 @@ func (r *UsageRepository) AggregateDailyData(ctx context.Context, date time.Time
 		SELECT
 			gen_random_uuid(),
 			tenant_id,
-			workflow_id,
+			project_id,
 			DATE(created_at),
 			provider,
 			model,
@@ -320,8 +320,8 @@ func (r *UsageRepository) AggregateDailyData(ctx context.Context, date time.Time
 			NOW()
 		FROM usage_records
 		WHERE DATE(created_at) = $1
-		GROUP BY tenant_id, workflow_id, DATE(created_at), provider, model
-		ON CONFLICT (tenant_id, COALESCE(workflow_id, '00000000-0000-0000-0000-000000000000'::uuid), date, provider, model)
+		GROUP BY tenant_id, project_id, DATE(created_at), provider, model
+		ON CONFLICT (tenant_id, COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid), date, provider, model)
 		DO UPDATE SET
 			total_requests = EXCLUDED.total_requests,
 			successful_requests = EXCLUDED.successful_requests,
@@ -339,7 +339,7 @@ func (r *UsageRepository) AggregateDailyData(ctx context.Context, date time.Time
 }
 
 // GetCurrentSpend retrieves current spend for budget checking
-func (r *UsageRepository) GetCurrentSpend(ctx context.Context, tenantID uuid.UUID, workflowID *uuid.UUID, budgetType domain.BudgetType) (float64, error) {
+func (r *UsageRepository) GetCurrentSpend(ctx context.Context, tenantID uuid.UUID, projectID *uuid.UUID, budgetType domain.BudgetType) (float64, error) {
 	var start time.Time
 	now := time.Now()
 
@@ -355,7 +355,7 @@ func (r *UsageRepository) GetCurrentSpend(ctx context.Context, tenantID uuid.UUI
 	var query string
 	var args []interface{}
 
-	if workflowID == nil {
+	if projectID == nil {
 		query = `
 			SELECT COALESCE(SUM(total_cost_usd), 0)
 			FROM usage_records
@@ -366,9 +366,9 @@ func (r *UsageRepository) GetCurrentSpend(ctx context.Context, tenantID uuid.UUI
 		query = `
 			SELECT COALESCE(SUM(total_cost_usd), 0)
 			FROM usage_records
-			WHERE tenant_id = $1 AND workflow_id = $2 AND created_at >= $3
+			WHERE tenant_id = $1 AND project_id = $2 AND created_at >= $3
 		`
-		args = []interface{}{tenantID, workflowID, start}
+		args = []interface{}{tenantID, projectID, start}
 	}
 
 	var spend float64
@@ -394,13 +394,13 @@ func NewBudgetRepository(pool *pgxpool.Pool) *BudgetRepository {
 func (r *BudgetRepository) Create(ctx context.Context, budget *domain.UsageBudget) error {
 	query := `
 		INSERT INTO usage_budgets (
-			id, tenant_id, workflow_id, budget_type, budget_amount_usd,
+			id, tenant_id, project_id, budget_type, budget_amount_usd,
 			alert_threshold, enabled, created_at, updated_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		budget.ID, budget.TenantID, budget.WorkflowID, budget.BudgetType,
+		budget.ID, budget.TenantID, budget.ProjectID, budget.BudgetType,
 		budget.BudgetAmountUSD, budget.AlertThreshold, budget.Enabled,
 		budget.CreatedAt, budget.UpdatedAt,
 	)
@@ -410,14 +410,14 @@ func (r *BudgetRepository) Create(ctx context.Context, budget *domain.UsageBudge
 // GetByID retrieves a budget by ID
 func (r *BudgetRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.UsageBudget, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, budget_type, budget_amount_usd,
+		SELECT id, tenant_id, project_id, budget_type, budget_amount_usd,
 		       alert_threshold, enabled, created_at, updated_at
 		FROM usage_budgets
 		WHERE id = $1 AND tenant_id = $2
 	`
 	var budget domain.UsageBudget
 	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
-		&budget.ID, &budget.TenantID, &budget.WorkflowID, &budget.BudgetType,
+		&budget.ID, &budget.TenantID, &budget.ProjectID, &budget.BudgetType,
 		&budget.BudgetAmountUSD, &budget.AlertThreshold, &budget.Enabled,
 		&budget.CreatedAt, &budget.UpdatedAt,
 	)
@@ -433,7 +433,7 @@ func (r *BudgetRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) 
 // List retrieves all budgets for a tenant
 func (r *BudgetRepository) List(ctx context.Context, tenantID uuid.UUID) ([]*domain.UsageBudget, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, budget_type, budget_amount_usd,
+		SELECT id, tenant_id, project_id, budget_type, budget_amount_usd,
 		       alert_threshold, enabled, created_at, updated_at
 		FROM usage_budgets
 		WHERE tenant_id = $1
@@ -450,7 +450,7 @@ func (r *BudgetRepository) List(ctx context.Context, tenantID uuid.UUID) ([]*dom
 	for rows.Next() {
 		var budget domain.UsageBudget
 		if err := rows.Scan(
-			&budget.ID, &budget.TenantID, &budget.WorkflowID, &budget.BudgetType,
+			&budget.ID, &budget.TenantID, &budget.ProjectID, &budget.BudgetType,
 			&budget.BudgetAmountUSD, &budget.AlertThreshold, &budget.Enabled,
 			&budget.CreatedAt, &budget.UpdatedAt,
 		); err != nil {
@@ -462,32 +462,32 @@ func (r *BudgetRepository) List(ctx context.Context, tenantID uuid.UUID) ([]*dom
 	return budgets, nil
 }
 
-// GetByWorkflow retrieves budget for a specific workflow
-func (r *BudgetRepository) GetByWorkflow(ctx context.Context, tenantID uuid.UUID, workflowID *uuid.UUID, budgetType domain.BudgetType) (*domain.UsageBudget, error) {
+// GetByProject retrieves budget for a specific project
+func (r *BudgetRepository) GetByProject(ctx context.Context, tenantID uuid.UUID, projectID *uuid.UUID, budgetType domain.BudgetType) (*domain.UsageBudget, error) {
 	var query string
 	var args []interface{}
 
-	if workflowID == nil {
+	if projectID == nil {
 		query = `
-			SELECT id, tenant_id, workflow_id, budget_type, budget_amount_usd,
+			SELECT id, tenant_id, project_id, budget_type, budget_amount_usd,
 			       alert_threshold, enabled, created_at, updated_at
 			FROM usage_budgets
-			WHERE tenant_id = $1 AND workflow_id IS NULL AND budget_type = $2
+			WHERE tenant_id = $1 AND project_id IS NULL AND budget_type = $2
 		`
 		args = []interface{}{tenantID, budgetType}
 	} else {
 		query = `
-			SELECT id, tenant_id, workflow_id, budget_type, budget_amount_usd,
+			SELECT id, tenant_id, project_id, budget_type, budget_amount_usd,
 			       alert_threshold, enabled, created_at, updated_at
 			FROM usage_budgets
-			WHERE tenant_id = $1 AND workflow_id = $2 AND budget_type = $3
+			WHERE tenant_id = $1 AND project_id = $2 AND budget_type = $3
 		`
-		args = []interface{}{tenantID, workflowID, budgetType}
+		args = []interface{}{tenantID, projectID, budgetType}
 	}
 
 	var budget domain.UsageBudget
 	err := r.pool.QueryRow(ctx, query, args...).Scan(
-		&budget.ID, &budget.TenantID, &budget.WorkflowID, &budget.BudgetType,
+		&budget.ID, &budget.TenantID, &budget.ProjectID, &budget.BudgetType,
 		&budget.BudgetAmountUSD, &budget.AlertThreshold, &budget.Enabled,
 		&budget.CreatedAt, &budget.UpdatedAt,
 	)

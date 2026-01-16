@@ -16,48 +16,50 @@ const (
 	ScheduleStatusDisabled ScheduleStatus = "disabled"
 )
 
-// Schedule represents a scheduled workflow execution
+// Schedule represents a scheduled project execution
 type Schedule struct {
-	ID              uuid.UUID       `json:"id"`
-	TenantID        uuid.UUID       `json:"tenant_id"`
-	WorkflowID      uuid.UUID       `json:"workflow_id"`
-	WorkflowVersion int             `json:"workflow_version"`
-	Name            string          `json:"name"`
-	Description     string          `json:"description,omitempty"`
-	CronExpression  string          `json:"cron_expression"`
-	Timezone        string          `json:"timezone"`
-	Input           json.RawMessage `json:"input,omitempty"`
-	Status          ScheduleStatus  `json:"status"`
-	NextRunAt       *time.Time      `json:"next_run_at,omitempty"`
-	LastRunAt       *time.Time      `json:"last_run_at,omitempty"`
-	LastRunID       *uuid.UUID      `json:"last_run_id,omitempty"`
-	RunCount        int             `json:"run_count"`
-	CreatedBy       *uuid.UUID      `json:"created_by,omitempty"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
+	ID             uuid.UUID       `json:"id"`
+	TenantID       uuid.UUID       `json:"tenant_id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	ProjectVersion int             `json:"project_version"`
+	StartStepID    uuid.UUID       `json:"start_step_id"` // Required: which Start block this schedule triggers
+	Name           string          `json:"name"`
+	Description    string          `json:"description,omitempty"`
+	CronExpression string          `json:"cron_expression"`
+	Timezone       string          `json:"timezone"`
+	Input          json.RawMessage `json:"input,omitempty"`
+	Status         ScheduleStatus  `json:"status"`
+	NextRunAt      *time.Time      `json:"next_run_at,omitempty"`
+	LastRunAt      *time.Time      `json:"last_run_at,omitempty"`
+	LastRunID      *uuid.UUID      `json:"last_run_id,omitempty"`
+	RunCount       int             `json:"run_count"`
+	CreatedBy      *uuid.UUID      `json:"created_by,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 }
 
 // NewSchedule creates a new schedule
 func NewSchedule(
-	tenantID, workflowID uuid.UUID,
-	workflowVersion int,
+	tenantID, projectID, startStepID uuid.UUID,
+	projectVersion int,
 	name, cronExpression, timezone string,
 	input json.RawMessage,
 ) *Schedule {
 	now := time.Now().UTC()
 	return &Schedule{
-		ID:              uuid.New(),
-		TenantID:        tenantID,
-		WorkflowID:      workflowID,
-		WorkflowVersion: workflowVersion,
-		Name:            name,
-		CronExpression:  cronExpression,
-		Timezone:        timezone,
-		Input:           input,
-		Status:          ScheduleStatusActive,
-		RunCount:        0,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:             uuid.New(),
+		TenantID:       tenantID,
+		ProjectID:      projectID,
+		ProjectVersion: projectVersion,
+		StartStepID:    startStepID,
+		Name:           name,
+		CronExpression: cronExpression,
+		Timezone:       timezone,
+		Input:          input,
+		Status:         ScheduleStatusActive,
+		RunCount:       0,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 }
 

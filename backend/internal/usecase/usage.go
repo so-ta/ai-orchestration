@@ -43,7 +43,7 @@ func (u *UsageUsecase) GetSummary(ctx context.Context, input GetSummaryInput) (*
 	}
 
 	// Add budget status if available
-	budget, err := u.budgetRepo.GetByWorkflow(ctx, input.TenantID, nil, domain.BudgetTypeMonthly)
+	budget, err := u.budgetRepo.GetByProject(ctx, input.TenantID, nil, domain.BudgetTypeMonthly)
 	if err == nil && budget != nil && budget.Enabled {
 		currentSpend, err := u.usageRepo.GetCurrentSpend(ctx, input.TenantID, nil, domain.BudgetTypeMonthly)
 		if err == nil {
@@ -74,15 +74,15 @@ func (u *UsageUsecase) GetDaily(ctx context.Context, input GetDailyInput) ([]dom
 	return u.usageRepo.GetDaily(ctx, input.TenantID, input.Start, input.End)
 }
 
-// GetByWorkflowInput represents input for GetByWorkflow
-type GetByWorkflowInput struct {
+// GetByProjectInput represents input for GetByProject
+type GetByProjectInput struct {
 	TenantID uuid.UUID
 	Period   string
 }
 
-// GetByWorkflow retrieves usage data grouped by workflow
-func (u *UsageUsecase) GetByWorkflow(ctx context.Context, input GetByWorkflowInput) ([]domain.WorkflowUsage, error) {
-	return u.usageRepo.GetByWorkflow(ctx, input.TenantID, input.Period)
+// GetByProject retrieves usage data grouped by project
+func (u *UsageUsecase) GetByProject(ctx context.Context, input GetByProjectInput) ([]domain.ProjectUsage, error) {
+	return u.usageRepo.GetByProject(ctx, input.TenantID, input.Period)
 }
 
 // GetByModelInput represents input for GetByModel
@@ -120,7 +120,7 @@ func (u *UsageUsecase) ListBudgets(ctx context.Context, input ListBudgetsInput) 
 // CreateBudgetInput represents input for CreateBudget
 type CreateBudgetInput struct {
 	TenantID        uuid.UUID
-	WorkflowID      *uuid.UUID
+	ProjectID       *uuid.UUID
 	BudgetType      domain.BudgetType
 	BudgetAmountUSD float64
 	AlertThreshold  float64
@@ -129,7 +129,7 @@ type CreateBudgetInput struct {
 // CreateBudget creates a new budget
 func (u *UsageUsecase) CreateBudget(ctx context.Context, input CreateBudgetInput) (*domain.UsageBudget, error) {
 	// Check if budget already exists
-	existing, err := u.budgetRepo.GetByWorkflow(ctx, input.TenantID, input.WorkflowID, input.BudgetType)
+	existing, err := u.budgetRepo.GetByProject(ctx, input.TenantID, input.ProjectID, input.BudgetType)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func (u *UsageUsecase) CreateBudget(ctx context.Context, input CreateBudgetInput
 
 	budget := domain.NewUsageBudget(
 		input.TenantID,
-		input.WorkflowID,
+		input.ProjectID,
 		input.BudgetType,
 		input.BudgetAmountUSD,
 		input.AlertThreshold,

@@ -64,11 +64,43 @@ func (t StepType) IsValid() bool {
 	return false
 }
 
+// StepTriggerType represents the trigger type for a Start block
+type StepTriggerType string
+
+const (
+	StepTriggerTypeManual   StepTriggerType = "manual"
+	StepTriggerTypeWebhook  StepTriggerType = "webhook"
+	StepTriggerTypeSchedule StepTriggerType = "schedule"
+	StepTriggerTypeSlack    StepTriggerType = "slack"
+	StepTriggerTypeEmail    StepTriggerType = "email"
+)
+
+// ValidStepTriggerTypes returns all valid step trigger types
+func ValidStepTriggerTypes() []StepTriggerType {
+	return []StepTriggerType{
+		StepTriggerTypeManual,
+		StepTriggerTypeWebhook,
+		StepTriggerTypeSchedule,
+		StepTriggerTypeSlack,
+		StepTriggerTypeEmail,
+	}
+}
+
+// IsValid checks if the step trigger type is valid
+func (t StepTriggerType) IsValid() bool {
+	for _, valid := range ValidStepTriggerTypes() {
+		if t == valid {
+			return true
+		}
+	}
+	return false
+}
+
 // Step represents a node in the DAG
 type Step struct {
 	ID           uuid.UUID       `json:"id"`
 	TenantID     uuid.UUID       `json:"tenant_id"`
-	WorkflowID   uuid.UUID       `json:"workflow_id"`
+	ProjectID    uuid.UUID       `json:"project_id"`
 	Name         string          `json:"name"`
 	Type         StepType        `json:"type"`
 	Config       json.RawMessage `json:"config"`
@@ -76,6 +108,10 @@ type Step struct {
 	GroupRole    string          `json:"group_role,omitempty"`     // Role within block group (body, catch, then, else, etc.)
 	PositionX    int             `json:"position_x"`
 	PositionY    int             `json:"position_y"`
+
+	// Trigger configuration (only for Start blocks)
+	TriggerType   *StepTriggerType `json:"trigger_type,omitempty"`   // manual, webhook, schedule, slack, email
+	TriggerConfig json.RawMessage  `json:"trigger_config,omitempty"` // Trigger-specific configuration
 
 	// Block definition reference (for registry-based blocks)
 	BlockDefinitionID *uuid.UUID `json:"block_definition_id,omitempty"`
@@ -94,12 +130,12 @@ func (s *Step) GetCredentialBindings() (map[string]uuid.UUID, error) {
 }
 
 // NewStep creates a new step
-func NewStep(tenantID, workflowID uuid.UUID, name string, stepType StepType, config json.RawMessage) *Step {
+func NewStep(tenantID, projectID uuid.UUID, name string, stepType StepType, config json.RawMessage) *Step {
 	now := time.Now().UTC()
 	return &Step{
 		ID:                 uuid.New(),
 		TenantID:           tenantID,
-		WorkflowID:         workflowID,
+		ProjectID:          projectID,
 		Name:               name,
 		Type:               stepType,
 		Config:             config,
@@ -107,6 +143,37 @@ func NewStep(tenantID, workflowID uuid.UUID, name string, stepType StepType, con
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
+}
+
+// NewStartStep creates a new Start step with trigger configuration
+func NewStartStep(tenantID, projectID uuid.UUID, name string, triggerType StepTriggerType, triggerConfig json.RawMessage) *Step {
+	now := time.Now().UTC()
+	return &Step{
+		ID:                 uuid.New(),
+		TenantID:           tenantID,
+		ProjectID:          projectID,
+		Name:               name,
+		Type:               StepTypeStart,
+		Config:             json.RawMessage(`{}`),
+		TriggerType:        &triggerType,
+		TriggerConfig:      triggerConfig,
+		CredentialBindings: json.RawMessage(`{}`),
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+}
+
+// IsStartBlock returns true if this step is a Start block
+func (s *Step) IsStartBlock() bool {
+	return s.Type == StepTypeStart
+}
+
+// GetTriggerType returns the trigger type for a Start block
+func (s *Step) GetTriggerType() StepTriggerType {
+	if s.TriggerType == nil {
+		return StepTriggerTypeManual
+	}
+	return *s.TriggerType
 }
 
 // SetPosition sets the position of the step
@@ -221,9 +288,44 @@ type HumanInLoopStepConfig struct {
 }
 
 // StartStepConfig represents configuration for a start step
-// Start steps are entry points for workflows and pass through input data
+// Start steps are entry points for projects and pass through input data
 type StartStepConfig struct {
 	// No configuration needed - start steps pass through input data
+}
+
+// WebhookTriggerConfig represents configuration for webhook-triggered Start blocks
+type WebhookTriggerConfig struct {
+	Secret       string          `json:"secret"`                  // Webhook secret for verification
+	InputMapping json.RawMessage `json:"input_mapping,omitempty"` // How to map webhook payload to input
+	Enabled      bool            `json:"enabled"`                 // Whether webhook is enabled
+}
+
+// ScheduleTriggerConfig represents configuration for schedule-triggered Start blocks
+type ScheduleTriggerConfig struct {
+	CronExpression string          `json:"cron_expression"` // Cron expression
+	Timezone       string          `json:"timezone"`        // Timezone for the schedule
+	Input          json.RawMessage `json:"input,omitempty"` // Default input for scheduled runs
+	Enabled        bool            `json:"enabled"`         // Whether schedule is enabled
+}
+
+// SlackTriggerConfig represents configuration for Slack-triggered Start blocks
+type SlackTriggerConfig struct {
+	Channel      string          `json:"channel,omitempty"`       // Slack channel
+	BotToken     string          `json:"bot_token,omitempty"`     // Bot token (reference to credential)
+	InputMapping json.RawMessage `json:"input_mapping,omitempty"` // How to map Slack event to input
+	Enabled      bool            `json:"enabled"`                 // Whether trigger is enabled
+}
+
+// EmailTriggerConfig represents configuration for email-triggered Start blocks
+type EmailTriggerConfig struct {
+	Address      string          `json:"address,omitempty"`       // Email address to monitor
+	InputMapping json.RawMessage `json:"input_mapping,omitempty"` // How to map email to input
+	Enabled      bool            `json:"enabled"`                 // Whether trigger is enabled
+}
+
+// ManualTriggerConfig represents configuration for manually-triggered Start blocks
+type ManualTriggerConfig struct {
+	InputSchema json.RawMessage `json:"input_schema,omitempty"` // JSON schema for input validation
 }
 
 // SwitchCase represents a case in the switch step

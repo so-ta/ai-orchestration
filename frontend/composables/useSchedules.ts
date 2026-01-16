@@ -14,11 +14,11 @@ export function useSchedules() {
     removeItem,
   } = useListState<Schedule>()
 
-  async function list(workflowId?: string): Promise<Schedule[]> {
+  async function list(projectId?: string): Promise<Schedule[]> {
     return execute(async () => {
       const params = new URLSearchParams()
-      if (workflowId) {
-        params.append('workflow_id', workflowId)
+      if (projectId) {
+        params.append('project_id', projectId)
       }
       const queryString = params.toString()
       const endpoint = `/schedules${queryString ? `?${queryString}` : ''}`

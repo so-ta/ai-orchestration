@@ -94,15 +94,15 @@ func (h *UsageHandler) GetDaily(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetByWorkflow handles GET /api/v1/usage/by-workflow
-func (h *UsageHandler) GetByWorkflow(w http.ResponseWriter, r *http.Request) {
+// GetByProject handles GET /api/v1/usage/by-project
+func (h *UsageHandler) GetByProject(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 	period := r.URL.Query().Get("period")
 	if period == "" {
 		period = "month"
 	}
 
-	workflows, err := h.usageUsecase.GetByWorkflow(r.Context(), usecase.GetByWorkflowInput{
+	projects, err := h.usageUsecase.GetByProject(r.Context(), usecase.GetByProjectInput{
 		TenantID: tenantID,
 		Period:   period,
 	})
@@ -112,7 +112,7 @@ func (h *UsageHandler) GetByWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSONData(w, http.StatusOK, map[string]interface{}{
-		"workflows": workflows,
+		"projects": projects,
 	})
 }
 
@@ -166,9 +166,9 @@ func (h *UsageHandler) GetByRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	JSONData(w, http.StatusOK, map[string]interface{}{
-		"records":            records,
-		"total_cost_usd":     totalCost,
-		"total_input_tokens": totalInputTokens,
+		"records":             records,
+		"total_cost_usd":      totalCost,
+		"total_input_tokens":  totalInputTokens,
 		"total_output_tokens": totalOutputTokens,
 	})
 }
@@ -192,7 +192,7 @@ func (h *UsageHandler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 
 // CreateBudgetRequest represents a create budget request
 type CreateBudgetRequest struct {
-	WorkflowID      *uuid.UUID `json:"workflow_id,omitempty"`
+	ProjectID       *uuid.UUID `json:"project_id,omitempty"`
 	BudgetType      string     `json:"budget_type"`
 	BudgetAmountUSD float64    `json:"budget_amount_usd"`
 	AlertThreshold  float64    `json:"alert_threshold,omitempty"`
@@ -225,7 +225,7 @@ func (h *UsageHandler) CreateBudget(w http.ResponseWriter, r *http.Request) {
 
 	budget, err := h.usageUsecase.CreateBudget(r.Context(), usecase.CreateBudgetInput{
 		TenantID:        tenantID,
-		WorkflowID:      req.WorkflowID,
+		ProjectID:       req.ProjectID,
 		BudgetType:      domain.BudgetType(req.BudgetType),
 		BudgetAmountUSD: req.BudgetAmountUSD,
 		AlertThreshold:  alertThreshold,
