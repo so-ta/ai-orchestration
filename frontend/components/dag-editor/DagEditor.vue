@@ -102,6 +102,18 @@ const toast = useToast()
 // Selected edge for deletion
 const selectedEdgeId = ref<string | null>(null)
 
+// Delete button size constraints
+const DELETE_BUTTON_BASE_SIZE = 28
+const DELETE_BUTTON_MIN_SCALE = 0.7
+const DELETE_BUTTON_MAX_SCALE = 1.5
+
+// Compute delete button scale based on zoom level
+const deleteButtonScale = computed(() => {
+  const zoom = viewport.value.zoom
+  // Clamp scale between min and max
+  return Math.min(DELETE_BUTTON_MAX_SCALE, Math.max(DELETE_BUTTON_MIN_SCALE, zoom))
+})
+
 // Compute selected edge position for delete button
 const selectedEdgePosition = computed(() => {
   if (!selectedEdgeId.value) return null
@@ -129,7 +141,9 @@ const selectedEdgePosition = computed(() => {
   const screenX = midX * viewport.value.zoom + viewport.value.x
   const screenY = midY * viewport.value.zoom + viewport.value.y
 
-  return { x: screenX, y: screenY - 30 } // Offset above the edge
+  // Offset above the edge (scale offset with zoom)
+  const offset = 30 * deleteButtonScale.value
+  return { x: screenX, y: screenY - offset }
 })
 
 // Drag state
@@ -2652,13 +2666,14 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
     </VueFlow>
 
-    <!-- Edge Delete Button (positioned at edge center) -->
+    <!-- Edge Delete Button (positioned at edge center, scales with zoom) -->
     <div
       v-if="selectedEdgePosition && !readonly"
       class="edge-delete-button-container"
       :style="{
         left: `${selectedEdgePosition.x}px`,
         top: `${selectedEdgePosition.y}px`,
+        '--button-scale': deleteButtonScale,
       }"
     >
       <button
@@ -3327,12 +3342,13 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   opacity: 1;
 }
 
-/* Edge Delete Button (floating on selected edge) */
+/* Edge Delete Button (floating on selected edge, scales with zoom) */
 .edge-delete-button-container {
   position: absolute;
   z-index: 100;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(var(--button-scale, 1));
   pointer-events: auto;
+  transition: transform 0.1s ease;
 }
 
 .edge-delete-button-floating {
@@ -3347,7 +3363,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -3360,6 +3376,5 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
 .edge-delete-button-floating:active {
   background: #fee2e2;
-  transform: scale(0.95);
 }
 </style>
