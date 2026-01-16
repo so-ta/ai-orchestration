@@ -1312,3 +1312,191 @@ func TestExecutor_ExecuteCustomBlockStep_SystemBlock_NilExecCtx_Success(t *testi
 
 	assert.Equal(t, "system test", result["data"])
 }
+
+// Tests for port-based routing functionality
+func TestExecutor_ExtractOutputPortAndData(t *testing.T) {
+	executor := setupTestExecutor()
+
+	t.Run("default output port when no special fields", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Config: json.RawMessage(`{}`),
+		}
+		output := json.RawMessage(`{"result": "value"}`)
+
+		port, cleanedOutput := executor.extractOutputPortAndData(step, output)
+
+		assert.Equal(t, "output", port)
+		assert.JSONEq(t, `{"result": "value"}`, string(cleanedOutput))
+	})
+
+	t.Run("extracts __port and removes it from output", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Config: json.RawMessage(`{}`),
+		}
+		output := json.RawMessage(`{"__port": "true", "result": "value", "data": "test"}`)
+
+		port, cleanedOutput := executor.extractOutputPortAndData(step, output)
+
+		assert.Equal(t, "true", port)
+		// __port should be removed from output
+		var result map[string]interface{}
+		err := json.Unmarshal(cleanedOutput, &result)
+		require.NoError(t, err)
+		assert.NotContains(t, result, "__port")
+		assert.Equal(t, "value", result["result"])
+		assert.Equal(t, "test", result["data"])
+	})
+
+	t.Run("custom output ports with port+data format", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Config: json.RawMessage(`{"custom_output_ports": ["pass", "fail"]}`),
+		}
+		output := json.RawMessage(`{"port": "pass", "data": {"score": 85}}`)
+
+		port, cleanedOutput := executor.extractOutputPortAndData(step, output)
+
+		assert.Equal(t, "pass", port)
+		// Should return only the data content, not the wrapper
+		assert.JSONEq(t, `{"score": 85}`, string(cleanedOutput))
+	})
+
+	t.Run("custom output ports with invalid port falls back to default", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Config: json.RawMessage(`{"custom_output_ports": ["pass", "fail"]}`),
+		}
+		output := json.RawMessage(`{"port": "invalid", "data": {"score": 85}}`)
+
+		port, cleanedOutput := executor.extractOutputPortAndData(step, output)
+
+		assert.Equal(t, "output", port)
+		// Original output is returned when port is invalid
+		assert.JSONEq(t, `{"port": "invalid", "data": {"score": 85}}`, string(cleanedOutput))
+	})
+
+	t.Run("custom output ports without port field uses default", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Config: json.RawMessage(`{"custom_output_ports": ["pass", "fail"]}`),
+		}
+		output := json.RawMessage(`{"result": "value"}`)
+
+		port, cleanedOutput := executor.extractOutputPortAndData(step, output)
+
+		assert.Equal(t, "output", port)
+		assert.JSONEq(t, `{"result": "value"}`, string(cleanedOutput))
+	})
+}
+
+func TestExecutor_GetConfigBool(t *testing.T) {
+	t.Run("returns true when value is true", func(t *testing.T) {
+		config := json.RawMessage(`{"enable_error_port": true}`)
+		result := getConfigBool(config, "enable_error_port")
+		assert.True(t, result)
+	})
+
+	t.Run("returns false when value is false", func(t *testing.T) {
+		config := json.RawMessage(`{"enable_error_port": false}`)
+		result := getConfigBool(config, "enable_error_port")
+		assert.False(t, result)
+	})
+
+	t.Run("returns false when key is missing", func(t *testing.T) {
+		config := json.RawMessage(`{}`)
+		result := getConfigBool(config, "enable_error_port")
+		assert.False(t, result)
+	})
+
+	t.Run("returns false for nil config", func(t *testing.T) {
+		result := getConfigBool(nil, "enable_error_port")
+		assert.False(t, result)
+	})
+}
+
+func TestExecutor_GetConfigStringArray(t *testing.T) {
+	t.Run("returns array when value exists", func(t *testing.T) {
+		config := json.RawMessage(`{"custom_output_ports": ["pass", "fail"]}`)
+		result := getConfigStringArray(config, "custom_output_ports")
+		assert.Equal(t, []string{"pass", "fail"}, result)
+	})
+
+	t.Run("returns nil when key is missing", func(t *testing.T) {
+		config := json.RawMessage(`{}`)
+		result := getConfigStringArray(config, "custom_output_ports")
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil for nil config", func(t *testing.T) {
+		result := getConfigStringArray(nil, "custom_output_ports")
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns empty slice for empty array", func(t *testing.T) {
+		config := json.RawMessage(`{"custom_output_ports": []}`)
+		result := getConfigStringArray(config, "custom_output_ports")
+		assert.Equal(t, []string{}, result)
+	})
+}
+
+func TestExecutor_HasEdgeFromPort(t *testing.T) {
+	executor := setupTestExecutor()
+
+	stepID := uuid.New()
+	targetID := uuid.New()
+
+	graph := &Graph{
+		Steps:         make(map[uuid.UUID]domain.Step),
+		OutEdges:      make(map[uuid.UUID][]domain.Edge),
+		InEdges:       make(map[uuid.UUID][]domain.Edge),
+		BlockGroups:   make(map[uuid.UUID]domain.BlockGroup),
+		GroupInEdges:  make(map[uuid.UUID][]domain.Edge),
+		GroupOutEdges: make(map[uuid.UUID][]domain.Edge),
+	}
+
+	t.Run("returns true when edge with matching port exists", func(t *testing.T) {
+		graph.OutEdges[stepID] = []domain.Edge{
+			{ID: uuid.New(), SourceStepID: &stepID, TargetStepID: &targetID, SourcePort: "error"},
+		}
+
+		result := executor.hasEdgeFromPort(graph, stepID, "error")
+		assert.True(t, result)
+	})
+
+	t.Run("returns false when no edge with matching port", func(t *testing.T) {
+		graph.OutEdges[stepID] = []domain.Edge{
+			{ID: uuid.New(), SourceStepID: &stepID, TargetStepID: &targetID, SourcePort: "output"},
+		}
+
+		result := executor.hasEdgeFromPort(graph, stepID, "error")
+		assert.False(t, result)
+	})
+
+	t.Run("returns false when no edges exist", func(t *testing.T) {
+		graph.OutEdges[stepID] = []domain.Edge{}
+
+		result := executor.hasEdgeFromPort(graph, stepID, "error")
+		assert.False(t, result)
+	})
+}
+
+func TestExecutor_StepOutputPorts(t *testing.T) {
+	t.Run("StepOutputPorts is initialized in ExecutionContext", func(t *testing.T) {
+		tenantID := uuid.New()
+		workflowID := uuid.New()
+		run := &domain.Run{
+			ID:         uuid.New(),
+			TenantID:   tenantID,
+			WorkflowID: workflowID,
+			Input:      json.RawMessage(`{}`),
+		}
+		def := &domain.WorkflowDefinition{}
+
+		execCtx := NewExecutionContext(run, def)
+
+		assert.NotNil(t, execCtx.StepOutputPorts)
+		assert.Empty(t, execCtx.StepOutputPorts)
+	})
+}

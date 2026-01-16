@@ -991,7 +991,7 @@ func (e *Executor) hasEdgeFromPort(graph *Graph, stepID uuid.UUID, portName stri
 
 // extractOutputPortAndData extracts the output port and actual data from step output
 // For code blocks with custom ports, it looks for { port: "portName", data: {...} } format
-// Returns (outputPort, cleanedOutput) where cleanedOutput has port wrapper removed if applicable
+// Returns (outputPort, cleanedOutput) where cleanedOutput has port wrapper and __port field removed
 func (e *Executor) extractOutputPortAndData(step domain.Step, output json.RawMessage) (string, json.RawMessage) {
 	// Check if this is a code/function block with custom output ports
 	customPorts := getConfigStringArray(step.Config, "custom_output_ports")
@@ -1000,7 +1000,13 @@ func (e *Executor) extractOutputPortAndData(step domain.Step, output json.RawMes
 		var outputMap map[string]interface{}
 		if err := json.Unmarshal(output, &outputMap); err == nil {
 			if port, ok := outputMap["__port"].(string); ok {
-				return port, output
+				// Remove __port from output to avoid leaking internal field to next step
+				delete(outputMap, "__port")
+				cleanedOutput, err := json.Marshal(outputMap)
+				if err != nil {
+					return port, output // fallback to original if marshal fails
+				}
+				return port, cleanedOutput
 			}
 		}
 		return "output", output
