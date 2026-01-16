@@ -1,6 +1,24 @@
 import dagre from 'dagre'
 import type { Step, Edge, BlockGroup, OutputPort, StepType, BlockGroupType } from '~/types/api'
 
+/**
+ * Prefix used for group node IDs in Vue Flow to distinguish from step node IDs.
+ * Group node IDs are formatted as `group_${uuid}` while step node IDs are just `${uuid}`.
+ */
+export const GROUP_NODE_PREFIX = 'group_'
+
+/**
+ * Parse a Vue Flow node ID to determine if it's a group or step.
+ * @param nodeId The node ID from Vue Flow (e.g., "group_abc123" or "abc123")
+ * @returns Object with isGroup flag and the actual ID (without prefix)
+ */
+export function parseNodeId(nodeId: string): { isGroup: boolean; id: string } {
+  if (nodeId.startsWith(GROUP_NODE_PREFIX)) {
+    return { isGroup: true, id: nodeId.slice(GROUP_NODE_PREFIX.length) }
+  }
+  return { isGroup: false, id: nodeId }
+}
+
 export interface LayoutOptions {
   direction?: 'TB' | 'BT' | 'LR' | 'RL' // Top-Bottom, Bottom-Top, Left-Right, Right-Left
   nodeWidth?: number

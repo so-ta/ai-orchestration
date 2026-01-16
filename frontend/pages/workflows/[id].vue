@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
-import { calculateLayout, calculateLayoutWithGroups } from '~/utils/graph-layout'
+import { calculateLayout, calculateLayoutWithGroups, parseNodeId } from '~/utils/graph-layout'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -658,17 +658,6 @@ async function handleUpdateStepPosition(
   } catch (e) {
     console.error('Failed to update step position:', e)
   }
-}
-
-// Prefix used for group node IDs in Vue Flow (matches DagEditor.vue)
-const GROUP_NODE_PREFIX = 'group_'
-
-// Helper to parse node ID and determine if it's a group or step
-function parseNodeId(nodeId: string): { isGroup: boolean; id: string } {
-  if (nodeId.startsWith(GROUP_NODE_PREFIX)) {
-    return { isGroup: true, id: nodeId.slice(GROUP_NODE_PREFIX.length) }
-  }
-  return { isGroup: false, id: nodeId }
 }
 
 // Add edge (with optional source/target ports for branching/merging blocks)
