@@ -681,16 +681,27 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
   const targetInfo = parseNodeId(target)
 
   try {
-    const response = await workflows.createEdge(workflowId, {
-      // Set source_step_id or source_block_group_id based on node type
-      source_step_id: sourceInfo.isGroup ? undefined : sourceInfo.id,
-      source_block_group_id: sourceInfo.isGroup ? sourceInfo.id : undefined,
-      // Set target_step_id or target_block_group_id based on node type
-      target_step_id: targetInfo.isGroup ? undefined : targetInfo.id,
-      target_block_group_id: targetInfo.isGroup ? targetInfo.id : undefined,
+    // Build edge request, only including defined fields
+    const edgeRequest: Parameters<typeof workflows.createEdge>[1] = {
       source_port: sourcePort,
       target_port: targetPort,
-    })
+    }
+
+    // Set source based on node type
+    if (sourceInfo.isGroup) {
+      edgeRequest.source_block_group_id = sourceInfo.id
+    } else {
+      edgeRequest.source_step_id = sourceInfo.id
+    }
+
+    // Set target based on node type
+    if (targetInfo.isGroup) {
+      edgeRequest.target_block_group_id = targetInfo.id
+    } else {
+      edgeRequest.target_step_id = targetInfo.id
+    }
+
+    const response = await workflows.createEdge(workflowId, edgeRequest)
     // Add edge to local state instead of reloading entire workflow
     if (workflow.value && response?.data) {
       workflow.value.edges = [...(workflow.value.edges || []), response.data]
