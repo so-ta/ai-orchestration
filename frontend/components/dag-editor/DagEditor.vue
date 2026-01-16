@@ -283,25 +283,25 @@ interface GroupPort {
 
 const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
   parallel: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
+    { name: 'out', label: 'Output', color: '#22c55e' },
     { name: 'error', label: 'Error', color: '#ef4444' },
   ],
   try_catch: [
-    { name: 'success', label: 'Success', color: '#22c55e' },
+    { name: 'out', label: 'Output', color: '#22c55e' },
     { name: 'error', label: 'Error', color: '#ef4444' },
   ],
   foreach: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
+    { name: 'out', label: 'Output', color: '#22c55e' },
     { name: 'error', label: 'Error', color: '#ef4444' },
   ],
   while: [
-    { name: 'complete', label: 'Complete', color: '#22c55e' },
+    { name: 'out', label: 'Output', color: '#22c55e' },
   ],
 }
 
 // Get group output ports
 function getGroupOutputPorts(type: BlockGroupType): GroupPort[] {
-  return GROUP_OUTPUT_PORTS[type] || [{ name: 'complete', label: 'Complete', color: '#22c55e' }]
+  return GROUP_OUTPUT_PORTS[type] || [{ name: 'out', label: 'Output', color: '#22c55e' }]
 }
 
 // Multi-section zone configuration
@@ -925,6 +925,8 @@ function getEdgeColor(sourcePort?: string): string {
     'loop': '#3b82f6',      // blue
     'complete': '#22c55e',  // green
     'item': '#3b82f6',      // blue
+    // Block Group output
+    'out': '#22c55e',       // green
     // Default
     'default': '#94a3b8',   // gray
     'output': '#94a3b8',    // gray
@@ -950,6 +952,7 @@ function getEdgeLabel(sourcePort?: string, condition?: string): string | undefin
     'loop': 'Loop',
     'complete': 'Complete',
     'item': 'Item',
+    'out': 'Output',
     'default': 'Default',
   }
 
@@ -1840,6 +1843,8 @@ function getPortColor(portName: string): string {
     'loop': '#3b82f6',      // blue
     'complete': '#22c55e',  // green
     'item': '#3b82f6',      // blue
+    // Block Group output
+    'out': '#22c55e',       // green
     // Default
     'default': '#94a3b8',   // gray
     'output': '#94a3b8',    // gray
