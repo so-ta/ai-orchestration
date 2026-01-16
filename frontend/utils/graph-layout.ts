@@ -175,16 +175,18 @@ function adjustYBySourcePort(
     // Get unique target step IDs with their port info
     // Group by target step to handle multiple edges to same target
     const targetsByPort = new Map<string, { targetId: string; portIndex: number }[]>()
-    for (const edge of sourceEdges) {
-      if (!edge.target_step_id) continue
 
-      const portName = edge.source_port || 'out'
+    for (const edge of sourceEdges) {
+      if (!edge.target_step_id || !edge.source_port) continue
+
+      // source_port is required - skip edges without it
+      const portName = edge.source_port
       const portIndex = portOrder.get(portName) ?? 999 // Unknown ports go last
 
       const existing = targetsByPort.get(portName) || []
       // Avoid duplicates
       if (!existing.some(t => t.targetId === edge.target_step_id)) {
-        existing.push({ targetId: edge.target_step_id!, portIndex })
+        existing.push({ targetId: edge.target_step_id, portIndex })
       }
       targetsByPort.set(portName, existing)
     }

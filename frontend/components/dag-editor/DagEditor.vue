@@ -1082,7 +1082,14 @@ onConnect((params) => {
     }
 
     // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
-    const sourcePort = params.sourceHandle || undefined
+    // If sourceHandle is not set, use the default (first) output port of the source step
+    let sourcePort = params.sourceHandle || undefined
+    if (!sourcePort && sourceStep) {
+      const outputPorts = getOutputPorts(sourceStep.type, sourceStep)
+      if (outputPorts.length > 0) {
+        sourcePort = outputPorts[0].name
+      }
+    }
     const targetPort = params.targetHandle || undefined
     emit('edge:add', params.source, params.target, sourcePort, targetPort)
   }
