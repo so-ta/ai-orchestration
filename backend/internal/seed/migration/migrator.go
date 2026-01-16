@@ -53,6 +53,8 @@ func NewMigrator(
 }
 
 // Migrate performs UPSERT for all blocks in the registry
+// Blocks are processed in topological order (parents before children)
+// to support multi-level inheritance (e.g., http -> rest-api -> bearer-api -> github-api)
 func (m *Migrator) Migrate(ctx context.Context, registry *blocks.Registry) (*MigrationResult, error) {
 	result := &MigrationResult{
 		Created:   make([]string, 0),
@@ -61,7 +63,16 @@ func (m *Migrator) Migrate(ctx context.Context, registry *blocks.Registry) (*Mig
 		Errors:    make([]error, 0),
 	}
 
-	for _, seedBlock := range registry.GetAll() {
+	allBlocks := registry.GetAll()
+
+	// Build dependency graph and sort topologically
+	sortedBlocks, err := topologicalSort(allBlocks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sort blocks: %w", err)
+	}
+
+	// Process blocks in topological order (parents first)
+	for _, seedBlock := range sortedBlocks {
 		action, err := m.upsertBlock(ctx, seedBlock)
 		if err != nil {
 			result.Errors = append(result.Errors,
@@ -80,6 +91,65 @@ func (m *Migrator) Migrate(ctx context.Context, registry *blocks.Registry) (*Mig
 	}
 
 	return result, nil
+}
+
+// topologicalSort sorts blocks so that parents are processed before children
+// Uses Kahn's algorithm for topological sorting
+func topologicalSort(allBlocks []*blocks.SystemBlockDefinition) ([]*blocks.SystemBlockDefinition, error) {
+	// Build slug -> block map
+	blockMap := make(map[string]*blocks.SystemBlockDefinition)
+	for _, block := range allBlocks {
+		blockMap[block.Slug] = block
+	}
+
+	// Calculate in-degree (number of dependencies) for each block
+	inDegree := make(map[string]int)
+	children := make(map[string][]string) // parent -> children
+
+	for _, block := range allBlocks {
+		if _, exists := inDegree[block.Slug]; !exists {
+			inDegree[block.Slug] = 0
+		}
+		if block.ParentBlockSlug != "" {
+			inDegree[block.Slug]++
+			children[block.ParentBlockSlug] = append(children[block.ParentBlockSlug], block.Slug)
+		}
+	}
+
+	// Start with blocks that have no dependencies (in-degree = 0)
+	var queue []string
+	for slug, degree := range inDegree {
+		if degree == 0 {
+			queue = append(queue, slug)
+		}
+	}
+
+	var sorted []*blocks.SystemBlockDefinition
+	for len(queue) > 0 {
+		// Pop from queue
+		slug := queue[0]
+		queue = queue[1:]
+
+		block := blockMap[slug]
+		if block != nil {
+			sorted = append(sorted, block)
+		}
+
+		// Reduce in-degree for children
+		for _, childSlug := range children[slug] {
+			inDegree[childSlug]--
+			if inDegree[childSlug] == 0 {
+				queue = append(queue, childSlug)
+			}
+		}
+	}
+
+	// Check for cycles
+	if len(sorted) != len(allBlocks) {
+		return nil, fmt.Errorf("circular dependency detected in block inheritance")
+	}
+
+	return sorted, nil
 }
 
 // upsertBlock creates or updates a single block
@@ -114,6 +184,19 @@ func (m *Migrator) upsertBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBlockDefinition) (string, error) {
 	now := time.Now().UTC()
 
+	// Resolve parent block slug to ID
+	var parentBlockID *uuid.UUID
+	if seedBlock.ParentBlockSlug != "" {
+		parentBlock, err := m.blockRepo.GetBySlug(ctx, nil, seedBlock.ParentBlockSlug)
+		if err != nil {
+			return "", fmt.Errorf("failed to get parent block %s: %w", seedBlock.ParentBlockSlug, err)
+		}
+		if parentBlock == nil {
+			return "", fmt.Errorf("parent block %s not found", seedBlock.ParentBlockSlug)
+		}
+		parentBlockID = &parentBlock.ID
+	}
+
 	block := &domain.BlockDefinition{
 		ID:                  uuid.New(),
 		TenantID:            nil, // System block
@@ -138,8 +221,14 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 		Enabled:             seedBlock.Enabled,
 		GroupKind:           seedBlock.GroupKind,
 		IsContainer:         seedBlock.IsContainer,
-		CreatedAt:           now,
-		UpdatedAt:           now,
+		// Inheritance fields
+		ParentBlockID:  parentBlockID,
+		ConfigDefaults: seedBlock.ConfigDefaults,
+		PreProcess:     seedBlock.PreProcess,
+		PostProcess:    seedBlock.PostProcess,
+		InternalSteps:  seedBlock.InternalSteps,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	if err := m.blockRepo.Create(ctx, block); err != nil {
@@ -168,6 +257,19 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 		}
 	}
 
+	// Resolve parent block slug to ID
+	var parentBlockID *uuid.UUID
+	if seedBlock.ParentBlockSlug != "" {
+		parentBlock, err := m.blockRepo.GetBySlug(ctx, nil, seedBlock.ParentBlockSlug)
+		if err != nil {
+			return "", fmt.Errorf("failed to get parent block %s: %w", seedBlock.ParentBlockSlug, err)
+		}
+		if parentBlock == nil {
+			return "", fmt.Errorf("parent block %s not found", seedBlock.ParentBlockSlug)
+		}
+		parentBlockID = &parentBlock.ID
+	}
+
 	// Update fields (version is explicitly set from seedBlock)
 	existing.Name = seedBlock.Name
 	existing.Description = seedBlock.Description
@@ -187,6 +289,12 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 	existing.Version = seedBlock.Version // Use explicit version from seed (no auto-increment)
 	existing.GroupKind = seedBlock.GroupKind
 	existing.IsContainer = seedBlock.IsContainer
+	// Inheritance fields
+	existing.ParentBlockID = parentBlockID
+	existing.ConfigDefaults = seedBlock.ConfigDefaults
+	existing.PreProcess = seedBlock.PreProcess
+	existing.PostProcess = seedBlock.PostProcess
+	existing.InternalSteps = seedBlock.InternalSteps
 	existing.UpdatedAt = time.Now().UTC()
 
 	if err := m.blockRepo.Update(ctx, existing); err != nil {
@@ -232,6 +340,20 @@ func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.Sys
 		return true
 	}
 
+	// Compare inheritance fields
+	if existing.PreProcess != seed.PreProcess {
+		return true
+	}
+	if existing.PostProcess != seed.PostProcess {
+		return true
+	}
+	if !jsonEqual(existing.ConfigDefaults, seed.ConfigDefaults) {
+		return true
+	}
+	if !internalStepsEqual(existing.InternalSteps, seed.InternalSteps) {
+		return true
+	}
+
 	// Compare JSON fields
 	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema) {
 		return true
@@ -261,6 +383,23 @@ func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.Sys
 	}
 
 	return false
+}
+
+// internalStepsEqual compares internal steps
+func internalStepsEqual(a, b []domain.InternalStep) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Type != b[i].Type ||
+			a[i].OutputKey != b[i].OutputKey {
+			return false
+		}
+		if !jsonEqual(a[i].Config, b[i].Config) {
+			return false
+		}
+	}
+	return true
 }
 
 // jsonEqual compares two JSON raw messages
@@ -413,6 +552,19 @@ func (m *Migrator) describeChanges(existing *domain.BlockDefinition, seed *block
 	}
 	if !outputPortsEqual(existing.OutputPorts, seed.OutputPorts) {
 		changes = append(changes, "output_ports")
+	}
+	// Inheritance fields
+	if existing.PreProcess != seed.PreProcess {
+		changes = append(changes, "pre_process")
+	}
+	if existing.PostProcess != seed.PostProcess {
+		changes = append(changes, "post_process")
+	}
+	if !jsonEqual(existing.ConfigDefaults, seed.ConfigDefaults) {
+		changes = append(changes, "config_defaults")
+	}
+	if !internalStepsEqual(existing.InternalSteps, seed.InternalSteps) {
+		changes = append(changes, "internal_steps")
 	}
 
 	if len(changes) == 0 {

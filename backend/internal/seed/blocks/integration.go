@@ -7,20 +7,46 @@ import (
 )
 
 func (r *Registry) registerIntegrationBlocks() {
+	// === Level 0: Base blocks ===
 	r.register(HTTPBlock())
 	r.register(SubflowBlock())
 	r.register(ToolBlock())
+
+	// === Level 1: Foundation pattern blocks ===
+	r.register(WebhookBlock())
+	r.register(RestAPIBlock())
+	r.register(GraphQLBlock())
+
+	// === Level 2: Authentication pattern blocks ===
+	r.register(BearerAPIBlock())
+	r.register(APIKeyHeaderBlock())
+	r.register(APIKeyQueryBlock())
+
+	// === Level 3: Service-specific base blocks ===
+	r.register(GitHubAPIBlock())
+	r.register(NotionAPIBlock())
+	r.register(GoogleAPIBlock())
+	r.register(LinearAPIBlock())
+
+	// === Level 4+: Concrete operation blocks ===
+	// Webhook-based
 	r.register(SlackBlock())
 	r.register(DiscordBlock())
-	r.register(NotionQueryDBBlock())
-	r.register(NotionCreatePageBlock())
-	r.register(GSheetsAppendBlock())
-	r.register(GSheetsReadBlock())
+	// GitHub
 	r.register(GitHubCreateIssueBlock())
 	r.register(GitHubAddCommentBlock())
+	// Notion
+	r.register(NotionQueryDBBlock())
+	r.register(NotionCreatePageBlock())
+	// Google Sheets
+	r.register(GSheetsAppendBlock())
+	r.register(GSheetsReadBlock())
+	// Other API-based
 	r.register(WebSearchBlock())
-	r.register(LinearCreateIssueBlock())
 	r.register(EmailSendGridBlock())
+	r.register(LinearCreateIssueBlock())
+
+	// === RAG/Vector blocks (no inheritance) ===
 	r.register(EmbeddingBlock())
 	r.register(VectorUpsertBlock())
 	r.register(VectorSearchBlock())
@@ -30,7 +56,7 @@ func (r *Registry) registerIntegrationBlocks() {
 func HTTPBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "http",
-		Version:     3, // v3: Simplified (removed inheritance support)
+		Version:     2, // Incremented for inheritance support
 		Name:        "HTTP Request",
 		Description: "Make HTTP API calls",
 		Category:    domain.BlockCategoryApps,
@@ -39,10 +65,10 @@ func HTTPBlock() *SystemBlockDefinition {
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"url": {"type": "string", "description": "リクエストURL"},
-				"body": {"type": "object", "description": "リクエストボディ"},
-				"method": {"enum": ["GET", "POST", "PUT", "DELETE", "PATCH"], "type": "string", "default": "GET"},
-				"headers": {"type": "object", "description": "追加ヘッダー"},
+				"url": {"type": "string"},
+				"body": {"type": "object"},
+				"method": {"enum": ["GET", "POST", "PUT", "DELETE", "PATCH"], "type": "string"},
+				"headers": {"type": "object"},
 				"enable_error_port": {
 					"type": "boolean",
 					"title": "エラーハンドルを有効化",
@@ -54,21 +80,25 @@ func HTTPBlock() *SystemBlockDefinition {
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"body": {"type": "object", "description": "リクエストボディ（config.bodyをオーバーライド）"},
-				"headers": {"type": "object", "description": "追加ヘッダー（config.headersにマージ）"}
+				"url": {"type": "string", "description": "リクエストURL（継承ブロック用）"},
+				"body": {"type": "object", "description": "リクエストボディ"},
+				"method": {"type": "string", "description": "HTTPメソッド（継承ブロック用）"},
+				"headers": {"type": "object", "description": "追加ヘッダー"}
 			},
-			"description": "URL/ボディのテンプレートで参照可能なデータ"
+			"description": "URL/ボディのテンプレートで参照可能なデータ。継承ブロックはPreProcessでurl/body/method/headersを設定可能"
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
 		Code: `
-const url = renderTemplate(config.url, input);
+// Support inheritance: input can override config values
+const url = renderTemplate(input.url || config.url, input);
+const method = input.method || config.method || 'GET';
 const headers = Object.assign({}, config.headers || {}, input.headers || {});
 const body = input.body !== undefined ? input.body : config.body;
 const response = ctx.http.request(url, {
-    method: config.method || 'GET',
+    method: method,
     headers: headers,
-    body: body ? renderTemplate(JSON.stringify(body), input) : null
+    body: body ? (typeof body === 'string' ? body : renderTemplate(JSON.stringify(body), input)) : null
 });
 return response;
 `,
@@ -164,15 +194,517 @@ func ToolBlock() *SystemBlockDefinition {
 	}
 }
 
+// =============================================================================
+// Level 1: Foundation Pattern Blocks
+// =============================================================================
+
+// WebhookBlock provides a base for webhook-style POST notifications
+func WebhookBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "webhook",
+		Version:         1,
+		Name:            "Webhook",
+		Description:     "Webhook POST通知の基盤ブロック",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "send",
+		ParentBlockSlug: "http",
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"webhook_url": {"type": "string", "title": "Webhook URL"},
+				"secret_key": {"type": "string", "title": "シークレットキー名", "description": "ctx.secretsから取得するキー名"}
+			}
+		}`),
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"payload": {"type": "object", "description": "送信するペイロード"}
+			}
+		}`),
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"success": {"type": "boolean"},
+				"status": {"type": "number"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+const url = config.webhook_url || (config.secret_key ? ctx.secrets[config.secret_key] : null);
+if (!url) {
+    throw new Error('[WEBHOOK_001] Webhook URLが設定されていません');
+}
+return {
+    ...input,
+    url: url,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: input.payload || input
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    throw new Error('[WEBHOOK_002] Webhook送信失敗: ' + input.status);
+}
+return { success: true, status: input.status };
+`,
+		UIConfig: json.RawMessage(`{"icon": "send", "color": "#6366F1"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "WEBHOOK_001", Name: "URL_NOT_CONFIGURED", Description: "Webhook URLが設定されていません", Retryable: false},
+			{Code: "WEBHOOK_002", Name: "SEND_FAILED", Description: "送信に失敗しました", Retryable: true},
+		},
+		Enabled: true,
+	}
+}
+
+// RestAPIBlock provides a base for REST API calls with authentication
+func RestAPIBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "rest-api",
+		Version:         1,
+		Name:            "REST API",
+		Description:     "REST API呼び出しの基盤ブロック（認証サポート）",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "cloud",
+		ParentBlockSlug: "http",
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"base_url": {"type": "string", "title": "ベースURL"},
+				"auth_type": {"type": "string", "enum": ["none", "bearer", "api_key_header", "api_key_query"], "title": "認証タイプ", "default": "none"},
+				"auth_key": {"type": "string", "title": "認証キー（直接指定）"},
+				"secret_key": {"type": "string", "title": "シークレットキー名"},
+				"header_name": {"type": "string", "title": "ヘッダー名", "default": "X-API-Key", "description": "api_key_header使用時のヘッダー名"}
+			}
+		}`),
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"url": {"type": "string", "description": "リクエストURL（base_urlからの相対パス可）"},
+				"method": {"type": "string", "description": "HTTPメソッド"},
+				"headers": {"type": "object", "description": "追加ヘッダー"},
+				"body": {"type": "object", "description": "リクエストボディ"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+// 認証キー解決
+const authValue = config.auth_key || (config.secret_key ? ctx.secrets[config.secret_key] : null);
+
+// ヘッダー構築
+const headers = { ...(input.headers || {}) };
+const authType = config.auth_type || 'none';
+
+if (authType === 'bearer' && authValue) {
+    headers['Authorization'] = 'Bearer ' + authValue;
+} else if (authType === 'api_key_header' && authValue) {
+    const headerName = config.header_name || 'X-API-Key';
+    headers[headerName] = authValue;
+}
+
+// URL構築
+let url = input.url || '';
+if (config.base_url) {
+    url = config.base_url + url;
+}
+if (authType === 'api_key_query' && authValue) {
+    url += (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(authValue);
+}
+
+return { ...input, url, headers };
+`,
+		PostProcess: `
+// レート制限チェック
+if (input.status === 429) {
+    throw new Error('[REST_003] レート制限に達しました');
+}
+// エラーステータス
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || input.body?.error || 'Unknown error';
+    throw new Error('[REST_002] APIエラー: ' + errorMsg);
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "cloud", "color": "#0EA5E9"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "REST_001", Name: "AUTH_FAILED", Description: "認証に失敗しました", Retryable: false},
+			{Code: "REST_002", Name: "API_ERROR", Description: "APIエラー", Retryable: true},
+			{Code: "REST_003", Name: "RATE_LIMITED", Description: "レート制限に達しました", Retryable: true},
+		},
+		Enabled: true,
+	}
+}
+
+// GraphQLBlock provides a base for GraphQL API calls
+func GraphQLBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "graphql",
+		Version:         1,
+		Name:            "GraphQL",
+		Description:     "GraphQL API呼び出しの基盤ブロック",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "hexagon",
+		ParentBlockSlug: "rest-api",
+		ConfigDefaults: json.RawMessage(`{
+			"auth_type": "bearer"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"endpoint": {"type": "string", "title": "GraphQLエンドポイント"},
+				"query": {"type": "string", "title": "GraphQLクエリ", "x-ui-widget": "textarea"},
+				"variables": {"type": "object", "title": "変数"}
+			}
+		}`),
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "GraphQLクエリ（configより優先）"},
+				"variables": {"type": "object", "description": "変数（configとマージ）"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+const query = input.query || config.query;
+if (!query) {
+    throw new Error('[GQL_001] GraphQLクエリが指定されていません');
+}
+const variables = { ...(config.variables || {}), ...(input.variables || {}) };
+const body = { query, variables };
+const url = config.endpoint || input.url || '';
+return { ...input, url, method: 'POST', body };
+`,
+		PostProcess: `
+// GraphQLエラーチェック
+if (input.body?.errors && input.body.errors.length > 0) {
+    throw new Error('[GQL_002] ' + input.body.errors[0].message);
+}
+return input.body?.data || input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "hexagon", "color": "#E535AB"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "GQL_001", Name: "QUERY_REQUIRED", Description: "クエリが指定されていません", Retryable: false},
+			{Code: "GQL_002", Name: "GRAPHQL_ERROR", Description: "GraphQLエラー", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// =============================================================================
+// Level 2: Authentication Pattern Blocks
+// =============================================================================
+
+// BearerAPIBlock provides Bearer token authentication
+func BearerAPIBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "bearer-api",
+		Version:         1,
+		Name:            "Bearer API",
+		Description:     "Bearer Token認証API基盤",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "key",
+		ParentBlockSlug: "rest-api",
+		ConfigDefaults: json.RawMessage(`{
+			"auth_type": "bearer"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"token": {"type": "string", "title": "アクセストークン（直接指定）"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+// token -> auth_key にマッピング
+if (config.token && !config.auth_key) {
+    config.auth_key = config.token;
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "key", "color": "#F59E0B"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "BEARER_001", Name: "TOKEN_NOT_CONFIGURED", Description: "トークンが設定されていません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// APIKeyHeaderBlock provides API Key header authentication
+func APIKeyHeaderBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "api-key-header",
+		Version:         1,
+		Name:            "API Key (Header)",
+		Description:     "APIキーヘッダー認証基盤",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "key",
+		ParentBlockSlug: "rest-api",
+		ConfigDefaults: json.RawMessage(`{
+			"auth_type": "api_key_header"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"api_key": {"type": "string", "title": "APIキー（直接指定）"},
+				"header_name": {"type": "string", "title": "ヘッダー名", "default": "X-API-Key"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+// api_key -> auth_key にマッピング
+if (config.api_key && !config.auth_key) {
+    config.auth_key = config.api_key;
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "key", "color": "#10B981"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "APIKEY_001", Name: "KEY_NOT_CONFIGURED", Description: "APIキーが設定されていません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// APIKeyQueryBlock provides API Key query parameter authentication
+func APIKeyQueryBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "api-key-query",
+		Version:         1,
+		Name:            "API Key (Query)",
+		Description:     "APIキークエリパラメータ認証基盤",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "key",
+		ParentBlockSlug: "rest-api",
+		ConfigDefaults: json.RawMessage(`{
+			"auth_type": "api_key_query"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"api_key": {"type": "string", "title": "APIキー（直接指定）"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+// api_key -> auth_key にマッピング
+if (config.api_key && !config.auth_key) {
+    config.auth_key = config.api_key;
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "key", "color": "#8B5CF6"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "APIKEY_001", Name: "KEY_NOT_CONFIGURED", Description: "APIキーが設定されていません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// =============================================================================
+// Level 3: Service-Specific Base Blocks
+// =============================================================================
+
+// GitHubAPIBlock provides GitHub API base configuration
+func GitHubAPIBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "github-api",
+		Version:         1,
+		Name:            "GitHub API",
+		Description:     "GitHub API基盤ブロック",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryGitHub,
+		Icon:            "github",
+		ParentBlockSlug: "bearer-api",
+		ConfigDefaults: json.RawMessage(`{
+			"base_url": "https://api.github.com",
+			"secret_key": "GITHUB_TOKEN"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"token": {"type": "string", "title": "アクセストークン"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+return {
+    ...input,
+    headers: {
+        ...(input.headers || {}),
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+    }
+};
+`,
+		PostProcess: `
+if (input.status === 404) {
+    throw new Error('[GITHUB_003] リソースが見つかりません');
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "github", "color": "#24292F"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "GITHUB_001", Name: "TOKEN_NOT_CONFIGURED", Description: "トークンが設定されていません", Retryable: false},
+			{Code: "GITHUB_003", Name: "NOT_FOUND", Description: "リソースが見つかりません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// NotionAPIBlock provides Notion API base configuration
+func NotionAPIBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "notion-api",
+		Version:         1,
+		Name:            "Notion API",
+		Description:     "Notion API基盤ブロック",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryNotion,
+		Icon:            "file-text",
+		ParentBlockSlug: "bearer-api",
+		ConfigDefaults: json.RawMessage(`{
+			"base_url": "https://api.notion.com/v1",
+			"secret_key": "NOTION_API_KEY"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"api_key": {"type": "string", "title": "API Key"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+// api_key -> token にマッピング（親のbearer-api用）
+if (config.api_key && !config.token) {
+    config.token = config.api_key;
+}
+return {
+    ...input,
+    headers: {
+        ...(input.headers || {}),
+        'Notion-Version': '2022-06-28'
+    }
+};
+`,
+		UIConfig: json.RawMessage(`{"icon": "file-text", "color": "#000000"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "NOTION_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// GoogleAPIBlock provides Google API base configuration
+func GoogleAPIBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "google-api",
+		Version:         1,
+		Name:            "Google API",
+		Description:     "Google API基盤ブロック",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryGoogle,
+		Icon:            "cloud",
+		ParentBlockSlug: "api-key-query",
+		ConfigDefaults: json.RawMessage(`{
+			"secret_key": "GOOGLE_API_KEY"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"api_key": {"type": "string", "title": "API Key"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PostProcess: `
+if (input.status === 404) {
+    throw new Error('[GOOGLE_003] リソースが見つかりません');
+}
+if (input.body?.error) {
+    throw new Error('[GOOGLE_002] ' + (input.body.error.message || 'Unknown error'));
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "cloud", "color": "#4285F4"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "GOOGLE_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
+			{Code: "GOOGLE_002", Name: "API_ERROR", Description: "Google APIエラー", Retryable: true},
+			{Code: "GOOGLE_003", Name: "NOT_FOUND", Description: "リソースが見つかりません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// LinearAPIBlock provides Linear API base configuration
+func LinearAPIBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "linear-api",
+		Version:         1,
+		Name:            "Linear API",
+		Description:     "Linear API基盤ブロック",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryLinear,
+		Icon:            "check-square",
+		ParentBlockSlug: "graphql",
+		ConfigDefaults: json.RawMessage(`{
+			"endpoint": "https://api.linear.app/graphql",
+			"secret_key": "LINEAR_API_KEY"
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"api_key": {"type": "string", "title": "API Key"}
+			}
+		}`),
+		InputPorts:  []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{},
+		PreProcess: `
+// api_key -> auth_key にマッピング
+if (config.api_key && !config.auth_key) {
+    config.auth_key = config.api_key;
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "check-square", "color": "#5E6AD2"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "LINEAR_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
+		},
+		Enabled: true,
+	}
+}
+
+// =============================================================================
+// Level 4+: Concrete Operation Blocks
+// =============================================================================
+
+// SlackBlock sends messages to Slack via webhook
 func SlackBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "slack",
-		Version:     1,
-		Name:        "Slack",
-		Description: "Slackチャンネルにメッセージを送信",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategorySlack,
-		Icon:        "message-square",
+		Slug:            "slack",
+		Version:         3, // Incremented for webhook inheritance
+		Name:            "Slack",
+		Description:     "Slackチャンネルにメッセージを送信",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategorySlack,
+		Icon:            "message-square",
+		ParentBlockSlug: "webhook",
+		ConfigDefaults: json.RawMessage(`{
+			"secret_key": "SLACK_WEBHOOK_URL"
+		}`),
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["message"],
@@ -194,11 +726,7 @@ func SlackBlock() *SystemBlockDefinition {
 				"success": {"type": "boolean"}
 			}
 		}`),
-		Code: `
-const webhookUrl = config.webhook_url || ctx.secrets.SLACK_WEBHOOK_URL;
-if (!webhookUrl) {
-    throw new Error('[SLACK_001] Webhook URLが設定されていません');
-}
+		PreProcess: `
 const payload = {
     text: renderTemplate(config.message, input)
 };
@@ -206,13 +734,13 @@ if (config.channel) payload.channel = config.channel;
 if (config.username) payload.username = config.username;
 if (config.icon_emoji) payload.icon_emoji = config.icon_emoji;
 if (config.blocks && config.blocks.length > 0) payload.blocks = config.blocks;
-const response = ctx.http.post(webhookUrl, payload, {
-    headers: { 'Content-Type': 'application/json' }
-});
-if (response.status >= 400) {
-    throw new Error('[SLACK_002] Slack送信失敗: ' + response.status);
+return { ...input, payload };
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    throw new Error('[SLACK_002] Slack送信失敗: ' + input.status);
 }
-return { success: true, status: response.status };
+return { success: true, status: input.status };
 `,
 		UIConfig: json.RawMessage(`{"icon": "message-square", "color": "#4A154B"}`),
 		ErrorCodes: []domain.ErrorCodeDef{
@@ -224,15 +752,20 @@ return { success: true, status: response.status };
 	}
 }
 
+// DiscordBlock sends messages to Discord via webhook
 func DiscordBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "discord",
-		Version:     1,
-		Name:        "Discord",
-		Description: "Discord Webhookにメッセージを送信",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryDiscord,
-		Icon:        "message-circle",
+		Slug:            "discord",
+		Version:         3, // Incremented for webhook inheritance
+		Name:            "Discord",
+		Description:     "Discord Webhookにメッセージを送信",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryDiscord,
+		Icon:            "message-circle",
+		ParentBlockSlug: "webhook",
+		ConfigDefaults: json.RawMessage(`{
+			"secret_key": "DISCORD_WEBHOOK_URL"
+		}`),
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["content"],
@@ -253,27 +786,23 @@ func DiscordBlock() *SystemBlockDefinition {
 				"success": {"type": "boolean"}
 			}
 		}`),
-		Code: `
-const webhookUrl = config.webhook_url || ctx.secrets.DISCORD_WEBHOOK_URL;
-if (!webhookUrl) {
-    throw new Error('[DISCORD_001] Webhook URLが設定されていません');
-}
+		PreProcess: `
 const payload = {
     content: renderTemplate(config.content, input)
 };
 if (config.username) payload.username = config.username;
 if (config.avatar_url) payload.avatar_url = config.avatar_url;
 if (config.embeds && config.embeds.length > 0) payload.embeds = config.embeds;
-const response = ctx.http.post(webhookUrl, payload, {
-    headers: { 'Content-Type': 'application/json' }
-});
-if (response.status === 429) {
+return { ...input, payload };
+`,
+		PostProcess: `
+if (input.status === 429) {
     throw new Error('[DISCORD_003] レート制限に達しました');
 }
-if (response.status >= 400) {
-    throw new Error('[DISCORD_002] Discord送信失敗: ' + response.status);
+if (input.status >= 400) {
+    throw new Error('[DISCORD_002] Discord送信失敗: ' + input.status);
 }
-return { success: true, status: response.status };
+return { success: true, status: input.status };
 `,
 		UIConfig: json.RawMessage(`{"icon": "message-circle", "color": "#5865F2"}`),
 		ErrorCodes: []domain.ErrorCodeDef{
@@ -285,15 +814,17 @@ return { success: true, status: response.status };
 	}
 }
 
+// NotionQueryDBBlock queries a Notion database
 func NotionQueryDBBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "notion_query_db",
-		Version:     1,
-		Name:        "Notion: DB検索",
-		Description: "Notionデータベースを検索",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryNotion,
-		Icon:        "database",
+		Slug:            "notion_query_db",
+		Version:         2, // Incremented for notion-api inheritance
+		Name:            "Notion: DB検索",
+		Description:     "Notionデータベースを検索",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryNotion,
+		Icon:            "database",
+		ParentBlockSlug: "notion-api",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["database_id"],
@@ -315,34 +846,27 @@ func NotionQueryDBBlock() *SystemBlockDefinition {
 				"next_cursor": {"type": "string"}
 			}
 		}`),
-		Code: `
-const apiKey = config.api_key || ctx.secrets.NOTION_API_KEY;
-if (!apiKey) {
-    throw new Error('[NOTION_001] API Keyが設定されていません');
-}
+		PreProcess: `
 const payload = {};
 if (config.filter) payload.filter = config.filter;
 if (config.sorts) payload.sorts = config.sorts;
 if (config.page_size) payload.page_size = config.page_size;
-const response = ctx.http.post(
-    'https://api.notion.com/v1/databases/' + config.database_id + '/query',
-    payload,
-    {
-        headers: {
-            'Authorization': 'Bearer ' + apiKey,
-            'Content-Type': 'application/json',
-            'Notion-Version': '2022-06-28'
-        }
-    }
-);
-if (response.status >= 400) {
-    const errorMsg = response.body?.message || 'Unknown error';
+return {
+    ...input,
+    url: '/databases/' + config.database_id + '/query',
+    method: 'POST',
+    body: payload
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || 'Unknown error';
     throw new Error('[NOTION_004] クエリ失敗: ' + errorMsg);
 }
 return {
-    results: response.body.results,
-    has_more: response.body.has_more,
-    next_cursor: response.body.next_cursor
+    results: input.body.results,
+    has_more: input.body.has_more,
+    next_cursor: input.body.next_cursor
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "database", "color": "#000000"}`),
@@ -354,15 +878,17 @@ return {
 	}
 }
 
+// NotionCreatePageBlock creates a page in Notion
 func NotionCreatePageBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "notion_create_page",
-		Version:     1,
-		Name:        "Notion: ページ作成",
-		Description: "Notionにページを作成",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryNotion,
-		Icon:        "file-text",
+		Slug:            "notion_create_page",
+		Version:         2, // Incremented for notion-api inheritance
+		Name:            "Notion: ページ作成",
+		Description:     "Notionにページを作成",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryNotion,
+		Icon:            "file-text",
+		ParentBlockSlug: "notion-api",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["parent_id"],
@@ -385,11 +911,7 @@ func NotionCreatePageBlock() *SystemBlockDefinition {
 				"created_time": {"type": "string"}
 			}
 		}`),
-		Code: `
-const apiKey = config.api_key || ctx.secrets.NOTION_API_KEY;
-if (!apiKey) {
-    throw new Error('[NOTION_001] API Keyが設定されていません');
-}
+		PreProcess: `
 const parentKey = config.parent_type || 'database_id';
 const payload = {
     parent: { [parentKey]: config.parent_id }
@@ -414,21 +936,22 @@ if (config.content) {
         }
     ];
 }
-const response = ctx.http.post('https://api.notion.com/v1/pages', payload, {
-    headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json',
-        'Notion-Version': '2022-06-28'
-    }
-});
-if (response.status >= 400) {
-    const errorMsg = response.body?.message || 'Unknown error';
+return {
+    ...input,
+    url: '/pages',
+    method: 'POST',
+    body: payload
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || 'Unknown error';
     throw new Error('[NOTION_002] ページ作成失敗: ' + errorMsg);
 }
 return {
-    id: response.body.id,
-    url: response.body.url,
-    created_time: response.body.created_time
+    id: input.body.id,
+    url: input.body.url,
+    created_time: input.body.created_time
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "file-text", "color": "#000000"}`),
@@ -441,15 +964,20 @@ return {
 	}
 }
 
+// GSheetsAppendBlock appends rows to Google Sheets
 func GSheetsAppendBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "gsheets_append",
-		Version:     1,
-		Name:        "Google Sheets: 行追加",
-		Description: "Google Sheetsに行を追加",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryGoogle,
-		Icon:        "table",
+		Slug:            "gsheets_append",
+		Version:         2, // Incremented for google-api inheritance
+		Name:            "Google Sheets: 行追加",
+		Description:     "Google Sheetsに行を追加",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryGoogle,
+		Icon:            "table",
+		ParentBlockSlug: "google-api",
+		ConfigDefaults: json.RawMessage(`{
+			"base_url": "https://sheets.googleapis.com/v4/spreadsheets"
+		}`),
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["spreadsheet_id", "values"],
@@ -463,35 +991,40 @@ func GSheetsAppendBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const apiKey = config.api_key || ctx.secrets.GOOGLE_API_KEY;
-if (!apiKey) {
-    throw new Error('[GSHEETS_001] API Keyが設定されていません');
-}
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"updated_range": {"type": "string"},
+				"updated_rows": {"type": "number"},
+				"updated_cells": {"type": "number"}
+			}
+		}`),
+		PreProcess: `
 const range = encodeURIComponent(config.range || 'Sheet1!A:Z');
 const valueInputOption = config.value_input_option || 'USER_ENTERED';
-const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + config.spreadsheet_id +
-    '/values/' + range + ':append' +
-    '?valueInputOption=' + valueInputOption +
-    '&key=' + apiKey;
 let values = config.values;
 if (typeof values === 'string') {
     values = JSON.parse(renderTemplate(values, input));
 }
-const response = ctx.http.post(url, { values: values }, {
-    headers: { 'Content-Type': 'application/json' }
-});
-if (response.status === 404) {
+return {
+    ...input,
+    url: '/' + config.spreadsheet_id + '/values/' + range + ':append?valueInputOption=' + valueInputOption,
+    method: 'POST',
+    body: { values: values }
+};
+`,
+		PostProcess: `
+if (input.status === 404) {
     throw new Error('[GSHEETS_003] スプレッドシートが見つかりません');
 }
-if (response.status >= 400) {
-    const errorMsg = response.body?.error?.message || 'Unknown error';
+if (input.status >= 400) {
+    const errorMsg = input.body?.error?.message || 'Unknown error';
     throw new Error('[GSHEETS_002] 行追加失敗: ' + errorMsg);
 }
 return {
-    updated_range: response.body.updates?.updatedRange,
-    updated_rows: response.body.updates?.updatedRows,
-    updated_cells: response.body.updates?.updatedCells
+    updated_range: input.body.updates?.updatedRange,
+    updated_rows: input.body.updates?.updatedRows,
+    updated_cells: input.body.updates?.updatedCells
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "table", "color": "#0F9D58"}`),
@@ -504,15 +1037,20 @@ return {
 	}
 }
 
+// GSheetsReadBlock reads data from Google Sheets
 func GSheetsReadBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "gsheets_read",
-		Version:     1,
-		Name:        "Google Sheets: 読み取り",
-		Description: "Google Sheetsから範囲を読み取り",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryGoogle,
-		Icon:        "table",
+		Slug:            "gsheets_read",
+		Version:         2, // Incremented for google-api inheritance
+		Name:            "Google Sheets: 読み取り",
+		Description:     "Google Sheetsから範囲を読み取り",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryGoogle,
+		Icon:            "table",
+		ParentBlockSlug: "google-api",
+		ConfigDefaults: json.RawMessage(`{
+			"base_url": "https://sheets.googleapis.com/v4/spreadsheets"
+		}`),
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["spreadsheet_id", "range"],
@@ -525,28 +1063,33 @@ func GSheetsReadBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const apiKey = config.api_key || ctx.secrets.GOOGLE_API_KEY;
-if (!apiKey) {
-    throw new Error('[GSHEETS_001] API Keyが設定されていません');
-}
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"range": {"type": "string"},
+				"values": {"type": "array"}
+			}
+		}`),
+		PreProcess: `
 const range = encodeURIComponent(config.range);
 const majorDimension = config.major_dimension || 'ROWS';
-const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + config.spreadsheet_id +
-    '/values/' + range +
-    '?majorDimension=' + majorDimension +
-    '&key=' + apiKey;
-const response = ctx.http.get(url);
-if (response.status === 404) {
+return {
+    ...input,
+    url: '/' + config.spreadsheet_id + '/values/' + range + '?majorDimension=' + majorDimension,
+    method: 'GET'
+};
+`,
+		PostProcess: `
+if (input.status === 404) {
     throw new Error('[GSHEETS_003] スプレッドシートが見つかりません');
 }
-if (response.status >= 400) {
-    const errorMsg = response.body?.error?.message || 'Unknown error';
+if (input.status >= 400) {
+    const errorMsg = input.body?.error?.message || 'Unknown error';
     throw new Error('[GSHEETS_004] 読み取り失敗: ' + errorMsg);
 }
 return {
-    range: response.body.range,
-    values: response.body.values || []
+    range: input.body.range,
+    values: input.body.values || []
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "table", "color": "#0F9D58"}`),
@@ -559,15 +1102,17 @@ return {
 	}
 }
 
+// GitHubCreateIssueBlock creates an issue on GitHub
 func GitHubCreateIssueBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "github_create_issue",
-		Version:     1,
-		Name:        "GitHub: Issue作成",
-		Description: "GitHubリポジトリにIssueを作成",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryGitHub,
-		Icon:        "git-pull-request",
+		Slug:            "github_create_issue",
+		Version:         2, // Incremented for github-api inheritance
+		Name:            "GitHub: Issue作成",
+		Description:     "GitHubリポジトリにIssueを作成",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryGitHub,
+		Icon:            "git-pull-request",
+		ParentBlockSlug: "github-api",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["owner", "repo", "title"],
@@ -583,37 +1128,39 @@ func GitHubCreateIssueBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const token = config.token || ctx.secrets.GITHUB_TOKEN;
-if (!token) {
-    throw new Error('[GITHUB_001] トークンが設定されていません');
-}
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"id": {"type": "number"},
+				"number": {"type": "number"},
+				"url": {"type": "string"},
+				"html_url": {"type": "string"}
+			}
+		}`),
+		PreProcess: `
 const payload = {
     title: renderTemplate(config.title, input),
     body: config.body ? renderTemplate(config.body, input) : undefined,
     labels: config.labels,
     assignees: config.assignees
 };
-const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/issues';
-const response = ctx.http.post(url, payload, {
-    headers: {
-        'Authorization': 'Bearer ' + token,
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28'
-    }
-});
-if (response.status === 404) {
-    throw new Error('[GITHUB_003] リポジトリが見つかりません');
-}
-if (response.status >= 400) {
-    const errorMsg = response.body?.message || 'Unknown error';
+return {
+    ...input,
+    url: '/repos/' + config.owner + '/' + config.repo + '/issues',
+    method: 'POST',
+    body: payload
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || 'Unknown error';
     throw new Error('[GITHUB_002] Issue作成失敗: ' + errorMsg);
 }
 return {
-    id: response.body.id,
-    number: response.body.number,
-    url: response.body.url,
-    html_url: response.body.html_url
+    id: input.body.id,
+    number: input.body.number,
+    url: input.body.url,
+    html_url: input.body.html_url
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "git-pull-request", "color": "#24292F"}`),
@@ -626,15 +1173,17 @@ return {
 	}
 }
 
+// GitHubAddCommentBlock adds a comment to a GitHub issue or PR
 func GitHubAddCommentBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "github_add_comment",
-		Version:     1,
-		Name:        "GitHub: コメント追加",
-		Description: "GitHub IssueまたはPRにコメントを追加",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryGitHub,
-		Icon:        "message-square",
+		Slug:            "github_add_comment",
+		Version:         2, // Incremented for github-api inheritance
+		Name:            "GitHub: コメント追加",
+		Description:     "GitHub IssueまたはPRにコメントを追加",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryGitHub,
+		Icon:            "message-square",
+		ParentBlockSlug: "github-api",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["owner", "repo", "issue_number", "body"],
@@ -648,30 +1197,31 @@ func GitHubAddCommentBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const token = config.token || ctx.secrets.GITHUB_TOKEN;
-if (!token) {
-    throw new Error('[GITHUB_001] トークンが設定されていません');
-}
-const url = 'https://api.github.com/repos/' + config.owner + '/' + config.repo +
-    '/issues/' + config.issue_number + '/comments';
-const response = ctx.http.post(url, {
-    body: renderTemplate(config.body, input)
-}, {
-    headers: {
-        'Authorization': 'Bearer ' + token,
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28'
-    }
-});
-if (response.status >= 400) {
-    const errorMsg = response.body?.message || 'Unknown error';
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"id": {"type": "number"},
+				"url": {"type": "string"},
+				"html_url": {"type": "string"}
+			}
+		}`),
+		PreProcess: `
+return {
+    ...input,
+    url: '/repos/' + config.owner + '/' + config.repo + '/issues/' + config.issue_number + '/comments',
+    method: 'POST',
+    body: { body: renderTemplate(config.body, input) }
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || 'Unknown error';
     throw new Error('[GITHUB_004] コメント追加失敗: ' + errorMsg);
 }
 return {
-    id: response.body.id,
-    url: response.body.url,
-    html_url: response.body.html_url
+    id: input.body.id,
+    url: input.body.url,
+    html_url: input.body.html_url
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "message-square", "color": "#24292F"}`),
@@ -683,15 +1233,21 @@ return {
 	}
 }
 
+// WebSearchBlock performs web search using Tavily API
 func WebSearchBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "web_search",
-		Version:     1,
-		Name:        "Web検索",
-		Description: "Tavily APIでWeb検索を実行",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryWeb,
-		Icon:        "search",
+		Slug:            "web_search",
+		Version:         2, // Incremented for rest-api inheritance
+		Name:            "Web検索",
+		Description:     "Tavily APIでWeb検索を実行",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryWeb,
+		Icon:            "search",
+		ParentBlockSlug: "rest-api",
+		ConfigDefaults: json.RawMessage(`{
+			"base_url": "https://api.tavily.com",
+			"secret_key": "TAVILY_API_KEY"
+		}`),
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["query"],
@@ -707,11 +1263,15 @@ func WebSearchBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const apiKey = config.api_key || ctx.secrets.TAVILY_API_KEY;
-if (!apiKey) {
-    throw new Error('[SEARCH_001] API Keyが設定されていません');
-}
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"answer": {"type": "string"},
+				"results": {"type": "array"}
+			}
+		}`),
+		PreProcess: `
+const apiKey = config.api_key || (config.secret_key ? ctx.secrets[config.secret_key] : null);
 const payload = {
     api_key: apiKey,
     query: renderTemplate(config.query, input),
@@ -725,15 +1285,20 @@ if (config.include_domains && config.include_domains.length > 0) {
 if (config.exclude_domains && config.exclude_domains.length > 0) {
     payload.exclude_domains = config.exclude_domains;
 }
-const response = ctx.http.post('https://api.tavily.com/search', payload, {
-    headers: { 'Content-Type': 'application/json' }
-});
-if (response.status >= 400) {
-    throw new Error('[SEARCH_002] 検索失敗: ' + (response.body?.error || response.status));
+return {
+    ...input,
+    url: '/search',
+    method: 'POST',
+    body: payload
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    throw new Error('[SEARCH_002] 検索失敗: ' + (input.body?.error || input.status));
 }
 return {
-    answer: response.body.answer,
-    results: response.body.results
+    answer: input.body.answer,
+    results: input.body.results
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "search", "color": "#4285F4"}`),
@@ -745,15 +1310,17 @@ return {
 	}
 }
 
+// LinearCreateIssueBlock creates an issue in Linear
 func LinearCreateIssueBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "linear_create_issue",
-		Version:     1,
-		Name:        "Linear: Issue作成",
-		Description: "LinearにIssueを作成",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryLinear,
-		Icon:        "check-square",
+		Slug:            "linear_create_issue",
+		Version:         2, // Incremented for linear-api inheritance
+		Name:            "Linear: Issue作成",
+		Description:     "LinearにIssueを作成",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryLinear,
+		Icon:            "check-square",
+		ParentBlockSlug: "linear-api",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["team_id", "title"],
@@ -769,11 +1336,15 @@ func LinearCreateIssueBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const apiKey = config.api_key || ctx.secrets.LINEAR_API_KEY;
-if (!apiKey) {
-    throw new Error('[LINEAR_001] API Keyが設定されていません');
-}
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"id": {"type": "string"},
+				"identifier": {"type": "string"},
+				"url": {"type": "string"}
+			}
+		}`),
+		PreProcess: `
 const mutation = 'mutation IssueCreate($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }';
 const variables = {
     input: {
@@ -785,20 +1356,18 @@ const variables = {
         assigneeId: config.assignee_id
     }
 };
-const response = ctx.http.post('https://api.linear.app/graphql', {
+return {
+    ...input,
     query: mutation,
     variables: variables
-}, {
-    headers: {
-        'Authorization': apiKey,
-        'Content-Type': 'application/json'
-    }
-});
-if (response.status >= 400 || response.body.errors) {
-    const errorMsg = response.body.errors?.[0]?.message || 'Unknown error';
-    throw new Error('[LINEAR_002] Issue作成失敗: ' + errorMsg);
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    throw new Error('[LINEAR_002] Issue作成失敗: ' + input.status);
 }
-const issue = response.body.data.issueCreate.issue;
+// GraphQL response is already processed by graphql block
+const issue = input.issueCreate?.issue || input;
 return {
     id: issue.id,
     identifier: issue.identifier,
@@ -814,15 +1383,21 @@ return {
 	}
 }
 
+// EmailSendGridBlock sends email via SendGrid API
 func EmailSendGridBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
-		Slug:        "email_sendgrid",
-		Version:     1,
-		Name:        "Email (SendGrid)",
-		Description: "SendGrid APIでメールを送信",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryEmail,
-		Icon:        "mail",
+		Slug:            "email_sendgrid",
+		Version:         2, // Incremented for bearer-api inheritance
+		Name:            "Email (SendGrid)",
+		Description:     "SendGrid APIでメールを送信",
+		Category:        domain.BlockCategoryApps,
+		Subcategory:     domain.BlockSubcategoryEmail,
+		Icon:            "mail",
+		ParentBlockSlug: "bearer-api",
+		ConfigDefaults: json.RawMessage(`{
+			"base_url": "https://api.sendgrid.com/v3",
+			"secret_key": "SENDGRID_API_KEY"
+		}`),
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["from_email", "to_email", "subject", "content"],
@@ -839,10 +1414,17 @@ func EmailSendGridBlock() *SystemBlockDefinition {
 		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
-		Code: `
-const apiKey = config.api_key || ctx.secrets.SENDGRID_API_KEY;
-if (!apiKey) {
-    throw new Error('[EMAIL_001] API Keyが設定されていません');
+		OutputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"success": {"type": "boolean"},
+				"message_id": {"type": "string"}
+			}
+		}`),
+		PreProcess: `
+// api_key -> token にマッピング
+if (config.api_key && !config.token) {
+    config.token = config.api_key;
 }
 const payload = {
     personalizations: [{
@@ -861,19 +1443,21 @@ const payload = {
         value: renderTemplate(config.content, input)
     }]
 };
-const response = ctx.http.post('https://api.sendgrid.com/v3/mail/send', payload, {
-    headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-    }
-});
-if (response.status >= 400) {
-    const errors = response.body?.errors?.map(e => e.message).join(', ') || 'Unknown error';
+return {
+    ...input,
+    url: '/mail/send',
+    method: 'POST',
+    body: payload
+};
+`,
+		PostProcess: `
+if (input.status >= 400) {
+    const errors = input.body?.errors?.map(e => e.message).join(', ') || 'Unknown error';
     throw new Error('[EMAIL_002] メール送信失敗: ' + errors);
 }
 return {
     success: true,
-    message_id: response.headers['x-message-id']
+    message_id: input.headers?.['x-message-id'] || null
 };
 `,
 		UIConfig: json.RawMessage(`{"icon": "mail", "color": "#1A82E2"}`),

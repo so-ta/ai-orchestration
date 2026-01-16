@@ -2,7 +2,7 @@
 
 > **Status**: ✅ Implemented
 > **Created**: 2025-01-12
-> **Updated**: 2025-01-12
+> **Updated**: 2026-01-16
 > **Author**: AI Agent
 
 ---
@@ -179,6 +179,218 @@ interface Block {
 | `parallel` | `Promise.all(ctx.workflow.run(...))` | ✅ |
 | `subflow` | `ctx.workflow.run(...)` | ✅ |
 | `human` | `ctx.human.requestApproval(...)` | ✅ |
+
+---
+
+## Block 継承アーキテクチャ
+
+### 概要
+
+多段継承により、認証パターンやサービス固有の設定を階層的に定義できます。
+これにより、新規外部サービス連携を最小限のコードで追加できます。
+
+### 継承階層
+
+```
+http (Level 0: Base)
+├── webhook (Level 1: Pattern)
+│   ├── slack (Level 2: Concrete)
+│   └── discord (Level 2: Concrete)
+│
+├── rest-api (Level 1: Pattern)
+│   ├── bearer-api (Level 2: Auth)
+│   │   ├── github-api (Level 3: Service)
+│   │   │   ├── github_create_issue (Level 4: Operation)
+│   │   │   └── github_add_comment (Level 4: Operation)
+│   │   ├── notion-api (Level 3: Service)
+│   │   │   ├── notion_query_db (Level 4: Operation)
+│   │   │   └── notion_create_page (Level 4: Operation)
+│   │   └── email_sendgrid (Level 3: Concrete)
+│   ├── api-key-header (Level 2: Auth)
+│   │   └── web_search (Level 3: Concrete)
+│   └── api-key-query (Level 2: Auth)
+│       └── google-api (Level 3: Service)
+│           ├── gsheets_append (Level 4: Operation)
+│           └── gsheets_read (Level 4: Operation)
+│
+└── graphql (Level 1: Pattern)
+    └── linear-api (Level 2: Service)
+        └── linear_create_issue (Level 3: Operation)
+```
+
+### 各レベルの責務
+
+| Level | 名称 | 責務 | 例 |
+|-------|------|------|-----|
+| 0 | Base | 基本的な実行ロジック（Code保持） | `http` |
+| 1 | Pattern | 通信パターン、基本エラーハンドリング | `webhook`, `rest-api`, `graphql` |
+| 2 | Auth | 認証方式の抽象化 | `bearer-api`, `api-key-header`, `api-key-query` |
+| 3 | Service | サービス固有の設定（ベースURL、APIバージョン） | `github-api`, `notion-api` |
+| 4+ | Operation | 具体的なAPI操作 | `github_create_issue`, `notion_query_db` |
+
+### 実行フロー（Multi-Level Inheritance）
+
+```
+github_create_issue → github-api → bearer-api → rest-api → http
+
+1. PreProcess Chain (child → root):
+   github_create_issue.preProcess → github-api.preProcess →
+   bearer-api.preProcess → rest-api.preProcess
+
+2. Config Merge (root → child):
+   rest-api.configDefaults ← bearer-api.configDefaults ←
+   github-api.configDefaults ← github_create_issue.configDefaults
+   ← step.config (runtime)
+
+3. Execute Code (from root ancestor: http.code)
+
+4. PostProcess Chain (root → child):
+   rest-api.postProcess → bearer-api.postProcess →
+   github-api.postProcess → github_create_issue.postProcess
+```
+
+### ConfigDefaults マージ順序
+
+```
+root ancestor defaults (rest-api)
+    ↓ (override)
+auth level defaults (bearer-api: auth_type=bearer)
+    ↓ (override)
+service defaults (github-api: base_url, secret_key)
+    ↓ (override)
+child defaults (github_create_issue: specific settings)
+    ↓ (override)
+step config (execution time)
+```
+
+### 継承ルール
+
+| ルール | 説明 |
+|--------|------|
+| コードを持つブロックのみ継承可能 | `Code != ""` |
+| 最大継承深度 | 50レベル（実用上は4-5レベル） |
+| 循環継承禁止 | A→B→C→A のような循環は不可（トポロジカルソートで検出） |
+| テナント分離 | 同一テナント内またはシステムブロックからのみ継承可能 |
+
+### 継承ブロック定義例
+
+```go
+// integration.go - github_create_issue
+func GitHubCreateIssueBlock() *SystemBlockDefinition {
+    return &SystemBlockDefinition{
+        Slug:            "github_create_issue",
+        Version:         2,
+        ParentBlockSlug: "github-api",  // 親ブロック
+        PreProcess: `
+const payload = {
+    title: renderTemplate(config.title, input),
+    body: config.body ? renderTemplate(config.body, input) : undefined,
+    labels: config.labels,
+    assignees: config.assignees
+};
+return {
+    ...input,
+    url: '/repos/' + config.owner + '/' + config.repo + '/issues',
+    method: 'POST',
+    body: payload
+};
+`,
+        PostProcess: `
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || 'Unknown error';
+    throw new Error('[GITHUB_002] Issue作成失敗: ' + errorMsg);
+}
+return {
+    id: input.body.id,
+    number: input.body.number,
+    url: input.body.url,
+    html_url: input.body.html_url
+};
+`,
+        // Code は親（github-api → bearer-api → rest-api → http）から継承
+    }
+}
+```
+
+### Seeder マイグレーションのトポロジカルソート
+
+多段継承を正しく処理するため、Seeder は Kahn's Algorithm によるトポロジカルソートを使用：
+
+```go
+// migrator.go - topologicalSort
+func topologicalSort(allBlocks []*blocks.SystemBlockDefinition) ([]*blocks.SystemBlockDefinition, error) {
+    // 1. Build slug → block map
+    blockMap := make(map[string]*blocks.SystemBlockDefinition)
+
+    // 2. Calculate in-degree for each block
+    inDegree := make(map[string]int)
+    children := make(map[string][]string)
+
+    for _, block := range allBlocks {
+        if block.ParentBlockSlug != "" {
+            inDegree[block.Slug]++
+            children[block.ParentBlockSlug] = append(children[block.ParentBlockSlug], block.Slug)
+        }
+    }
+
+    // 3. Start with blocks that have no dependencies (in-degree = 0)
+    var queue []string
+    for slug, degree := range inDegree {
+        if degree == 0 {
+            queue = append(queue, slug)
+        }
+    }
+
+    // 4. Process queue, decrementing in-degree of children
+    var sorted []*blocks.SystemBlockDefinition
+    for len(queue) > 0 {
+        slug := queue[0]
+        queue = queue[1:]
+        sorted = append(sorted, blockMap[slug])
+
+        for _, childSlug := range children[slug] {
+            inDegree[childSlug]--
+            if inDegree[childSlug] == 0 {
+                queue = append(queue, childSlug)
+            }
+        }
+    }
+
+    // 5. Check for cycles
+    if len(sorted) != len(allBlocks) {
+        return nil, fmt.Errorf("circular dependency detected")
+    }
+
+    return sorted, nil
+}
+```
+
+### 新規サービス追加の簡略化
+
+継承アーキテクチャにより、新規サービス追加が大幅に簡略化されます：
+
+**Before（従来）**: ~50行のコード（認証、エラーハンドリング、URLヘッダー設定を全て手動）
+
+**After（継承使用）**: ~20行のコード（固有のロジックのみ記述）
+
+```javascript
+// 例: Jira Issue作成を追加
+
+// Step 1: jira-api 基盤ブロック作成（1回のみ）
+{
+    slug: "jira-api",
+    parent_block_slug: "bearer-api",
+    config_defaults: { "base_url": "https://{domain}.atlassian.net/rest/api/3" }
+}
+
+// Step 2: jira_create_issue 操作ブロック作成
+{
+    slug: "jira_create_issue",
+    parent_block_slug: "jira-api",
+    pre_process: `return { url: '/issue', method: 'POST', body: {...} };`,
+    post_process: `return { key: input.body.key };`
+}
+```
 
 ---
 
@@ -640,6 +852,13 @@ Response:
 
 - 本ドキュメント更新
 - API.md に管理者API追加
+
+### Phase 7: 多段継承アーキテクチャ ✅
+
+- 基盤/パターンブロック10個追加（webhook, rest-api, graphql, bearer-api, api-key-header, api-key-query, github-api, notion-api, google-api, linear-api）
+- 既存11個の外部連携ブロックを継承アーキテクチャにマイグレーション
+- Seeder にトポロジカルソート（Kahn's Algorithm）を実装
+- 最大継承深度50、循環依存検出
 
 ---
 

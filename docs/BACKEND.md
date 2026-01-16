@@ -367,8 +367,9 @@ const (
 | Constraint | Value |
 |------------|-------|
 | Only blocks with code can be inherited | `Code != ""` |
-| Maximum inheritance depth | 10 levels |
-| Circular inheritance | Not allowed |
+| Maximum inheritance depth | 50 levels（実用上は4-5レベル） |
+| Circular inheritance | Not allowed（トポロジカルソートで検出） |
+| Tenant isolation | 同一テナント内またはシステムブロックからのみ継承可能 |
 
 #### Block Execution Flow
 
@@ -761,6 +762,32 @@ DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmod
 ```
 
 **Note**: `make seed-blocks` コマンドはMakefile内でDATABASE_URLを自動設定します。
+
+### Seeder マイグレーション処理
+
+Seeder は多段継承を正しく処理するため、Kahn's Algorithm によるトポロジカルソートを使用：
+
+```
+http (Level 0)
+  ↓ sorted first
+rest-api (Level 1)
+  ↓
+bearer-api (Level 2)
+  ↓
+github-api (Level 3)
+  ↓
+github_create_issue (Level 4)
+  ↓ sorted last
+```
+
+**処理フロー**:
+1. すべてのブロック定義を収集
+2. 依存関係グラフを構築（`parent_block_slug` → 子ブロック）
+3. トポロジカルソートで処理順序を決定
+4. 循環依存を検出（エラー時はマイグレーション中止）
+5. 親から子の順にUPSERT実行
+
+**See**: `internal/seed/migration/migrator.go` - `topologicalSort()` 関数
 
 ## Canonical Code Patterns (必須)
 
