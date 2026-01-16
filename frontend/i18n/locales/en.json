@@ -691,8 +691,10 @@
         "skip": "Skip step",
         "skipDesc": "Continue to next step",
         "fallback": "Use fallback",
-        "fallbackDesc": "Return a fallback value",
-        "fallbackValue": "Fallback value (JSON)"
+        "fallbackDesc": "Return a fallback value or route to error port",
+        "fallbackValue": "Fallback value (JSON)",
+        "enableErrorPort": "Use error port",
+        "enableErrorPortDesc": "Route error to the 'error' output port instead of using a static fallback value"
       }
     },
     "comingSoon": "Coming soon",

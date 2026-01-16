@@ -11,6 +11,7 @@ export interface ErrorHandlingConfig {
   timeout_seconds?: number
   on_error: 'fail' | 'skip' | 'fallback'
   fallback_value?: unknown
+  enable_error_port?: boolean
 }
 
 const props = defineProps<{
@@ -39,11 +40,6 @@ const ensureRetryConfig = () => {
       }
     }
   }
-}
-
-// Update specific fields
-const updateEnabled = (enabled: boolean) => {
-  config.value = { ...config.value, enabled }
 }
 
 const updateRetryMaxRetries = (max_retries: number) => {
@@ -88,6 +84,10 @@ const updateFallbackValue = (value: string) => {
   }
 }
 
+const updateEnableErrorPort = (enable_error_port: boolean) => {
+  config.value = { ...config.value, enable_error_port }
+}
+
 const fallbackValueString = computed(() => {
   if (config.value.fallback_value === undefined) return ''
   return typeof config.value.fallback_value === 'string'
@@ -98,20 +98,7 @@ const fallbackValueString = computed(() => {
 
 <template>
   <div class="error-handling-form">
-    <!-- Enable Toggle -->
-    <div class="form-group">
-      <label class="toggle-label">
-        <input
-          type="checkbox"
-          :checked="config.enabled"
-          :disabled="disabled"
-          @change="updateEnabled(($event.target as HTMLInputElement).checked)"
-        >
-        <span class="toggle-text">{{ t('flow.errorHandling.enabled') }}</span>
-      </label>
-    </div>
-
-    <div v-if="config.enabled" class="error-handling-options">
+    <div class="error-handling-options">
       <!-- Retry Settings -->
       <div class="subsection">
         <h5 class="subsection-title">{{ t('flow.errorHandling.retry.title') }}</h5>
@@ -239,16 +226,31 @@ const fallbackValueString = computed(() => {
         </div>
 
         <!-- Fallback Value (shown when fallback is selected) -->
-        <div v-if="config.on_error === 'fallback'" class="form-group fallback-value-group">
-          <label class="form-label">{{ t('flow.errorHandling.onError.fallbackValue') }}</label>
-          <textarea
-            class="form-input form-textarea code-input"
-            :value="fallbackValueString"
-            :disabled="disabled"
-            rows="3"
-            placeholder='{"default": "value"}'
-            @input="updateFallbackValue(($event.target as HTMLTextAreaElement).value)"
-          />
+        <div v-if="config.on_error === 'fallback'" class="fallback-options">
+          <div class="form-group">
+            <label class="toggle-label error-port-toggle">
+              <input
+                type="checkbox"
+                :checked="config.enable_error_port"
+                :disabled="disabled"
+                @change="updateEnableErrorPort(($event.target as HTMLInputElement).checked)"
+              >
+              <span class="toggle-text">{{ t('flow.errorHandling.onError.enableErrorPort') }}</span>
+            </label>
+            <p class="option-hint">{{ t('flow.errorHandling.onError.enableErrorPortDesc') }}</p>
+          </div>
+
+          <div v-if="!config.enable_error_port" class="form-group fallback-value-group">
+            <label class="form-label">{{ t('flow.errorHandling.onError.fallbackValue') }}</label>
+            <textarea
+              class="form-input form-textarea code-input"
+              :value="fallbackValueString"
+              :disabled="disabled"
+              rows="3"
+              placeholder='{"default": "value"}'
+              @input="updateFallbackValue(($event.target as HTMLTextAreaElement).value)"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -420,7 +422,29 @@ const fallbackValueString = computed(() => {
   color: var(--color-text-tertiary);
 }
 
+.fallback-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border-radius: 6px;
+  border: 1px solid var(--color-border-light);
+}
+
+.error-port-toggle {
+  margin-bottom: 0;
+}
+
+.option-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
+  margin: 0.25rem 0 0 1.5rem;
+  line-height: 1.4;
+}
+
 .fallback-value-group {
-  margin-top: 0.5rem;
+  margin-top: 0;
 }
 </style>

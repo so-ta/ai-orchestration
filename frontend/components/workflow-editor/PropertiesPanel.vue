@@ -161,7 +161,7 @@ const isStartNode = computed(() => props.step?.type === 'start')
 const flowConfig = ref<{
   prescript?: { enabled: boolean; code: string }
   postscript?: { enabled: boolean; code: string }
-  error_handling?: { enabled: boolean; retry?: object; timeout_seconds?: number; on_error: string; fallback_value?: unknown }
+  error_handling?: { enabled: boolean; retry?: object; timeout_seconds?: number; on_error: string; fallback_value?: unknown; enable_error_port?: boolean }
 }>({})
 
 function handleFlowConfigUpdate(config: typeof flowConfig.value) {
