@@ -15,7 +15,7 @@
 | Backend | `cd backend && go test ./...` | Go コード変更後 |
 | Frontend | `cd frontend && npm run check` | TS/Vue コード変更後 |
 | E2E | `cd backend && go test ./tests/e2e/... -v` | 統合テスト時 |
-| Integration | `cd backend && INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration` | 外部API接続テスト時 |
+| Integration | `cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration` | 外部API接続テスト時 |
 
 **コミット前の必須チェック**:
 ```bash

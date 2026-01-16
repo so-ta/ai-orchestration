@@ -16,83 +16,16 @@
 package sandbox
 
 import (
-	"bufio"
 	"context"
 	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/souta/ai-orchestration/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// loadEnvFile loads environment variables from a file
-func loadEnvFile(path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		value = strings.Trim(value, `"'`)
-		os.Setenv(key, value)
-	}
-	return scanner.Err()
-}
-
-// skipIfNotIntegration skips if INTEGRATION_TEST is not set
-func skipIfNotIntegration(t *testing.T) {
-	t.Helper()
-	if os.Getenv("INTEGRATION_TEST") != "1" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=1 to run)")
-	}
-}
-
-// loadTestEnv loads .env.test.local
-func loadTestEnv(t *testing.T) {
-	t.Helper()
-	paths := []string{
-		".env.test.local",
-		"../../../../.env.test.local",
-		filepath.Join(os.Getenv("HOME"), ".env.test.local"),
-	}
-
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			if err := loadEnvFile(path); err != nil {
-				t.Logf("Warning: failed to load %s: %v", path, err)
-			} else {
-				t.Logf("Loaded environment from %s", path)
-				return
-			}
-		}
-	}
-	t.Log("No .env.test.local found, using existing environment variables")
-}
-
-// requireEnvVar returns env var value or skips
-func requireEnvVar(t *testing.T, key string) string {
-	t.Helper()
-	value := os.Getenv(key)
-	if value == "" {
-		t.Skipf("Skipping: %s not set", key)
-	}
-	return value
-}
 
 // createTestSandbox creates a sandbox with HTTP client for testing
 func createTestSandbox() (*Sandbox, *ExecutionContext) {
@@ -114,9 +47,9 @@ func createTestSandbox() (*Sandbox, *ExecutionContext) {
 // =============================================================================
 
 func TestSlackBlock_Integration_SendMessage(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	webhookURL := requireEnvVar(t, "SLACK_WEBHOOK_URL")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	webhookURL := testutil.RequireEnvVar(t, "SLACK_WEBHOOK_URL")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -152,9 +85,9 @@ return { success: true, status: response.status };
 // =============================================================================
 
 func TestDiscordBlock_Integration_SendMessage(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	webhookURL := requireEnvVar(t, "DISCORD_WEBHOOK_URL")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	webhookURL := testutil.RequireEnvVar(t, "DISCORD_WEBHOOK_URL")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -194,9 +127,9 @@ return { success: true, status: response.status };
 // =============================================================================
 
 func TestGitHubBlock_Integration_GetUser(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	token := requireEnvVar(t, "GITHUB_TOKEN")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	token := testutil.RequireEnvVar(t, "GITHUB_TOKEN")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -234,9 +167,9 @@ return {
 }
 
 func TestGitHubBlock_Integration_ListRepos(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	token := requireEnvVar(t, "GITHUB_TOKEN")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	token := testutil.RequireEnvVar(t, "GITHUB_TOKEN")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -279,9 +212,9 @@ return {
 // =============================================================================
 
 func TestNotionBlock_Integration_ListUsers(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "NOTION_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "NOTION_API_KEY")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -319,9 +252,9 @@ return {
 }
 
 func TestNotionBlock_Integration_Search(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "NOTION_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "NOTION_API_KEY")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -366,9 +299,9 @@ return {
 // =============================================================================
 
 func TestLinearBlock_Integration_GetViewer(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "LINEAR_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "LINEAR_API_KEY")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -406,9 +339,9 @@ return response.data.data.viewer;
 }
 
 func TestLinearBlock_Integration_ListTeams(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "LINEAR_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "LINEAR_API_KEY")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -452,9 +385,9 @@ return {
 // =============================================================================
 
 func TestSendGridBlock_Integration_ValidateAPIKey(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "SENDGRID_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "SENDGRID_API_KEY")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -499,9 +432,9 @@ return {
 // =============================================================================
 
 func TestTavilyBlock_Integration_Search(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "TAVILY_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "TAVILY_API_KEY")
 
 	sandbox, execCtx := createTestSandbox()
 
@@ -548,9 +481,9 @@ return {
 // =============================================================================
 
 func TestGoogleSheetsBlock_Integration_GetSpreadsheet(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "GOOGLE_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "GOOGLE_API_KEY")
 	spreadsheetID := os.Getenv("GOOGLE_TEST_SPREADSHEET_ID")
 	if spreadsheetID == "" {
 		t.Skip("Skipping: GOOGLE_TEST_SPREADSHEET_ID not set")
@@ -589,8 +522,8 @@ return {
 // =============================================================================
 
 func TestBlocks_Integration_AllAvailable(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
 
 	services := []struct {
 		name   string

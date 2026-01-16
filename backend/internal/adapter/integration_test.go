@@ -11,97 +11,27 @@
 package adapter
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/souta/ai-orchestration/internal/testutil"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// loadEnvFile loads environment variables from a file
-func loadEnvFile(path string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		// Parse KEY=VALUE
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		// Remove quotes if present
-		value = strings.Trim(value, `"'`)
-		os.Setenv(key, value)
-	}
-	return scanner.Err()
-}
-
-// skipIfNotIntegration skips the test if INTEGRATION_TEST is not set
-func skipIfNotIntegration(t *testing.T) {
-	t.Helper()
-	if os.Getenv("INTEGRATION_TEST") != "1" {
-		t.Skip("Skipping integration test (set INTEGRATION_TEST=1 to run)")
-	}
-}
-
-// loadTestEnv loads .env.test.local if it exists
-func loadTestEnv(t *testing.T) {
-	t.Helper()
-	// Try to find .env.test.local in various locations
-	paths := []string{
-		".env.test.local",
-		"../../../.env.test.local",
-		filepath.Join(os.Getenv("HOME"), ".env.test.local"),
-	}
-
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			if err := loadEnvFile(path); err != nil {
-				t.Logf("Warning: failed to load %s: %v", path, err)
-			} else {
-				t.Logf("Loaded environment from %s", path)
-				return
-			}
-		}
-	}
-	t.Log("No .env.test.local found, using existing environment variables")
-}
-
-// requireEnvVar checks if an environment variable is set and skips if not
-func requireEnvVar(t *testing.T, key string) string {
-	t.Helper()
-	value := os.Getenv(key)
-	if value == "" {
-		t.Skipf("Skipping: %s not set", key)
-	}
-	return value
-}
 
 // =============================================================================
 // OpenAI Integration Tests
 // =============================================================================
 
 func TestOpenAIAdapter_Integration_BasicChat(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "OPENAI_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "OPENAI_API_KEY")
 
 	adapter := NewOpenAIAdapterWithKey(apiKey)
 
@@ -138,9 +68,9 @@ func TestOpenAIAdapter_Integration_BasicChat(t *testing.T) {
 }
 
 func TestOpenAIAdapter_Integration_WithVariables(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "OPENAI_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "OPENAI_API_KEY")
 
 	adapter := NewOpenAIAdapterWithKey(apiKey)
 
@@ -177,9 +107,9 @@ func TestOpenAIAdapter_Integration_WithVariables(t *testing.T) {
 }
 
 func TestOpenAIAdapter_Integration_SystemPrompt(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "OPENAI_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "OPENAI_API_KEY")
 
 	adapter := NewOpenAIAdapterWithKey(apiKey)
 
@@ -221,9 +151,9 @@ func TestOpenAIAdapter_Integration_SystemPrompt(t *testing.T) {
 // =============================================================================
 
 func TestAnthropicAdapter_Integration_BasicChat(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "ANTHROPIC_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "ANTHROPIC_API_KEY")
 
 	adapter := NewAnthropicAdapterWithKey(apiKey)
 
@@ -261,9 +191,9 @@ func TestAnthropicAdapter_Integration_BasicChat(t *testing.T) {
 }
 
 func TestAnthropicAdapter_Integration_WithVariables(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "ANTHROPIC_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "ANTHROPIC_API_KEY")
 
 	adapter := NewAnthropicAdapterWithKey(apiKey)
 
@@ -300,9 +230,9 @@ func TestAnthropicAdapter_Integration_WithVariables(t *testing.T) {
 }
 
 func TestAnthropicAdapter_Integration_SystemPrompt(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
-	apiKey := requireEnvVar(t, "ANTHROPIC_API_KEY")
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	apiKey := testutil.RequireEnvVar(t, "ANTHROPIC_API_KEY")
 
 	adapter := NewAnthropicAdapterWithKey(apiKey)
 
@@ -340,7 +270,7 @@ func TestAnthropicAdapter_Integration_SystemPrompt(t *testing.T) {
 // =============================================================================
 
 func TestHTTPAdapter_Integration_PublicAPI(t *testing.T) {
-	skipIfNotIntegration(t)
+	testutil.SkipIfNotIntegration(t)
 
 	adapter := NewHTTPAdapter()
 
@@ -385,7 +315,7 @@ func TestHTTPAdapter_Integration_PublicAPI(t *testing.T) {
 }
 
 func TestHTTPAdapter_Integration_POST(t *testing.T) {
-	skipIfNotIntegration(t)
+	testutil.SkipIfNotIntegration(t)
 
 	adapter := NewHTTPAdapter()
 
@@ -434,7 +364,7 @@ func TestHTTPAdapter_Integration_POST(t *testing.T) {
 }
 
 func TestHTTPAdapter_Integration_VariableSubstitution(t *testing.T) {
-	skipIfNotIntegration(t)
+	testutil.SkipIfNotIntegration(t)
 
 	adapter := NewHTTPAdapter()
 
@@ -475,8 +405,8 @@ func TestHTTPAdapter_Integration_VariableSubstitution(t *testing.T) {
 // =============================================================================
 
 func TestAdapters_Integration_AllAvailable(t *testing.T) {
-	skipIfNotIntegration(t)
-	loadTestEnv(t)
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
 
 	tests := []struct {
 		name      string
