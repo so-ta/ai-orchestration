@@ -44,13 +44,11 @@ const hasOutputPorts = computed(() => {
 // Local state for flow configuration
 const prescriptConfig = ref<ScriptConfig>({
   enabled: false,
-  language: 'javascript',
   code: ''
 })
 
 const postscriptConfig = ref<ScriptConfig>({
   enabled: false,
-  language: 'javascript',
   code: ''
 })
 
@@ -76,11 +74,10 @@ watch(() => props.step, (newStep) => {
       const ps = config.prescript as ScriptConfig
       prescriptConfig.value = {
         enabled: ps.enabled ?? false,
-        language: ps.language ?? 'javascript',
         code: ps.code ?? ''
       }
     } else {
-      prescriptConfig.value = { enabled: false, language: 'javascript', code: '' }
+      prescriptConfig.value = { enabled: false, code: '' }
     }
 
     // Load postscript
@@ -88,11 +85,10 @@ watch(() => props.step, (newStep) => {
       const ps = config.postscript as ScriptConfig
       postscriptConfig.value = {
         enabled: ps.enabled ?? false,
-        language: ps.language ?? 'javascript',
         code: ps.code ?? ''
       }
     } else {
-      postscriptConfig.value = { enabled: false, language: 'javascript', code: '' }
+      postscriptConfig.value = { enabled: false, code: '' }
     }
 
     // Load error handling

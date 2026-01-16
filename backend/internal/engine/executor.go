@@ -1066,9 +1066,8 @@ func getConfigStringArray(config json.RawMessage, key string) []string {
 
 // ScriptConfig represents prescript/postscript configuration
 type ScriptConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Language string `json:"language"`
-	Code     string `json:"code"`
+	Enabled bool   `json:"enabled"`
+	Code    string `json:"code"`
 }
 
 // ErrorHandlingConfig represents error handling configuration
@@ -1104,9 +1103,6 @@ func getScriptConfig(config json.RawMessage, key string) *ScriptConfig {
 	sc := &ScriptConfig{}
 	if enabled, ok := scriptData["enabled"].(bool); ok {
 		sc.Enabled = enabled
-	}
-	if language, ok := scriptData["language"].(string); ok {
-		sc.Language = language
 	}
 	if code, ok := scriptData["code"].(string); ok {
 		sc.Code = code
@@ -1715,18 +1711,8 @@ func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionCo
 		return nil, fmt.Errorf("invalid function config: %w", err)
 	}
 
-	// Validate language (only JavaScript supported for now)
-	language := config.Language
-	if language == "" {
-		language = "javascript"
-	}
-	if language != "javascript" && language != "js" {
-		return nil, fmt.Errorf("unsupported language: %s (only javascript is supported)", language)
-	}
-
 	e.logger.Info("Executing function step",
 		"step_id", step.ID,
-		"language", language,
 	)
 
 	// Parse input to map
