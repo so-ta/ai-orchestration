@@ -303,14 +303,13 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	case domain.StepTypeLog:
 		return e.executeLogStep(ctx, step, input)
 	case domain.StepTypeSubflow:
-		// Subflow not yet implemented, log warning and return with status
+		// Subflow not yet implemented - return error to ensure workflow fails explicitly
 		// TODO: Implement subflow execution when workflow nesting feature is added
-		e.logger.Warn("Subflow step type is not yet implemented, passing through input",
+		e.logger.Error("Subflow step type is not yet implemented",
 			"step_id", step.ID,
 			"step_name", step.Name,
 		)
-		// Return output with explicit not_implemented status for visibility
-		return json.RawMessage(`{"_subflow_status": "not_implemented", "_message": "Subflow execution is not yet supported"}`), nil
+		return nil, fmt.Errorf("subflow step type is not yet implemented: step %s (%s)", step.Name, step.ID)
 	default:
 		return e.executeCustomOrPassthrough(ctx, execCtx, step, input)
 	}
@@ -2770,7 +2769,8 @@ func stringJoin(strs []string, sep string) string {
 }
 
 // stringContains performs case-insensitive substring search.
-// Early returns for edge cases to avoid unnecessary allocations.
+// Both strings are converted to lowercase for comparison.
+// Early returns handle edge cases (empty substring, impossible match).
 func stringContains(s, substr string) bool {
 	if len(substr) == 0 {
 		return true
@@ -2778,10 +2778,7 @@ func stringContains(s, substr string) bool {
 	if len(substr) > len(s) {
 		return false
 	}
-	// For short substrings, use direct comparison to avoid full string allocation
-	substrLower := strings.ToLower(substr)
-	sLower := strings.ToLower(s)
-	return strings.Contains(sLower, substrLower)
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 // Time functions (for testing)

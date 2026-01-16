@@ -1646,13 +1646,9 @@ func TestExecutor_DispatchStepExecution_Subflow(t *testing.T) {
 	input := json.RawMessage(`{"passthrough": "data"}`)
 	output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
 
-	// Subflow returns explicit not_implemented status (not yet implemented)
-	assert.NoError(t, err)
-	assert.NotNil(t, output)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(output, &result)
-	require.NoError(t, err)
-	assert.Equal(t, "not_implemented", result["_subflow_status"])
-	assert.Equal(t, "Subflow execution is not yet supported", result["_message"])
+	// Subflow should return error (not yet implemented)
+	assert.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "subflow step type is not yet implemented")
+	assert.Contains(t, err.Error(), step.Name)
 }
