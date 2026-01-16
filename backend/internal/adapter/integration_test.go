@@ -99,7 +99,8 @@ func TestOpenAIAdapter_Integration_WithVariables(t *testing.T) {
 	require.NotNil(t, resp)
 
 	var output map[string]interface{}
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 	content := output["content"].(string)
 
 	assert.Contains(t, content, "8", "Response should contain the correct answer")
@@ -133,7 +134,8 @@ func TestOpenAIAdapter_Integration_SystemPrompt(t *testing.T) {
 	require.NotNil(t, resp)
 
 	var output map[string]interface{}
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 	content := strings.ToLower(output["content"].(string))
 
 	// Pirate speak typically contains these words
@@ -222,7 +224,8 @@ func TestAnthropicAdapter_Integration_WithVariables(t *testing.T) {
 	require.NotNil(t, resp)
 
 	var output map[string]interface{}
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 	content := output["content"].(string)
 
 	assert.Contains(t, content, "11", "Response should contain the correct answer")
@@ -256,7 +259,8 @@ func TestAnthropicAdapter_Integration_SystemPrompt(t *testing.T) {
 	require.NotNil(t, resp)
 
 	var output map[string]interface{}
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 	content := output["content"].(string)
 
 	// Count words (approximately)
@@ -300,7 +304,8 @@ func TestHTTPAdapter_Integration_PublicAPI(t *testing.T) {
 	assert.Equal(t, "200", resp.Metadata["status_code"])
 
 	var output HTTPOutput
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 	assert.Equal(t, 200, output.StatusCode)
 
 	// Verify the response body contains our query parameter
@@ -346,7 +351,8 @@ func TestHTTPAdapter_Integration_POST(t *testing.T) {
 	assert.Equal(t, "200", resp.Metadata["status_code"])
 
 	var output HTTPOutput
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 
 	// Verify the response echoed our data
 	if body, ok := output.Body.(map[string]interface{}); ok {
@@ -389,7 +395,8 @@ func TestHTTPAdapter_Integration_VariableSubstitution(t *testing.T) {
 	require.NotNil(t, resp)
 
 	var output HTTPOutput
-	json.Unmarshal(resp.Output, &output)
+	err = json.Unmarshal(resp.Output, &output)
+	require.NoError(t, err)
 
 	// httpbin.org echoes the URL in the response
 	if body, ok := output.Body.(map[string]interface{}); ok {
