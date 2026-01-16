@@ -6,6 +6,7 @@
  * 適切なフォームへ誘導するウィザード。
  */
 import type { BlockDefinition, BlockCategory } from '~/types/api'
+import { useBlocks } from '~/composables/useBlocks'
 
 const emit = defineEmits<{
   complete: [block: BlockDefinition]

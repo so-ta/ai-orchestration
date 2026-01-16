@@ -1147,6 +1147,10 @@
     }
   },
   "blockEditor": {
+    "systemBlock": "システム",
+    "inherited": "継承",
+    "inheritedFrom": "継承元",
+    "versionHistory": "バージョン履歴",
     "createBlockTitle": "ブロックの作成方法を選択",
     "createBlockSubtitle": "用途に合わせた方法でブロックを作成できます",
     "fromScratch": "ゼロから作成",

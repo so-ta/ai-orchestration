@@ -46,7 +46,7 @@ const hasParent = computed(() => !!props.block.parent_block_id)
   <div class="block-card" :class="{ 'is-system': block.is_system }">
     <div class="card-header">
       <div class="block-icon" :style="{ background: iconBgColor }">
-        {{ block.icon || '&#9632;' }}
+        {{ block.icon || '■' }}
       </div>
       <div class="block-info">
         <h4 class="block-name">{{ block.name }}</h4>

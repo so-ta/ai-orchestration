@@ -1147,6 +1147,10 @@
     }
   },
   "blockEditor": {
+    "systemBlock": "System",
+    "inherited": "Inherited",
+    "inheritedFrom": "Inherited from",
+    "versionHistory": "Version History",
     "title": "Block Editor",
     "searchPlaceholder": "Search blocks...",
     "viewGrid": "Grid view",
