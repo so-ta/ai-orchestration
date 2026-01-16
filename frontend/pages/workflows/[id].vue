@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
-import { calculateLayout, calculateLayoutWithGroups } from '~/utils/graph-layout'
+import { calculateLayout, calculateLayoutWithGroups, parseNodeId } from '~/utils/graph-layout'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -266,6 +266,10 @@ async function handleGroupMoveComplete(
       const step = workflow.value.steps?.find(s => s.id === added.stepId)
       if (step) {
         // Collect edges to delete
+        // This includes:
+        // - step-to-step edges (source_step_id or target_step_id matches)
+        // - group-to-step edges (target_step_id matches, for edges from groups to this step)
+        // - step-to-group edges (source_step_id matches, for edges from this step to groups)
         const connectedEdges = workflow.value.edges?.filter(e =>
           e.source_step_id === added.stepId || e.target_step_id === added.stepId
         ) || []
@@ -657,16 +661,36 @@ async function handleUpdateStepPosition(
 }
 
 // Add edge (with optional source/target ports for branching/merging blocks)
+// Handles both step-to-step and group-to-step connections
 async function handleAddEdge(source: string, target: string, sourcePort?: string, targetPort?: string) {
   if (!workflow.value || isReadonly.value) return
 
+  // Parse source and target to determine if they are groups or steps
+  const sourceInfo = parseNodeId(source)
+  const targetInfo = parseNodeId(target)
+
   try {
-    const response = await workflows.createEdge(workflowId, {
-      source_step_id: source,
-      target_step_id: target,
+    // Build edge request, only including defined fields
+    const edgeRequest: Parameters<typeof workflows.createEdge>[1] = {
       source_port: sourcePort,
       target_port: targetPort,
-    })
+    }
+
+    // Set source based on node type
+    if (sourceInfo.isGroup) {
+      edgeRequest.source_block_group_id = sourceInfo.id
+    } else {
+      edgeRequest.source_step_id = sourceInfo.id
+    }
+
+    // Set target based on node type
+    if (targetInfo.isGroup) {
+      edgeRequest.target_block_group_id = targetInfo.id
+    } else {
+      edgeRequest.target_step_id = targetInfo.id
+    }
+
+    const response = await workflows.createEdge(workflowId, edgeRequest)
     // Add edge to local state instead of reloading entire workflow
     if (workflow.value && response?.data) {
       workflow.value.edges = [...(workflow.value.edges || []), response.data]
@@ -944,6 +968,30 @@ function getOutputPortsForLayout(stepType: StepType, step?: Step): OutputPort[] 
   return basePorts
 }
 
+// Get output ports for a block group type (for auto-layout)
+// This mirrors GROUP_OUTPUT_PORTS in DagEditor.vue
+const GROUP_OUTPUT_PORTS_FOR_LAYOUT: Record<BlockGroupType, OutputPort[]> = {
+  parallel: [
+    { name: 'out', label: 'Output', is_default: true },
+    { name: 'error', label: 'Error', is_default: false },
+  ],
+  try_catch: [
+    { name: 'out', label: 'Output', is_default: true },
+    { name: 'error', label: 'Error', is_default: false },
+  ],
+  foreach: [
+    { name: 'out', label: 'Output', is_default: true },
+    { name: 'error', label: 'Error', is_default: false },
+  ],
+  while: [
+    { name: 'out', label: 'Output', is_default: true },
+  ],
+}
+
+function getGroupOutputPortsForLayout(groupType: BlockGroupType): OutputPort[] {
+  return GROUP_OUTPUT_PORTS_FOR_LAYOUT[groupType] || [{ name: 'out', label: 'Output', is_default: true }]
+}
+
 // Auto-layout using dagre
 async function handleAutoLayout() {
   if (!workflow.value || isReadonly.value) return
@@ -960,6 +1008,7 @@ async function handleAutoLayout() {
       // Use layout with groups support
       const layoutResults = calculateLayoutWithGroups(steps, edges, blockGroups.value, {
         getOutputPorts: getOutputPortsForLayout,
+        getGroupOutputPorts: getGroupOutputPortsForLayout,
       })
 
       // Update local state immediately (optimistic update)
