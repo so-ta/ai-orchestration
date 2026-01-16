@@ -42,7 +42,13 @@ func HTTPBlock() *SystemBlockDefinition {
 				"url": {"type": "string"},
 				"body": {"type": "object"},
 				"method": {"enum": ["GET", "POST", "PUT", "DELETE", "PATCH"], "type": "string"},
-				"headers": {"type": "object"}
+				"headers": {"type": "object"},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "エラーハンドルを有効化",
+					"description": "エラー発生時に専用のエラーポートに出力します",
+					"default": false
+				}
 			}
 		}`),
 		InputSchema: json.RawMessage(`{
@@ -125,7 +131,13 @@ func ToolBlock() *SystemBlockDefinition {
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"adapter_id": {"type": "string"}
+				"adapter_id": {"type": "string"},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "エラーハンドルを有効化",
+					"description": "エラー発生時に専用のエラーポートに出力します",
+					"default": false
+				}
 			}
 		}`),
 		InputSchema: json.RawMessage(`{
