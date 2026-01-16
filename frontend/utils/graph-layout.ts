@@ -1,5 +1,5 @@
 import dagre from 'dagre'
-import type { Step, Edge, BlockGroup } from '~/types/api'
+import type { Step, Edge, BlockGroup, OutputPort } from '~/types/api'
 
 export interface LayoutOptions {
   direction?: 'TB' | 'BT' | 'LR' | 'RL' // Top-Bottom, Bottom-Top, Left-Right, Right-Left
@@ -7,6 +7,15 @@ export interface LayoutOptions {
   nodeHeight?: number
   nodeSeparation?: number
   rankSeparation?: number
+}
+
+/**
+ * Extended layout options with port ordering information
+ */
+export interface LayoutOptionsWithPorts extends LayoutOptions {
+  // Function to get output ports for a step type
+  // Returns ports in order (top to bottom)
+  getOutputPorts?: (stepType: string, step?: Step) => OutputPort[]
 }
 
 export interface LayoutResult {
@@ -37,9 +46,10 @@ const DEFAULT_OPTIONS: Required<LayoutOptions> = {
 export function calculateLayout(
   steps: Step[],
   edges: Edge[],
-  options: LayoutOptions = {}
+  options: LayoutOptionsWithPorts = {}
 ): LayoutResult[] {
   const opts = { ...DEFAULT_OPTIONS, ...options }
+  const getOutputPorts = options.getOutputPorts
 
   // Create a new directed graph
   const g = new dagre.graphlib.Graph()
@@ -98,7 +108,129 @@ export function calculateLayout(
     }
   }
 
+  // Apply port-based Y ordering if getOutputPorts is provided
+  if (getOutputPorts) {
+    adjustYBySourcePort(results, steps, edges, getOutputPorts, opts.nodeSeparation, GRID_SIZE)
+  }
+
   return results
+}
+
+/**
+ * Adjust Y positions of target nodes based on source port order.
+ * When a source node has multiple output ports (e.g., out, out2, error),
+ * target nodes are positioned vertically in the order of the ports.
+ */
+function adjustYBySourcePort(
+  results: LayoutResult[],
+  steps: Step[],
+  edges: Edge[],
+  getOutputPorts: (stepType: string, step?: Step) => OutputPort[],
+  nodeSeparation: number,
+  gridSize: number
+): void {
+  const snapToGrid = (value: number): number => {
+    return Math.round(value / gridSize) * gridSize
+  }
+
+  // Build step map for quick lookup
+  const stepMap = new Map<string, Step>()
+  for (const step of steps) {
+    stepMap.set(step.id, step)
+  }
+
+  // Build result map for quick lookup and modification
+  const resultMap = new Map<string, LayoutResult>()
+  for (const result of results) {
+    resultMap.set(result.stepId, result)
+  }
+
+  // Group edges by source step
+  const edgesBySource = new Map<string, Edge[]>()
+  for (const edge of edges) {
+    if (edge.source_step_id && edge.target_step_id) {
+      const existing = edgesBySource.get(edge.source_step_id) || []
+      existing.push(edge)
+      edgesBySource.set(edge.source_step_id, existing)
+    }
+  }
+
+  // For each source step with multiple outgoing edges to different targets
+  for (const [sourceId, sourceEdges] of edgesBySource) {
+    if (sourceEdges.length <= 1) continue
+
+    const sourceStep = stepMap.get(sourceId)
+    if (!sourceStep) continue
+
+    // Get output ports for the source step
+    const outputPorts = getOutputPorts(sourceStep.type, sourceStep)
+    if (outputPorts.length <= 1) continue
+
+    // Create port order map (port name -> order index)
+    const portOrder = new Map<string, number>()
+    outputPorts.forEach((port, index) => {
+      portOrder.set(port.name, index)
+    })
+
+    // Get unique target step IDs with their port info
+    // Group by target step to handle multiple edges to same target
+    const targetsByPort = new Map<string, { targetId: string; portIndex: number }[]>()
+    for (const edge of sourceEdges) {
+      if (!edge.target_step_id) continue
+
+      const portName = edge.source_port || 'out'
+      const portIndex = portOrder.get(portName) ?? 999 // Unknown ports go last
+
+      const existing = targetsByPort.get(portName) || []
+      // Avoid duplicates
+      if (!existing.some(t => t.targetId === edge.target_step_id)) {
+        existing.push({ targetId: edge.target_step_id!, portIndex })
+      }
+      targetsByPort.set(portName, existing)
+    }
+
+    // Collect all targets with their port indices
+    const allTargets: Array<{ targetId: string; portIndex: number }> = []
+    for (const targets of targetsByPort.values()) {
+      allTargets.push(...targets)
+    }
+
+    // Sort targets by port index
+    allTargets.sort((a, b) => a.portIndex - b.portIndex)
+
+    // Get unique target IDs in sorted order
+    const uniqueTargetIds: string[] = []
+    const seen = new Set<string>()
+    for (const target of allTargets) {
+      if (!seen.has(target.targetId)) {
+        uniqueTargetIds.push(target.targetId)
+        seen.add(target.targetId)
+      }
+    }
+
+    if (uniqueTargetIds.length <= 1) continue
+
+    // Calculate the center Y of all target nodes
+    const targetResults = uniqueTargetIds.map(id => resultMap.get(id)).filter((r): r is LayoutResult => r !== undefined)
+    if (targetResults.length <= 1) continue
+
+    // Calculate center of current positions
+    const sumY = targetResults.reduce((sum, r) => sum + r.y, 0)
+    const centerY = sumY / targetResults.length
+
+    // Calculate new positions centered around the current center
+    const nodeHeight = DEFAULT_OPTIONS.nodeHeight
+    const totalHeight = (targetResults.length - 1) * (nodeHeight + nodeSeparation)
+    const startY = centerY - totalHeight / 2
+
+    // Assign new Y positions in port order
+    uniqueTargetIds.forEach((targetId, index) => {
+      const result = resultMap.get(targetId)
+      if (result) {
+        result.y = snapToGrid(startY + index * (nodeHeight + nodeSeparation))
+      }
+    })
+  }
 }
 
 /**
@@ -112,12 +244,13 @@ export function calculateLayout(
  * - Group internal steps with multiple entry points (no incoming internal edges) are arranged vertically
  * - Edges from outside the group connect to the group boundary, not directly to internal steps
  * - This creates a clean visual where edges don't cross group boundaries
+ * - When getOutputPorts is provided, target nodes are ordered by source port order (top to bottom)
  */
 export function calculateLayoutWithGroups(
   steps: Step[],
   edges: Edge[],
   blockGroups: BlockGroup[],
-  options: LayoutOptions = {}
+  options: LayoutOptionsWithPorts = {}
 ): { steps: LayoutResult[]; groups: GroupLayoutResult[] } {
   const opts = { ...DEFAULT_OPTIONS, ...options }
   const GRID_SIZE = 20
@@ -360,6 +493,21 @@ export function calculateLayoutWithGroups(
         })
       }
     }
+  }
+
+  // Apply port-based Y ordering for ungrouped steps if getOutputPorts is provided
+  const getOutputPorts = options.getOutputPorts
+  if (getOutputPorts) {
+    // Filter edges to only include edges between ungrouped steps
+    const ungroupedStepIds = new Set(ungroupedSteps.map(s => s.id))
+    const ungroupedEdges = edges.filter(
+      e => e.source_step_id && e.target_step_id &&
+           ungroupedStepIds.has(e.source_step_id) && ungroupedStepIds.has(e.target_step_id)
+    )
+
+    // Only adjust ungrouped steps (grouped steps have their own internal layout)
+    const ungroupedResults = stepResults.filter(r => ungroupedStepIds.has(r.stepId))
+    adjustYBySourcePort(ungroupedResults, ungroupedSteps, ungroupedEdges, getOutputPorts, opts.nodeSeparation, GRID_SIZE)
   }
 
   return { steps: stepResults, groups: groupResults }

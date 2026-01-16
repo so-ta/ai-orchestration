@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole } from '~/types/api'
+import type { Workflow, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import { calculateLayout, calculateLayoutWithGroups } from '~/utils/graph-layout'
 
@@ -895,6 +895,55 @@ async function handlePasteStep(data: { type: StepType; name: string; config: Rec
   }
 }
 
+// Get output ports for a step type (used for auto-layout port ordering)
+function getOutputPortsForLayout(stepType: string, step?: Step): OutputPort[] {
+  const config = step?.config as Record<string, unknown> | undefined
+
+  // Special handling for switch blocks - generate dynamic ports from cases
+  if (stepType === 'switch' && config?.cases) {
+    const cases = config.cases as Array<{ name: string; expression?: string; is_default?: boolean }>
+    const dynamicPorts: OutputPort[] = []
+
+    for (const caseItem of cases) {
+      if (caseItem.is_default) {
+        dynamicPorts.push({
+          name: 'default',
+          label: 'Default',
+          is_default: true,
+        })
+      } else {
+        dynamicPorts.push({
+          name: caseItem.name || `case_${dynamicPorts.length + 1}`,
+          label: caseItem.name || `Case ${dynamicPorts.length + 1}`,
+          is_default: false,
+        })
+      }
+    }
+
+    // Add error port for switch
+    dynamicPorts.push({ name: 'error', label: 'Error', is_default: false })
+
+    return dynamicPorts
+  }
+
+  // Look up from block definitions
+  const blockDef = blockDefinitions.value.find(b => b.slug === stepType)
+  let basePorts: OutputPort[] = blockDef?.output_ports || [{ name: 'out', label: 'Output', is_default: false }]
+
+  // If the step has error port enabled, add error port if not already present
+  if (config?.enable_error_port) {
+    const hasErrorPort = basePorts.some(p => p.name === 'error')
+    if (!hasErrorPort) {
+      basePorts = [
+        ...basePorts,
+        { name: 'error', label: 'Error', is_default: false }
+      ]
+    }
+  }
+
+  return basePorts
+}
+
 // Auto-layout using dagre
 async function handleAutoLayout() {
   if (!workflow.value || isReadonly.value) return
@@ -909,7 +958,9 @@ async function handleAutoLayout() {
     // Check if there are block groups
     if (blockGroups.value.length > 0) {
       // Use layout with groups support
-      const layoutResults = calculateLayoutWithGroups(steps, edges, blockGroups.value)
+      const layoutResults = calculateLayoutWithGroups(steps, edges, blockGroups.value, {
+        getOutputPorts: getOutputPortsForLayout,
+      })
 
       // Update local state immediately (optimistic update)
       for (const result of layoutResults.steps) {
@@ -945,7 +996,9 @@ async function handleAutoLayout() {
       await Promise.all([...stepUpdatePromises, ...groupUpdatePromises])
     } else {
       // Use simple layout without groups
-      const layoutResults = calculateLayout(steps, edges)
+      const layoutResults = calculateLayout(steps, edges, {
+        getOutputPorts: getOutputPortsForLayout,
+      })
 
       // Update local state immediately (optimistic update)
       for (const result of layoutResults) {
