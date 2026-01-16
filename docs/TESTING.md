@@ -589,11 +589,10 @@ jobs:
 cp backend/.env.test.local.example backend/.env.test.local
 
 # 2. APIキーを設定（.env.test.local を編集）
-OPENAI_API_KEY=sk-your-key
-ANTHROPIC_API_KEY=sk-ant-your-key
+# 必要なサービスのキーのみ設定すればOK
 
 # 3. 統合テスト実行
-cd backend && INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration
+cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration
 ```
 
 ### 環境変数ファイル
@@ -603,58 +602,75 @@ cd backend && INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integrat
 | `.env.test.local.example` | テンプレート | ✓ コミット |
 | `.env.test.local` | 実際のAPIキー | ✗ gitignore |
 
-### 対象アダプター
+### 対象サービス
 
-| Adapter | 必要な環境変数 | テスト内容 |
-|---------|---------------|-----------|
+#### LLM Adapters (`internal/adapter/`)
+
+| Service | 環境変数 | テスト内容 |
+|---------|---------|-----------|
 | OpenAI | `OPENAI_API_KEY` | Chat Completion API |
 | Anthropic | `ANTHROPIC_API_KEY` | Messages API |
 | HTTP | なし | httpbin.org を使用 |
+
+#### Preset Blocks (`internal/block/sandbox/`)
+
+| Service | 環境変数 | テスト内容 |
+|---------|---------|-----------|
+| Slack | `SLACK_WEBHOOK_URL` | Webhook メッセージ送信 |
+| Discord | `DISCORD_WEBHOOK_URL` | Webhook メッセージ送信 |
+| GitHub | `GITHUB_TOKEN` | ユーザー情報取得、リポジトリ一覧 |
+| Notion | `NOTION_API_KEY` | ユーザー一覧、検索 |
+| Linear | `LINEAR_API_KEY` | ユーザー情報、チーム一覧 |
+| SendGrid | `SENDGRID_API_KEY` | APIキー検証 |
+| Tavily | `TAVILY_API_KEY` | Web検索 |
+| Google Sheets | `GOOGLE_API_KEY` | スプレッドシート取得 |
 
 ### CI での扱い
 
 統合テストは CI では**スキップ**される:
 - `INTEGRATION_TEST=1` が設定されていない場合、自動スキップ
-- API キーがない場合も自動スキップ
+- API キーがない場合も該当テストのみスキップ
 - 通常の `go test ./...` では実行されない
+
+### 実行例
+
+```bash
+# 全統合テスト
+cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration
+
+# Adapter テストのみ（OpenAI, Anthropic, HTTP）
+INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration
+
+# Block テストのみ（Slack, Discord, GitHub等）
+INTEGRATION_TEST=1 go test ./internal/block/sandbox/... -v -run Integration
+
+# 特定サービスのみ
+INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*OpenAI
+INTEGRATION_TEST=1 go test ./internal/block/sandbox/... -v -run Integration.*Slack
+INTEGRATION_TEST=1 go test ./internal/block/sandbox/... -v -run Integration.*GitHub
+```
 
 ### テストパターン
 
 ```go
-func TestOpenAIAdapter_Integration_BasicChat(t *testing.T) {
+func TestSlackBlock_Integration_SendMessage(t *testing.T) {
     // 1. 統合テストモードかチェック
     skipIfNotIntegration(t)
 
     // 2. 環境変数ロード
     loadTestEnv(t)
 
-    // 3. APIキー確認（なければスキップ）
-    apiKey := requireEnvVar(t, "OPENAI_API_KEY")
+    // 3. 必要な環境変数確認（なければスキップ）
+    webhookURL := requireEnvVar(t, "SLACK_WEBHOOK_URL")
 
-    // 4. 実際のAPIコール
-    adapter := NewOpenAIAdapterWithKey(apiKey)
-    resp, err := adapter.Execute(ctx, req)
+    // 4. サンドボックスで実際のAPIコール
+    sandbox, execCtx := createTestSandbox()
+    result, err := sandbox.Execute(ctx, code, input, execCtx)
 
     // 5. 検証
     require.NoError(t, err)
-    assert.NotEmpty(t, output["content"])
+    assert.True(t, result["success"].(bool))
 }
-```
-
-### 実行例
-
-```bash
-# 全統合テスト
-INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration
-
-# OpenAI のみ
-INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*OpenAI
-
-# Anthropic のみ
-INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*Anthropic
-
-# HTTP のみ（APIキー不要）
-INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*HTTP
 ```
 
 ### 注意事項
@@ -663,6 +679,7 @@ INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*HTTP
 - **レート制限**: 連続実行時は制限に注意
 - **タイムアウト**: 各テストは30秒のタイムアウトを設定
 - **ネットワーク**: インターネット接続が必要
+- **副作用**: Slack/Discord テストは実際にメッセージを送信する
 
 ---
 
