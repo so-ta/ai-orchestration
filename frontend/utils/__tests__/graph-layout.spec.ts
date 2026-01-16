@@ -112,16 +112,16 @@ describe('graph-layout', () => {
       expect(target2Result.y).toBeLessThan(target3Result.y)
     })
 
-    it('should handle missing source_port by defaulting to "out"', () => {
+    it('should skip edges without source_port', () => {
       const steps: Step[] = [
         createStep('source', 'condition'),
         createStep('target1', 'tool'),
         createStep('target2', 'tool'),
       ]
 
-      // One edge has no source_port specified
+      // One edge has no source_port specified - should be skipped
       const edges: Edge[] = [
-        createEdge('source', 'target1'),           // No source_port, defaults to 'out'
+        createEdge('source', 'target1'),           // No source_port - will be skipped
         createEdge('source', 'target2', 'error'),  // Explicit error port
       ]
 
@@ -137,11 +137,12 @@ describe('graph-layout', () => {
 
       const results = calculateLayout(steps, edges, { getOutputPorts })
 
+      // Both targets should have valid positions (layout still works)
       const target1Result = results.find(r => r.stepId === 'target1')!
       const target2Result = results.find(r => r.stepId === 'target2')!
 
-      // target1 (defaulting to 'out') should be above target2 (error)
-      expect(target1Result.y).toBeLessThan(target2Result.y)
+      expect(target1Result).toBeDefined()
+      expect(target2Result).toBeDefined()
     })
 
     it('should not reorder when source has only one output port', () => {
