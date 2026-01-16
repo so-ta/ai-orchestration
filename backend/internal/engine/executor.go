@@ -303,7 +303,11 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	case domain.StepTypeLog:
 		return e.executeLogStep(ctx, step, input)
 	case domain.StepTypeSubflow:
-		// Subflow not yet implemented, pass through
+		// Subflow not yet implemented, log warning and pass through
+		e.logger.Warn("Subflow step type is not yet implemented, passing through input",
+			"step_id", step.ID,
+			"step_name", step.Name,
+		)
 		return input, nil
 	default:
 		return e.executeCustomOrPassthrough(ctx, execCtx, step, input)
@@ -552,6 +556,11 @@ func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionCont
 
 		groupOutput, outputPort, err := e.executeBlockGroup(ctx, execCtx, graph, &group, currentOutput)
 		if err != nil {
+			e.logger.Error("Block group execution failed",
+				"group_id", groupID,
+				"group_name", group.Name,
+				"error", err,
+			)
 			return fmt.Errorf("block group %s execution failed: %w", group.Name, err)
 		}
 
