@@ -178,7 +178,6 @@ type WaitStepConfig struct {
 // FunctionStepConfig represents configuration for a function step
 type FunctionStepConfig struct {
 	Code         string          `json:"code"`                    // JavaScript code to execute
-	Language     string          `json:"language,omitempty"`      // javascript (default)
 	TimeoutMs    int             `json:"timeout_ms,omitempty"`    // execution timeout
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"` // JSON Schema for output filtering
 }

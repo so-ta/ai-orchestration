@@ -29,13 +29,25 @@ function createEdge(sourceId: string, targetId: string, sourcePort?: string): Ed
   }
 }
 
-// Helper to create an edge from a block group
+// Helper to create an edge from a block group to a step
 function createGroupEdge(sourceGroupId: string, targetId: string, sourcePort: string): Edge {
   return {
     id: `edge-group-${sourceGroupId}-${targetId}`,
     workflow_id: 'test-workflow',
     source_block_group_id: sourceGroupId,
     target_step_id: targetId,
+    source_port: sourcePort,
+    created_at: new Date().toISOString(),
+  }
+}
+
+// Helper to create an edge from a block group to another block group
+function createGroupToGroupEdge(sourceGroupId: string, targetGroupId: string, sourcePort: string): Edge {
+  return {
+    id: `edge-group-${sourceGroupId}-group-${targetGroupId}`,
+    workflow_id: 'test-workflow',
+    source_block_group_id: sourceGroupId,
+    target_block_group_id: targetGroupId,
     source_port: sourcePort,
     created_at: new Date().toISOString(),
   }
@@ -365,6 +377,102 @@ describe('graph-layout', () => {
 
       // success (out) should be above error-handler (error)
       expect(successResult.y).toBeLessThan(errorResult.y)
+    })
+
+    it('should apply port ordering for edges from block groups to other groups', () => {
+      // Create steps inside each group
+      const innerStep1 = { ...createStep('inner1', 'tool'), block_group_id: 'group1' }
+      const innerStep2 = { ...createStep('inner2', 'tool'), block_group_id: 'group2' }
+      const innerStep3 = { ...createStep('inner3', 'tool'), block_group_id: 'group3' }
+      const steps: Step[] = [innerStep1, innerStep2, innerStep3]
+
+      // Create three groups
+      const group1 = createBlockGroup('group1', 'parallel')
+      const group2 = createBlockGroup('group2', 'parallel')
+      const group3 = createBlockGroup('group3', 'parallel')
+      const blockGroups: BlockGroup[] = [group1, group2, group3]
+
+      // Edges from group1 to group2 (error port) and group3 (out port)
+      // Intentionally in wrong order - error first, out second
+      const edges: Edge[] = [
+        createGroupToGroupEdge('group1', 'group2', 'error'),  // Should be last (bottom)
+        createGroupToGroupEdge('group1', 'group3', 'out'),    // Should be first (top)
+      ]
+
+      const getOutputPorts = (): OutputPort[] => {
+        return [{ name: 'out', label: 'Output', is_default: false }]
+      }
+
+      const getGroupOutputPorts = (groupType: BlockGroupType): OutputPort[] => {
+        if (groupType === 'parallel') {
+          return [
+            { name: 'out', label: 'Output', is_default: true },
+            { name: 'error', label: 'Error', is_default: false },
+          ]
+        }
+        return [{ name: 'out', label: 'Output', is_default: true }]
+      }
+
+      const results = calculateLayoutWithGroups(steps, edges, blockGroups, {
+        getOutputPorts,
+        getGroupOutputPorts,
+      })
+
+      const group2Result = results.groups.find(r => r.groupId === 'group2')!
+      const group3Result = results.groups.find(r => r.groupId === 'group3')!
+
+      // group3 (out) should be above group2 (error)
+      expect(group3Result.y).toBeLessThan(group2Result.y)
+    })
+
+    it('should apply port ordering for mixed targets (steps and groups) from same source group', () => {
+      // Create source group with internal step
+      const innerStep = { ...createStep('inner', 'tool'), block_group_id: 'source-group' }
+      // Create target group with internal step
+      const innerStep2 = { ...createStep('inner2', 'tool'), block_group_id: 'target-group' }
+      // Create ungrouped target step
+      const targetStep = createStep('target-step', 'tool')
+      const steps: Step[] = [innerStep, innerStep2, targetStep]
+
+      // Create source group (try_catch type with out and error ports)
+      const sourceGroup = createBlockGroup('source-group', 'try_catch')
+      // Create target group
+      const targetGroup = createBlockGroup('target-group', 'foreach')
+      const blockGroups: BlockGroup[] = [sourceGroup, targetGroup]
+
+      // Edges from source-group:
+      // - out port -> target-group (should be top)
+      // - error port -> target-step (should be bottom)
+      // Intentionally in wrong order - error first
+      const edges: Edge[] = [
+        createGroupEdge('source-group', 'target-step', 'error'),  // Should be last (bottom)
+        createGroupToGroupEdge('source-group', 'target-group', 'out'),  // Should be first (top)
+      ]
+
+      const getOutputPorts = (): OutputPort[] => {
+        return [{ name: 'out', label: 'Output', is_default: false }]
+      }
+
+      const getGroupOutputPorts = (groupType: BlockGroupType): OutputPort[] => {
+        if (groupType === 'try_catch') {
+          return [
+            { name: 'out', label: 'Output', is_default: true },
+            { name: 'error', label: 'Error', is_default: false },
+          ]
+        }
+        return [{ name: 'out', label: 'Output', is_default: true }]
+      }
+
+      const results = calculateLayoutWithGroups(steps, edges, blockGroups, {
+        getOutputPorts,
+        getGroupOutputPorts,
+      })
+
+      const targetGroupResult = results.groups.find(r => r.groupId === 'target-group')!
+      const targetStepResult = results.steps.find(r => r.stepId === 'target-step')!
+
+      // target-group (out) should be above target-step (error)
+      expect(targetGroupResult.y).toBeLessThan(targetStepResult.y)
     })
   })
 })

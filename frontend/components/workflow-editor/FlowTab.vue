@@ -44,18 +44,16 @@ const hasOutputPorts = computed(() => {
 // Local state for flow configuration
 const prescriptConfig = ref<ScriptConfig>({
   enabled: false,
-  language: 'javascript',
   code: ''
 })
 
 const postscriptConfig = ref<ScriptConfig>({
   enabled: false,
-  language: 'javascript',
   code: ''
 })
 
 const errorHandlingConfig = ref<ErrorHandlingConfig>({
-  enabled: false,
+  enabled: true,
   retry: {
     max_retries: 3,
     interval_seconds: 1,
@@ -63,7 +61,8 @@ const errorHandlingConfig = ref<ErrorHandlingConfig>({
   },
   timeout_seconds: undefined,
   on_error: 'fail',
-  fallback_value: undefined
+  fallback_value: undefined,
+  enable_error_port: false
 })
 
 // Load config from step when step changes
@@ -76,11 +75,10 @@ watch(() => props.step, (newStep) => {
       const ps = config.prescript as ScriptConfig
       prescriptConfig.value = {
         enabled: ps.enabled ?? false,
-        language: ps.language ?? 'javascript',
         code: ps.code ?? ''
       }
     } else {
-      prescriptConfig.value = { enabled: false, language: 'javascript', code: '' }
+      prescriptConfig.value = { enabled: false, code: '' }
     }
 
     // Load postscript
@@ -88,30 +86,31 @@ watch(() => props.step, (newStep) => {
       const ps = config.postscript as ScriptConfig
       postscriptConfig.value = {
         enabled: ps.enabled ?? false,
-        language: ps.language ?? 'javascript',
         code: ps.code ?? ''
       }
     } else {
-      postscriptConfig.value = { enabled: false, language: 'javascript', code: '' }
+      postscriptConfig.value = { enabled: false, code: '' }
     }
 
     // Load error handling
     if (config.error_handling && typeof config.error_handling === 'object') {
       const eh = config.error_handling as ErrorHandlingConfig
       errorHandlingConfig.value = {
-        enabled: eh.enabled ?? false,
+        enabled: eh.enabled ?? true,
         retry: eh.retry ?? { max_retries: 3, interval_seconds: 1, backoff_strategy: 'fixed' },
         timeout_seconds: eh.timeout_seconds,
         on_error: eh.on_error ?? 'fail',
-        fallback_value: eh.fallback_value
+        fallback_value: eh.fallback_value,
+        enable_error_port: eh.enable_error_port ?? false
       }
     } else {
       errorHandlingConfig.value = {
-        enabled: false,
+        enabled: true,
         retry: { max_retries: 3, interval_seconds: 1, backoff_strategy: 'fixed' },
         timeout_seconds: undefined,
         on_error: 'fail',
-        fallback_value: undefined
+        fallback_value: undefined,
+        enable_error_port: false
       }
     }
   }
@@ -122,7 +121,7 @@ const emitChanges = () => {
   emit('update:flow-config', {
     prescript: prescriptConfig.value.enabled ? prescriptConfig.value : undefined,
     postscript: postscriptConfig.value.enabled ? postscriptConfig.value : undefined,
-    error_handling: errorHandlingConfig.value.enabled ? errorHandlingConfig.value : undefined
+    error_handling: errorHandlingConfig.value
   })
 }
 

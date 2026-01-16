@@ -432,26 +432,6 @@ func TestExecutor_ExecuteFunctionStep_WithExecuteFunction(t *testing.T) {
 	assert.Equal(t, "Hello, World!", result["greeting"])
 }
 
-func TestExecutor_ExecuteFunctionStep_UnsupportedLanguage(t *testing.T) {
-	executor := setupTestExecutor()
-
-	step := domain.Step{
-		ID:   uuid.New(),
-		Name: "test-function-python",
-		Type: domain.StepTypeFunction,
-		Config: json.RawMessage(`{
-			"code": "print('hello')",
-			"language": "python"
-		}`),
-	}
-
-	input := json.RawMessage(`{}`)
-	_, err := executor.executeFunctionStep(context.Background(), nil, step, input)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported language")
-}
-
 func TestExecutor_ExecuteRouterStep_NoAdapter(t *testing.T) {
 	executor := setupTestExecutor()
 

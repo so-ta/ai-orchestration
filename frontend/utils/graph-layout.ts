@@ -260,10 +260,18 @@ function adjustYBySourcePort(
  * Adjust Y positions of target nodes based on block group source port order.
  * Similar to adjustYBySourcePort but handles edges originating from block groups.
  */
-function adjustYByGroupSourcePort(
-  results: LayoutResult[],
+/**
+ * Adjust Y positions of all targets (both steps and groups) from block groups based on source port order.
+ * This unified function handles both step and group targets together to ensure consistent ordering
+ * when a group outputs to a mix of steps and groups.
+ * Also updates the positions of steps inside moved groups.
+ */
+function adjustYByGroupSourcePortUnified(
+  stepResults: LayoutResult[],
+  groupResults: GroupLayoutResult[],
   edges: Edge[],
   groupMap: Map<string, BlockGroup>,
+  steps: Step[],
   getGroupOutputPorts: (groupType: BlockGroupType) => OutputPort[],
   nodeSeparation: number,
   nodeHeight: number,
@@ -273,23 +281,38 @@ function adjustYByGroupSourcePort(
     return Math.round(value / gridSize) * gridSize
   }
 
-  // Build result map for quick lookup and modification
-  const resultMap = new Map<string, LayoutResult>()
-  for (const result of results) {
-    resultMap.set(result.stepId, result)
+  // Build result maps for quick lookup and modification
+  const stepResultMap = new Map<string, LayoutResult>()
+  for (const result of stepResults) {
+    stepResultMap.set(result.stepId, result)
   }
 
-  // Group edges by source block group
+  const groupResultMap = new Map<string, GroupLayoutResult>()
+  for (const result of groupResults) {
+    groupResultMap.set(result.groupId, result)
+  }
+
+  // Build map of steps by their group ID
+  const stepsByGroupId = new Map<string, Step[]>()
+  for (const step of steps) {
+    if (step.block_group_id) {
+      const existing = stepsByGroupId.get(step.block_group_id) || []
+      existing.push(step)
+      stepsByGroupId.set(step.block_group_id, existing)
+    }
+  }
+
+  // Group edges by source block group (both step and group targets)
   const edgesBySourceGroup = new Map<string, Edge[]>()
   for (const edge of edges) {
-    if (edge.source_block_group_id && edge.target_step_id) {
+    if (edge.source_block_group_id && (edge.target_step_id || edge.target_block_group_id)) {
       const existing = edgesBySourceGroup.get(edge.source_block_group_id) || []
       existing.push(edge)
       edgesBySourceGroup.set(edge.source_block_group_id, existing)
     }
   }
 
-  // For each source group with multiple outgoing edges to different targets
+  // For each source group with multiple outgoing edges
   for (const [sourceGroupId, sourceEdges] of edgesBySourceGroup) {
     if (sourceEdges.length <= 1) continue
 
@@ -306,25 +329,39 @@ function adjustYByGroupSourcePort(
       portOrder.set(port.name, index)
     })
 
-    // Get unique target step IDs with their port info
-    const targetsByPort = new Map<string, { targetId: string; portIndex: number }[]>()
+    // Collect all targets with their port info and type
+    interface TargetInfo {
+      id: string
+      isGroup: boolean
+      portIndex: number
+    }
+    const targetsByPort = new Map<string, TargetInfo[]>()
 
     for (const edge of sourceEdges) {
-      if (!edge.target_step_id || !edge.source_port) continue
+      if (!edge.source_port) continue
 
       const portName = edge.source_port
-      const portIndex = portOrder.get(portName) ?? 999 // Unknown ports go last
+      const portIndex = portOrder.get(portName) ?? 999
 
       const existing = targetsByPort.get(portName) || []
-      // Avoid duplicates
-      if (!existing.some(t => t.targetId === edge.target_step_id)) {
-        existing.push({ targetId: edge.target_step_id, portIndex })
+
+      if (edge.target_step_id) {
+        // Target is a step
+        if (!existing.some(t => t.id === edge.target_step_id && !t.isGroup)) {
+          existing.push({ id: edge.target_step_id, isGroup: false, portIndex })
+        }
+      } else if (edge.target_block_group_id) {
+        // Target is a group
+        if (!existing.some(t => t.id === edge.target_block_group_id && t.isGroup)) {
+          existing.push({ id: edge.target_block_group_id, isGroup: true, portIndex })
+        }
       }
+
       targetsByPort.set(portName, existing)
     }
 
     // Collect all targets with their port indices
-    const allTargets: Array<{ targetId: string; portIndex: number }> = []
+    const allTargets: TargetInfo[] = []
     for (const targets of targetsByPort.values()) {
       allTargets.push(...targets)
     }
@@ -332,37 +369,331 @@ function adjustYByGroupSourcePort(
     // Sort targets by port index
     allTargets.sort((a, b) => a.portIndex - b.portIndex)
 
-    // Get unique target IDs in sorted order
-    const uniqueTargetIds: string[] = []
+    // Get unique targets in sorted order
+    const uniqueTargets: TargetInfo[] = []
     const seen = new Set<string>()
     for (const target of allTargets) {
-      if (!seen.has(target.targetId)) {
-        uniqueTargetIds.push(target.targetId)
-        seen.add(target.targetId)
+      const key = `${target.isGroup ? 'g' : 's'}_${target.id}`
+      if (!seen.has(key)) {
+        uniqueTargets.push(target)
+        seen.add(key)
       }
     }
 
-    if (uniqueTargetIds.length <= 1) continue
+    if (uniqueTargets.length <= 1) continue
 
-    // Calculate the center Y of all target nodes
-    const targetResults = uniqueTargetIds.map(id => resultMap.get(id)).filter((r): r is LayoutResult => r !== undefined)
-    if (targetResults.length <= 1) continue
+    // Get current Y positions and heights for all targets
+    interface TargetPosition {
+      target: TargetInfo
+      y: number
+      height: number
+    }
+    const targetPositions: TargetPosition[] = []
 
-    // Calculate center of current positions
-    const sumY = targetResults.reduce((sum, r) => sum + r.y, 0)
-    const centerY = sumY / targetResults.length
-
-    // Calculate new positions centered around the current center
-    const totalHeight = (targetResults.length - 1) * (nodeHeight + nodeSeparation)
-    const startY = centerY - totalHeight / 2
-
-    // Assign new Y positions in port order
-    uniqueTargetIds.forEach((targetId, index) => {
-      const result = resultMap.get(targetId)
-      if (result) {
-        result.y = snapToGrid(startY + index * (nodeHeight + nodeSeparation))
+    for (const target of uniqueTargets) {
+      if (target.isGroup) {
+        const result = groupResultMap.get(target.id)
+        if (result) {
+          targetPositions.push({ target, y: result.y, height: result.height })
+        }
+      } else {
+        const result = stepResultMap.get(target.id)
+        if (result) {
+          targetPositions.push({ target, y: result.y, height: nodeHeight })
+        }
       }
-    })
+    }
+
+    if (targetPositions.length <= 1) continue
+
+    // Get source group's result to calculate port positions
+    const sourceResult = groupResultMap.get(sourceGroupId)
+    if (!sourceResult) continue
+
+    // Calculate port Y positions on the source group
+    // Ports are distributed vertically on the right edge of the group
+    const portCount = outputPorts.length
+    const portSpacing = sourceResult.height / (portCount + 1)
+    const portYPositions = new Map<number, number>()
+    for (let i = 0; i < portCount; i++) {
+      // Port Y position relative to the group's top
+      portYPositions.set(i, sourceResult.y + portSpacing * (i + 1))
+    }
+
+    // Group targets by port index
+    const targetsByPortIndex = new Map<number, TargetPosition[]>()
+    for (const tp of targetPositions) {
+      const existing = targetsByPortIndex.get(tp.target.portIndex) || []
+      existing.push(tp)
+      targetsByPortIndex.set(tp.target.portIndex, existing)
+    }
+
+    // Collect all positioned targets with their final Y positions and heights
+    interface PositionedTarget {
+      target: TargetInfo
+      y: number
+      height: number
+      portIndex: number
+    }
+    const positionedTargets: PositionedTarget[] = []
+
+    // Position targets at their corresponding port's Y level
+    for (const [portIndex, portTargets] of targetsByPortIndex) {
+      const portY = portYPositions.get(portIndex)
+      if (portY === undefined) continue
+
+      if (portTargets.length === 1) {
+        // Single target for this port - align its center with the port
+        const tp = portTargets[0]
+        const newY = snapToGrid(portY - tp.height / 2)
+        positionedTargets.push({ target: tp.target, y: newY, height: tp.height, portIndex })
+      } else {
+        // Multiple targets for the same port - stack them vertically around the port Y
+        const totalHeight = portTargets.reduce((sum, tp) => sum + tp.height, 0) +
+                           (portTargets.length - 1) * nodeSeparation
+        let currentY = portY - totalHeight / 2
+
+        for (const tp of portTargets) {
+          const newY = snapToGrid(currentY)
+          positionedTargets.push({ target: tp.target, y: newY, height: tp.height, portIndex })
+          currentY += tp.height + nodeSeparation
+        }
+      }
+    }
+
+    // Sort by port index to process in order
+    positionedTargets.sort((a, b) => a.portIndex - b.portIndex)
+
+    // Check for overlaps between targets on different ports and adjust
+    for (let i = 1; i < positionedTargets.length; i++) {
+      const prev = positionedTargets[i - 1]
+      const curr = positionedTargets[i]
+
+      // Skip if same port (already handled by stacking logic)
+      if (prev.portIndex === curr.portIndex) continue
+
+      // Check if previous target's bottom overlaps with current target's top
+      const prevBottom = prev.y + prev.height
+      const currTop = curr.y
+      const overlap = prevBottom - currTop + nodeSeparation
+
+      if (overlap > 0) {
+        // Move current target down to avoid overlap
+        curr.y = snapToGrid(prevBottom + nodeSeparation)
+      }
+    }
+
+    // Apply the final positions
+    for (const pt of positionedTargets) {
+      if (pt.target.isGroup) {
+        const result = groupResultMap.get(pt.target.id)
+        if (result) {
+          const deltaY = pt.y - result.y
+          result.y = pt.y
+
+          const groupSteps = stepsByGroupId.get(pt.target.id) || []
+          for (const step of groupSteps) {
+            const stepResult = stepResultMap.get(step.id)
+            if (stepResult) {
+              stepResult.y = snapToGrid(stepResult.y + deltaY)
+            }
+          }
+        }
+      } else {
+        const result = stepResultMap.get(pt.target.id)
+        if (result) {
+          result.y = pt.y
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Align consecutive groups (1:1 connections) to make edges horizontal.
+ * This ensures that when group A connects to group B with a single edge,
+ * their connection points (output port of A, input port of B) are at the same Y position.
+ */
+function alignConsecutiveGroups(
+  stepResults: LayoutResult[],
+  groupResults: GroupLayoutResult[],
+  edges: Edge[],
+  groupMap: Map<string, BlockGroup>,
+  steps: Step[],
+  getGroupOutputPorts: (groupType: BlockGroupType) => OutputPort[],
+  gridSize: number
+): void {
+  const snapToGrid = (value: number): number => {
+    return Math.round(value / gridSize) * gridSize
+  }
+
+  // Build result maps
+  const groupResultMap = new Map<string, GroupLayoutResult>()
+  for (const result of groupResults) {
+    groupResultMap.set(result.groupId, result)
+  }
+
+  const stepResultMap = new Map<string, LayoutResult>()
+  for (const result of stepResults) {
+    stepResultMap.set(result.stepId, result)
+  }
+
+  // Build map of steps by their group ID
+  const stepsByGroupId = new Map<string, Step[]>()
+  for (const step of steps) {
+    if (step.block_group_id) {
+      const existing = stepsByGroupId.get(step.block_group_id) || []
+      existing.push(step)
+      stepsByGroupId.set(step.block_group_id, existing)
+    }
+  }
+
+  // Find group-to-group edges
+  const groupToGroupEdges = edges.filter(
+    e => e.source_block_group_id && e.target_block_group_id
+  )
+
+  // Count incoming group-to-group edges for each target group
+  const incomingCountByGroup = new Map<string, number>()
+  for (const edge of groupToGroupEdges) {
+    if (edge.target_block_group_id) {
+      const count = incomingCountByGroup.get(edge.target_block_group_id) || 0
+      incomingCountByGroup.set(edge.target_block_group_id, count + 1)
+    }
+  }
+
+  // Count outgoing group-to-group edges for each source group
+  const outgoingCountByGroup = new Map<string, number>()
+  for (const edge of groupToGroupEdges) {
+    if (edge.source_block_group_id) {
+      const count = outgoingCountByGroup.get(edge.source_block_group_id) || 0
+      outgoingCountByGroup.set(edge.source_block_group_id, count + 1)
+    }
+  }
+
+  // Count ALL targets (steps + groups) per port for each source group
+  // This is used to skip alignment when a group has multiple targets on the same port
+  const targetsPerPortByGroup = new Map<string, Map<string, number>>()
+  for (const edge of edges) {
+    if (edge.source_block_group_id && edge.source_port && (edge.target_step_id || edge.target_block_group_id)) {
+      let portMap = targetsPerPortByGroup.get(edge.source_block_group_id)
+      if (!portMap) {
+        portMap = new Map<string, number>()
+        targetsPerPortByGroup.set(edge.source_block_group_id, portMap)
+      }
+      const count = portMap.get(edge.source_port) || 0
+      portMap.set(edge.source_port, count + 1)
+    }
+  }
+
+  // Build adjacency list for topological sorting
+  const outgoingEdges = new Map<string, Edge[]>()
+  const incomingDegree = new Map<string, number>()
+
+  // Initialize all groups with 0 incoming degree
+  for (const result of groupResults) {
+    incomingDegree.set(result.groupId, 0)
+    outgoingEdges.set(result.groupId, [])
+  }
+
+  // Build the graph structure (only for edges we want to process)
+  for (const edge of groupToGroupEdges) {
+    if (!edge.source_block_group_id || !edge.target_block_group_id || !edge.source_port) continue
+
+    const sourceOutgoingCount = outgoingCountByGroup.get(edge.source_block_group_id) || 0
+    const targetIncomingCount = incomingCountByGroup.get(edge.target_block_group_id) || 0
+
+    // Skip if source has multiple group-to-group outgoing edges
+    if (sourceOutgoingCount !== 1) continue
+
+    // Skip if target has multiple group-to-group incoming edges
+    if (targetIncomingCount !== 1) continue
+
+    // Skip if source has multiple targets (steps + groups) on the same port
+    // This prevents overlap when a port connects to both a step and a group
+    const portMap = targetsPerPortByGroup.get(edge.source_block_group_id)
+    const targetsOnPort = portMap?.get(edge.source_port) || 0
+    if (targetsOnPort > 1) continue
+
+    // Skip if source group outputs to BOTH groups AND steps (on any port)
+    // This prevents overlap when aligning a group would overlap with step targets on other ports
+    const allEdgesFromSource = edges.filter(e => e.source_block_group_id === edge.source_block_group_id)
+    const hasGroupTargets = allEdgesFromSource.some(e => e.target_block_group_id)
+    const hasStepTargets = allEdgesFromSource.some(e => e.target_step_id)
+    if (hasGroupTargets && hasStepTargets) continue
+
+    const existing = outgoingEdges.get(edge.source_block_group_id) || []
+    existing.push(edge)
+    outgoingEdges.set(edge.source_block_group_id, existing)
+
+    const degree = incomingDegree.get(edge.target_block_group_id) || 0
+    incomingDegree.set(edge.target_block_group_id, degree + 1)
+  }
+
+  // Topological sort using Kahn's algorithm
+  const queue: string[] = []
+  for (const [groupId, degree] of incomingDegree) {
+    if (degree === 0) {
+      queue.push(groupId)
+    }
+  }
+
+  // Process edges in topological order
+  while (queue.length > 0) {
+    const sourceGroupId = queue.shift()!
+    const edges = outgoingEdges.get(sourceGroupId) || []
+
+    for (const edge of edges) {
+      if (!edge.target_block_group_id) continue
+
+      const sourceResult = groupResultMap.get(edge.source_block_group_id!)
+      const targetResult = groupResultMap.get(edge.target_block_group_id)
+
+      if (sourceResult && targetResult) {
+        // Calculate source output port Y position based on actual port location
+        const sourceGroup = groupMap.get(edge.source_block_group_id!)
+        let sourcePortY = sourceResult.y + sourceResult.height / 2 // default to center
+
+        if (sourceGroup && edge.source_port) {
+          const outputPorts = getGroupOutputPorts(sourceGroup.type)
+          const portIndex = outputPorts.findIndex(p => p.name === edge.source_port)
+          if (portIndex >= 0 && outputPorts.length > 1) {
+            // Calculate actual port Y position (ports are distributed vertically)
+            const portSpacing = sourceResult.height / (outputPorts.length + 1)
+            sourcePortY = sourceResult.y + portSpacing * (portIndex + 1)
+          }
+        }
+
+        // Calculate target input port Y position (center of group - input is always at center)
+        const targetPortY = targetResult.y + targetResult.height / 2
+
+        // Calculate delta to align target's input port with source's output port
+        const deltaY = sourcePortY - targetPortY
+
+        if (Math.abs(deltaY) >= gridSize) {
+          // Move target group
+          const newY = snapToGrid(targetResult.y + deltaY)
+          const actualDelta = newY - targetResult.y
+          targetResult.y = newY
+
+          // Also move all steps inside the target group
+          const targetGroupSteps = stepsByGroupId.get(edge.target_block_group_id) || []
+          for (const step of targetGroupSteps) {
+            const stepResult = stepResultMap.get(step.id)
+            if (stepResult) {
+              stepResult.y = snapToGrid(stepResult.y + actualDelta)
+            }
+          }
+        }
+      }
+
+      // Decrease incoming degree and add to queue if it becomes 0
+      const degree = incomingDegree.get(edge.target_block_group_id) || 0
+      incomingDegree.set(edge.target_block_group_id, degree - 1)
+      if (degree - 1 === 0) {
+        queue.push(edge.target_block_group_id)
+      }
+    }
   }
 }
 
@@ -644,7 +975,7 @@ export function calculateLayoutWithGroups(
     adjustYBySourcePort(ungroupedResults, ungroupedSteps, ungroupedEdges, getOutputPorts, opts.nodeSeparation, GRID_SIZE)
   }
 
-  // Apply port-based Y ordering for edges from block groups to ungrouped steps
+  // Apply port-based Y ordering for edges from block groups (unified handling for both step and group targets)
   const getGroupOutputPorts = options.getGroupOutputPorts
   if (getGroupOutputPorts) {
     // Build group map for quick lookup
@@ -653,14 +984,38 @@ export function calculateLayoutWithGroups(
       groupMap.set(group.id, group)
     }
 
-    // Filter edges that originate from block groups and target ungrouped steps
-    const groupToStepEdges = edges.filter(
-      e => e.source_block_group_id && e.target_step_id && ungroupedStepIds.has(e.target_step_id)
+    // Filter edges that originate from block groups (targeting either ungrouped steps or groups)
+    const groupOutputEdges = edges.filter(
+      e => e.source_block_group_id && (
+        (e.target_step_id && ungroupedStepIds.has(e.target_step_id)) ||
+        e.target_block_group_id
+      )
     )
 
-    // Only adjust ungrouped target steps
-    const ungroupedResults = stepResults.filter(r => ungroupedStepIds.has(r.stepId))
-    adjustYByGroupSourcePort(ungroupedResults, groupToStepEdges, groupMap, getGroupOutputPorts, opts.nodeSeparation, opts.nodeHeight, GRID_SIZE)
+    // Use unified function to handle both step and group targets together
+    // Pass all stepResults (not just ungrouped) so that steps inside groups can be moved with their group
+    adjustYByGroupSourcePortUnified(
+      stepResults,
+      groupResults,
+      groupOutputEdges,
+      groupMap,
+      steps,
+      getGroupOutputPorts,
+      opts.nodeSeparation,
+      opts.nodeHeight,
+      GRID_SIZE
+    )
+
+    // Align consecutive groups (1:1 connections) to make edges horizontal
+    alignConsecutiveGroups(
+      stepResults,
+      groupResults,
+      edges,
+      groupMap,
+      steps,
+      getGroupOutputPorts,
+      GRID_SIZE
+    )
   }
 
   return { steps: stepResults, groups: groupResults }
