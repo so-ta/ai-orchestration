@@ -303,7 +303,9 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	case domain.StepTypeLog:
 		return e.executeLogStep(ctx, step, input)
 	case domain.StepTypeSubflow:
-		// Subflow not yet implemented - return error to ensure workflow fails explicitly
+		// Subflow not yet implemented - return error to ensure workflow fails explicitly.
+		// BREAKING CHANGE: Previously passed through input silently. Now returns error
+		// to prevent unintended success when subflow execution is expected but not available.
 		// TODO: Implement subflow execution when workflow nesting feature is added
 		e.logger.Error("Subflow step type is not yet implemented",
 			"step_id", step.ID,
