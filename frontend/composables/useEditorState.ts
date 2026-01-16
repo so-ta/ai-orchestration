@@ -6,7 +6,7 @@ const STORAGE_KEY = 'workflow-editor-panel-widths'
 interface StepClipboard {
   name: string
   type: string
-  config: Record<string, any>
+  config: Record<string, unknown>
 }
 
 // Global state (singleton pattern)

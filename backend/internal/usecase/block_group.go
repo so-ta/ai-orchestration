@@ -11,9 +11,10 @@ import (
 
 // BlockGroupUsecase handles block group business logic
 type BlockGroupUsecase struct {
-	workflowRepo   repository.WorkflowRepository
-	blockGroupRepo repository.BlockGroupRepository
-	stepRepo       repository.StepRepository
+	workflowRepo    repository.WorkflowRepository
+	blockGroupRepo  repository.BlockGroupRepository
+	stepRepo        repository.StepRepository
+	workflowChecker *WorkflowChecker
 }
 
 // NewBlockGroupUsecase creates a new BlockGroupUsecase
@@ -23,9 +24,10 @@ func NewBlockGroupUsecase(
 	stepRepo repository.StepRepository,
 ) *BlockGroupUsecase {
 	return &BlockGroupUsecase{
-		workflowRepo:   workflowRepo,
-		blockGroupRepo: blockGroupRepo,
-		stepRepo:       stepRepo,
+		workflowRepo:    workflowRepo,
+		blockGroupRepo:  blockGroupRepo,
+		stepRepo:        stepRepo,
+		workflowChecker: NewWorkflowChecker(workflowRepo),
 	}
 }
 
@@ -49,12 +51,8 @@ type CreateBlockGroupInput struct {
 // Create creates a new block group
 func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupInput) (*domain.BlockGroup, error) {
 	// Verify workflow exists and is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	// Validate input
@@ -101,7 +99,7 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 // GetByID retrieves a block group by ID
 func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, workflowID, groupID uuid.UUID) (*domain.BlockGroup, error) {
 	// Verify workflow exists
-	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
+	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
 
@@ -121,7 +119,7 @@ func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, workflowID, g
 // List lists block groups for a workflow
 func (u *BlockGroupUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.BlockGroup, error) {
 	// Verify workflow exists
-	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
+	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
 	return u.blockGroupRepo.ListByWorkflow(ctx, tenantID, workflowID)
@@ -146,12 +144,8 @@ type UpdateBlockGroupInput struct {
 // Update updates a block group
 func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupInput) (*domain.BlockGroup, error) {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.GroupID)
@@ -206,12 +200,8 @@ func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupIn
 // Delete deletes a block group
 func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, workflowID, groupID uuid.UUID) error {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
 		return err
-	}
-	if !workflow.CanEdit() {
-		return domain.ErrWorkflowNotEditable
 	}
 
 	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
@@ -239,12 +229,8 @@ type AddStepToGroupInput struct {
 // AddStepToGroup adds a step to a block group
 func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToGroupInput) (*domain.Step, error) {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	// Verify group exists
@@ -286,12 +272,8 @@ func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToG
 // RemoveStepFromGroup removes a step from its block group
 func (u *BlockGroupUsecase) RemoveStepFromGroup(ctx context.Context, tenantID, workflowID, stepID uuid.UUID) (*domain.Step, error) {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	// Get step
@@ -314,7 +296,7 @@ func (u *BlockGroupUsecase) RemoveStepFromGroup(ctx context.Context, tenantID, w
 // GetStepsByGroup retrieves all steps in a block group
 func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, workflowID, groupID uuid.UUID) ([]*domain.Step, error) {
 	// Verify workflow exists
-	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
+	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
 

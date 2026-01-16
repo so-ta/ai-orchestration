@@ -1,11 +1,8 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/usecase"
 )
 
@@ -35,15 +32,13 @@ type CreateEdgeRequest struct {
 // Create handles POST /api/v1/workflows/{workflow_id}/edges
 func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req CreateEdgeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -57,16 +52,14 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Parse source (step or group)
 	if req.SourceStepID != "" {
-		sourceID, err := uuid.Parse(req.SourceStepID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source_step_id", nil)
+		sourceID, ok := parseUUIDString(w, req.SourceStepID, "source_step_id")
+		if !ok {
 			return
 		}
 		input.SourceStepID = &sourceID
 	} else if req.SourceBlockGroupID != "" {
-		sourceGroupID, err := uuid.Parse(req.SourceBlockGroupID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source_block_group_id", nil)
+		sourceGroupID, ok := parseUUIDString(w, req.SourceBlockGroupID, "source_block_group_id")
+		if !ok {
 			return
 		}
 		input.SourceBlockGroupID = &sourceGroupID
@@ -77,16 +70,14 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Parse target (step or group)
 	if req.TargetStepID != "" {
-		targetID, err := uuid.Parse(req.TargetStepID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target_step_id", nil)
+		targetID, ok := parseUUIDString(w, req.TargetStepID, "target_step_id")
+		if !ok {
 			return
 		}
 		input.TargetStepID = &targetID
 	} else if req.TargetBlockGroupID != "" {
-		targetGroupID, err := uuid.Parse(req.TargetBlockGroupID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid target_block_group_id", nil)
+		targetGroupID, ok := parseUUIDString(w, req.TargetBlockGroupID, "target_block_group_id")
+		if !ok {
 			return
 		}
 		input.TargetBlockGroupID = &targetGroupID
@@ -107,9 +98,8 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 // List handles GET /api/v1/workflows/{workflow_id}/edges
 func (h *EdgeHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -125,14 +115,12 @@ func (h *EdgeHandler) List(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /api/v1/workflows/{workflow_id}/edges/{edge_id}
 func (h *EdgeHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	edgeID, err := uuid.Parse(chi.URLParam(r, "edge_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid edge ID", nil)
+	edgeID, ok := parseUUID(w, r, "edge_id", "edge ID")
+	if !ok {
 		return
 	}
 

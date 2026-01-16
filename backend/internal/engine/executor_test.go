@@ -1500,3 +1500,187 @@ func TestExecutor_StepOutputPorts(t *testing.T) {
 		assert.Empty(t, execCtx.StepOutputPorts)
 	})
 }
+
+// Tests for dispatchStepExecution
+func TestExecutor_DispatchStepExecution(t *testing.T) {
+	executor := setupTestExecutor()
+
+	run := &domain.Run{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+	}
+	def := &domain.WorkflowDefinition{Name: "test"}
+	execCtx := NewExecutionContext(run, def)
+
+	t.Run("Start step passes through input", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "start-step",
+			Type:   domain.StepTypeStart,
+			Config: json.RawMessage(`{}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"test": "value"}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		assert.Equal(t, "value", result["test"])
+	})
+
+	t.Run("Note step passes through input", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "note-step",
+			Type:   domain.StepTypeNote,
+			Config: json.RawMessage(`{"content": "test note"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"data": "unchanged"}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		assert.Equal(t, "unchanged", result["data"])
+	})
+
+	t.Run("Tool step with mock adapter returns expected fields", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "tool-step",
+			Type:   domain.StepTypeTool,
+			Config: json.RawMessage(`{"adapter_id": "mock"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"key": "value"}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		// Mock adapter returns "success": true, "input": <original input>, "message": ...
+		assert.Equal(t, true, result["success"])
+		assert.Equal(t, "Mock adapter executed successfully", result["message"])
+	})
+
+	t.Run("Condition step evaluates expression and returns result", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "condition-step",
+			Type:   domain.StepTypeCondition,
+			Config: json.RawMessage(`{"expression": "$.value > 5"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"value": 10}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		// Condition step returns "result": true/false based on expression
+		assert.Equal(t, true, result["result"])
+		assert.Equal(t, "$.value > 5", result["expression"])
+	})
+
+	t.Run("Condition step returns false when expression not met", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "condition-step-false",
+			Type:   domain.StepTypeCondition,
+			Config: json.RawMessage(`{"expression": "$.value > 5"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"value": 3}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		assert.Equal(t, false, result["result"])
+	})
+}
+
+func TestExecutor_DispatchStepExecution_Subflow(t *testing.T) {
+	executor := setupTestExecutor()
+
+	run := &domain.Run{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+	}
+	def := &domain.WorkflowDefinition{Name: "test"}
+	execCtx := NewExecutionContext(run, def)
+
+	step := domain.Step{
+		ID:     uuid.New(),
+		Name:   "subflow-step",
+		Type:   domain.StepTypeSubflow,
+		Config: json.RawMessage(`{"workflow_id": "some-id"}`),
+	}
+	stepRun := &domain.StepRun{
+		ID:     uuid.New(),
+		StepID: step.ID,
+	}
+
+	input := json.RawMessage(`{"passthrough": "data"}`)
+	output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+	// Subflow should return error (not yet implemented)
+	assert.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "subflow step type is not yet implemented")
+	assert.Contains(t, err.Error(), step.Name)
+}
+
+func TestExecutor_DispatchStepExecution_UnknownType(t *testing.T) {
+	executor := setupTestExecutor()
+
+	run := &domain.Run{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+	}
+	def := &domain.WorkflowDefinition{Name: "test"}
+	execCtx := NewExecutionContext(run, def)
+
+	step := domain.Step{
+		ID:     uuid.New(),
+		Name:   "unknown-step",
+		Type:   domain.StepType("unknown_type_xyz"), // Unknown step type
+		Config: json.RawMessage(`{}`),
+	}
+	stepRun := &domain.StepRun{
+		ID:     uuid.New(),
+		StepID: step.ID,
+	}
+
+	input := json.RawMessage(`{"test": "data"}`)
+	output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+	// Unknown step type should return error
+	assert.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "unknown step type")
+	assert.Contains(t, err.Error(), "unknown_type_xyz")
+	assert.Contains(t, err.Error(), step.Name)
+}

@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/repository"
@@ -37,7 +39,10 @@ func (r *CopilotSessionRepository) Create(ctx context.Context, session *domain.C
 		session.CreatedAt,
 		session.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("create copilot session: %w", err)
+	}
+	return nil
 }
 
 // GetByID retrieves a copilot session by ID
@@ -60,10 +65,10 @@ func (r *CopilotSessionRepository) GetByID(ctx context.Context, tenantID uuid.UU
 		&session.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrCopilotSessionNotFound
 		}
-		return nil, err
+		return nil, fmt.Errorf("get copilot session by ID: %w", err)
 	}
 	if title.Valid {
 		session.Title = title.String
@@ -93,10 +98,10 @@ func (r *CopilotSessionRepository) GetActiveByUserAndWorkflow(ctx context.Contex
 		&session.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil // No active session found
 		}
-		return nil, err
+		return nil, fmt.Errorf("get active copilot session: %w", err)
 	}
 	if title.Valid {
 		session.Title = title.String
@@ -121,7 +126,7 @@ func (r *CopilotSessionRepository) GetWithMessages(ctx context.Context, tenantID
 	`
 	rows, err := r.pool.Query(ctx, query, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("query copilot messages: %w", err)
 	}
 	defer rows.Close()
 
@@ -136,10 +141,15 @@ func (r *CopilotSessionRepository) GetWithMessages(ctx context.Context, tenantID
 			&msg.Metadata,
 			&msg.CreatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan copilot message: %w", err)
 		}
 		messages = append(messages, msg)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate copilot messages: %w", err)
+	}
+
 	session.Messages = messages
 	return session, nil
 }
@@ -154,7 +164,7 @@ func (r *CopilotSessionRepository) ListByUserAndWorkflow(ctx context.Context, te
 	`
 	rows, err := r.pool.Query(ctx, query, tenantID, userID, workflowID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list copilot sessions: %w", err)
 	}
 	defer rows.Close()
 
@@ -172,13 +182,18 @@ func (r *CopilotSessionRepository) ListByUserAndWorkflow(ctx context.Context, te
 			&session.CreatedAt,
 			&session.UpdatedAt,
 		); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan copilot session: %w", err)
 		}
 		if title.Valid {
 			session.Title = title.String
 		}
 		sessions = append(sessions, &session)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate copilot sessions: %w", err)
+	}
+
 	return sessions, nil
 }
 
@@ -196,7 +211,10 @@ func (r *CopilotSessionRepository) Update(ctx context.Context, session *domain.C
 		session.ID,
 		session.TenantID,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("update copilot session: %w", err)
+	}
+	return nil
 }
 
 // AddMessage adds a message to a session
@@ -213,7 +231,10 @@ func (r *CopilotSessionRepository) AddMessage(ctx context.Context, message *doma
 		message.Metadata,
 		message.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("add copilot message: %w", err)
+	}
+	return nil
 }
 
 // CloseSession marks a session as inactive
@@ -224,5 +245,8 @@ func (r *CopilotSessionRepository) CloseSession(ctx context.Context, tenantID uu
 		WHERE id = $1 AND tenant_id = $2
 	`
 	_, err := r.pool.Exec(ctx, query, id, tenantID)
-	return err
+	if err != nil {
+		return fmt.Errorf("close copilot session: %w", err)
+	}
+	return nil
 }

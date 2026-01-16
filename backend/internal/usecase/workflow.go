@@ -105,12 +105,7 @@ type ListWorkflowsOutput struct {
 
 // List lists workflows with pagination
 func (u *WorkflowUsecase) List(ctx context.Context, input ListWorkflowsInput) (*ListWorkflowsOutput, error) {
-	if input.Page < 1 {
-		input.Page = 1
-	}
-	if input.Limit < 1 || input.Limit > 100 {
-		input.Limit = 20
-	}
+	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
 	filter := repository.WorkflowFilter{
 		Status: input.Status,

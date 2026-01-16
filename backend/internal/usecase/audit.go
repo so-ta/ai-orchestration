@@ -81,12 +81,7 @@ type ListAuditLogsOutput struct {
 
 // List lists audit logs with pagination
 func (s *AuditService) List(ctx context.Context, input ListAuditLogsInput) (*ListAuditLogsOutput, error) {
-	if input.Page < 1 {
-		input.Page = 1
-	}
-	if input.Limit < 1 || input.Limit > 100 {
-		input.Limit = 50
-	}
+	input.Page, input.Limit = NormalizePaginationWithLimit(input.Page, input.Limit, DefaultAuditLimit)
 
 	filter := repository.AuditLogFilter{
 		ActorID:      input.ActorID,

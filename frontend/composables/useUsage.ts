@@ -1,5 +1,5 @@
 // Usage tracking composable
-import { ref, computed } from 'vue'
+import { extractErrorMessage } from './useAsyncState'
 
 export interface UsageSummary {
   period: string
@@ -99,7 +99,7 @@ export function useUsage() {
     try {
       summary.value = await api.get<UsageSummary>(`/usage/summary?period=${period}`)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch usage summary'
+      error.value = extractErrorMessage(e, 'Failed to fetch usage summary')
       throw e
     } finally {
       loading.value = false
@@ -120,7 +120,7 @@ export function useUsage() {
       const response = await api.get<{ daily: DailyUsage[]; start: string; end: string }>(url)
       dailyData.value = response.daily || []
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch daily usage'
+      error.value = extractErrorMessage(e, 'Failed to fetch daily usage')
       throw e
     } finally {
       loading.value = false
@@ -135,7 +135,7 @@ export function useUsage() {
       const response = await api.get<{ workflows: WorkflowUsage[] }>(`/usage/by-workflow?period=${period}`)
       workflowData.value = response.workflows || []
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch workflow usage'
+      error.value = extractErrorMessage(e, 'Failed to fetch workflow usage')
       throw e
     } finally {
       loading.value = false
@@ -150,7 +150,7 @@ export function useUsage() {
       const response = await api.get<{ models: Record<string, ModelUsage> }>(`/usage/by-model?period=${period}`)
       modelData.value = response.models || {}
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch model usage'
+      error.value = extractErrorMessage(e, 'Failed to fetch model usage')
       throw e
     } finally {
       loading.value = false
@@ -164,7 +164,7 @@ export function useUsage() {
     try {
       return await api.get(`/runs/${runId}/usage`)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch run usage'
+      error.value = extractErrorMessage(e, 'Failed to fetch run usage')
       throw e
     } finally {
       loading.value = false
@@ -179,7 +179,7 @@ export function useUsage() {
       const response = await api.get<{ budgets: Budget[] }>('/usage/budgets')
       budgets.value = response.budgets || []
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch budgets'
+      error.value = extractErrorMessage(e, 'Failed to fetch budgets')
       throw e
     } finally {
       loading.value = false
@@ -200,7 +200,7 @@ export function useUsage() {
       await fetchBudgets()
       return budget
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to create budget'
+      error.value = extractErrorMessage(e, 'Failed to create budget')
       throw e
     } finally {
       loading.value = false
@@ -220,7 +220,7 @@ export function useUsage() {
       await fetchBudgets()
       return budget
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to update budget'
+      error.value = extractErrorMessage(e, 'Failed to update budget')
       throw e
     } finally {
       loading.value = false
@@ -235,7 +235,7 @@ export function useUsage() {
       await api.delete(`/usage/budgets/${id}`)
       await fetchBudgets()
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to delete budget'
+      error.value = extractErrorMessage(e, 'Failed to delete budget')
       throw e
     } finally {
       loading.value = false
@@ -250,7 +250,7 @@ export function useUsage() {
       const response = await api.get<{ pricing: TokenPricing[] }>('/usage/pricing')
       pricing.value = response.pricing || []
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to fetch pricing'
+      error.value = extractErrorMessage(e, 'Failed to fetch pricing')
       throw e
     } finally {
       loading.value = false
@@ -291,6 +291,7 @@ export function useUsage() {
       .slice(0, 5)
   })
 
+  // Note: State refs not wrapped in readonly() to preserve backward compatibility
   return {
     // State
     summary,

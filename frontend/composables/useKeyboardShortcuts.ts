@@ -8,14 +8,14 @@ interface KeyboardShortcutsOptions {
   onDelete: () => void
   onDeleteGroup?: () => void
   onCopy: () => void
-  onPaste: (data: { type: StepType; name: string; config: Record<string, any> }) => void
+  onPaste: (data: { type: StepType; name: string; config: Record<string, unknown> }) => void
   onClearSelection: () => void
 }
 
 interface ClipboardData {
   type: StepType
   name: string
-  config: Record<string, any>
+  config: Record<string, unknown>
 }
 
 // Global clipboard for steps (persists across composable instances)

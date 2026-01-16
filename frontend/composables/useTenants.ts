@@ -9,6 +9,7 @@ import type {
   TenantPlan,
   PaginatedResponse,
 } from '~/types/api'
+import { useListState } from './useAsyncState'
 
 interface TenantFilters {
   status?: TenantStatus
@@ -22,20 +23,21 @@ interface TenantFilters {
 export function useTenants() {
   const api = useApi()
 
-  const tenants = ref<Tenant[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const pagination = ref<{ page: number; limit: number; total: number }>({
-    page: 1,
-    limit: 20,
-    total: 0,
-  })
+  const {
+    items: tenants,
+    loading,
+    error,
+    pagination,
+    execute,
+    setItems,
+    addItem,
+    updateItem,
+    removeItem,
+    setPagination,
+  } = useListState<Tenant>()
 
   async function fetchTenants(filters: TenantFilters = {}) {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const params = new URLSearchParams()
       if (filters.status) params.set('status', filters.status)
       if (filters.plan) params.set('plan', filters.plan)
@@ -48,190 +50,95 @@ export function useTenants() {
       const endpoint = `/admin/tenants${queryString ? `?${queryString}` : ''}`
 
       const response = await api.get<PaginatedResponse<Tenant>>(endpoint)
-      tenants.value = response.data
-      pagination.value = {
+      setItems(response.data)
+      setPagination({
         page: response.meta.page,
         limit: response.meta.limit,
         total: response.meta.total,
-      }
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch tenants'
-      throw err
-    } finally {
-      loading.value = false
-    }
+      })
+    }, 'Failed to fetch tenants')
   }
 
   async function getTenant(id: string): Promise<Tenant> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const response = await api.get<Tenant>(`/admin/tenants/${id}`)
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch tenant'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to fetch tenant')
   }
 
   async function createTenant(data: CreateTenantRequest): Promise<Tenant> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const response = await api.post<Tenant>('/admin/tenants', data)
-      // Add to local list
-      tenants.value = [response, ...tenants.value]
-      pagination.value.total += 1
+      addItem(response)
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to create tenant'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to create tenant')
   }
 
   async function updateTenant(id: string, data: UpdateTenantRequest): Promise<Tenant> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const response = await api.put<Tenant>(`/admin/tenants/${id}`, data)
-      // Update local list
-      const index = tenants.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        tenants.value[index] = response
-      }
+      updateItem(t => t.id === id, response)
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to update tenant'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to update tenant')
   }
 
   async function deleteTenant(id: string): Promise<void> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       await api.delete(`/admin/tenants/${id}`)
-      // Remove from local list
-      tenants.value = tenants.value.filter(t => t.id !== id)
-      pagination.value.total -= 1
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to delete tenant'
-      throw err
-    } finally {
-      loading.value = false
-    }
+      removeItem(t => t.id === id)
+    }, 'Failed to delete tenant')
   }
 
   async function suspendTenant(id: string, reason: string): Promise<Tenant> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const data: SuspendTenantRequest = { reason }
       const response = await api.post<Tenant>(`/admin/tenants/${id}/suspend`, data)
-      // Update local list
-      const index = tenants.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        tenants.value[index] = response
-      }
+      updateItem(t => t.id === id, response)
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to suspend tenant'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to suspend tenant')
   }
 
   async function activateTenant(id: string): Promise<Tenant> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const response = await api.post<Tenant>(`/admin/tenants/${id}/activate`)
-      // Update local list
-      const index = tenants.value.findIndex(t => t.id === id)
-      if (index !== -1) {
-        tenants.value[index] = response
-      }
+      updateItem(t => t.id === id, response)
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to activate tenant'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to activate tenant')
   }
 
   async function getTenantStats(id: string): Promise<TenantStats> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const response = await api.get<TenantStats>(`/admin/tenants/${id}/stats`)
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch tenant stats'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to fetch tenant stats')
   }
 
   async function getOverviewStats(): Promise<TenantOverviewStats> {
-    loading.value = true
-    error.value = null
-
-    try {
+    return execute(async () => {
       const response = await api.get<TenantOverviewStats>('/admin/tenants/stats/overview')
       return response
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to fetch overview stats'
-      throw err
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to fetch overview stats')
   }
 
   // Helper functions for status and plan display
   function getStatusColor(status: TenantStatus): string {
-    switch (status) {
-      case 'active':
-        return 'success'
-      case 'suspended':
-        return 'error'
-      case 'pending':
-        return 'warning'
-      case 'inactive':
-        return 'secondary'
-      default:
-        return 'secondary'
+    const colorMap: Record<TenantStatus, string> = {
+      active: 'success',
+      suspended: 'error',
+      pending: 'warning',
+      inactive: 'secondary',
     }
+    return colorMap[status] || 'secondary'
   }
 
   function getPlanColor(plan: TenantPlan): string {
-    switch (plan) {
-      case 'enterprise':
-        return 'primary'
-      case 'professional':
-        return 'info'
-      case 'starter':
-        return 'success'
-      case 'free':
-        return 'secondary'
-      default:
-        return 'secondary'
+    const colorMap: Record<TenantPlan, string> = {
+      enterprise: 'primary',
+      professional: 'info',
+      starter: 'success',
+      free: 'secondary',
     }
+    return colorMap[plan] || 'secondary'
   }
 
   return {

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
@@ -42,23 +41,20 @@ type CreateBlockGroupRequest struct {
 // Create handles POST /api/v1/workflows/{id}/block-groups
 func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
 	var req CreateBlockGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
 	var parentGroupID *uuid.UUID
 	if req.ParentGroupID != nil {
-		id, err := uuid.Parse(*req.ParentGroupID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid parent group ID", nil)
+		id, ok := parseUUIDString(w, *req.ParentGroupID, "parent group ID")
+		if !ok {
 			return
 		}
 		parentGroupID = &id
@@ -89,9 +85,8 @@ func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 // List handles GET /api/v1/workflows/{id}/block-groups
 func (h *BlockGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -107,14 +102,12 @@ func (h *BlockGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get handles GET /api/v1/workflows/{id}/block-groups/{group_id}
 func (h *BlockGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	groupID, err := uuid.Parse(chi.URLParam(r, "group_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group ID", nil)
+	groupID, ok := parseUUID(w, r, "group_id", "group ID")
+	if !ok {
 		return
 	}
 
@@ -147,20 +140,17 @@ type UpdateBlockGroupRequest struct {
 // Update handles PUT /api/v1/workflows/{id}/block-groups/{group_id}
 func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	groupID, err := uuid.Parse(chi.URLParam(r, "group_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group ID", nil)
+	groupID, ok := parseUUID(w, r, "group_id", "group ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateBlockGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -175,9 +165,8 @@ func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.ParentGroupID != nil {
-		id, err := uuid.Parse(*req.ParentGroupID)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid parent group ID", nil)
+		id, ok := parseUUIDString(w, *req.ParentGroupID, "parent group ID")
+		if !ok {
 			return
 		}
 		input.ParentGroupID = &id
@@ -205,14 +194,12 @@ func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 // Delete handles DELETE /api/v1/workflows/{id}/block-groups/{group_id}
 func (h *BlockGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	groupID, err := uuid.Parse(chi.URLParam(r, "group_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group ID", nil)
+	groupID, ok := parseUUID(w, r, "group_id", "group ID")
+	if !ok {
 		return
 	}
 
@@ -233,26 +220,22 @@ type AddStepToGroupRequest struct {
 // AddStepToGroup handles POST /api/v1/workflows/{id}/block-groups/{group_id}/steps
 func (h *BlockGroupHandler) AddStepToGroup(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	groupID, err := uuid.Parse(chi.URLParam(r, "group_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group ID", nil)
+	groupID, ok := parseUUID(w, r, "group_id", "group ID")
+	if !ok {
 		return
 	}
 
 	var req AddStepToGroupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
-	stepID, err := uuid.Parse(req.StepID)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUIDString(w, req.StepID, "step ID")
+	if !ok {
 		return
 	}
 
@@ -274,14 +257,12 @@ func (h *BlockGroupHandler) AddStepToGroup(w http.ResponseWriter, r *http.Reques
 // RemoveStepFromGroup handles DELETE /api/v1/workflows/{id}/block-groups/{group_id}/steps/{step_id}
 func (h *BlockGroupHandler) RemoveStepFromGroup(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	stepID, err := uuid.Parse(chi.URLParam(r, "step_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid step ID", nil)
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
 		return
 	}
 
@@ -297,14 +278,12 @@ func (h *BlockGroupHandler) RemoveStepFromGroup(w http.ResponseWriter, r *http.R
 // GetStepsByGroup handles GET /api/v1/workflows/{id}/block-groups/{group_id}/steps
 func (h *BlockGroupHandler) GetStepsByGroup(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid workflow ID", nil)
+	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	if !ok {
 		return
 	}
-	groupID, err := uuid.Parse(chi.URLParam(r, "group_id"))
-	if err != nil {
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid group ID", nil)
+	groupID, ok := parseUUID(w, r, "group_id", "group ID")
+	if !ok {
 		return
 	}
 

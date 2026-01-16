@@ -1,12 +1,9 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
 )
@@ -38,8 +35,7 @@ type CreateCredentialRequest struct {
 // Create creates a new credential
 func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateCredentialRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -81,10 +77,8 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get retrieves a credential by ID
 func (h *CredentialHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
@@ -146,16 +140,13 @@ type UpdateCredentialRequest struct {
 
 // Update updates a credential
 func (h *CredentialHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateCredentialRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -195,10 +186,8 @@ func (h *CredentialHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete deletes a credential
 func (h *CredentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
@@ -217,10 +206,8 @@ func (h *CredentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // Revoke revokes a credential
 func (h *CredentialHandler) Revoke(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
@@ -240,10 +227,8 @@ func (h *CredentialHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 
 // Activate activates a credential
 func (h *CredentialHandler) Activate(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 

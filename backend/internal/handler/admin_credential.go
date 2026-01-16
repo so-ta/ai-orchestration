@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/repository"
@@ -64,8 +63,7 @@ func (h *AdminCredentialHandler) toResponse(cred *domain.SystemCredential) *Syst
 // Create creates a new system credential
 func (h *AdminCredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateSystemCredentialRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -135,10 +133,8 @@ func (h *AdminCredentialHandler) Create(w http.ResponseWriter, r *http.Request) 
 
 // Get retrieves a system credential by ID
 func (h *AdminCredentialHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
@@ -181,16 +177,13 @@ type UpdateSystemCredentialRequest struct {
 
 // Update updates a system credential
 func (h *AdminCredentialHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateSystemCredentialRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -257,10 +250,8 @@ func (h *AdminCredentialHandler) Update(w http.ResponseWriter, r *http.Request) 
 
 // Delete deletes a system credential
 func (h *AdminCredentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
@@ -274,10 +265,8 @@ func (h *AdminCredentialHandler) Delete(w http.ResponseWriter, r *http.Request) 
 
 // Revoke revokes a system credential
 func (h *AdminCredentialHandler) Revoke(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 
@@ -297,10 +286,8 @@ func (h *AdminCredentialHandler) Revoke(w http.ResponseWriter, r *http.Request) 
 
 // Activate activates a system credential
 func (h *AdminCredentialHandler) Activate(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "credential_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid credential ID", nil)
+	id, ok := parseUUID(w, r, "credential_id", "credential ID")
+	if !ok {
 		return
 	}
 

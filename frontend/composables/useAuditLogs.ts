@@ -1,4 +1,5 @@
 import type { AuditLog, AuditAction, PaginatedResponse } from '~/types/api'
+import { extractErrorMessage } from './useAsyncState'
 
 export interface AuditLogFilter {
   resource_type?: string
@@ -19,7 +20,7 @@ export function useAuditLogs() {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  const list = async (filter?: AuditLogFilter): Promise<{ data: AuditLog[]; total: number }> => {
+  async function list(filter?: AuditLogFilter): Promise<{ data: AuditLog[]; total: number }> {
     loading.value = true
     error.value = null
     try {
@@ -42,7 +43,7 @@ export function useAuditLogs() {
       total.value = result.meta?.total || 0
       return { data: result.data || [], total: result.meta?.total || 0 }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
+      error.value = extractErrorMessage(e, 'Failed to fetch audit logs')
       throw e
     } finally {
       loading.value = false
@@ -50,7 +51,7 @@ export function useAuditLogs() {
   }
 
   // Format action for display
-  const formatAction = (action: AuditAction): string => {
+  function formatAction(action: AuditAction): string {
     const actionMap: Record<AuditAction, string> = {
       create: 'Created',
       update: 'Updated',
@@ -65,7 +66,7 @@ export function useAuditLogs() {
   }
 
   // Format resource type for display
-  const formatResourceType = (type: string): string => {
+  function formatResourceType(type: string): string {
     const typeMap: Record<string, string> = {
       workflow: 'Workflow',
       step: 'Step',
@@ -81,7 +82,7 @@ export function useAuditLogs() {
   }
 
   // Get action badge color
-  const getActionColor = (action: AuditAction): string => {
+  function getActionColor(action: AuditAction): string {
     const colorMap: Record<AuditAction, string> = {
       create: '#22c55e',
       update: '#3b82f6',
@@ -95,6 +96,7 @@ export function useAuditLogs() {
     return colorMap[action] || '#6b7280'
   }
 
+  // Note: State refs not wrapped in readonly() to preserve backward compatibility
   return {
     auditLogs,
     total,

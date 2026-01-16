@@ -15,6 +15,7 @@ type EdgeUsecase struct {
 	edgeRepo            repository.EdgeRepository
 	blockGroupRepo      repository.BlockGroupRepository
 	blockDefinitionRepo repository.BlockDefinitionRepository
+	workflowChecker     *WorkflowChecker
 }
 
 // NewEdgeUsecase creates a new EdgeUsecase
@@ -24,9 +25,10 @@ func NewEdgeUsecase(
 	edgeRepo repository.EdgeRepository,
 ) *EdgeUsecase {
 	return &EdgeUsecase{
-		workflowRepo: workflowRepo,
-		stepRepo:     stepRepo,
-		edgeRepo:     edgeRepo,
+		workflowRepo:    workflowRepo,
+		stepRepo:        stepRepo,
+		edgeRepo:        edgeRepo,
+		workflowChecker: NewWorkflowChecker(workflowRepo),
 	}
 }
 
@@ -60,12 +62,8 @@ type CreateEdgeInput struct {
 // Create creates a new edge
 func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domain.Edge, error) {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	// Validate: no self-loop for step-to-step edges
@@ -209,7 +207,7 @@ func wouldCreateCycle(steps []domain.Step, edges []domain.Edge, source, target u
 // List lists edges for a workflow
 func (u *EdgeUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Edge, error) {
 	// Verify workflow exists
-	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
+	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
 	return u.edgeRepo.ListByWorkflow(ctx, tenantID, workflowID)
@@ -218,12 +216,8 @@ func (u *EdgeUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) 
 // Delete deletes an edge
 func (u *EdgeUsecase) Delete(ctx context.Context, tenantID, workflowID, edgeID uuid.UUID) error {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
 		return err
-	}
-	if !workflow.CanEdit() {
-		return domain.ErrWorkflowNotEditable
 	}
 
 	return u.edgeRepo.Delete(ctx, tenantID, workflowID, edgeID)

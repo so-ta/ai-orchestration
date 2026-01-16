@@ -14,6 +14,7 @@ type StepUsecase struct {
 	workflowRepo     repository.WorkflowRepository
 	stepRepo         repository.StepRepository
 	blockDefRepo     repository.BlockDefinitionRepository
+	workflowChecker  *WorkflowChecker
 }
 
 // NewStepUsecase creates a new StepUsecase
@@ -23,9 +24,10 @@ func NewStepUsecase(
 	blockDefRepo repository.BlockDefinitionRepository,
 ) *StepUsecase {
 	return &StepUsecase{
-		workflowRepo:     workflowRepo,
-		stepRepo:         stepRepo,
-		blockDefRepo:     blockDefRepo,
+		workflowRepo:    workflowRepo,
+		stepRepo:        stepRepo,
+		blockDefRepo:    blockDefRepo,
+		workflowChecker: NewWorkflowChecker(workflowRepo),
 	}
 }
 
@@ -43,12 +45,8 @@ type CreateStepInput struct {
 // Create creates a new step
 func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domain.Step, error) {
 	// Verify workflow exists and is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	// Validate input
@@ -87,7 +85,7 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 // GetByID retrieves a step by ID
 func (u *StepUsecase) GetByID(ctx context.Context, tenantID, workflowID, stepID uuid.UUID) (*domain.Step, error) {
 	// Verify workflow exists
-	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
+	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
 	return u.stepRepo.GetByID(ctx, tenantID, workflowID, stepID)
@@ -96,7 +94,7 @@ func (u *StepUsecase) GetByID(ctx context.Context, tenantID, workflowID, stepID 
 // List lists steps for a workflow
 func (u *StepUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error) {
 	// Verify workflow exists
-	if _, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID); err != nil {
+	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
 		return nil, err
 	}
 	return u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
@@ -117,12 +115,8 @@ type UpdateStepInput struct {
 // Update updates a step
 func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domain.Step, error) {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
 		return nil, err
-	}
-	if !workflow.CanEdit() {
-		return nil, domain.ErrWorkflowNotEditable
 	}
 
 	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.StepID)
@@ -156,12 +150,8 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 // Delete deletes a step
 func (u *StepUsecase) Delete(ctx context.Context, tenantID, workflowID, stepID uuid.UUID) error {
 	// Verify workflow is editable
-	workflow, err := u.workflowRepo.GetByID(ctx, tenantID, workflowID)
-	if err != nil {
+	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
 		return err
-	}
-	if !workflow.CanEdit() {
-		return domain.ErrWorkflowNotEditable
 	}
 
 	return u.stepRepo.Delete(ctx, tenantID, workflowID, stepID)

@@ -161,12 +161,7 @@ type ListCredentialsOutput struct {
 
 // List lists credentials with pagination (without decrypting data)
 func (u *CredentialUsecase) List(ctx context.Context, input ListCredentialsInput) (*ListCredentialsOutput, error) {
-	if input.Page < 1 {
-		input.Page = 1
-	}
-	if input.Limit < 1 || input.Limit > 100 {
-		input.Limit = 20
-	}
+	input.Page, input.Limit = NormalizePagination(input.Page, input.Limit)
 
 	filter := repository.CredentialFilter{
 		CredentialType: input.CredentialType,

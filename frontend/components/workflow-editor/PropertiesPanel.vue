@@ -26,7 +26,7 @@ const activeTab = ref<'settings' | 'copilot' | 'execution'>('settings')
 // Keep current tab when step changes (no automatic tab switching)
 
 const emit = defineEmits<{
-  (e: 'save', data: { name: string; type: StepType; config: Record<string, any> }): void
+  (e: 'save', data: { name: string; type: StepType; config: StepConfig }): void
   (e: 'delete'): void
   (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
   (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
@@ -34,17 +34,66 @@ const emit = defineEmits<{
   (e: 'update:name', name: string): void
 }>()
 
+// Step config type - dynamic form configuration with common known fields
+// Using index signature for dynamic access while keeping type safety for known fields
+interface StepConfig {
+  // LLM config
+  provider?: string
+  model?: string
+  system_prompt?: string
+  prompt?: string
+  temperature?: number
+  max_tokens?: number
+  // Tool config
+  adapter_id?: string
+  url?: string
+  method?: string
+  // Condition/Switch config
+  expression?: string
+  cases?: Array<{ name: string; expression: string; is_default?: boolean }>
+  // Loop config
+  loop_type?: string
+  count?: number
+  input_path?: string
+  condition?: string
+  max_iterations?: number
+  // Wait config
+  duration_ms?: number
+  until?: string
+  // Function config
+  code?: string
+  timeout_ms?: number
+  // Router config
+  routes_json?: string
+  // Human in loop config
+  instructions?: string
+  timeout_hours?: number
+  approval_url?: boolean
+  // Map config
+  parallel?: number
+  // Subflow config
+  workflow_id?: string
+  // Log config
+  message?: string
+  level?: string
+  data?: string
+  // Output schema
+  output_schema?: object
+  // Dynamic access for other fields
+  [key: string]: unknown
+}
+
 // Form state
 const formName = ref('')
 const formType = ref<StepType>('tool')
-const formConfig = ref<Record<string, any>>({})
+const formConfig = ref<StepConfig>({})
 
 // Watch for step changes and reset form
 watch(() => props.step, (newStep) => {
   if (newStep) {
     formName.value = newStep.name
     formType.value = newStep.type
-    formConfig.value = { ...(newStep.config as Record<string, any>) }
+    formConfig.value = { ...(newStep.config as StepConfig) }
   } else {
     formName.value = ''
     formType.value = 'tool'

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -78,11 +79,11 @@ func (r *CredentialRepository) GetByID(ctx context.Context, tenantID, id uuid.UU
 		&cred.UpdatedAt,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrCredentialNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get credential by ID: %w", err)
 	}
 
 	return &cred, nil
@@ -115,11 +116,11 @@ func (r *CredentialRepository) GetByName(ctx context.Context, tenantID uuid.UUID
 		&cred.UpdatedAt,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrCredentialNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get credential by name: %w", err)
 	}
 
 	return &cred, nil

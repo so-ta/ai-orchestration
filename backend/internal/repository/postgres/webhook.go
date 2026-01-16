@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -69,11 +70,11 @@ func (r *WebhookRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID)
 		&webhook.UpdatedAt,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrWebhookNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get webhook by ID: %w", err)
 	}
 
 	return &webhook, nil
@@ -105,11 +106,11 @@ func (r *WebhookRepository) GetByIDForTrigger(ctx context.Context, id uuid.UUID)
 		&webhook.WorkflowVersion,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, domain.ErrWebhookNotFound
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get webhook for trigger: %w", err)
 	}
 
 	return &webhook, nil

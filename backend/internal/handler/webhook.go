@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
@@ -36,14 +35,12 @@ type CreateWebhookRequest struct {
 // Create creates a new webhook
 func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateWebhookRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
-	workflowID, err := uuid.Parse(req.WorkflowID)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+	workflowID, ok := parseUUIDString(w, req.WorkflowID, "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -74,10 +71,8 @@ func (h *WebhookHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get retrieves a webhook by ID
 func (h *WebhookHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 
@@ -133,16 +128,13 @@ type UpdateWebhookRequest struct {
 
 // Update updates a webhook
 func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateWebhookRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -170,10 +162,8 @@ func (h *WebhookHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete deletes a webhook
 func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 
@@ -192,10 +182,8 @@ func (h *WebhookHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // Enable enables a webhook
 func (h *WebhookHandler) Enable(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 
@@ -215,10 +203,8 @@ func (h *WebhookHandler) Enable(w http.ResponseWriter, r *http.Request) {
 
 // Disable disables a webhook
 func (h *WebhookHandler) Disable(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 
@@ -238,10 +224,8 @@ func (h *WebhookHandler) Disable(w http.ResponseWriter, r *http.Request) {
 
 // RegenerateSecret regenerates the webhook secret
 func (h *WebhookHandler) RegenerateSecret(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 
@@ -261,10 +245,8 @@ func (h *WebhookHandler) RegenerateSecret(w http.ResponseWriter, r *http.Request
 
 // Trigger handles incoming webhook requests (public endpoint)
 func (h *WebhookHandler) Trigger(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "webhook_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid webhook ID", nil)
+	id, ok := parseUUID(w, r, "webhook_id", "webhook ID")
+	if !ok {
 		return
 	}
 

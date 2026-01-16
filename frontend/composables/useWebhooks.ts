@@ -1,18 +1,24 @@
 import type { Webhook, CreateWebhookRequest, UpdateWebhookRequest, ApiResponse, PaginatedResponse } from '~/types/api'
+import { useListState } from './useAsyncState'
 
 export function useWebhooks() {
   const api = useApi()
   const config = useRuntimeConfig()
   const baseUrl = config.public.apiBase || 'http://localhost:8080'
 
-  const webhooks = ref<Webhook[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  const {
+    items: webhooks,
+    loading,
+    error,
+    execute,
+    setItems,
+    addItem,
+    updateItem,
+    removeItem,
+  } = useListState<Webhook>()
 
-  const list = async (workflowId?: string): Promise<Webhook[]> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function list(workflowId?: string): Promise<Webhook[]> {
+    return execute(async () => {
       const params = new URLSearchParams()
       if (workflowId) {
         params.append('workflow_id', workflowId)
@@ -21,133 +27,68 @@ export function useWebhooks() {
       const endpoint = `/webhooks${queryString ? `?${queryString}` : ''}`
 
       const result = await api.get<PaginatedResponse<Webhook>>(endpoint)
-      webhooks.value = result.data || []
-      return result.data || []
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+      const items = result.data || []
+      setItems(items)
+      return items
+    }, 'Failed to fetch webhooks')
   }
 
-  const get = async (id: string): Promise<Webhook> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function get(id: string): Promise<Webhook> {
+    return execute(async () => {
       const result = await api.get<ApiResponse<Webhook>>(`/webhooks/${id}`)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to fetch webhook')
   }
 
-  const create = async (data: CreateWebhookRequest): Promise<Webhook> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function create(data: CreateWebhookRequest): Promise<Webhook> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Webhook>>('/webhooks', data)
-      webhooks.value.push(result.data)
+      addItem(result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to create webhook')
   }
 
-  const update = async (id: string, data: UpdateWebhookRequest): Promise<Webhook> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function update(id: string, data: UpdateWebhookRequest): Promise<Webhook> {
+    return execute(async () => {
       const result = await api.put<ApiResponse<Webhook>>(`/webhooks/${id}`, data)
-      const index = webhooks.value.findIndex(w => w.id === id)
-      if (index !== -1) {
-        webhooks.value[index] = result.data
-      }
+      updateItem(w => w.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to update webhook')
   }
 
-  const remove = async (id: string): Promise<void> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function remove(id: string): Promise<void> {
+    return execute(async () => {
       await api.delete(`/webhooks/${id}`)
-      webhooks.value = webhooks.value.filter(w => w.id !== id)
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+      removeItem(w => w.id === id)
+    }, 'Failed to delete webhook')
   }
 
-  const enable = async (id: string): Promise<Webhook> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function enable(id: string): Promise<Webhook> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Webhook>>(`/webhooks/${id}/enable`)
-      const index = webhooks.value.findIndex(w => w.id === id)
-      if (index !== -1) {
-        webhooks.value[index] = result.data
-      }
+      updateItem(w => w.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to enable webhook')
   }
 
-  const disable = async (id: string): Promise<Webhook> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function disable(id: string): Promise<Webhook> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Webhook>>(`/webhooks/${id}/disable`)
-      const index = webhooks.value.findIndex(w => w.id === id)
-      if (index !== -1) {
-        webhooks.value[index] = result.data
-      }
+      updateItem(w => w.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to disable webhook')
   }
 
-  const regenerateSecret = async (id: string): Promise<Webhook> => {
-    loading.value = true
-    error.value = null
-    try {
+  async function regenerateSecret(id: string): Promise<Webhook> {
+    return execute(async () => {
       const result = await api.post<ApiResponse<Webhook>>(`/webhooks/${id}/regenerate-secret`)
-      const index = webhooks.value.findIndex(w => w.id === id)
-      if (index !== -1) {
-        webhooks.value[index] = result.data
-      }
+      updateItem(w => w.id === id, result.data)
       return result.data
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error'
-      throw e
-    } finally {
-      loading.value = false
-    }
+    }, 'Failed to regenerate webhook secret')
   }
 
   // Get the webhook URL for triggering
-  const getWebhookUrl = (webhook: Webhook): string => {
+  function getWebhookUrl(webhook: Webhook): string {
     return `${baseUrl}/webhooks/${webhook.id}/trigger`
   }
 

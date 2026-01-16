@@ -184,12 +184,8 @@ func (e *Executor) ExecuteSingleStep(ctx context.Context, execCtx *ExecutionCont
 	}
 	stepRun.Start(stepInput)
 
-	// Execute based on step type
-	var output json.RawMessage
-	var err error
-
-	// Call executeNodeWithInput instead of executeNode to use custom input
-	output, err = e.executeStepWithInput(ctx, execCtx, *targetStep, stepRun, stepInput)
+	// Execute step using unified dispatch
+	output, err := e.dispatchStepExecution(ctx, execCtx, *targetStep, stepRun, stepInput)
 
 	if err != nil {
 		stepRun.Fail(err.Error())
@@ -270,8 +266,9 @@ func (e *Executor) ExecuteFromStep(ctx context.Context, execCtx *ExecutionContex
 	return nil
 }
 
-// executeStepWithInput executes a step with explicit input (for single step execution)
-func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
+// dispatchStepExecution routes step execution to the appropriate handler based on step type.
+// This is the central dispatch point for all step type execution logic.
+func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	switch step.Type {
 	case domain.StepTypeStart:
 		return e.executeStartStep(ctx, step, input)
@@ -306,18 +303,37 @@ func (e *Executor) executeStepWithInput(ctx context.Context, execCtx *ExecutionC
 	case domain.StepTypeLog:
 		return e.executeLogStep(ctx, step, input)
 	case domain.StepTypeSubflow:
-		return input, nil
+		// Subflow not yet implemented - return error to ensure workflow fails explicitly.
+		// BREAKING CHANGE: Previously passed through input silently. Now returns error
+		// to prevent unintended success when subflow execution is expected but not available.
+		// TODO: Implement subflow execution when workflow nesting feature is added
+		e.logger.Error("Subflow step type is not yet implemented",
+			"step_id", step.ID,
+			"step_name", step.Name,
+		)
+		return nil, fmt.Errorf("subflow step type is not yet implemented: step %s (%s)", step.Name, step.ID)
 	default:
-		// Check if this is a custom block
-		// First check by BlockDefinitionID, then try to find by step type (slug)
-		if step.BlockDefinitionID != nil {
-			return e.executeCustomBlockStep(ctx, execCtx, step, input)
-		} else if e.blockDefRepo != nil {
-			// Try to find block definition by step type (slug)
-			return e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
-		}
-		return input, nil
+		return e.executeCustomOrPassthrough(ctx, execCtx, step, input)
 	}
+}
+
+// executeCustomOrPassthrough handles custom block execution or returns error for unknown types.
+func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+	// First check by BlockDefinitionID
+	if step.BlockDefinitionID != nil {
+		return e.executeCustomBlockStep(ctx, execCtx, step, input)
+	}
+	// Then try to find block definition by step type (slug)
+	if e.blockDefRepo != nil {
+		return e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
+	}
+	// Unknown step type without block definition - return error to fail workflow explicitly
+	e.logger.Error("Unknown step type without block definition",
+		"step_id", step.ID,
+		"step_name", step.Name,
+		"step_type", step.Type,
+	)
+	return nil, fmt.Errorf("unknown step type %q without block definition: step %s (%s)", step.Type, step.Name, step.ID)
 }
 
 // Execute executes the workflow
@@ -513,37 +529,28 @@ func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionCont
 			}
 		}
 
-		// Check if group already completed
-		mu.Lock()
-		if completedGroups[groupID] {
-			mu.Unlock()
-			continue
-		}
-		mu.Unlock()
+		// Check if group already completed and all dependencies are met (single lock)
+		shouldExecute := func() bool {
+			mu.Lock()
+			defer mu.Unlock()
 
-		// Check if all incoming edges to this group are satisfied
-		allDependenciesMet := true
-		for _, inEdge := range graph.GroupInEdges[groupID] {
-			if inEdge.SourceStepID != nil {
-				mu.Lock()
-				if !completed[*inEdge.SourceStepID] {
-					allDependenciesMet = false
-				}
-				mu.Unlock()
+			if completedGroups[groupID] {
+				return false
 			}
-			if inEdge.SourceBlockGroupID != nil {
-				mu.Lock()
-				if !completedGroups[*inEdge.SourceBlockGroupID] {
-					allDependenciesMet = false
-				}
-				mu.Unlock()
-			}
-			if !allDependenciesMet {
-				break
-			}
-		}
 
-		if !allDependenciesMet {
+			// Check if all incoming edges to this group are satisfied
+			for _, inEdge := range graph.GroupInEdges[groupID] {
+				if inEdge.SourceStepID != nil && !completed[*inEdge.SourceStepID] {
+					return false
+				}
+				if inEdge.SourceBlockGroupID != nil && !completedGroups[*inEdge.SourceBlockGroupID] {
+					return false
+				}
+			}
+			return true
+		}()
+
+		if !shouldExecute {
 			continue
 		}
 
@@ -559,9 +566,10 @@ func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionCont
 		if err != nil {
 			e.logger.Error("Block group execution failed",
 				"group_id", groupID,
+				"group_name", group.Name,
 				"error", err,
 			)
-			return err
+			return fmt.Errorf("block group %s execution failed: %w", group.Name, err)
 		}
 
 		mu.Lock()
@@ -689,6 +697,13 @@ func (e *Executor) executeFromGroupOutput(ctx context.Context, execCtx *Executio
 }
 
 func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext, graph *Graph, currentID uuid.UUID, completed, completedGroups map[uuid.UUID]bool, mu *sync.Mutex) []uuid.UUID {
+	ctx, span := tracer.Start(ctx, "workflow.find_next_nodes",
+		trace.WithAttributes(
+			attribute.String("current_step_id", currentID.String()),
+		),
+	)
+	defer span.End()
+
 	var nextNodes []uuid.UUID
 
 	// Get the output and output port of current step
@@ -741,8 +756,10 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 		if edge.Condition != nil && *edge.Condition != "" {
 			condResult, err := e.evaluator.Evaluate(*edge.Condition, currentOutput)
 			if err != nil {
-				e.logger.Warn("Edge condition evaluation failed",
+				e.logger.Warn("Edge condition evaluation failed, skipping edge",
 					"edge_id", edge.ID,
+					"source_step_id", currentID,
+					"target_step_id", targetID,
 					"condition", *edge.Condition,
 					"error", err,
 				)
@@ -757,33 +774,28 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 			}
 		}
 
-		// Check if all incoming edges' sources are completed (steps and groups)
-		allDependenciesMet := true
-		for _, inEdge := range graph.InEdges[targetID] {
-			if inEdge.SourceStepID != nil {
-				mu.Lock()
-				if !completed[*inEdge.SourceStepID] {
-					allDependenciesMet = false
+		// Check if all incoming edges' sources are completed (single lock operation)
+		allDependenciesMet := func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+
+			for _, inEdge := range graph.InEdges[targetID] {
+				if inEdge.SourceStepID != nil && !completed[*inEdge.SourceStepID] {
+					return false
 				}
-				mu.Unlock()
-			}
-			if inEdge.SourceBlockGroupID != nil {
-				mu.Lock()
-				if !completedGroups[*inEdge.SourceBlockGroupID] {
-					allDependenciesMet = false
+				if inEdge.SourceBlockGroupID != nil && !completedGroups[*inEdge.SourceBlockGroupID] {
+					return false
 				}
-				mu.Unlock()
 			}
-			if !allDependenciesMet {
-				break
-			}
-		}
+			return true
+		}()
 
 		if allDependenciesMet {
 			nextNodes = append(nextNodes, targetID)
 		}
 	}
 
+	span.SetAttributes(attribute.Int("next_node_count", len(nextNodes)))
 	return nextNodes
 }
 
@@ -825,58 +837,8 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 	}
 	stepRun.Start(input)
 
-	// Execute based on step type
-	var output json.RawMessage
-
-	switch step.Type {
-	case domain.StepTypeStart:
-		output, err = e.executeStartStep(ctx, step, input)
-	case domain.StepTypeTool:
-		output, err = e.executeToolStep(ctx, execCtx, step, stepRun, input)
-	case domain.StepTypeLLM:
-		output, err = e.executeLLMStep(ctx, execCtx, step, stepRun, input)
-	case domain.StepTypeCondition:
-		output, err = e.executeConditionStep(ctx, execCtx, step, input)
-	case domain.StepTypeMap:
-		output, err = e.executeMapStep(ctx, step, input)
-	case domain.StepTypeWait:
-		output, err = e.executeWaitStep(ctx, step, input)
-	case domain.StepTypeFunction:
-		output, err = e.executeFunctionStep(ctx, execCtx, step, input)
-	case domain.StepTypeRouter:
-		output, err = e.executeRouterStep(ctx, step, input)
-	case domain.StepTypeHumanInLoop:
-		output, err = e.executeHumanInLoopStep(ctx, execCtx, step, input)
-	case domain.StepTypeSwitch:
-		output, err = e.executeSwitchStep(ctx, execCtx, step, input)
-	case domain.StepTypeFilter:
-		output, err = e.executeFilterStep(ctx, step, input)
-	case domain.StepTypeSplit:
-		output, err = e.executeSplitStep(ctx, step, input)
-	case domain.StepTypeAggregate:
-		output, err = e.executeAggregateStep(ctx, step, input)
-	case domain.StepTypeError:
-		output, err = e.executeErrorStep(ctx, step, input)
-	case domain.StepTypeNote:
-		output, err = e.executeNoteStep(ctx, step, input)
-	case domain.StepTypeLog:
-		output, err = e.executeLogStep(ctx, step, input)
-	case domain.StepTypeSubflow:
-		// Subflow not yet implemented
-		output = input
-	default:
-		// Check if this is a custom block
-		// First check by BlockDefinitionID, then try to find by step type (slug)
-		if step.BlockDefinitionID != nil {
-			output, err = e.executeCustomBlockStep(ctx, execCtx, step, input)
-		} else if e.blockDefRepo != nil {
-			// Try to find block definition by step type (slug)
-			output, err = e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
-		} else {
-			// For unimplemented types without block definition, pass through
-			output = input
-		}
-	}
+	// Execute step using unified dispatch
+	output, err := e.dispatchStepExecution(ctx, execCtx, step, stepRun, input)
 
 	// Determine output port (default is "output")
 	outputPort := "output"
@@ -1250,12 +1212,12 @@ func (e *Executor) executeConditionStep(ctx context.Context, execCtx *ExecutionC
 	}
 
 	// Evaluate the condition expression
-	condResult, err := e.evaluator.Evaluate(config.Expression, input)
-	if err != nil {
+	condResult, evalErr := e.evaluator.Evaluate(config.Expression, input)
+	if evalErr != nil {
 		e.logger.Warn("Condition evaluation failed, defaulting to true",
 			"step_id", step.ID,
 			"expression", config.Expression,
-			"error", err,
+			"error", evalErr,
 		)
 		condResult = true
 	}
@@ -1263,6 +1225,12 @@ func (e *Executor) executeConditionStep(ctx context.Context, execCtx *ExecutionC
 	result := map[string]interface{}{
 		"result":     condResult,
 		"expression": config.Expression,
+	}
+
+	// Include evaluation error in result for debugging
+	if evalErr != nil {
+		result["evaluation_error"] = evalErr.Error()
+		result["defaulted"] = true
 	}
 
 	e.logger.Info("Condition step evaluated",
@@ -2799,39 +2767,20 @@ func parseISO8601(s string) (time.Time, error) {
 }
 
 func stringJoin(strs []string, sep string) string {
-	result := ""
-	for i, s := range strs {
-		if i > 0 {
-			result += sep
-		}
-		result += s
-	}
-	return result
+	return strings.Join(strs, sep)
 }
 
+// stringContains performs case-insensitive substring search.
+// Both strings are converted to lowercase for comparison.
+// Early returns handle edge cases (empty substring, impossible match).
 func stringContains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsLower(s, substr))
-}
-
-func containsLower(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if toLower(s[i:i+len(substr)]) == toLower(substr) {
-			return true
-		}
+	if len(substr) == 0 {
+		return true
 	}
-	return false
-}
-
-func toLower(s string) string {
-	result := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		result[i] = c
+	if len(substr) > len(s) {
+		return false
 	}
-	return string(result)
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 // Time functions (for testing)

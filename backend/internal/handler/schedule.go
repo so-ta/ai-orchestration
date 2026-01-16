@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
@@ -37,14 +36,12 @@ type CreateScheduleRequest struct {
 // Create creates a new schedule
 func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
-	workflowID, err := uuid.Parse(req.WorkflowID)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+	workflowID, ok := parseUUIDString(w, req.WorkflowID, "workflow ID")
+	if !ok {
 		return
 	}
 
@@ -84,10 +81,8 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Get retrieves a schedule by ID
 func (h *ScheduleHandler) Get(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "schedule_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid schedule ID", nil)
+	id, ok := parseUUID(w, r, "schedule_id", "schedule ID")
+	if !ok {
 		return
 	}
 
@@ -145,16 +140,13 @@ type UpdateScheduleRequest struct {
 
 // Update updates a schedule
 func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "schedule_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid schedule ID", nil)
+	id, ok := parseUUID(w, r, "schedule_id", "schedule ID")
+	if !ok {
 		return
 	}
 
 	var req UpdateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_JSON", "Invalid JSON body", nil)
+	if !decodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -184,10 +176,8 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete deletes a schedule
 func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "schedule_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid schedule ID", nil)
+	id, ok := parseUUID(w, r, "schedule_id", "schedule ID")
+	if !ok {
 		return
 	}
 
@@ -206,10 +196,8 @@ func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 // Pause pauses a schedule
 func (h *ScheduleHandler) Pause(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "schedule_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid schedule ID", nil)
+	id, ok := parseUUID(w, r, "schedule_id", "schedule ID")
+	if !ok {
 		return
 	}
 
@@ -229,10 +217,8 @@ func (h *ScheduleHandler) Pause(w http.ResponseWriter, r *http.Request) {
 
 // Resume resumes a paused schedule
 func (h *ScheduleHandler) Resume(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "schedule_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid schedule ID", nil)
+	id, ok := parseUUID(w, r, "schedule_id", "schedule ID")
+	if !ok {
 		return
 	}
 
@@ -252,10 +238,8 @@ func (h *ScheduleHandler) Resume(w http.ResponseWriter, r *http.Request) {
 
 // Trigger manually triggers a schedule
 func (h *ScheduleHandler) Trigger(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "schedule_id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_ID", "Invalid schedule ID", nil)
+	id, ok := parseUUID(w, r, "schedule_id", "schedule ID")
+	if !ok {
 		return
 	}
 
