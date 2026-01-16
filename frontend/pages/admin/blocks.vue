@@ -1,6 +1,13 @@
 <script setup lang="ts">
+/**
+ * Admin Blocks Page - ブロック管理ページ
+ *
+ * システムブロックとカスタムブロックの作成・編集・削除・バージョン管理を行う。
+ * 新しいBlockEditorコンポーネントを使用した改善版UI。
+ */
 import type { BlockDefinition, BlockCategory } from '~/types/api'
 import { useAdminBlocks, type BlockVersion, categoryConfig } from '~/composables/useBlocks'
+import type { BlockFormData } from '~/composables/useBlockEditor'
 
 const { t } = useI18n()
 const { confirm } = useConfirm()
@@ -19,46 +26,45 @@ const loading = ref(true)
 const message = ref<{ type: 'success' | 'error'; text: string } | null>(null)
 
 // Modal state
-const showCreateModal = ref(false)
+const showCreateWizard = ref(false)
 const showEditModal = ref(false)
 const showDeleteModal = ref(false)
 const showVersionModal = ref(false)
 const selectedBlock = ref<BlockDefinition | null>(null)
 
-// Filter state
-const selectedCategory = ref<BlockCategory | ''>('')
-
-// Create form state
-const createForm = reactive({
-  slug: '',
-  name: '',
-  description: '',
-  category: 'integration' as BlockCategory,
-  icon: '',
-})
-
-// Edit form state (includes code editing)
-const editForm = reactive({
-  name: '',
-  description: '',
-  icon: '',
-  enabled: true,
-  code: '',
-  configSchema: '{}',
-  uiConfig: '{}',
-  changeSummary: '',
-})
+// Creation wizard state
+const creationType = ref<'scratch' | 'inherit' | 'template'>('scratch')
+const selectedTemplate = ref<string | null>(null)
+const selectedParentBlock = ref<BlockDefinition | null>(null)
 
 // Version state
 const versions = ref<BlockVersion[]>([])
 const loadingVersions = ref(false)
 
+// Filter state
+const searchQuery = ref('')
+const selectedCategory = ref<BlockCategory | ''>('')
+const viewMode = ref<'grid' | 'table'>('grid')
+
 // Computed
 const filteredBlocks = computed(() => {
   let result = blocks.value
+
+  // Category filter
   if (selectedCategory.value) {
     result = result.filter(b => b.category === selectedCategory.value)
   }
+
+  // Search filter
+  if (searchQuery.value.trim()) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter(b =>
+      b.name.toLowerCase().includes(query) ||
+      b.slug.toLowerCase().includes(query) ||
+      b.description?.toLowerCase().includes(query)
+    )
+  }
+
   // Sort by category then name
   return [...result].sort((a, b) => {
     if (a.category !== b.category) {
@@ -82,44 +88,47 @@ async function fetchBlocks() {
   try {
     loading.value = true
     // Use admin API to get all blocks with code
-    const response = await adminBlocks.listSystemBlocks()
-    blocks.value = response.blocks || []
-  } catch (err) {
-    // Fallback to regular API
     try {
-      const response = await blocksApi.list()
+      const response = await adminBlocks.listSystemBlocks()
       blocks.value = response.blocks || []
     } catch {
-      showMessageToast('error', t('errors.loadFailed'))
+      // Fallback to regular API
+      const response = await blocksApi.list()
+      blocks.value = response.blocks || []
     }
+  } catch {
+    showMessageToast('error', t('errors.loadFailed'))
   } finally {
     loading.value = false
   }
 }
 
-function resetCreateForm() {
-  createForm.slug = ''
-  createForm.name = ''
-  createForm.description = ''
-  createForm.category = 'apps'
-  createForm.icon = ''
+function openCreateWizard() {
+  creationType.value = 'scratch'
+  selectedTemplate.value = null
+  selectedParentBlock.value = null
+  showCreateWizard.value = true
 }
 
-function openCreateModal() {
-  resetCreateForm()
-  showCreateModal.value = true
+function handleWizardSelect(type: 'scratch' | 'inherit' | 'template', data?: { templateId?: string; parentBlock?: BlockDefinition }) {
+  creationType.value = type
+  if (data?.templateId) {
+    selectedTemplate.value = data.templateId
+  }
+  if (data?.parentBlock) {
+    selectedParentBlock.value = data.parentBlock
+  }
+  showCreateWizard.value = false
+  showEditModal.value = true
+  selectedBlock.value = null
 }
 
 function openEditModal(block: BlockDefinition) {
   selectedBlock.value = block
-  editForm.name = block.name
-  editForm.description = block.description || ''
-  editForm.icon = block.icon || ''
-  editForm.enabled = block.enabled
-  editForm.code = block.code || ''
-  editForm.configSchema = JSON.stringify(block.config_schema || {}, null, 2)
-  editForm.uiConfig = JSON.stringify(block.ui_config || {}, null, 2)
-  editForm.changeSummary = ''
+  creationType.value = block.parent_block_id ? 'inherit' : 'scratch'
+  selectedParentBlock.value = block.parent_block_id
+    ? blocks.value.find(b => b.id === block.parent_block_id) || null
+    : null
   showEditModal.value = true
 }
 
@@ -145,18 +154,58 @@ async function openVersionModal(block: BlockDefinition) {
   }
 }
 
-async function submitCreate() {
+async function handleFormSubmit(formData: BlockFormData) {
   try {
-    await blocksApi.create({
-      slug: createForm.slug,
-      name: createForm.name,
-      description: createForm.description || undefined,
-      category: createForm.category,
-      icon: createForm.icon || undefined,
-    })
-    showMessageToast('success', t('admin.blocks.messages.created'))
-    showCreateModal.value = false
-    resetCreateForm()
+    // Parse JSON fields
+    let configSchema, uiConfig
+    try {
+      configSchema = JSON.parse(formData.config_schema || '{}')
+      uiConfig = JSON.parse(formData.ui_config || '{}')
+    } catch {
+      showMessageToast('error', t('blockEditor.errors.invalidJson'))
+      return
+    }
+
+    // Parse optional JSON fields
+    let configDefaults
+    if (formData.config_defaults) {
+      try {
+        configDefaults = JSON.parse(formData.config_defaults)
+      } catch {
+        showMessageToast('error', t('blockEditor.errors.invalidJson'))
+        return
+      }
+    }
+
+    if (selectedBlock.value) {
+      // Update existing block
+      await adminBlocks.updateSystemBlock(selectedBlock.value.id, {
+        name: formData.name,
+        description: formData.description || undefined,
+        code: formData.code,
+        config_schema: configSchema,
+        ui_config: uiConfig,
+        change_summary: formData.change_summary,
+      })
+      showMessageToast('success', t('admin.blocks.messages.updated'))
+    } else {
+      // Create new block
+      // Note: parent_block_id, config_defaults, pre_process, post_process would need backend API support
+      await blocksApi.create({
+        slug: formData.slug,
+        name: formData.name,
+        description: formData.description || undefined,
+        category: formData.category,
+        icon: formData.icon || undefined,
+        code: formData.code || undefined,
+        config_schema: configSchema,
+        ui_config: uiConfig,
+      })
+      showMessageToast('success', t('admin.blocks.messages.created'))
+    }
+
+    showEditModal.value = false
+    selectedBlock.value = null
     await fetchBlocks()
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : t('errors.generic')
@@ -164,36 +213,36 @@ async function submitCreate() {
   }
 }
 
-async function submitEdit() {
-  if (!selectedBlock.value) return
-
+async function handleDuplicate(block: BlockDefinition) {
   try {
-    // Parse JSON fields
-    let configSchema
-    let uiConfig
+    let configSchema, uiConfig
     try {
-      configSchema = JSON.parse(editForm.configSchema)
-      uiConfig = JSON.parse(editForm.uiConfig)
+      configSchema = typeof block.config_schema === 'string'
+        ? JSON.parse(block.config_schema)
+        : block.config_schema || {}
+      uiConfig = typeof block.ui_config === 'string'
+        ? JSON.parse(block.ui_config)
+        : block.ui_config || {}
     } catch {
-      showMessageToast('error', t('admin.blocks.messages.invalidJson'))
-      return
+      configSchema = {}
+      uiConfig = {}
     }
 
-    await adminBlocks.updateSystemBlock(selectedBlock.value.id, {
-      name: editForm.name,
-      description: editForm.description || undefined,
-      code: editForm.code,
+    await blocksApi.create({
+      slug: block.slug + '_copy',
+      name: block.name + ' (Copy)',
+      description: block.description || undefined,
+      category: block.category,
+      icon: block.icon || undefined,
+      code: block.code || undefined,
       config_schema: configSchema,
       ui_config: uiConfig,
-      change_summary: editForm.changeSummary,
     })
-
-    showMessageToast('success', t('admin.blocks.messages.updated'))
-    showEditModal.value = false
+    showMessageToast('success', t('admin.blocks.messages.created'))
     await fetchBlocks()
   } catch (err) {
-    showMessageToast('error', t('admin.blocks.messages.updateFailed'))
-    console.error('Error updating block:', err)
+    const errorMessage = err instanceof Error ? err.message : t('errors.generic')
+    showMessageToast('error', errorMessage)
   }
 }
 
@@ -206,7 +255,7 @@ async function confirmDelete() {
     showDeleteModal.value = false
     selectedBlock.value = null
     await fetchBlocks()
-  } catch (err) {
+  } catch {
     showMessageToast('error', t('admin.blocks.messages.deleteFailed'))
   }
 }
@@ -239,23 +288,180 @@ function formatDate(date: string | undefined): string {
   return new Date(date).toLocaleString()
 }
 
-function generateSlug() {
-  if (createForm.name) {
-    createForm.slug = createForm.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-  }
-}
-
 function getCategoryName(category: BlockCategory): string {
   const config = categoryConfig[category]
   return config ? t(config.nameKey) : category
 }
 
-function truncateCode(code: string | undefined, maxLength: number = 50): string {
-  if (!code) return '-'
-  return code.length > maxLength ? code.substring(0, maxLength) + '...' : code
+function blockToFormData(block: BlockDefinition): BlockFormData {
+  return {
+    slug: block.slug,
+    name: block.name,
+    description: block.description || '',
+    category: block.category,
+    icon: block.icon || '',
+    code: block.code || '',
+    config_schema: JSON.stringify(block.config_schema || {}, null, 2),
+    ui_config: JSON.stringify(block.ui_config || {}, null, 2),
+    change_summary: '',
+    parent_block_id: block.parent_block_id,
+    config_defaults: JSON.stringify(block.config_defaults || {}, null, 2),
+    pre_process: block.pre_process || '',
+    post_process: block.post_process || '',
+  }
+}
+
+function getInitialFormData(): BlockFormData {
+  // Template defaults
+  const templates: Record<string, Partial<BlockFormData>> = {
+    discord_notify: {
+      name: 'Discord Notification',
+      slug: 'discord_notify',
+      description: 'Send notification to Discord webhook',
+      category: 'apps',
+      icon: 'message-circle',
+      code: `// Discord notification
+const webhookUrl = config.webhook_url;
+const message = input.message || 'Notification from workflow';
+
+const response = ctx.http.post(webhookUrl, {
+  body: JSON.stringify({ content: message }),
+  headers: { 'Content-Type': 'application/json' }
+});
+
+return { success: response.status === 204 };`,
+      config_schema: JSON.stringify({
+        type: 'object',
+        properties: {
+          webhook_url: { type: 'string', title: 'Webhook URL' }
+        },
+        required: ['webhook_url']
+      }, null, 2),
+    },
+    slack_notify: {
+      name: 'Slack Notification',
+      slug: 'slack_notify',
+      description: 'Send notification to Slack webhook',
+      category: 'apps',
+      icon: 'hash',
+      code: `// Slack notification
+const webhookUrl = config.webhook_url;
+const message = input.message || 'Notification from workflow';
+
+const response = ctx.http.post(webhookUrl, {
+  body: JSON.stringify({ text: message }),
+  headers: { 'Content-Type': 'application/json' }
+});
+
+return { success: response.status === 200 };`,
+      config_schema: JSON.stringify({
+        type: 'object',
+        properties: {
+          webhook_url: { type: 'string', title: 'Webhook URL' }
+        },
+        required: ['webhook_url']
+      }, null, 2),
+    },
+    json_transformer: {
+      name: 'JSON Transformer',
+      slug: 'json_transformer',
+      description: 'Transform JSON data with custom logic',
+      category: 'flow',
+      icon: 'code',
+      code: `// Transform input JSON
+const data = input.data || input;
+const result = {};
+
+// Add your transformation logic here
+for (const key in data) {
+  result[key] = data[key];
+}
+
+return result;`,
+    },
+    api_request: {
+      name: 'API Request',
+      slug: 'api_request',
+      description: 'Make HTTP API request',
+      category: 'apps',
+      icon: 'globe',
+      code: `// API request
+const url = config.url;
+const method = config.method || 'GET';
+const headers = config.headers || {};
+const body = input.body;
+
+const response = ctx.http[method.toLowerCase()](url, {
+  headers: headers,
+  body: body ? JSON.stringify(body) : undefined
+});
+
+return {
+  status: response.status,
+  body: response.json()
+};`,
+      config_schema: JSON.stringify({
+        type: 'object',
+        properties: {
+          url: { type: 'string', title: 'URL' },
+          method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET' },
+          headers: { type: 'object', title: 'Headers' }
+        },
+        required: ['url']
+      }, null, 2),
+    },
+  }
+
+  if (selectedTemplate.value && templates[selectedTemplate.value]) {
+    const template = templates[selectedTemplate.value]
+    return {
+      slug: template.slug || '',
+      name: template.name || '',
+      description: template.description || '',
+      category: template.category || 'custom',
+      icon: template.icon || '',
+      code: template.code || '',
+      config_schema: template.config_schema || '{}',
+      ui_config: '{}',
+      change_summary: '',
+      config_defaults: '{}',
+      pre_process: '',
+      post_process: '',
+    }
+  }
+
+  if (creationType.value === 'inherit' && selectedParentBlock.value) {
+    return {
+      slug: '',
+      name: '',
+      description: '',
+      category: selectedParentBlock.value.category,
+      icon: selectedParentBlock.value.icon || '',
+      code: '',
+      config_schema: JSON.stringify(selectedParentBlock.value.config_schema || {}, null, 2),
+      ui_config: JSON.stringify(selectedParentBlock.value.ui_config || {}, null, 2),
+      change_summary: '',
+      parent_block_id: selectedParentBlock.value.id,
+      config_defaults: '{}',
+      pre_process: '',
+      post_process: '',
+    }
+  }
+
+  return {
+    slug: '',
+    name: '',
+    description: '',
+    category: 'custom',
+    icon: '',
+    code: '',
+    config_schema: '{}',
+    ui_config: '{}',
+    change_summary: '',
+    config_defaults: '{}',
+    pre_process: '',
+    post_process: '',
+  }
 }
 
 onMounted(() => {
@@ -274,16 +480,18 @@ onMounted(() => {
       <span>{{ $t('admin.blocks.title') }}</span>
     </div>
 
-    <div class="flex justify-between items-center mb-4">
+    <!-- Header -->
+    <div class="page-header">
       <div>
-        <h1 style="font-size: 1.5rem; font-weight: 600;">
+        <h1 class="page-title">
           {{ $t('admin.blocks.title') }}
         </h1>
-        <p class="text-secondary" style="margin-top: 0.25rem;">
+        <p class="page-subtitle">
           {{ $t('admin.blocks.subtitle') }}
         </p>
       </div>
-      <button class="btn btn-primary" @click="openCreateModal">
+      <button class="btn btn-primary" @click="openCreateWizard">
+        <span class="btn-icon">+</span>
         {{ $t('admin.blocks.newBlock') }}
       </button>
     </div>
@@ -296,43 +504,81 @@ onMounted(() => {
       {{ message.text }}
     </div>
 
-    <!-- Filter -->
-    <div class="filter-bar mb-4">
-      <label class="filter-label">{{ $t('admin.blocks.table.category') }}:</label>
-      <select v-model="selectedCategory" class="filter-select">
-        <option value="">{{ $t('common.all') }}</option>
-        <option v-for="cat in categories" :key="cat" :value="cat">
-          {{ getCategoryName(cat) }}
-        </option>
-      </select>
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-left">
+        <div class="search-input-wrapper">
+          <input
+            v-model="searchQuery"
+            type="text"
+            class="search-input"
+            :placeholder="$t('blockEditor.searchPlaceholder')"
+          />
+        </div>
+        <select v-model="selectedCategory" class="filter-select">
+          <option value="">{{ $t('common.all') }}</option>
+          <option v-for="cat in categories" :key="cat" :value="cat">
+            {{ getCategoryName(cat) }}
+          </option>
+        </select>
+      </div>
+      <div class="view-toggle">
+        <button
+          :class="['view-btn', { active: viewMode === 'grid' }]"
+          @click="viewMode = 'grid'"
+          :title="$t('blockEditor.viewGrid')"
+        >
+          <span class="view-icon">&#9638;</span>
+        </button>
+        <button
+          :class="['view-btn', { active: viewMode === 'table' }]"
+          @click="viewMode = 'table'"
+          :title="$t('blockEditor.viewTable')"
+        >
+          <span class="view-icon">&#9776;</span>
+        </button>
+      </div>
     </div>
 
     <!-- Loading state -->
-    <div v-if="loading && blocks.length === 0" class="card" style="padding: 2rem; text-align: center;">
+    <div v-if="loading && blocks.length === 0" class="card loading-card">
       <p class="text-secondary">{{ $t('common.loading') }}</p>
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="blocks.length === 0" class="card" style="padding: 3rem; text-align: center;">
-      <p class="text-secondary" style="font-size: 1.125rem; margin-bottom: 0.5rem;">
+    <div v-else-if="blocks.length === 0" class="card empty-card">
+      <div class="empty-icon">&#128230;</div>
+      <p class="empty-title">
         {{ $t('admin.blocks.noBlocks') }}
       </p>
-      <p class="text-secondary" style="margin-bottom: 1.5rem;">
+      <p class="empty-description">
         {{ $t('admin.blocks.noBlocksDesc') }}
       </p>
-      <button class="btn btn-primary" @click="openCreateModal">
+      <button class="btn btn-primary" @click="openCreateWizard">
         {{ $t('admin.blocks.createFirst') }}
       </button>
     </div>
 
-    <!-- Block list -->
+    <!-- Block Grid -->
+    <div v-else-if="viewMode === 'grid'" class="block-grid">
+      <BlockEditorBlockCard
+        v-for="block in filteredBlocks"
+        :key="block.id"
+        :block="block"
+        @edit="openEditModal"
+        @delete="openDeleteModal"
+        @duplicate="handleDuplicate"
+        @view-versions="openVersionModal"
+      />
+    </div>
+
+    <!-- Block Table -->
     <div v-else class="card">
       <table class="table">
         <thead>
           <tr>
             <th>{{ $t('admin.blocks.table.name') }}</th>
             <th>{{ $t('admin.blocks.table.category') }}</th>
-            <th>{{ $t('admin.blocks.table.code') }}</th>
             <th>{{ $t('admin.blocks.table.version') }}</th>
             <th>{{ $t('admin.blocks.table.enabled') }}</th>
             <th>{{ $t('admin.blocks.table.updatedAt') }}</th>
@@ -342,23 +588,22 @@ onMounted(() => {
         <tbody>
           <tr v-for="block in filteredBlocks" :key="block.id">
             <td>
-              <div>
-                <strong>{{ block.name }}</strong>
-                <code class="slug-code">{{ block.slug }}</code>
-                <p v-if="block.description" class="text-secondary description-text">
-                  {{ block.description }}
-                </p>
+              <div class="block-name-cell">
+                <div class="block-icon-small">{{ block.icon || '&#128230;' }}</div>
+                <div>
+                  <strong>{{ block.name }}</strong>
+                  <code class="slug-code">{{ block.slug }}</code>
+                  <div class="block-badges">
+                    <span v-if="block.is_system" class="badge badge-system">System</span>
+                    <span v-if="block.parent_block_id" class="badge badge-inherited">Inherited</span>
+                  </div>
+                </div>
               </div>
             </td>
             <td>
               <span class="badge badge-category">
                 {{ getCategoryName(block.category) }}
               </span>
-            </td>
-            <td>
-              <div class="code-preview" :title="block.code">
-                {{ truncateCode(block.code) }}
-              </div>
             </td>
             <td>
               <span class="version-badge">v{{ block.version || 1 }}</span>
@@ -370,7 +615,7 @@ onMounted(() => {
             </td>
             <td>{{ formatDate(block.updated_at) }}</td>
             <td>
-              <div class="flex gap-2">
+              <div class="action-buttons">
                 <button
                   class="btn btn-sm btn-primary"
                   @click="openEditModal(block)"
@@ -396,182 +641,36 @@ onMounted(() => {
       </table>
     </div>
 
-    <!-- Create Modal -->
+    <!-- Creation Wizard Modal -->
     <UiModal
-      :show="showCreateModal"
-      :title="$t('admin.blocks.newBlock')"
+      :show="showCreateWizard"
+      :title="$t('blockEditor.wizard.title')"
       size="lg"
-      @close="showCreateModal = false"
+      @close="showCreateWizard = false"
     >
-      <form @submit.prevent="submitCreate">
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.name') }} *</label>
-            <input
-              v-model="createForm.name"
-              type="text"
-              class="form-input"
-              :placeholder="$t('admin.blocks.form.namePlaceholder')"
-              required
-              @blur="generateSlug"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Slug *</label>
-            <input
-              v-model="createForm.slug"
-              type="text"
-              class="form-input"
-              placeholder="e.g., slack_message"
-              required
-              pattern="[a-z0-9_]+"
-            />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">{{ $t('admin.blocks.form.description') }}</label>
-          <textarea
-            v-model="createForm.description"
-            class="form-input"
-            :placeholder="$t('admin.blocks.form.descriptionPlaceholder')"
-            rows="2"
-          />
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.category') }} *</label>
-            <select
-              v-model="createForm.category"
-              class="form-input"
-              required
-            >
-              <option v-for="cat in categories" :key="cat" :value="cat">
-                {{ getCategoryName(cat) }}
-              </option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.icon') }}</label>
-            <input
-              v-model="createForm.icon"
-              type="text"
-              class="form-input"
-              placeholder="e.g., message-circle"
-            />
-          </div>
-        </div>
-      </form>
-
-      <template #footer>
-        <button class="btn btn-secondary" @click="showCreateModal = false">
-          {{ $t('common.cancel') }}
-        </button>
-        <button class="btn btn-primary" :disabled="loading" @click="submitCreate">
-          {{ $t('common.create') }}
-        </button>
-      </template>
+      <BlockEditorBlockCreationWizard
+        :blocks="blocks"
+        @select="handleWizardSelect"
+        @close="showCreateWizard = false"
+      />
     </UiModal>
 
-    <!-- Edit Modal (with code editing) -->
+    <!-- Block Form Modal (Create/Edit) -->
     <UiModal
       :show="showEditModal"
-      :title="$t('admin.blocks.editBlock') + ': ' + (selectedBlock?.name || '')"
+      :title="selectedBlock ? $t('admin.blocks.editBlock') + ': ' + selectedBlock.name : $t('admin.blocks.newBlock')"
       size="xl"
       @close="showEditModal = false"
     >
-      <form @submit.prevent="submitEdit">
-        <!-- Basic Info Section -->
-        <div class="section-title">{{ $t('admin.blocks.sections.basicInfo') }}</div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.name') }} *</label>
-            <input
-              v-model="editForm.name"
-              type="text"
-              class="form-input"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.icon') }}</label>
-            <input
-              v-model="editForm.icon"
-              type="text"
-              class="form-input"
-              placeholder="e.g., message-circle"
-            />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">{{ $t('admin.blocks.form.description') }}</label>
-          <input
-            v-model="editForm.description"
-            type="text"
-            class="form-input"
-          />
-        </div>
-
-        <!-- Code Section -->
-        <div class="section-title">{{ $t('admin.blocks.sections.code') }}</div>
-
-        <div class="form-group">
-          <label class="form-label">{{ $t('admin.blocks.form.code') }} (JavaScript)</label>
-          <textarea
-            v-model="editForm.code"
-            class="form-input code-editor"
-            rows="12"
-            spellcheck="false"
-          />
-        </div>
-
-        <!-- Schema Section -->
-        <div class="section-title">{{ $t('admin.blocks.sections.schemas') }}</div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.configSchema') }} (JSON)</label>
-            <textarea
-              v-model="editForm.configSchema"
-              class="form-input code-editor"
-              rows="6"
-              spellcheck="false"
-            />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ $t('admin.blocks.form.uiConfig') }} (JSON)</label>
-            <textarea
-              v-model="editForm.uiConfig"
-              class="form-input code-editor"
-              rows="6"
-              spellcheck="false"
-            />
-          </div>
-        </div>
-
-        <!-- Change Summary -->
-        <div class="form-group">
-          <label class="form-label">{{ $t('admin.blocks.form.changeSummary') }}</label>
-          <input
-            v-model="editForm.changeSummary"
-            type="text"
-            class="form-input"
-            :placeholder="$t('admin.blocks.form.changeSummaryPlaceholder')"
-          />
-        </div>
-      </form>
-
-      <template #footer>
-        <button class="btn btn-secondary" @click="showEditModal = false">
-          {{ $t('common.cancel') }}
-        </button>
-        <button class="btn btn-primary" :disabled="loading" @click="submitEdit">
-          {{ $t('common.save') }}
-        </button>
-      </template>
+      <BlockEditorBlockForm
+        :initial-data="selectedBlock ? blockToFormData(selectedBlock) : getInitialFormData()"
+        :is-edit="!!selectedBlock"
+        :blocks="blocks"
+        :use-inheritance="creationType === 'inherit'"
+        :parent-block="selectedParentBlock"
+        @submit="handleFormSubmit"
+        @cancel="showEditModal = false"
+      />
     </UiModal>
 
     <!-- Delete Confirmation Modal -->
@@ -581,7 +680,12 @@ onMounted(() => {
       size="sm"
       @close="showDeleteModal = false"
     >
-      <p>{{ $t('admin.blocks.confirmDelete') }}</p>
+      <div class="delete-confirm">
+        <p>{{ $t('admin.blocks.confirmDelete') }}</p>
+        <p v-if="selectedBlock" class="delete-block-name">
+          {{ selectedBlock.name }} <code>{{ selectedBlock.slug }}</code>
+        </p>
+      </div>
 
       <template #footer>
         <button class="btn btn-secondary" @click="showDeleteModal = false">
@@ -600,11 +704,11 @@ onMounted(() => {
       size="lg"
       @close="showVersionModal = false"
     >
-      <div v-if="loadingVersions" style="text-align: center; padding: 2rem;">
+      <div v-if="loadingVersions" class="loading-state">
         {{ $t('common.loading') }}
       </div>
 
-      <div v-else-if="versions.length === 0" style="text-align: center; padding: 2rem;">
+      <div v-else-if="versions.length === 0" class="empty-state">
         <p class="text-secondary">{{ $t('admin.blocks.noVersions') }}</p>
       </div>
 
@@ -649,6 +753,30 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.page-subtitle {
+  margin-top: 0.25rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.btn-icon {
+  margin-right: 0.5rem;
+  font-weight: bold;
+}
+
 .message-toast {
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
@@ -667,23 +795,104 @@ onMounted(() => {
 
 .filter-bar {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
 }
 
-.filter-label {
+.filter-left {
+  display: flex;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.search-input-wrapper {
+  flex: 1;
+  max-width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-background);
   font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 .filter-select {
-  padding: 0.375rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-background);
   font-size: 0.875rem;
   min-width: 150px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--color-surface);
+  padding: 0.25rem;
+  border-radius: var(--radius);
+}
+
+.view-btn {
+  padding: 0.375rem 0.5rem;
+  border: none;
+  background: transparent;
+  border-radius: calc(var(--radius) - 2px);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: all 0.15s;
+}
+
+.view-btn:hover {
+  color: var(--color-text);
+}
+
+.view-btn.active {
+  background: var(--color-background);
+  color: var(--color-primary);
+}
+
+.view-icon {
+  font-size: 1rem;
+}
+
+.loading-card,
+.empty-card {
+  padding: 3rem;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.empty-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.empty-description {
+  color: var(--color-text-secondary);
+  margin-bottom: 1.5rem;
+}
+
+.block-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
 }
 
 .table {
@@ -704,6 +913,23 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
+.block-name-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.block-icon-small {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border-radius: 0.375rem;
+  font-size: 1rem;
+}
+
 .slug-code {
   display: inline-block;
   margin-left: 0.5rem;
@@ -715,8 +941,9 @@ onMounted(() => {
   color: var(--color-text-secondary);
 }
 
-.description-text {
-  font-size: 0.75rem;
+.block-badges {
+  display: flex;
+  gap: 0.25rem;
   margin-top: 0.25rem;
 }
 
@@ -724,13 +951,24 @@ onMounted(() => {
   display: inline-block;
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   font-weight: 500;
+  text-transform: uppercase;
 }
 
 .badge-category {
   background: rgba(99, 102, 241, 0.1);
   color: var(--color-primary);
+}
+
+.badge-system {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.badge-inherited {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
 }
 
 .version-badge {
@@ -741,16 +979,6 @@ onMounted(() => {
   font-weight: 600;
   background: rgba(99, 102, 241, 0.1);
   color: var(--color-primary);
-}
-
-.code-preview {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .status-badge {
@@ -771,6 +999,11 @@ onMounted(() => {
   color: #6b7280;
 }
 
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .btn-sm {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
@@ -785,69 +1018,26 @@ onMounted(() => {
   background: #dc2626;
 }
 
-.section-title {
+.delete-confirm {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.delete-block-name {
   font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--color-text);
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
+  margin-top: 0.5rem;
 }
 
-.section-title:first-child {
-  margin-top: 0;
-}
-
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-label {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.form-input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.375rem;
-  background: var(--color-background);
-  color: var(--color-text);
-  font-size: 0.875rem;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-.form-input:disabled {
-  background: var(--color-surface);
+.delete-block-name code {
+  font-weight: normal;
+  margin-left: 0.5rem;
   color: var(--color-text-secondary);
-  cursor: not-allowed;
 }
 
-textarea.form-input {
-  resize: vertical;
-  min-height: 60px;
-}
-
-.code-editor {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  resize: vertical;
-  min-height: 100px;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 2rem;
 }
 
 .version-list {

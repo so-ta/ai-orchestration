@@ -1146,6 +1146,148 @@
       "invalidJson": "Invalid JSON format"
     }
   },
+  "blockEditor": {
+    "systemBlock": "System",
+    "inherited": "Inherited",
+    "inheritedFrom": "Inherited from",
+    "versionHistory": "Version History",
+    "title": "Block Editor",
+    "searchPlaceholder": "Search blocks...",
+    "viewGrid": "Grid view",
+    "viewTable": "Table view",
+    "wizard": {
+      "title": "Create New Block",
+      "subtitle": "Select how you want to create the block",
+      "scratch": {
+        "title": "Create from Scratch",
+        "description": "Create a completely new block from scratch"
+      },
+      "inherit": {
+        "title": "Inherit from Existing Block",
+        "description": "Create a specialized block based on an existing block"
+      },
+      "template": {
+        "title": "Start from Template",
+        "description": "Use a predefined template for a quick start"
+      },
+      "templates": {
+        "title": "Templates",
+        "discord_notify": "Discord Notification",
+        "discord_notify_desc": "Send message to Discord webhook",
+        "slack_notify": "Slack Notification",
+        "slack_notify_desc": "Send message to Slack channel",
+        "json_transformer": "JSON Transformer",
+        "json_transformer_desc": "Transform JSON data with custom logic",
+        "api_request": "API Request",
+        "api_request_desc": "Call external API"
+      },
+      "selectParent": "Select parent block",
+      "searchBlocks": "Search blocks...",
+      "noBlocksFound": "No blocks found"
+    },
+    "steps": {
+      "basic": "Basic Info",
+      "basicDesc": "Configure basic information",
+      "inheritance": "Inheritance",
+      "inheritanceDesc": "Configure inheritance settings",
+      "implementation": "Implementation",
+      "implementationDesc": "Write execution code",
+      "test": "Test",
+      "testDesc": "Test block execution"
+    },
+    "form": {
+      "name": "Block Name",
+      "namePlaceholder": "e.g., Send Slack Message",
+      "nameHint": "Human-readable name displayed in the UI",
+      "slug": "Slug",
+      "slugPlaceholder": "e.g., send_slack_message",
+      "slugHint": "Unique identifier (lowercase, numbers, underscores only)",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter a description of the block...",
+      "descriptionHint": "Description displayed in the block palette",
+      "category": "Category",
+      "categoryHint": "Category for displaying in the palette",
+      "icon": "Icon",
+      "iconPlaceholder": "e.g., message-circle",
+      "iconHint": "Icon displayed in the palette (Lucide icon name)",
+      "code": "Execution Code",
+      "codePlaceholder": "// See documentation for available variables",
+      "codeHint": "JavaScript code executed in Goja sandbox",
+      "configSchema": "Config Schema",
+      "configSchemaPlaceholder": "",
+      "configSchemaHint": "JSON Schema defining configuration fields",
+      "uiConfig": "UI Config",
+      "uiConfigPlaceholder": "",
+      "uiConfigHint": "Configuration for how the UI is displayed",
+      "changeSummary": "Change Summary",
+      "changeSummaryPlaceholder": "Describe your changes...",
+      "changeSummaryHint": "Description of changes (for version history)"
+    },
+    "inheritance": {
+      "title": "Inheritance Settings",
+      "parentBlock": "Parent Block",
+      "parentBlockHint": "Select the block to inherit from",
+      "noParent": "No parent block (standalone)",
+      "chain": "Inheritance Chain",
+      "chainHint": "Shows inheritance hierarchy from root block",
+      "configDefaults": "Config Defaults",
+      "configDefaultsPlaceholder": "",
+      "configDefaultsHint": "Default values merged with parent block config",
+      "preProcess": "Pre-Process",
+      "preProcessPlaceholder": "// Executed before parent block code\ninput.timestamp = Date.now();",
+      "preProcessHint": "JavaScript code executed before parent block code",
+      "postProcess": "Post-Process",
+      "postProcessPlaceholder": "// Executed after parent block code\nresult.processed = true;",
+      "postProcessHint": "JavaScript code executed after parent block code"
+    },
+    "card": {
+      "version": "v{version}",
+      "system": "System",
+      "inherited": "Inherited",
+      "viewVersions": "View history",
+      "duplicate": "Duplicate",
+      "noDescription": "No description"
+    },
+    "test": {
+      "title": "Test Execution",
+      "input": "Test Input",
+      "inputPlaceholder": "",
+      "config": "Test Config",
+      "configPlaceholder": "",
+      "run": "Run Test",
+      "running": "Executing...",
+      "clear": "Clear Result",
+      "success": "Test Passed",
+      "failed": "Test Failed",
+      "output": "Output",
+      "logs": "Logs",
+      "info": "This is a mock test. Integration with backend API is required for actual execution.",
+      "invalidInput": "Invalid input JSON format",
+      "invalidConfig": "Invalid config JSON format"
+    },
+    "process": {
+      "title": "Process Hooks",
+      "preProcess": "Pre-Process",
+      "postProcess": "Post-Process",
+      "help": "Help",
+      "preProcessHelp": "Pre-Process code is executed before parent block code. You can transform inputs or add processing.",
+      "postProcessHelp": "Post-Process code is executed after parent block code. You can transform outputs or add processing.",
+      "availableVars": "Available Variables",
+      "varInput": "input - Input data",
+      "varConfig": "config - Block configuration",
+      "varSecrets": "ctx.secrets - Secrets accessor",
+      "templates": "Templates",
+      "templateTimestamp": "Add Timestamp",
+      "templateValidation": "Input Validation",
+      "templateLogging": "Add Logging"
+    },
+    "errors": {
+      "invalidJson": "Invalid JSON format",
+      "loadFailed": "Failed to load blocks",
+      "saveFailed": "Failed to save block",
+      "deleteFailed": "Failed to delete block"
+    }
+  },
   "credentials": {
     "title": "Credentials",
     "subtitle": "Securely manage API keys and authentication",
