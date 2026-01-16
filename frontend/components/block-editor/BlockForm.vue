@@ -769,4 +769,3 @@ textarea.form-input {
   background: var(--color-background);
 }
 </style>
-</template>
