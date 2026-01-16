@@ -164,12 +164,6 @@ function adjustYBySourcePort(
 
     // Get output ports for the source step
     const outputPorts = getOutputPorts(sourceStep.type, sourceStep)
-
-    // Debug log
-    console.log('[adjustYBySourcePort] sourceStep:', sourceStep.type, sourceStep.name)
-    console.log('[adjustYBySourcePort] outputPorts:', outputPorts.map(p => p.name))
-    console.log('[adjustYBySourcePort] edges:', sourceEdges.map(e => ({ target: e.target_step_id, port: e.source_port })))
-
     if (outputPorts.length <= 1) continue
 
     // Create port order map (port name -> order index)
@@ -209,8 +203,6 @@ function adjustYBySourcePort(
     // Sort targets by port index
     allTargets.sort((a, b) => a.portIndex - b.portIndex)
 
-    console.log('[adjustYBySourcePort] allTargets sorted:', allTargets.map(t => ({ targetId: t.targetId, portIndex: t.portIndex })))
-
     // Get unique target IDs in sorted order
     const uniqueTargetIds: string[] = []
     const seen = new Set<string>()
@@ -220,8 +212,6 @@ function adjustYBySourcePort(
         seen.add(target.targetId)
       }
     }
-
-    console.log('[adjustYBySourcePort] uniqueTargetIds:', uniqueTargetIds)
 
     if (uniqueTargetIds.length <= 1) continue
 
