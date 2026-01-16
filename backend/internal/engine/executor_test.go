@@ -1652,3 +1652,35 @@ func TestExecutor_DispatchStepExecution_Subflow(t *testing.T) {
 	assert.Contains(t, err.Error(), "subflow step type is not yet implemented")
 	assert.Contains(t, err.Error(), step.Name)
 }
+
+func TestExecutor_DispatchStepExecution_UnknownType(t *testing.T) {
+	executor := setupTestExecutor()
+
+	run := &domain.Run{
+		ID:         uuid.New(),
+		WorkflowID: uuid.New(),
+	}
+	def := &domain.WorkflowDefinition{Name: "test"}
+	execCtx := NewExecutionContext(run, def)
+
+	step := domain.Step{
+		ID:     uuid.New(),
+		Name:   "unknown-step",
+		Type:   domain.StepType("unknown_type_xyz"), // Unknown step type
+		Config: json.RawMessage(`{}`),
+	}
+	stepRun := &domain.StepRun{
+		ID:     uuid.New(),
+		StepID: step.ID,
+	}
+
+	input := json.RawMessage(`{"test": "data"}`)
+	output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+	// Unknown step type should return error
+	assert.Error(t, err)
+	assert.Nil(t, output)
+	assert.Contains(t, err.Error(), "unknown step type")
+	assert.Contains(t, err.Error(), "unknown_type_xyz")
+	assert.Contains(t, err.Error(), step.Name)
+}
