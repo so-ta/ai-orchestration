@@ -96,8 +96,11 @@ const emit = defineEmits<{
   }): void
 }>()
 
-const { onConnect, onNodeDragStop, onPaneClick, project, updateNode } = useVueFlow()
+const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode } = useVueFlow()
 const toast = useToast()
+
+// Selected edge for deletion
+const selectedEdgeId = ref<string | null>(null)
 
 // Drag state
 const isDragOver = ref(false)
@@ -1023,6 +1026,13 @@ const flowEdges = computed<FlowEdge[]>(() => {
       color = '#8b5cf6' // purple for group edges
     }
 
+    // Check if this edge is selected
+    const isSelected = selectedEdgeId.value === edge.id
+    if (isSelected) {
+      color = '#f97316' // orange for selected edge
+      strokeWidth = 4
+    }
+
     result.push({
       id: edge.id,
       source,
@@ -1030,7 +1040,7 @@ const flowEdges = computed<FlowEdge[]>(() => {
       sourceHandle: edge.source_port || undefined, // Connect from specific output port
       targetHandle: edge.target_port || undefined, // Connect to specific input port
       type: 'smoothstep',
-      animated: flowStatus.animated,
+      animated: flowStatus.animated || isSelected,
       label: getEdgeLabel(edge.source_port, edge.condition),
       labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
       labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
@@ -1056,14 +1066,14 @@ function isBranchingBlockInGroup(stepId: string): boolean {
   return !!step.block_group_id
 }
 
-// Count existing outgoing edges from a step
-function countOutgoingEdges(stepId: string): number {
-  return props.edges.filter(e => e.source_step_id === stepId).length
+// Get existing outgoing edges from a step
+function getOutgoingEdgesFromStep(stepId: string): Edge[] {
+  return props.edges.filter(e => e.source_step_id === stepId)
 }
 
-// Count existing outgoing edges from a group
-function countOutgoingEdgesFromGroup(groupId: string): number {
-  return props.edges.filter(e => e.source_block_group_id === groupId).length
+// Get existing outgoing edges from a group
+function getOutgoingEdgesFromGroup(groupId: string): Edge[] {
+  return props.edges.filter(e => e.source_block_group_id === groupId)
 }
 
 // Get default source port for a node (step or group)
@@ -1107,34 +1117,27 @@ onConnect((params) => {
     // Check if source is a group
     const isSourceGroup = sourceNodeId?.startsWith(GROUP_NODE_PREFIX)
 
+    // Delete existing outgoing edges before creating new one (auto-replace)
+    // Exception: branching blocks inside Block Groups can have multiple outputs
     if (isSourceGroup) {
-      // Source is a Block Group - only allow 1 outgoing edge
+      // Source is a Block Group - delete existing outgoing edges
       const groupId = getGroupUuidFromNodeId(sourceNodeId)
-      const existingOutgoingEdges = countOutgoingEdgesFromGroup(groupId)
-      if (existingOutgoingEdges > 0) {
-        toast.error(
-          '接続がブロックされました',
-          '1つのブロックからは1本のエッジのみ接続できます'
-        )
-        return
+      const existingEdges = getOutgoingEdgesFromGroup(groupId)
+      for (const edge of existingEdges) {
+        emit('edge:delete', edge.id)
       }
     } else if (sourceStep) {
       // Source is a step
       const isBranchingBlock = sourceStep.type === 'condition' || sourceStep.type === 'switch'
-      const existingOutgoingEdges = countOutgoingEdges(sourceNodeId)
+      const existingEdges = getOutgoingEdgesFromStep(sourceNodeId)
 
-      if (existingOutgoingEdges > 0) {
-        // Branching blocks inside a Block Group are allowed multiple outputs
-        if (isBranchingBlock && sourceStep.block_group_id) {
-          // Allow - branching block inside group can have multiple outputs
-        } else {
-          toast.error(
-            '接続がブロックされました',
-            isBranchingBlock
-              ? '分岐ブロック（Condition/Switch）の複数出力はグループ内でのみ可能です'
-              : '1つのブロックからは1本のエッジのみ接続できます'
-          )
-          return
+      // Branching blocks inside a Block Group are allowed multiple outputs
+      const allowMultiple = isBranchingBlock && sourceStep.block_group_id
+
+      if (!allowMultiple && existingEdges.length > 0) {
+        // Delete existing edges before adding new one
+        for (const edge of existingEdges) {
+          emit('edge:delete', edge.id)
         }
       }
     }
@@ -1145,6 +1148,40 @@ onConnect((params) => {
     const targetPort = params.targetHandle || getDefaultTargetPort(params.target)
     emit('edge:add', params.source, params.target, sourcePort, targetPort)
   }
+})
+
+// Handle edge click - select edge for deletion
+onEdgeClick(({ edge }) => {
+  if (!props.readonly) {
+    // Find the actual edge ID from our edges array using source/target
+    const actualEdge = props.edges.find(e => {
+      // Match by VueFlow edge ID format
+      const flowEdgeId = edge.id
+      // VueFlow edge ID format: "source-target" or with handles
+      return e.id === flowEdgeId || flowEdgeId.includes(e.id)
+    })
+
+    if (actualEdge) {
+      selectedEdgeId.value = actualEdge.id
+    }
+  }
+})
+
+// Handle keyboard events for edge deletion
+function handleKeyDown(event: KeyboardEvent) {
+  if (props.readonly) return
+
+  if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdgeId.value) {
+    emit('edge:delete', selectedEdgeId.value)
+    selectedEdgeId.value = null
+    event.preventDefault()
+  }
+}
+
+// Clear edge selection when clicking on pane
+onPaneClick(() => {
+  selectedEdgeId.value = null
+  emit('pane:click')
 })
 
 // Handle node drag
@@ -1739,10 +1776,7 @@ onNodeDragStop((event) => {
   }
 })
 
-// Handle click on empty area (deselect current selection)
-onPaneClick(() => {
-  emit('pane:click')
-})
+// Note: pane click handler is defined above (with edge selection clearing)
 
 // Handle node click
 function onNodeClick(event: { node: Node }) {
@@ -2303,10 +2337,12 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 <template>
   <div
     :class="['dag-editor', { 'drag-over': isDragOver }]"
+    tabindex="0"
     @dragenter="handleDragEnter"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
     @drop="handleDrop"
+    @keydown="handleKeyDown"
   >
     <VueFlow
       :nodes="nodes"

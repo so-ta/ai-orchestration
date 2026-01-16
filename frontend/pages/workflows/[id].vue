@@ -700,6 +700,21 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
   }
 }
 
+// Handle edge deletion
+async function handleDeleteEdge(edgeId: string) {
+  if (!workflow.value || isReadonly.value) return
+
+  try {
+    await workflows.deleteEdge(workflowId, edgeId)
+    // Remove edge from local state
+    if (workflow.value?.edges) {
+      workflow.value.edges = workflow.value.edges.filter(e => e.id !== edgeId)
+    }
+  } catch (e) {
+    toast.error('エッジの削除に失敗しました', e instanceof Error ? e.message : undefined)
+  }
+}
+
 // Prepare workflow data for save
 function prepareWorkflowData() {
   if (!workflow.value) return null
@@ -1385,6 +1400,7 @@ onMounted(() => {
             @step:drop="handleStepDrop"
             @step:assign-group="handleStepAssignGroup"
             @edge:add="handleAddEdge"
+            @edge:delete="handleDeleteEdge"
             @pane:click="handlePaneClick"
             @group:select="handleSelectGroup"
             @group:update="handleUpdateGroupPosition"

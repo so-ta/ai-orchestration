@@ -325,12 +325,8 @@ func TestEdgeUsecase_Create_PortValidation(t *testing.T) {
 	// Create steps
 	sourceStep := domain.NewStep(tenantID, workflowID, "Source", domain.StepTypeFunction, json.RawMessage(`{}`))
 	targetStep := domain.NewStep(tenantID, workflowID, "Target", domain.StepTypeFunction, json.RawMessage(`{}`))
-	sourceStep2 := domain.NewStep(tenantID, workflowID, "Source2", domain.StepTypeFunction, json.RawMessage(`{}`))
-	sourceStep3 := domain.NewStep(tenantID, workflowID, "Source3", domain.StepTypeFunction, json.RawMessage(`{}`))
 	require.NoError(t, stepRepo.Create(ctx, sourceStep))
 	require.NoError(t, stepRepo.Create(ctx, targetStep))
-	require.NoError(t, stepRepo.Create(ctx, sourceStep2))
-	require.NoError(t, stepRepo.Create(ctx, sourceStep3))
 
 	// Create block group
 	tryCatchGroup := &domain.BlockGroup{
@@ -418,11 +414,10 @@ func TestEdgeUsecase_Create_PortValidation(t *testing.T) {
 	})
 
 	t.Run("step-to-group with group-input port is allowed", func(t *testing.T) {
-		// Use sourceStep2 to avoid conflict with existing edge from sourceStep
 		input := CreateEdgeInput{
 			TenantID:           tenantID,
 			WorkflowID:         workflowID,
-			SourceStepID:       &sourceStep2.ID,
+			SourceStepID:       &sourceStep.ID,
 			TargetBlockGroupID: &tryCatchGroup.ID,
 			SourcePort:         "output",
 			TargetPort:         "group-input",
@@ -433,11 +428,10 @@ func TestEdgeUsecase_Create_PortValidation(t *testing.T) {
 	})
 
 	t.Run("empty port skips validation (default port)", func(t *testing.T) {
-		// Use sourceStep3 to avoid conflict with existing edges
 		input := CreateEdgeInput{
 			TenantID:     tenantID,
 			WorkflowID:   workflowID,
-			SourceStepID: &sourceStep3.ID,
+			SourceStepID: &sourceStep.ID,
 			TargetStepID: &targetStep.ID,
 			SourcePort:   "",
 			TargetPort:   "",

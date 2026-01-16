@@ -120,10 +120,8 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 		}
 	}
 
-	// Validate single outgoing edge restriction
-	if err := u.validateSingleOutgoingEdge(ctx, input, sourceStep); err != nil {
-		return nil, err
-	}
+	// Note: Single outgoing edge restriction is now handled by the frontend.
+	// The frontend automatically deletes existing edges before creating new ones.
 
 	// Create new edge based on connection type
 	var newEdge *domain.Edge
@@ -322,44 +320,4 @@ func (u *EdgeUsecase) getBlockDefinitionForStep(ctx context.Context, step *domai
 func (u *EdgeUsecase) getBlockDefinitionForGroup(ctx context.Context, group *domain.BlockGroup) (*domain.BlockDefinition, error) {
 	// Use group type as slug
 	return u.blockDefinitionRepo.GetBySlug(ctx, nil, string(group.Type))
-}
-
-// validateSingleOutgoingEdge validates that a source (step or group) has at most one outgoing edge
-// Exception: branching blocks (condition/switch) inside a Block Group can have multiple outputs
-func (u *EdgeUsecase) validateSingleOutgoingEdge(ctx context.Context, input CreateEdgeInput, sourceStep *domain.Step) error {
-	// Get existing edges for the workflow
-	edges, err := u.edgeRepo.ListByWorkflow(ctx, input.TenantID, input.WorkflowID)
-	if err != nil {
-		return err
-	}
-
-	// Check if source is a group
-	if input.SourceBlockGroupID != nil {
-		// Count existing outgoing edges from this group
-		for _, edge := range edges {
-			if edge.SourceBlockGroupID != nil && *edge.SourceBlockGroupID == *input.SourceBlockGroupID {
-				return domain.ErrEdgeParallelNotAllowed
-			}
-		}
-		return nil
-	}
-
-	// Check if source is a step
-	if input.SourceStepID != nil && sourceStep != nil {
-		// Branching blocks inside a Block Group are allowed multiple outputs
-		isBranchingBlock := sourceStep.Type == domain.StepTypeCondition || sourceStep.Type == domain.StepTypeSwitch
-		if isBranchingBlock && sourceStep.BlockGroupID != nil {
-			// Allow multiple outputs for branching blocks inside groups
-			return nil
-		}
-
-		// Count existing outgoing edges from this step
-		for _, edge := range edges {
-			if edge.SourceStepID != nil && *edge.SourceStepID == *input.SourceStepID {
-				return domain.ErrEdgeParallelNotAllowed
-			}
-		}
-	}
-
-	return nil
 }

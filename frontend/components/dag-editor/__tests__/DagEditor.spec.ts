@@ -21,6 +21,7 @@ vi.mock('@vue-flow/core', () => ({
     onConnect: vi.fn(),
     onNodeDragStop: vi.fn(),
     onPaneClick: vi.fn(),
+    onEdgeClick: vi.fn(),
     project: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
     updateNode: vi.fn(),
   }),
