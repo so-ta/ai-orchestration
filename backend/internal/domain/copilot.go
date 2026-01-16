@@ -7,16 +7,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// CopilotSession represents a chat session for a user and workflow
+// CopilotSession represents a chat session for a user and project
 type CopilotSession struct {
-	ID         uuid.UUID `json:"id"`
-	TenantID   uuid.UUID `json:"tenant_id"`
-	UserID     string    `json:"user_id"`
-	WorkflowID uuid.UUID `json:"workflow_id"`
-	Title      string    `json:"title"`
-	IsActive   bool      `json:"is_active"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID        uuid.UUID `json:"id"`
+	TenantID  uuid.UUID `json:"tenant_id"`
+	UserID    string    `json:"user_id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	Title     string    `json:"title"`
+	IsActive  bool      `json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	// Loaded relations
 	Messages []CopilotMessage `json:"messages,omitempty"`
@@ -33,16 +33,16 @@ type CopilotMessage struct {
 }
 
 // NewCopilotSession creates a new copilot session
-func NewCopilotSession(tenantID uuid.UUID, userID string, workflowID uuid.UUID) *CopilotSession {
+func NewCopilotSession(tenantID uuid.UUID, userID string, projectID uuid.UUID) *CopilotSession {
 	now := time.Now().UTC()
 	return &CopilotSession{
-		ID:         uuid.New(),
-		TenantID:   tenantID,
-		UserID:     userID,
-		WorkflowID: workflowID,
-		IsActive:   true,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		UserID:    userID,
+		ProjectID: projectID,
+		IsActive:  true,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
 

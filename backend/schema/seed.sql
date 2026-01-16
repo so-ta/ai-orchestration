@@ -1,9 +1,9 @@
 -- AI Orchestration Seed Data
 -- This file contains initial data for the database
 --
--- NOTE: Block definitions and workflows are now managed programmatically.
+-- NOTE: Block definitions and projects are now managed programmatically.
 -- Use the seeder command to migrate them:
---   go run ./cmd/seeder              # Migrate blocks and workflows
+--   go run ./cmd/seeder              # Migrate blocks and projects
 --   go run ./cmd/seeder --validate   # Validate only
 --   go run ./cmd/seeder --dry-run    # Preview changes
 --
@@ -22,6 +22,6 @@ ON CONFLICT (id) DO NOTHING;
 -- See: backend/internal/seed/blocks/
 -- Run: go run ./cmd/seeder --blocks-only
 
--- NOTE: Workflows are managed by programmatic seeder.
--- See: backend/internal/seed/workflows/
--- Run: go run ./cmd/seeder --workflows-only
+-- NOTE: Projects are managed by programmatic seeder.
+-- See: backend/internal/seed/projects/
+-- Run: go run ./cmd/seeder --projects-only

@@ -11,23 +11,23 @@ import (
 
 // BlockGroupUsecase handles block group business logic
 type BlockGroupUsecase struct {
-	workflowRepo    repository.WorkflowRepository
-	blockGroupRepo  repository.BlockGroupRepository
-	stepRepo        repository.StepRepository
-	workflowChecker *WorkflowChecker
+	projectRepo    repository.ProjectRepository
+	blockGroupRepo repository.BlockGroupRepository
+	stepRepo       repository.StepRepository
+	projectChecker *ProjectChecker
 }
 
 // NewBlockGroupUsecase creates a new BlockGroupUsecase
 func NewBlockGroupUsecase(
-	workflowRepo repository.WorkflowRepository,
+	projectRepo repository.ProjectRepository,
 	blockGroupRepo repository.BlockGroupRepository,
 	stepRepo repository.StepRepository,
 ) *BlockGroupUsecase {
 	return &BlockGroupUsecase{
-		workflowRepo:    workflowRepo,
-		blockGroupRepo:  blockGroupRepo,
-		stepRepo:        stepRepo,
-		workflowChecker: NewWorkflowChecker(workflowRepo),
+		projectRepo:    projectRepo,
+		blockGroupRepo: blockGroupRepo,
+		stepRepo:       stepRepo,
+		projectChecker: NewProjectChecker(projectRepo),
 	}
 }
 
@@ -35,7 +35,7 @@ func NewBlockGroupUsecase(
 // Supports 4 types: parallel, try_catch, foreach, while
 type CreateBlockGroupInput struct {
 	TenantID      uuid.UUID
-	WorkflowID    uuid.UUID
+	ProjectID     uuid.UUID
 	Name          string
 	Type          domain.BlockGroupType
 	Config        json.RawMessage
@@ -50,8 +50,8 @@ type CreateBlockGroupInput struct {
 
 // Create creates a new block group
 func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupInput) (*domain.BlockGroup, error) {
-	// Verify workflow exists and is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
+	// Verify project exists and is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -69,12 +69,12 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 		if err != nil {
 			return nil, err
 		}
-		if parent.WorkflowID != input.WorkflowID {
-			return nil, domain.NewValidationError("parent_group_id", "parent group must be in the same workflow")
+		if parent.ProjectID != input.ProjectID {
+			return nil, domain.NewValidationError("parent_group_id", "parent group must be in the same project")
 		}
 	}
 
-	group := domain.NewBlockGroup(input.TenantID, input.WorkflowID, input.Name, input.Type)
+	group := domain.NewBlockGroup(input.TenantID, input.ProjectID, input.Name, input.Type)
 	if input.Config != nil {
 		group.Config = input.Config
 	}
@@ -97,9 +97,9 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 }
 
 // GetByID retrieves a block group by ID
-func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, workflowID, groupID uuid.UUID) (*domain.BlockGroup, error) {
-	// Verify workflow exists
-	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
+func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, projectID, groupID uuid.UUID) (*domain.BlockGroup, error) {
+	// Verify project exists
+	if _, err := u.projectChecker.CheckExists(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
 
@@ -108,27 +108,27 @@ func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, workflowID, g
 		return nil, err
 	}
 
-	// Verify group belongs to workflow
-	if group.WorkflowID != workflowID {
+	// Verify group belongs to project
+	if group.ProjectID != projectID {
 		return nil, domain.ErrBlockGroupNotFound
 	}
 
 	return group, nil
 }
 
-// List lists block groups for a workflow
-func (u *BlockGroupUsecase) List(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.BlockGroup, error) {
-	// Verify workflow exists
-	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
+// List lists block groups for a project
+func (u *BlockGroupUsecase) List(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.BlockGroup, error) {
+	// Verify project exists
+	if _, err := u.projectChecker.CheckExists(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
-	return u.blockGroupRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	return u.blockGroupRepo.ListByProject(ctx, tenantID, projectID)
 }
 
 // UpdateBlockGroupInput represents input for updating a block group
 type UpdateBlockGroupInput struct {
 	TenantID      uuid.UUID
-	WorkflowID    uuid.UUID
+	ProjectID     uuid.UUID
 	GroupID       uuid.UUID
 	Name          string
 	Config        json.RawMessage
@@ -143,8 +143,8 @@ type UpdateBlockGroupInput struct {
 
 // Update updates a block group
 func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupInput) (*domain.BlockGroup, error) {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -153,8 +153,8 @@ func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupIn
 		return nil, err
 	}
 
-	// Verify group belongs to workflow
-	if group.WorkflowID != input.WorkflowID {
+	// Verify group belongs to project
+	if group.ProjectID != input.ProjectID {
 		return nil, domain.ErrBlockGroupNotFound
 	}
 
@@ -198,9 +198,9 @@ func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupIn
 }
 
 // Delete deletes a block group
-func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, workflowID, groupID uuid.UUID) error {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
+func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, projectID, groupID uuid.UUID) error {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, tenantID, projectID); err != nil {
 		return err
 	}
 
@@ -209,8 +209,8 @@ func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, workflowID, gr
 		return err
 	}
 
-	// Verify group belongs to workflow
-	if group.WorkflowID != workflowID {
+	// Verify group belongs to project
+	if group.ProjectID != projectID {
 		return domain.ErrBlockGroupNotFound
 	}
 
@@ -219,17 +219,17 @@ func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, workflowID, gr
 
 // AddStepToGroupInput represents input for adding a step to a block group
 type AddStepToGroupInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	StepID     uuid.UUID
-	GroupID    uuid.UUID
-	GroupRole  domain.GroupRole
+	TenantID  uuid.UUID
+	ProjectID uuid.UUID
+	StepID    uuid.UUID
+	GroupID   uuid.UUID
+	GroupRole domain.GroupRole
 }
 
 // AddStepToGroup adds a step to a block group
 func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToGroupInput) (*domain.Step, error) {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, input.TenantID, input.WorkflowID); err != nil {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
 		return nil, err
 	}
 
@@ -238,12 +238,12 @@ func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToG
 	if err != nil {
 		return nil, err
 	}
-	if group.WorkflowID != input.WorkflowID {
+	if group.ProjectID != input.ProjectID {
 		return nil, domain.ErrBlockGroupNotFound
 	}
 
 	// Get step
-	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.WorkflowID, input.StepID)
+	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, input.StepID)
 	if err != nil {
 		return nil, err
 	}
@@ -270,14 +270,14 @@ func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToG
 }
 
 // RemoveStepFromGroup removes a step from its block group
-func (u *BlockGroupUsecase) RemoveStepFromGroup(ctx context.Context, tenantID, workflowID, stepID uuid.UUID) (*domain.Step, error) {
-	// Verify workflow is editable
-	if _, err := u.workflowChecker.CheckEditable(ctx, tenantID, workflowID); err != nil {
+func (u *BlockGroupUsecase) RemoveStepFromGroup(ctx context.Context, tenantID, projectID, stepID uuid.UUID) (*domain.Step, error) {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
 
 	// Get step
-	step, err := u.stepRepo.GetByID(ctx, tenantID, workflowID, stepID)
+	step, err := u.stepRepo.GetByID(ctx, tenantID, projectID, stepID)
 	if err != nil {
 		return nil, err
 	}
@@ -294,9 +294,9 @@ func (u *BlockGroupUsecase) RemoveStepFromGroup(ctx context.Context, tenantID, w
 }
 
 // GetStepsByGroup retrieves all steps in a block group
-func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, workflowID, groupID uuid.UUID) ([]*domain.Step, error) {
-	// Verify workflow exists
-	if _, err := u.workflowChecker.CheckExists(ctx, tenantID, workflowID); err != nil {
+func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, projectID, groupID uuid.UUID) ([]*domain.Step, error) {
+	// Verify project exists
+	if _, err := u.projectChecker.CheckExists(ctx, tenantID, projectID); err != nil {
 		return nil, err
 	}
 
@@ -305,12 +305,12 @@ func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, workf
 	if err != nil {
 		return nil, err
 	}
-	if group.WorkflowID != workflowID {
+	if group.ProjectID != projectID {
 		return nil, domain.ErrBlockGroupNotFound
 	}
 
 	// Get steps in group
-	steps, err := u.stepRepo.ListByWorkflow(ctx, tenantID, workflowID)
+	steps, err := u.stepRepo.ListByProject(ctx, tenantID, projectID)
 	if err != nil {
 		return nil, err
 	}

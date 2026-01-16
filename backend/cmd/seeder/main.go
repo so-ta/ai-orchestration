@@ -15,7 +15,7 @@ import (
 	"github.com/souta/ai-orchestration/pkg/database"
 )
 
-// Default tenant ID for system workflows
+// Default tenant ID for system projects
 const defaultTenantID = "00000000-0000-0000-0000-000000000001"
 
 func main() {
@@ -23,9 +23,9 @@ func main() {
 	validateOnly := flag.Bool("validate", false, "Only validate blocks without migrating")
 	dryRun := flag.Bool("dry-run", false, "Show what would be changed without applying")
 	verbose := flag.Bool("verbose", false, "Show detailed output")
-	blocksOnly := flag.Bool("blocks-only", false, "Only migrate blocks, skip workflows")
-	workflowsOnly := flag.Bool("workflows-only", false, "Only migrate workflows, skip blocks")
-	tenantIDStr := flag.String("tenant-id", defaultTenantID, "Tenant ID for workflow migration")
+	blocksOnly := flag.Bool("blocks-only", false, "Only migrate blocks, skip projects")
+	projectsOnly := flag.Bool("projects-only", false, "Only migrate projects, skip blocks")
+	tenantIDStr := flag.String("tenant-id", defaultTenantID, "Tenant ID for project migration")
 	flag.Parse()
 
 	// Create registries
@@ -33,7 +33,7 @@ func main() {
 	workflowRegistry := workflows.NewRegistry()
 
 	fmt.Printf("📦 Loaded %d block definitions\n", blockRegistry.Count())
-	fmt.Printf("📦 Loaded %d workflow definitions\n", workflowRegistry.Count())
+	fmt.Printf("📦 Loaded %d project definitions\n", workflowRegistry.Count())
 
 	// Validate all blocks
 	validator := validation.NewBlockValidator()
@@ -54,17 +54,17 @@ func main() {
 
 	fmt.Printf("\n✅ All blocks passed validation\n")
 
-	// Validate all workflows
-	workflowErrors := validateWorkflows(workflowRegistry)
-	if len(workflowErrors) > 0 {
-		fmt.Printf("\n❌ Workflow Validation Errors:\n")
-		for _, err := range workflowErrors {
+	// Validate all projects (using workflow registry for backward compatibility)
+	projectErrors := validateProjects(workflowRegistry)
+	if len(projectErrors) > 0 {
+		fmt.Printf("\n❌ Project Validation Errors:\n")
+		for _, err := range projectErrors {
 			fmt.Printf("   %v\n", err)
 		}
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ All workflows passed validation\n")
+	fmt.Printf("✅ All projects passed validation\n")
 
 	if *validateOnly {
 		os.Exit(0)
@@ -95,14 +95,14 @@ func main() {
 	// Create repositories
 	blockRepo := postgres.NewBlockDefinitionRepository(pool)
 	versionRepo := postgres.NewBlockVersionRepository(pool)
-	workflowRepo := postgres.NewWorkflowRepository(pool)
+	projectRepo := postgres.NewProjectRepository(pool)
 	stepRepo := postgres.NewStepRepository(pool)
 	edgeRepo := postgres.NewEdgeRepository(pool)
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 
 	// Create migrators
 	blockMigrator := migration.NewMigrator(blockRepo, versionRepo)
-	workflowMigrator := migration.NewWorkflowMigrator(workflowRepo, stepRepo, edgeRepo).
+	projectMigrator := migration.NewProjectMigrator(projectRepo, stepRepo, edgeRepo).
 		WithBlockRepo(blockRepo).
 		WithBlockGroupRepo(blockGroupRepo)
 
@@ -111,7 +111,7 @@ func main() {
 		fmt.Printf("\n🔄 Dry Run - Checking what would be changed...\n\n")
 
 		// Block dry run
-		if !*workflowsOnly {
+		if !*projectsOnly {
 			blockChanges, err := blockMigrator.DryRun(ctx, blockRegistry)
 			if err != nil {
 				fmt.Printf("❌ Block dry run failed: %v\n", err)
@@ -155,30 +155,30 @@ func main() {
 				len(blockChanges.ToCreate), len(blockChanges.ToUpdate), len(blockChanges.Unchanged))
 		}
 
-		// Workflow dry run
+		// Project dry run
 		if !*blocksOnly {
-			workflowChanges, err := workflowMigrator.DryRun(ctx, workflowRegistry, tenantID)
+			projectChanges, err := projectMigrator.DryRun(ctx, workflowRegistry, tenantID)
 			if err != nil {
-				fmt.Printf("❌ Workflow dry run failed: %v\n", err)
+				fmt.Printf("❌ Project dry run failed: %v\n", err)
 				os.Exit(1)
 			}
 
-			fmt.Printf("\n=== WORKFLOWS ===\n")
-			if len(workflowChanges.ToCreate) > 0 {
-				fmt.Printf("📥 Workflows to create (%d):\n", len(workflowChanges.ToCreate))
-				for _, slug := range workflowChanges.ToCreate {
-					wf, ok := workflowRegistry.GetBySlug(slug)
+			fmt.Printf("\n=== PROJECTS ===\n")
+			if len(projectChanges.ToCreate) > 0 {
+				fmt.Printf("📥 Projects to create (%d):\n", len(projectChanges.ToCreate))
+				for _, slug := range projectChanges.ToCreate {
+					proj, ok := workflowRegistry.GetBySlug(slug)
 					if !ok {
-						fmt.Printf("   + %s (unknown workflow)\n", slug)
+						fmt.Printf("   + %s (unknown project)\n", slug)
 						continue
 					}
-					fmt.Printf("   + %s (v%d) - %s\n", slug, wf.Version, wf.Name)
+					fmt.Printf("   + %s (v%d) - %s\n", slug, proj.Version, proj.Name)
 				}
 			}
 
-			if len(workflowChanges.ToUpdate) > 0 {
-				fmt.Printf("\n📝 Workflows to update (%d):\n", len(workflowChanges.ToUpdate))
-				for _, change := range workflowChanges.ToUpdate {
+			if len(projectChanges.ToUpdate) > 0 {
+				fmt.Printf("\n📝 Projects to update (%d):\n", len(projectChanges.ToUpdate))
+				for _, change := range projectChanges.ToUpdate {
 					if *verbose {
 						fmt.Printf("   ~ %s (v%d → v%d) - %s\n",
 							change.SystemSlug, change.OldVersion, change.NewVersion, change.Reason)
@@ -189,15 +189,15 @@ func main() {
 				}
 			}
 
-			if len(workflowChanges.Unchanged) > 0 && *verbose {
-				fmt.Printf("\n✓ Unchanged workflows (%d):\n", len(workflowChanges.Unchanged))
-				for _, slug := range workflowChanges.Unchanged {
+			if len(projectChanges.Unchanged) > 0 && *verbose {
+				fmt.Printf("\n✓ Unchanged projects (%d):\n", len(projectChanges.Unchanged))
+				for _, slug := range projectChanges.Unchanged {
 					fmt.Printf("   = %s\n", slug)
 				}
 			}
 
-			fmt.Printf("\n📊 Workflow Summary: %d to create, %d to update, %d unchanged\n",
-				len(workflowChanges.ToCreate), len(workflowChanges.ToUpdate), len(workflowChanges.Unchanged))
+			fmt.Printf("\n📊 Project Summary: %d to create, %d to update, %d unchanged\n",
+				len(projectChanges.ToCreate), len(projectChanges.ToUpdate), len(projectChanges.Unchanged))
 		}
 
 		os.Exit(0)
@@ -207,7 +207,7 @@ func main() {
 	fmt.Printf("\n🚀 Running migration...\n\n")
 
 	// Block migration
-	if !*workflowsOnly {
+	if !*projectsOnly {
 		fmt.Printf("=== BLOCKS ===\n")
 		blockResult, err := blockMigrator.Migrate(ctx, blockRegistry)
 		if err != nil {
@@ -242,37 +242,37 @@ func main() {
 		}
 	}
 
-	// Workflow migration
+	// Project migration
 	if !*blocksOnly {
-		fmt.Printf("\n=== WORKFLOWS ===\n")
-		workflowResult, err := workflowMigrator.Migrate(ctx, workflowRegistry, tenantID)
+		fmt.Printf("\n=== PROJECTS ===\n")
+		projectResult, err := projectMigrator.Migrate(ctx, workflowRegistry, tenantID)
 		if err != nil {
-			fmt.Printf("❌ Workflow migration failed: %v\n", err)
+			fmt.Printf("❌ Project migration failed: %v\n", err)
 			os.Exit(1)
 		}
 
 		if *verbose {
-			if len(workflowResult.Created) > 0 {
-				fmt.Printf("📥 Created workflows:\n")
-				for _, slug := range workflowResult.Created {
+			if len(projectResult.Created) > 0 {
+				fmt.Printf("📥 Created projects:\n")
+				for _, slug := range projectResult.Created {
 					fmt.Printf("   + %s\n", slug)
 				}
 			}
-			if len(workflowResult.Updated) > 0 {
-				fmt.Printf("📝 Updated workflows:\n")
-				for _, slug := range workflowResult.Updated {
+			if len(projectResult.Updated) > 0 {
+				fmt.Printf("📝 Updated projects:\n")
+				for _, slug := range projectResult.Updated {
 					fmt.Printf("   ~ %s\n", slug)
 				}
 			}
 		}
 
-		fmt.Printf("✅ Workflow migration completed!\n")
+		fmt.Printf("✅ Project migration completed!\n")
 		fmt.Printf("   Created: %d, Updated: %d, Unchanged: %d\n",
-			len(workflowResult.Created), len(workflowResult.Updated), len(workflowResult.Unchanged))
+			len(projectResult.Created), len(projectResult.Updated), len(projectResult.Unchanged))
 
-		if len(workflowResult.Errors) > 0 {
-			fmt.Printf("\n⚠️  Workflow Warnings:\n")
-			for _, err := range workflowResult.Errors {
+		if len(projectResult.Errors) > 0 {
+			fmt.Printf("\n⚠️  Project Warnings:\n")
+			for _, err := range projectResult.Errors {
 				fmt.Printf("   %v\n", err)
 			}
 		}
@@ -288,11 +288,11 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func validateWorkflows(registry *workflows.Registry) []error {
+func validateProjects(registry *workflows.Registry) []error {
 	var errors []error
-	for _, wf := range registry.GetAll() {
-		if err := wf.Validate(); err != nil {
-			errors = append(errors, fmt.Errorf("%s: %w", wf.SystemSlug, err))
+	for _, proj := range registry.GetAll() {
+		if err := proj.Validate(); err != nil {
+			errors = append(errors, fmt.Errorf("%s: %w", proj.SystemSlug, err))
 		}
 	}
 	return errors

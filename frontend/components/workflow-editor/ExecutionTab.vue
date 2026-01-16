@@ -820,7 +820,7 @@ async function loadTestRuns() {
 // Flattened step runs from all test runs
 interface StepRunWithRunInfo extends StepRun {
   run_id: string
-  workflow_version: number
+  project_version: number
   run_number: number
   run_status: string
 }
@@ -833,7 +833,7 @@ const allTestStepRuns = computed<StepRunWithRunInfo[]>(() => {
         stepRuns.push({
           ...stepRun,
           run_id: run.id,
-          workflow_version: run.workflow_version,
+          project_version: run.project_version,
           run_number: run.run_number,
           run_status: run.status,
         })

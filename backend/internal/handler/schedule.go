@@ -25,12 +25,13 @@ func NewScheduleHandler(uc *usecase.ScheduleUsecase, auditService *usecase.Audit
 
 // CreateScheduleRequest represents the request body for creating a schedule
 type CreateScheduleRequest struct {
-	WorkflowID     string          `json:"workflow_id"`
+	ProjectID      string          `json:"project_id"`
 	Name           string          `json:"name"`
 	Description    string          `json:"description,omitempty"`
 	CronExpression string          `json:"cron_expression"`
 	Timezone       string          `json:"timezone,omitempty"`
 	Input          json.RawMessage `json:"input,omitempty"`
+	StartStepID    *string         `json:"start_step_id,omitempty"` // Optional: start execution from a specific step
 }
 
 // Create creates a new schedule
@@ -40,7 +41,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflowID, ok := parseUUIDString(w, req.WorkflowID, "workflow ID")
+	projectID, ok := parseUUIDString(w, req.ProjectID, "project ID")
 	if !ok {
 		return
 	}
@@ -54,14 +55,25 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		createdBy = &userID
 	}
 
+	// Parse start_step_id (required for multi-start projects)
+	if req.StartStepID == nil || *req.StartStepID == "" {
+		HandleError(w, domain.NewValidationError("start_step_id", "start_step_id is required"))
+		return
+	}
+	startStepID, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
+	if !ok {
+		return
+	}
+
 	schedule, err := h.usecase.Create(r.Context(), usecase.CreateScheduleInput{
 		TenantID:       tenantID,
-		WorkflowID:     workflowID,
+		ProjectID:      projectID,
 		Name:           req.Name,
 		Description:    req.Description,
 		CronExpression: req.CronExpression,
 		Timezone:       req.Timezone,
 		Input:          req.Input,
+		StartStepID:    startStepID,
 		CreatedBy:      createdBy,
 	})
 	if err != nil {
@@ -71,9 +83,9 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Log audit event
 	logAudit(r.Context(), h.auditService, r, domain.AuditActionScheduleCreate, domain.AuditResourceSchedule, &schedule.ID, map[string]interface{}{
-		"name":        schedule.Name,
-		"workflow_id": workflowID,
-		"cron":        schedule.CronExpression,
+		"name":       schedule.Name,
+		"project_id": projectID,
+		"cron":       schedule.CronExpression,
 	})
 
 	JSONData(w, http.StatusCreated, schedule)
@@ -107,10 +119,10 @@ func (h *ScheduleHandler) List(w http.ResponseWriter, r *http.Request) {
 		Limit:    parseIntQuery(r, "limit", 20),
 	}
 
-	// Optional workflow filter
-	if workflowIDStr := r.URL.Query().Get("workflow_id"); workflowIDStr != "" {
-		if workflowID, err := uuid.Parse(workflowIDStr); err == nil {
-			input.WorkflowID = &workflowID
+	// Optional project filter
+	if projectIDStr := r.URL.Query().Get("project_id"); projectIDStr != "" {
+		if projectID, err := uuid.Parse(projectIDStr); err == nil {
+			input.ProjectID = &projectID
 		}
 	}
 
@@ -136,6 +148,7 @@ type UpdateScheduleRequest struct {
 	CronExpression string          `json:"cron_expression,omitempty"`
 	Timezone       string          `json:"timezone,omitempty"`
 	Input          json.RawMessage `json:"input,omitempty"`
+	StartStepID    *string         `json:"start_step_id,omitempty"` // Optional: start execution from a specific step
 }
 
 // Update updates a schedule
@@ -152,6 +165,16 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	tenantID := getTenantID(r)
 
+	// Parse start_step_id if provided
+	var startStepID *uuid.UUID
+	if req.StartStepID != nil && *req.StartStepID != "" {
+		stepID, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
+		if !ok {
+			return
+		}
+		startStepID = &stepID
+	}
+
 	schedule, err := h.usecase.Update(r.Context(), usecase.UpdateScheduleInput{
 		TenantID:       tenantID,
 		ID:             id,
@@ -160,6 +183,7 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		CronExpression: req.CronExpression,
 		Timezone:       req.Timezone,
 		Input:          req.Input,
+		StartStepID:    startStepID,
 	})
 	if err != nil {
 		HandleError(w, err)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Schedule, ScheduleStatus, CreateScheduleRequest, UpdateScheduleRequest, Workflow } from '~/types/api'
+import type { Schedule, ScheduleStatus, CreateScheduleRequest, UpdateScheduleRequest, Project } from '~/types/api'
 
 const { t } = useI18n()
 const schedulesApi = useSchedules()
@@ -8,7 +8,7 @@ const { confirm } = useConfirm()
 
 // State
 const schedules = ref<Schedule[]>([])
-const workflows = ref<Workflow[]>([])
+const workflows = ref<Project[]>([])
 const loading = ref(false)
 const showModal = ref(false)
 const editingSchedule = ref<Schedule | null>(null)
@@ -21,7 +21,8 @@ const filterWorkflow = ref('')
 const formData = ref({
   name: '',
   description: '',
-  workflow_id: '',
+  project_id: '',
+  start_step_id: '', // Which Start block to trigger
   cron_expression: '',
   timezone: 'Asia/Tokyo',
   input: '{}',
@@ -71,7 +72,7 @@ onMounted(() => {
 const filteredSchedules = computed(() => {
   return schedules.value.filter((s) => {
     if (filterStatus.value && s.status !== filterStatus.value) return false
-    if (filterWorkflow.value && s.workflow_id !== filterWorkflow.value) return false
+    if (filterWorkflow.value && s.project_id !== filterWorkflow.value) return false
     return true
   })
 })
@@ -115,7 +116,8 @@ const openCreateModal = () => {
   formData.value = {
     name: '',
     description: '',
-    workflow_id: '',
+    project_id: '',
+    start_step_id: '',
     cron_expression: '',
     timezone: 'Asia/Tokyo',
     input: '{}',
@@ -128,7 +130,8 @@ const openEditModal = (schedule: Schedule) => {
   formData.value = {
     name: schedule.name,
     description: schedule.description || '',
-    workflow_id: schedule.workflow_id,
+    project_id: schedule.project_id,
+    start_step_id: schedule.start_step_id,
     cron_expression: schedule.cron_expression,
     timezone: schedule.timezone,
     input: schedule.input ? JSON.stringify(schedule.input, null, 2) : '{}',
@@ -158,7 +161,8 @@ const handleSubmit = async () => {
       toast.success(t('schedules.messages.updated'))
     } else {
       const createData: CreateScheduleRequest = {
-        workflow_id: formData.value.workflow_id,
+        project_id: formData.value.project_id,
+        start_step_id: formData.value.start_step_id,
         name: formData.value.name,
         description: formData.value.description || undefined,
         cron_expression: formData.value.cron_expression,
@@ -287,8 +291,8 @@ const applyCronExample = (cron: string) => {
               </div>
             </td>
             <td>
-              <NuxtLink :to="`/workflows/${schedule.workflow_id}`" class="workflow-link">
-                {{ getWorkflowName(schedule.workflow_id) }}
+              <NuxtLink :to="`/workflows/${schedule.project_id}`" class="workflow-link">
+                {{ getWorkflowName(schedule.project_id) }}
               </NuxtLink>
             </td>
             <td>
@@ -354,7 +358,7 @@ const applyCronExample = (cron: string) => {
 
           <div v-if="!editingSchedule" class="form-group">
             <label>{{ $t('schedules.form.workflow') }}</label>
-            <select v-model="formData.workflow_id" class="form-input" required>
+            <select v-model="formData.project_id" class="form-input" required>
               <option value="">{{ $t('schedules.form.workflowPlaceholder') }}</option>
               <option v-for="wf in workflows" :key="wf.id" :value="wf.id">
                 {{ wf.name }}

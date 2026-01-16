@@ -1,6 +1,6 @@
-import type { Step, Workflow } from '~/types/api'
+import type { Step, Project } from '~/types/api'
 
-const STORAGE_KEY = 'workflow-editor-panel-widths'
+const STORAGE_KEY = 'project-editor-panel-widths'
 
 // Clipboard data structure
 interface StepClipboard {
@@ -49,13 +49,13 @@ watch([leftPanelWidth, rightPanelWidth], () => {
 
 /**
  * Editor state management composable
- * Manages selection, clipboard, and panel widths for the workflow editor
+ * Manages selection, clipboard, and panel widths for the project editor
  */
-export function useEditorState(workflow?: Ref<Workflow | null>) {
-  // Computed: Get selected step from workflow
+export function useEditorState(project?: Ref<Project | null>) {
+  // Computed: Get selected step from project
   const selectedStep = computed<Step | null>(() => {
-    if (!selectedStepId.value || !workflow?.value?.steps) return null
-    return workflow.value.steps.find(s => s.id === selectedStepId.value) || null
+    if (!selectedStepId.value || !project?.value?.steps) return null
+    return project.value.steps.find(s => s.id === selectedStepId.value) || null
   })
 
   // Actions

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { Workflow, Run, TriggerType } from '~/types/api'
+import type { Project, Run, TriggerType } from '~/types/api'
 
 const { t } = useI18n()
-const workflows = useWorkflows()
+const projects = useProjects()
 const runsApi = useRuns()
 
 // Stats data
@@ -24,7 +24,7 @@ interface RunGroup {
 }
 
 const runGroups = ref<RunGroup[]>([])
-const recentWorkflows = ref<Workflow[]>([])
+const recentWorkflows = ref<Project[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
@@ -34,8 +34,8 @@ async function loadDashboard() {
     loading.value = true
     error.value = null
 
-    // Get workflows first
-    const workflowsRes = await workflows.list()
+    // Get projects first
+    const workflowsRes = await projects.list()
     const allWorkflows = workflowsRes.data || []
 
     // Create workflow name map
@@ -83,11 +83,11 @@ async function loadDashboard() {
     // Group runs by workflow + trigger type
     const groupMap = new Map<string, RunGroup>()
     for (const run of allRuns) {
-      const key = `${run.workflow_id}:${run.triggered_by}`
+      const key = `${run.project_id}:${run.triggered_by}`
       if (!groupMap.has(key)) {
         groupMap.set(key, {
-          workflowId: run.workflow_id,
-          workflowName: workflowMap.get(run.workflow_id) || 'Unknown Workflow',
+          workflowId: run.project_id,
+          workflowName: workflowMap.get(run.project_id) || 'Unknown Workflow',
           triggerType: run.triggered_by,
           runs: [],
         })

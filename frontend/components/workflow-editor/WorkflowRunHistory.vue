@@ -15,7 +15,7 @@ const error = ref<string | null>(null)
 // Flattened step runs from all runs
 interface StepRunWithRunInfo extends StepRun {
   run_id: string
-  workflow_version: number
+  project_version: number
   run_number: number
   run_status: string
 }
@@ -30,7 +30,7 @@ const allStepRuns = computed<StepRunWithRunInfo[]>(() => {
         stepRuns.push({
           ...stepRun,
           run_id: run.id,
-          workflow_version: run.workflow_version,
+          project_version: run.project_version,
           run_number: run.run_number,
           run_status: run.status,
         })
@@ -227,7 +227,7 @@ watch(() => props.workflowId, () => {
               </span>
             </td>
             <td>
-              <span class="version-badge">v{{ stepRun.workflow_version }}</span>
+              <span class="version-badge">v{{ stepRun.project_version }}</span>
             </td>
             <td>
               <span class="duration">{{ calculateStepDuration(stepRun) }}</span>

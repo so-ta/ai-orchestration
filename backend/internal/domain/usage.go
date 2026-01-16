@@ -16,11 +16,11 @@ const (
 
 // UsageRecord represents a single LLM API call record
 type UsageRecord struct {
-	ID          uuid.UUID  `json:"id"`
-	TenantID    uuid.UUID  `json:"tenant_id"`
-	WorkflowID  *uuid.UUID `json:"workflow_id,omitempty"`
-	RunID       *uuid.UUID `json:"run_id,omitempty"`
-	StepRunID   *uuid.UUID `json:"step_run_id,omitempty"`
+	ID        uuid.UUID  `json:"id"`
+	TenantID  uuid.UUID  `json:"tenant_id"`
+	ProjectID *uuid.UUID `json:"project_id,omitempty"`
+	RunID     *uuid.UUID `json:"run_id,omitempty"`
+	StepRunID *uuid.UUID `json:"step_run_id,omitempty"`
 
 	// Provider information
 	Provider  string `json:"provider"`
@@ -48,7 +48,7 @@ type UsageRecord struct {
 // NewUsageRecord creates a new UsageRecord with calculated costs
 func NewUsageRecord(
 	tenantID uuid.UUID,
-	workflowID, runID, stepRunID *uuid.UUID,
+	projectID, runID, stepRunID *uuid.UUID,
 	provider, model, operation string,
 	inputTokens, outputTokens int,
 	latencyMs *int,
@@ -60,7 +60,7 @@ func NewUsageRecord(
 	return &UsageRecord{
 		ID:            uuid.New(),
 		TenantID:      tenantID,
-		WorkflowID:    workflowID,
+		ProjectID:     projectID,
 		RunID:         runID,
 		StepRunID:     stepRunID,
 		Provider:      provider,
@@ -81,12 +81,12 @@ func NewUsageRecord(
 
 // UsageDailyAggregate represents pre-aggregated daily usage data
 type UsageDailyAggregate struct {
-	ID         uuid.UUID  `json:"id"`
-	TenantID   uuid.UUID  `json:"tenant_id"`
-	WorkflowID *uuid.UUID `json:"workflow_id,omitempty"`
-	Date       time.Time  `json:"date"`
-	Provider   string     `json:"provider"`
-	Model      string     `json:"model"`
+	ID        uuid.UUID  `json:"id"`
+	TenantID  uuid.UUID  `json:"tenant_id"`
+	ProjectID *uuid.UUID `json:"project_id,omitempty"`
+	Date      time.Time  `json:"date"`
+	Provider  string     `json:"provider"`
+	Model     string     `json:"model"`
 
 	// Aggregated metrics
 	TotalRequests      int     `json:"total_requests"`
@@ -107,7 +107,7 @@ type UsageDailyAggregate struct {
 type UsageBudget struct {
 	ID              uuid.UUID  `json:"id"`
 	TenantID        uuid.UUID  `json:"tenant_id"`
-	WorkflowID      *uuid.UUID `json:"workflow_id,omitempty"`
+	ProjectID       *uuid.UUID `json:"project_id,omitempty"`
 	BudgetType      BudgetType `json:"budget_type"`
 	BudgetAmountUSD float64    `json:"budget_amount_usd"`
 	AlertThreshold  float64    `json:"alert_threshold"` // 0.00 - 1.00
@@ -119,7 +119,7 @@ type UsageBudget struct {
 // NewUsageBudget creates a new UsageBudget
 func NewUsageBudget(
 	tenantID uuid.UUID,
-	workflowID *uuid.UUID,
+	projectID *uuid.UUID,
 	budgetType BudgetType,
 	budgetAmountUSD float64,
 	alertThreshold float64,
@@ -131,7 +131,7 @@ func NewUsageBudget(
 	return &UsageBudget{
 		ID:              uuid.New(),
 		TenantID:        tenantID,
-		WorkflowID:      workflowID,
+		ProjectID:       projectID,
 		BudgetType:      budgetType,
 		BudgetAmountUSD: budgetAmountUSD,
 		AlertThreshold:  alertThreshold,
@@ -184,11 +184,11 @@ type DailyUsage struct {
 	TotalTokens  int64     `json:"total_tokens"`
 }
 
-// WorkflowUsage represents usage data for a single workflow
-type WorkflowUsage struct {
-	WorkflowID   uuid.UUID `json:"workflow_id"`
-	WorkflowName string    `json:"workflow_name"`
-	TotalCostUSD float64   `json:"total_cost_usd"`
-	TotalRequests int      `json:"total_requests"`
-	TotalTokens  int64     `json:"total_tokens"`
+// ProjectUsage represents usage data for a single project
+type ProjectUsage struct {
+	ProjectID     uuid.UUID `json:"project_id"`
+	ProjectName   string    `json:"project_name"`
+	TotalCostUSD  float64   `json:"total_cost_usd"`
+	TotalRequests int       `json:"total_requests"`
+	TotalTokens   int64     `json:"total_tokens"`
 }

@@ -96,8 +96,30 @@ const emit = defineEmits<{
   }): void
 }>()
 
-const { onConnect, onNodeDragStop, onPaneClick, project, updateNode } = useVueFlow()
+const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, getNodes, viewport } = useVueFlow()
 const toast = useToast()
+
+// Selected edge for deletion
+const selectedEdgeId = ref<string | null>(null)
+// Store the click position in flow coordinates for delete button placement
+const edgeClickFlowPosition = ref<{ x: number; y: number } | null>(null)
+// Reference to the dag editor container for coordinate conversion
+const dagEditorRef = ref<HTMLElement | null>(null)
+
+// Compute button position from flow coordinates, reactive to viewport changes
+const edgeDeleteButtonPosition = computed(() => {
+  if (!edgeClickFlowPosition.value) return null
+
+  // Convert flow coordinates to screen position using current viewport
+  // This makes the button follow pan/zoom just like blocks do
+  const screenX = edgeClickFlowPosition.value.x * viewport.value.zoom + viewport.value.x
+  const screenY = edgeClickFlowPosition.value.y * viewport.value.zoom + viewport.value.y
+
+  return {
+    x: screenX + 10, // Offset to top-right
+    y: screenY - 30,
+  }
+})
 
 // Drag state
 const isDragOver = ref(false)
@@ -1023,6 +1045,13 @@ const flowEdges = computed<FlowEdge[]>(() => {
       color = '#8b5cf6' // purple for group edges
     }
 
+    // Check if this edge is selected (use same blue color as selected blocks)
+    const isSelected = selectedEdgeId.value === edge.id
+    if (isSelected) {
+      color = '#3b82f6' // blue for selected edge (matches selected blocks)
+      strokeWidth = 3
+    }
+
     result.push({
       id: edge.id,
       source,
@@ -1030,12 +1059,15 @@ const flowEdges = computed<FlowEdge[]>(() => {
       sourceHandle: edge.source_port || undefined, // Connect from specific output port
       targetHandle: edge.target_port || undefined, // Connect to specific input port
       type: 'smoothstep',
-      animated: flowStatus.animated,
+      animated: flowStatus.animated || isSelected,
       label: getEdgeLabel(edge.source_port, edge.condition),
       labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
       labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
+      labelShowBg: true,
       style: { stroke: color, strokeWidth },
       markerEnd: { type: MarkerType.ArrowClosed, color },
+      interactionWidth: 20, // Make edge easier to click
+      data: { isSelected, edgeId: edge.id },
     })
   }
 
@@ -1056,9 +1088,14 @@ function isBranchingBlockInGroup(stepId: string): boolean {
   return !!step.block_group_id
 }
 
-// Count existing outgoing edges from a step
-function countOutgoingEdges(stepId: string): number {
-  return props.edges.filter(e => e.source_step_id === stepId).length
+// Get existing outgoing edges from a step
+function getOutgoingEdgesFromStep(stepId: string): Edge[] {
+  return props.edges.filter(e => e.source_step_id === stepId)
+}
+
+// Get existing outgoing edges from a group
+function getOutgoingEdgesFromGroup(groupId: string): Edge[] {
+  return props.edges.filter(e => e.source_block_group_id === groupId)
 }
 
 // Get default source port for a node (step or group)
@@ -1096,29 +1133,98 @@ function getDefaultTargetPort(nodeId: string): string | undefined {
 // Handle new connection
 onConnect((params) => {
   if (!props.readonly) {
-    const sourceStepId = params.source
-    const sourceStep = props.steps.find(s => s.id === sourceStepId)
+    const sourceNodeId = params.source
+    const sourceStep = props.steps.find(s => s.id === sourceNodeId)
 
-    // Check if this is a branching block (condition/switch) trying to create multiple outputs outside a Block Group
-    if (sourceStep && (sourceStep.type === 'condition' || sourceStep.type === 'switch')) {
-      const existingOutgoingEdges = countOutgoingEdges(sourceStepId)
+    // Check if source is a group
+    const isSourceGroup = sourceNodeId?.startsWith(GROUP_NODE_PREFIX)
 
-      // If this branching block is not in a Block Group and already has an outgoing edge, block the connection
-      if (!sourceStep.block_group_id && existingOutgoingEdges > 0) {
-        toast.error(
-          'Connection blocked',
-          'Branching blocks (Condition/Switch) with multiple outputs must be inside a Block Group'
-        )
-        return
+    // Delete existing outgoing edges before creating new one (auto-replace)
+    // Exception: branching blocks inside Block Groups can have multiple outputs
+    if (isSourceGroup) {
+      // Source is a Block Group - delete existing outgoing edges
+      const groupId = getGroupUuidFromNodeId(sourceNodeId)
+      const existingEdges = getOutgoingEdgesFromGroup(groupId)
+      for (const edge of existingEdges) {
+        emit('edge:delete', edge.id)
+      }
+    } else if (sourceStep) {
+      // Source is a step
+      const isBranchingBlock = sourceStep.type === 'condition' || sourceStep.type === 'switch'
+      const existingEdges = getOutgoingEdgesFromStep(sourceNodeId)
+
+      // Branching blocks inside a Block Group are allowed multiple outputs
+      const allowMultiple = isBranchingBlock && sourceStep.block_group_id
+
+      if (!allowMultiple && existingEdges.length > 0) {
+        // Delete existing edges before adding new one
+        for (const edge of existingEdges) {
+          emit('edge:delete', edge.id)
+        }
       }
     }
 
     // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
     // If not set, use the default (first) port of the source/target (supports both steps and groups)
-    const sourcePort = params.sourceHandle || getDefaultSourcePort(sourceStepId, sourceStep)
+    const sourcePort = params.sourceHandle || getDefaultSourcePort(sourceNodeId, sourceStep)
     const targetPort = params.targetHandle || getDefaultTargetPort(params.target)
     emit('edge:add', params.source, params.target, sourcePort, targetPort)
   }
+})
+
+// Handle edge click - select edge for deletion
+onEdgeClick(({ edge, event }) => {
+  if (!props.readonly) {
+    // Find the actual edge ID from our edges array using source/target
+    const actualEdge = props.edges.find(e => {
+      // Match by VueFlow edge ID format
+      const flowEdgeId = edge.id
+      // VueFlow edge ID format: "source-target" or with handles
+      return e.id === flowEdgeId || flowEdgeId.includes(e.id)
+    })
+
+    if (actualEdge && dagEditorRef.value) {
+      selectedEdgeId.value = actualEdge.id
+      // Store click position in flow coordinates
+      // This allows the delete button to follow pan/zoom
+      const mouseEvent = event as MouseEvent
+      const rect = dagEditorRef.value.getBoundingClientRect()
+      const flowPos = project({
+        x: mouseEvent.clientX - rect.left,
+        y: mouseEvent.clientY - rect.top,
+      })
+      edgeClickFlowPosition.value = {
+        x: flowPos.x,
+        y: flowPos.y,
+      }
+    }
+  }
+})
+
+// Handle keyboard events for edge deletion
+function handleKeyDown(event: KeyboardEvent) {
+  if (props.readonly) return
+
+  if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdgeId.value) {
+    handleDeleteSelectedEdge()
+    event.preventDefault()
+  }
+}
+
+// Handle delete button click for selected edge
+function handleDeleteSelectedEdge() {
+  if (selectedEdgeId.value) {
+    emit('edge:delete', selectedEdgeId.value)
+    selectedEdgeId.value = null
+    edgeClickFlowPosition.value = null
+  }
+}
+
+// Clear edge selection when clicking on pane
+onPaneClick(() => {
+  selectedEdgeId.value = null
+  edgeClickFlowPosition.value = null
+  emit('pane:click')
 })
 
 // Handle node drag
@@ -1713,13 +1819,14 @@ onNodeDragStop((event) => {
   }
 })
 
-// Handle click on empty area (deselect current selection)
-onPaneClick(() => {
-  emit('pane:click')
-})
+// Note: pane click handler is defined above (with edge selection clearing)
 
 // Handle node click
 function onNodeClick(event: { node: Node }) {
+  // Clear edge selection when clicking on a node
+  selectedEdgeId.value = null
+  edgeClickFlowPosition.value = null
+
   // Check if this is a group node
   if (event.node.type === 'group') {
     emit('group:select', event.node.data.group)
@@ -2276,11 +2383,14 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
 <template>
   <div
+    ref="dagEditorRef"
     :class="['dag-editor', { 'drag-over': isDragOver }]"
+    tabindex="0"
     @dragenter="handleDragEnter"
     @dragover="handleDragOver"
     @dragleave="handleDragLeave"
     @drop="handleDrop"
+    @keydown="handleKeyDown"
   >
     <VueFlow
       :nodes="nodes"
@@ -2544,7 +2654,29 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
         :node-color="(node: Node) => node.type === 'group' ? node.data.color : getStepColor(node.data.type)"
         class="dag-minimap"
       />
+
     </VueFlow>
+
+    <!-- Edge Delete Button (positioned relative to dag-editor container) -->
+    <div
+      v-if="edgeDeleteButtonPosition && selectedEdgeId && !readonly"
+      class="edge-delete-button-container"
+      :style="{
+        left: `${edgeDeleteButtonPosition.x}px`,
+        top: `${edgeDeleteButtonPosition.y}px`,
+      }"
+    >
+      <button
+        class="edge-delete-button-floating"
+        @click.stop="handleDeleteSelectedEdge"
+        title="エッジを削除 (Delete)"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      </button>
+    </div>
 
     <!-- Drop indicator overlay -->
     <div v-if="isDragOver" class="drop-indicator">
@@ -2560,6 +2692,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     <div v-if="!readonly && !isDragOver" class="dag-editor-hint">
       Drag blocks here to add steps
     </div>
+
   </div>
 </template>
 
@@ -2572,6 +2705,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     radial-gradient(circle, #e5e5e5 1px, transparent 1px);
   background-size: 24px 24px;
   position: relative;
+  overflow: hidden;
   transition: background-color 0.2s;
 }
 
@@ -3197,5 +3331,39 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 :deep(.vue-flow__node-group:hover .vue-flow__resize-control),
 :deep(.vue-flow__node-group.selected .vue-flow__resize-control) {
   opacity: 1;
+}
+
+/* Edge Delete Button (positioned relative to dag-editor container) */
+.edge-delete-button-container {
+  position: absolute;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.edge-delete-button-floating {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: white;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.edge-delete-button-floating:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.edge-delete-button-floating:active {
+  background: #fee2e2;
 }
 </style>

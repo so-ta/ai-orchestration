@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { Run, Workflow } from '~/types/api'
+import type { Run, Project } from '~/types/api'
 
 const { t } = useI18n()
-const { list: listWorkflows } = useWorkflows()
+const { list: listProjects } = useProjects()
 const { list: listRuns } = useRuns()
 
 // State
 const runs = ref<Run[]>([])
-const workflows = ref<Map<string, Workflow>>(new Map())
+const workflows = ref<Map<string, Project>>(new Map())
 const loading = ref(true)
 const error = ref<string | null>(null)
 
@@ -21,9 +21,9 @@ async function fetchData() {
   loading.value = true
   error.value = null
   try {
-    // Get all workflows
-    const wfResponse = await listWorkflows()
-    wfResponse.data?.forEach(wf => {
+    // Get all projects
+    const wfResponse = await listProjects()
+    wfResponse.data?.forEach((wf: Project) => {
       workflows.value.set(wf.id, wf)
     })
 
@@ -62,9 +62,9 @@ const filteredRuns = computed(() => {
     result = result.filter(r => r.triggered_by === modeFilter.value)
   }
 
-  // Filter by workflow
+  // Filter by project
   if (workflowFilter.value !== 'all') {
-    result = result.filter(r => r.workflow_id === workflowFilter.value)
+    result = result.filter(r => r.project_id === workflowFilter.value)
   }
 
   return result
@@ -86,8 +86,8 @@ const workflowOptions = computed(() => {
   }))
 })
 
-function getWorkflowName(workflowId: string) {
-  return workflows.value.get(workflowId)?.name || 'Unknown Workflow'
+function getWorkflowName(projectId: string) {
+  return workflows.value.get(projectId)?.name || 'Unknown Workflow'
 }
 
 function getStatusBadge(status: string) {
@@ -320,8 +320,8 @@ onUnmounted(() => {
                       </svg>
                     </div>
                     <div>
-                      <NuxtLink :to="`/workflows/${run.workflow_id}`" class="workflow-link">
-                        {{ getWorkflowName(run.workflow_id) }}
+                      <NuxtLink :to="`/workflows/${run.project_id}`" class="workflow-link">
+                        {{ getWorkflowName(run.project_id) }}
                       </NuxtLink>
                       <div class="run-id">
                         {{ run.id.substring(0, 8) }}...

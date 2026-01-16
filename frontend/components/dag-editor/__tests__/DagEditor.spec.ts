@@ -21,8 +21,11 @@ vi.mock('@vue-flow/core', () => ({
     onConnect: vi.fn(),
     onNodeDragStop: vi.fn(),
     onPaneClick: vi.fn(),
+    onEdgeClick: vi.fn(),
     project: vi.fn(({ x, y }: { x: number; y: number }) => ({ x, y })),
     updateNode: vi.fn(),
+    getNodes: { value: [] },
+    viewport: { value: { x: 0, y: 0, zoom: 1 } },
   }),
   Handle: defineComponent({
     name: 'Handle',
@@ -73,7 +76,7 @@ describe('DagEditor', () => {
   const mockSteps: Step[] = [
     {
       id: 'step-1',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       name: 'Start Step',
       type: 'start',
       config: {},
@@ -84,7 +87,7 @@ describe('DagEditor', () => {
     },
     {
       id: 'step-2',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       name: 'LLM Step',
       type: 'llm',
       config: { provider: 'openai', model: 'gpt-4' },
@@ -98,7 +101,7 @@ describe('DagEditor', () => {
   const mockEdges: Edge[] = [
     {
       id: 'edge-1',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       source_step_id: 'step-1',
       target_step_id: 'step-2',
       created_at: '2024-01-01T00:00:00Z',
@@ -215,7 +218,7 @@ describe('DagEditor', () => {
       const mockGroups: BlockGroup[] = [
         {
           id: 'group-1',
-          workflow_id: 'workflow-1',
+          project_id: 'project-1',
           name: 'Loop Group',
           type: 'foreach',
           config: {},
@@ -337,7 +340,7 @@ describe('DagEditor', () => {
         const steps: Step[] = [
           {
             id: `step-${type}`,
-            workflow_id: 'workflow-1',
+            project_id: 'project-1',
             name: `${type} Step`,
             type: type as Step['type'],
             config: {},
@@ -373,7 +376,7 @@ describe('DagEditor', () => {
         const groups: BlockGroup[] = [
           {
             id: `group-${type}`,
-            workflow_id: 'workflow-1',
+            project_id: 'project-1',
             name: `${type} Group`,
             type: type,
             config: {},
@@ -509,7 +512,7 @@ describe('DagEditor', () => {
       it('BlockGroup.id should be plain UUID (not prefixed)', () => {
         const group: BlockGroup = {
           id: 'abc123-def456-ghi789', // Plain UUID
-          workflow_id: 'workflow-1',
+          project_id: 'project-1',
           name: 'Test Group',
           type: 'foreach',
           config: {},

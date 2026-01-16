@@ -4,16 +4,16 @@ import "errors"
 
 // Domain errors
 var (
-	// Workflow errors
-	ErrWorkflowNotFound         = errors.New("workflow not found")
-	ErrWorkflowAlreadyPublished = errors.New("workflow is already published")
-	ErrWorkflowNotPublished     = errors.New("workflow is not published")
-	ErrWorkflowNotEditable      = errors.New("published workflow cannot be edited")
-	ErrWorkflowHasCycle             = errors.New("workflow contains a cycle")
-	ErrWorkflowHasUnconnected       = errors.New("workflow has unconnected steps")
-	ErrWorkflowHasUnreachable       = errors.New("workflow has unreachable steps")
-	ErrWorkflowBranchOutsideGroup   = errors.New("branching blocks (condition/switch) with multiple outputs must be inside a Block Group")
-	ErrWorkflowVersionNotFound  = errors.New("workflow version not found")
+	// Project errors
+	ErrProjectNotFound          = errors.New("project not found")
+	ErrProjectAlreadyPublished  = errors.New("project is already published")
+	ErrProjectNotPublished      = errors.New("project is not published")
+	ErrProjectNotEditable       = errors.New("published project cannot be edited")
+	ErrProjectHasCycle          = errors.New("project contains a cycle")
+	ErrProjectHasUnconnected    = errors.New("project has unconnected steps")
+	ErrProjectHasUnreachable    = errors.New("project has unreachable steps")
+	ErrProjectBranchOutsideGroup = errors.New("branching blocks (condition/switch) with multiple outputs must be inside a Block Group")
+	ErrProjectVersionNotFound   = errors.New("project version not found")
 
 	// Step errors
 	ErrStepNotFound     = errors.New("step not found")

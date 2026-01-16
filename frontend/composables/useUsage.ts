@@ -24,9 +24,9 @@ export interface DailyUsage {
   total_tokens: number
 }
 
-export interface WorkflowUsage {
-  workflow_id: string
-  workflow_name: string
+export interface ProjectUsage {
+  project_id: string
+  project_name: string
   total_cost_usd: number
   total_requests: number
   total_tokens: number
@@ -85,7 +85,7 @@ export function useUsage() {
 
   const summary = ref<UsageSummary | null>(null)
   const dailyData = ref<DailyUsage[]>([])
-  const workflowData = ref<WorkflowUsage[]>([])
+  const projectData = ref<ProjectUsage[]>([])
   const modelData = ref<Record<string, ModelUsage>>({})
   const budgets = ref<Budget[]>([])
   const pricing = ref<TokenPricing[]>([])
@@ -127,15 +127,15 @@ export function useUsage() {
     }
   }
 
-  // Fetch usage by workflow
-  async function fetchByWorkflow(period = 'month') {
+  // Fetch usage by project
+  async function fetchByProject(period = 'month') {
     loading.value = true
     error.value = null
     try {
-      const response = await api.get<{ workflows: WorkflowUsage[] }>(`/usage/by-workflow?period=${period}`)
-      workflowData.value = response.workflows || []
+      const response = await api.get<{ projects: ProjectUsage[] }>(`/usage/by-project?period=${period}`)
+      projectData.value = response.projects || []
     } catch (e) {
-      error.value = extractErrorMessage(e, 'Failed to fetch workflow usage')
+      error.value = extractErrorMessage(e, 'Failed to fetch project usage')
       throw e
     } finally {
       loading.value = false
@@ -262,7 +262,7 @@ export function useUsage() {
     await Promise.all([
       fetchSummary(period),
       fetchDaily(),
-      fetchByWorkflow(period),
+      fetchByProject(period),
       fetchByModel(period),
       fetchBudgets(),
     ])
@@ -285,8 +285,8 @@ export function useUsage() {
       .slice(0, 5)
   })
 
-  const topWorkflows = computed(() => {
-    return [...workflowData.value]
+  const topProjects = computed(() => {
+    return [...projectData.value]
       .sort((a, b) => b.total_cost_usd - a.total_cost_usd)
       .slice(0, 5)
   })
@@ -296,7 +296,7 @@ export function useUsage() {
     // State
     summary,
     dailyData,
-    workflowData,
+    projectData,
     modelData,
     budgets,
     pricing,
@@ -306,7 +306,7 @@ export function useUsage() {
     // Actions
     fetchSummary,
     fetchDaily,
-    fetchByWorkflow,
+    fetchByProject,
     fetchByModel,
     fetchByRun,
     fetchBudgets,
@@ -319,6 +319,6 @@ export function useUsage() {
     // Computed
     budgetStatus,
     topModels,
-    topWorkflows,
+    topProjects,
   }
 }

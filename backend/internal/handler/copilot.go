@@ -27,9 +27,9 @@ func NewCopilotHandler(uc *usecase.CopilotUsecase, runUC *usecase.RunUsecase) *C
 
 // SuggestRequest represents the request body for suggestions
 type SuggestRequest struct {
-	WorkflowID string  `json:"workflow_id"`
-	StepID     *string `json:"step_id,omitempty"`
-	Context    string  `json:"context,omitempty"`
+	ProjectID string  `json:"project_id"`
+	StepID    *string `json:"step_id,omitempty"`
+	Context   string  `json:"context,omitempty"`
 }
 
 // Suggest handles POST /api/v1/copilot/suggest
@@ -43,9 +43,9 @@ func (h *CopilotHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflowID, err := uuid.Parse(req.WorkflowID)
+	projectID, err := uuid.Parse(req.ProjectID)
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
@@ -60,10 +60,10 @@ func (h *CopilotHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := usecase.SuggestInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     stepID,
-		Context:    req.Context,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    stepID,
+		Context:   req.Context,
 	}
 
 	output, err := h.usecase.Suggest(ctx, input)
@@ -125,8 +125,8 @@ func (h *CopilotHandler) Diagnose(w http.ResponseWriter, r *http.Request) {
 
 // ExplainRequest represents the request body for explanation
 type ExplainRequest struct {
-	WorkflowID string  `json:"workflow_id"`
-	StepID     *string `json:"step_id,omitempty"`
+	ProjectID string  `json:"project_id"`
+	StepID    *string `json:"step_id,omitempty"`
 }
 
 // Explain handles POST /api/v1/copilot/explain
@@ -140,9 +140,9 @@ func (h *CopilotHandler) Explain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflowID, err := uuid.Parse(req.WorkflowID)
+	projectID, err := uuid.Parse(req.ProjectID)
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
@@ -157,9 +157,9 @@ func (h *CopilotHandler) Explain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := usecase.ExplainInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     stepID,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    stepID,
 	}
 
 	output, err := h.usecase.Explain(ctx, input)
@@ -173,7 +173,7 @@ func (h *CopilotHandler) Explain(w http.ResponseWriter, r *http.Request) {
 
 // OptimizeRequest represents the request body for optimization
 type OptimizeRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	ProjectID string `json:"project_id"`
 }
 
 // Optimize handles POST /api/v1/copilot/optimize
@@ -187,15 +187,15 @@ func (h *CopilotHandler) Optimize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workflowID, err := uuid.Parse(req.WorkflowID)
+	projectID, err := uuid.Parse(req.ProjectID)
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
 	input := usecase.OptimizeInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
+		TenantID:  tenantID,
+		ProjectID: projectID,
 	}
 
 	output, err := h.usecase.Optimize(ctx, input)
@@ -209,9 +209,9 @@ func (h *CopilotHandler) Optimize(w http.ResponseWriter, r *http.Request) {
 
 // ChatRequest represents the request body for chat
 type ChatRequest struct {
-	WorkflowID *string `json:"workflow_id,omitempty"`
-	Message    string  `json:"message"`
-	Context    string  `json:"context,omitempty"`
+	ProjectID *string `json:"project_id,omitempty"`
+	Message   string  `json:"message"`
+	Context   string  `json:"context,omitempty"`
 }
 
 // Chat handles POST /api/v1/copilot/chat
@@ -230,21 +230,21 @@ func (h *CopilotHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var workflowID *uuid.UUID
-	if req.WorkflowID != nil {
-		id, err := uuid.Parse(*req.WorkflowID)
+	var projectID *uuid.UUID
+	if req.ProjectID != nil {
+		id, err := uuid.Parse(*req.ProjectID)
 		if err != nil {
-			Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+			Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 			return
 		}
-		workflowID = &id
+		projectID = &id
 	}
 
 	input := usecase.ChatInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		Message:    req.Message,
-		Context:    req.Context,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		Message:   req.Message,
+		Context:   req.Context,
 	}
 
 	output, err := h.usecase.Chat(ctx, input)
@@ -256,14 +256,14 @@ func (h *CopilotHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	JSON(w, http.StatusOK, output)
 }
 
-// SuggestForStep handles POST /api/v1/workflows/{workflow_id}/steps/{step_id}/copilot/suggest
+// SuggestForStep handles POST /api/v1/projects/{project_id}/steps/{step_id}/copilot/suggest
 func (h *CopilotHandler) SuggestForStep(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
@@ -282,10 +282,10 @@ func (h *CopilotHandler) SuggestForStep(w http.ResponseWriter, r *http.Request) 
 	}
 
 	input := usecase.SuggestInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     &stepID,
-		Context:    req.Context,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    &stepID,
+		Context:   req.Context,
 	}
 
 	output, err := h.usecase.Suggest(ctx, input)
@@ -297,14 +297,14 @@ func (h *CopilotHandler) SuggestForStep(w http.ResponseWriter, r *http.Request) 
 	JSON(w, http.StatusOK, output)
 }
 
-// ExplainStep handles POST /api/v1/workflows/{workflow_id}/steps/{step_id}/copilot/explain
+// ExplainStep handles POST /api/v1/projects/{project_id}/steps/{step_id}/copilot/explain
 func (h *CopilotHandler) ExplainStep(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
@@ -315,9 +315,9 @@ func (h *CopilotHandler) ExplainStep(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := usecase.ExplainInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     &stepID,
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    &stepID,
 	}
 
 	output, err := h.usecase.Explain(ctx, input)
@@ -331,22 +331,22 @@ func (h *CopilotHandler) ExplainStep(w http.ResponseWriter, r *http.Request) {
 
 // ========== Session Management Handlers ==========
 
-// GetOrCreateSession handles GET /api/v1/workflows/{workflow_id}/copilot/session
+// GetOrCreateSession handles GET /api/v1/projects/{project_id}/copilot/session
 func (h *CopilotHandler) GetOrCreateSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 	userID := middleware.GetUserID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
 	input := usecase.GetOrCreateSessionInput{
-		TenantID:   tenantID,
-		UserID:     userID.String(),
-		WorkflowID: workflowID,
+		TenantID:  tenantID,
+		UserID:    userID.String(),
+		ProjectID: projectID,
 	}
 
 	session, err := h.usecase.GetOrCreateSession(ctx, input)
@@ -358,22 +358,22 @@ func (h *CopilotHandler) GetOrCreateSession(w http.ResponseWriter, r *http.Reque
 	JSON(w, http.StatusOK, session)
 }
 
-// ListSessions handles GET /api/v1/workflows/{workflow_id}/copilot/sessions
+// ListSessions handles GET /api/v1/projects/{project_id}/copilot/sessions
 func (h *CopilotHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 	userID := middleware.GetUserID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
 	input := usecase.ListSessionsInput{
-		TenantID:   tenantID,
-		UserID:     userID.String(),
-		WorkflowID: workflowID,
+		TenantID:  tenantID,
+		UserID:    userID.String(),
+		ProjectID: projectID,
 	}
 
 	sessions, err := h.usecase.ListSessions(ctx, input)
@@ -385,22 +385,22 @@ func (h *CopilotHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 	JSON(w, http.StatusOK, map[string]interface{}{"sessions": sessions})
 }
 
-// StartNewSession handles POST /api/v1/workflows/{workflow_id}/copilot/sessions/new
+// StartNewSession handles POST /api/v1/projects/{project_id}/copilot/sessions/new
 func (h *CopilotHandler) StartNewSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 	userID := middleware.GetUserID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
 	input := usecase.StartNewSessionInput{
-		TenantID:   tenantID,
-		UserID:     userID.String(),
-		WorkflowID: workflowID,
+		TenantID:  tenantID,
+		UserID:    userID.String(),
+		ProjectID: projectID,
 	}
 
 	session, err := h.usecase.StartNewSession(ctx, input)
@@ -412,7 +412,7 @@ func (h *CopilotHandler) StartNewSession(w http.ResponseWriter, r *http.Request)
 	JSON(w, http.StatusCreated, session)
 }
 
-// GetSessionMessages handles GET /api/v1/workflows/{workflow_id}/copilot/sessions/{session_id}
+// GetSessionMessages handles GET /api/v1/projects/{project_id}/copilot/sessions/{session_id}
 func (h *CopilotHandler) GetSessionMessages(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
@@ -439,15 +439,15 @@ type ChatWithSessionRequest struct {
 	Context   string  `json:"context,omitempty"`
 }
 
-// ChatWithSession handles POST /api/v1/workflows/{workflow_id}/copilot/chat
+// ChatWithSession handles POST /api/v1/projects/{project_id}/copilot/chat
 func (h *CopilotHandler) ChatWithSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 	userID := middleware.GetUserID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
@@ -473,12 +473,12 @@ func (h *CopilotHandler) ChatWithSession(w http.ResponseWriter, r *http.Request)
 	}
 
 	input := usecase.ChatWithSessionInput{
-		TenantID:   tenantID,
-		UserID:     userID.String(),
-		WorkflowID: workflowID,
-		SessionID:  sessionID,
-		Message:    req.Message,
-		Context:    req.Context,
+		TenantID:  tenantID,
+		UserID:    userID.String(),
+		ProjectID: projectID,
+		SessionID: sessionID,
+		Message:   req.Message,
+		Context:   req.Context,
 	}
 
 	output, session, err := h.usecase.ChatWithSession(ctx, input)
@@ -494,23 +494,23 @@ func (h *CopilotHandler) ChatWithSession(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-// GenerateWorkflowRequest represents the request body for workflow generation
-type GenerateWorkflowRequest struct {
+// GenerateProjectRequest represents the request body for project generation
+type GenerateProjectRequest struct {
 	Description string `json:"description"`
 }
 
-// GenerateWorkflow handles POST /api/v1/workflows/{workflow_id}/copilot/generate
-func (h *CopilotHandler) GenerateWorkflow(w http.ResponseWriter, r *http.Request) {
+// GenerateProject handles POST /api/v1/projects/{project_id}/copilot/generate
+func (h *CopilotHandler) GenerateProject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 
-	workflowID, err := uuid.Parse(chi.URLParam(r, "id"))
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
-		Error(w, http.StatusBadRequest, "INVALID_WORKFLOW_ID", "Invalid workflow ID", nil)
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
 		return
 	}
 
-	var req GenerateWorkflowRequest
+	var req GenerateProjectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		Error(w, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body", nil)
 		return
@@ -521,13 +521,13 @@ func (h *CopilotHandler) GenerateWorkflow(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	input := usecase.GenerateWorkflowInput{
+	input := usecase.GenerateProjectInput{
 		TenantID:    tenantID,
-		WorkflowID:  workflowID,
+		ProjectID:   projectID,
 		Description: req.Description,
 	}
 
-	output, err := h.usecase.GenerateWorkflow(ctx, input)
+	output, err := h.usecase.GenerateProject(ctx, input)
 	if err != nil {
 		Error(w, http.StatusInternalServerError, "GENERATE_FAILED", err.Error(), nil)
 		return
@@ -536,17 +536,17 @@ func (h *CopilotHandler) GenerateWorkflow(w http.ResponseWriter, r *http.Request
 	JSON(w, http.StatusOK, output)
 }
 
-// ========== Async System Workflow Endpoints (Meta-Workflow Architecture) ==========
+// ========== Async System Project Endpoints (Meta-Project Architecture) ==========
 
-// AsyncGenerateRequest represents the request body for async workflow generation
+// AsyncGenerateRequest represents the request body for async project generation
 type AsyncGenerateRequest struct {
 	Prompt    string `json:"prompt"`
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// AsyncGenerateWorkflow handles POST /api/v1/copilot/async/generate
+// AsyncGenerateProject handles POST /api/v1/copilot/async/generate
 // Returns run_id immediately, client polls GET /copilot/runs/{id} for result
-func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Request) {
+func (h *CopilotHandler) AsyncGenerateProject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 	userID := middleware.GetUserID(ctx)
@@ -562,7 +562,7 @@ func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Build input for system workflow
+	// Build input for system project
 	inputData, err := json.Marshal(map[string]interface{}{
 		"prompt":    req.Prompt,
 		"tenant_id": tenantID.String(),
@@ -573,7 +573,7 @@ func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-generate",
 		Input:         inputData,
@@ -599,8 +599,8 @@ func (h *CopilotHandler) AsyncGenerateWorkflow(w http.ResponseWriter, r *http.Re
 
 // AsyncSuggestRequest represents the request body for async suggestions
 type AsyncSuggestRequest struct {
-	WorkflowID string `json:"workflow_id"`
-	Context    string `json:"context,omitempty"`
+	ProjectID string `json:"project_id"`
+	Context   string `json:"context,omitempty"`
 }
 
 // AsyncSuggest handles POST /api/v1/copilot/async/suggest
@@ -615,15 +615,15 @@ func (h *CopilotHandler) AsyncSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.WorkflowID == "" {
-		Error(w, http.StatusBadRequest, "EMPTY_WORKFLOW_ID", "Workflow ID cannot be empty", nil)
+	if req.ProjectID == "" {
+		Error(w, http.StatusBadRequest, "EMPTY_PROJECT_ID", "Project ID cannot be empty", nil)
 		return
 	}
 
 	inputData, err := json.Marshal(map[string]interface{}{
-		"workflow_id": req.WorkflowID,
-		"context":     req.Context,
-		"tenant_id":   tenantID.String(),
+		"project_id": req.ProjectID,
+		"context":    req.Context,
+		"tenant_id":  tenantID.String(),
 	})
 	if err != nil {
 		slog.Error("failed to marshal input data", "error", err)
@@ -631,15 +631,15 @@ func (h *CopilotHandler) AsyncSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-suggest",
 		Input:         inputData,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
-			"feature":     "suggest",
-			"user_id":     userID.String(),
-			"workflow_id": req.WorkflowID,
+			"feature":    "suggest",
+			"user_id":    userID.String(),
+			"project_id": req.ProjectID,
 		},
 		UserID: &userID,
 	})
@@ -687,7 +687,7 @@ func (h *CopilotHandler) AsyncDiagnose(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-diagnose",
 		Input:         inputData,
@@ -713,7 +713,7 @@ func (h *CopilotHandler) AsyncDiagnose(w http.ResponseWriter, r *http.Request) {
 
 // AsyncOptimizeRequest represents the request body for async optimization
 type AsyncOptimizeRequest struct {
-	WorkflowID string `json:"workflow_id"`
+	ProjectID string `json:"project_id"`
 }
 
 // AsyncOptimize handles POST /api/v1/copilot/async/optimize
@@ -728,14 +728,14 @@ func (h *CopilotHandler) AsyncOptimize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.WorkflowID == "" {
-		Error(w, http.StatusBadRequest, "EMPTY_WORKFLOW_ID", "Workflow ID cannot be empty", nil)
+	if req.ProjectID == "" {
+		Error(w, http.StatusBadRequest, "EMPTY_PROJECT_ID", "Project ID cannot be empty", nil)
 		return
 	}
 
 	inputData, err := json.Marshal(map[string]interface{}{
-		"workflow_id": req.WorkflowID,
-		"tenant_id":   tenantID.String(),
+		"project_id": req.ProjectID,
+		"tenant_id":  tenantID.String(),
 	})
 	if err != nil {
 		slog.Error("failed to marshal input data", "error", err)
@@ -743,15 +743,15 @@ func (h *CopilotHandler) AsyncOptimize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemWorkflow(ctx, usecase.ExecuteSystemWorkflowInput{
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "copilot-optimize",
 		Input:         inputData,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
-			"feature":     "optimize",
-			"user_id":     userID.String(),
-			"workflow_id": req.WorkflowID,
+			"feature":    "optimize",
+			"user_id":    userID.String(),
+			"project_id": req.ProjectID,
 		},
 		UserID: &userID,
 	})

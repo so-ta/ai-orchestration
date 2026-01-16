@@ -38,10 +38,10 @@ type CreateBlockGroupRequest struct {
 	} `json:"size"`
 }
 
-// Create handles POST /api/v1/workflows/{id}/block-groups
+// Create handles POST /api/v1/projects/{id}/block-groups
 func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -62,7 +62,7 @@ func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	group, err := h.blockGroupUsecase.Create(r.Context(), usecase.CreateBlockGroupInput{
 		TenantID:      tenantID,
-		WorkflowID:    workflowID,
+		ProjectID:     projectID,
 		Name:          req.Name,
 		Type:          domain.BlockGroupType(req.Type),
 		Config:        req.Config,
@@ -82,15 +82,15 @@ func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusCreated, group)
 }
 
-// List handles GET /api/v1/workflows/{id}/block-groups
+// List handles GET /api/v1/projects/{id}/block-groups
 func (h *BlockGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
 
-	groups, err := h.blockGroupUsecase.List(r.Context(), tenantID, workflowID)
+	groups, err := h.blockGroupUsecase.List(r.Context(), tenantID, projectID)
 	if err != nil {
 		HandleError(w, err)
 		return
@@ -99,10 +99,10 @@ func (h *BlockGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusOK, groups)
 }
 
-// Get handles GET /api/v1/workflows/{id}/block-groups/{group_id}
+// Get handles GET /api/v1/projects/{id}/block-groups/{group_id}
 func (h *BlockGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -111,7 +111,7 @@ func (h *BlockGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	group, err := h.blockGroupUsecase.GetByID(r.Context(), tenantID, workflowID, groupID)
+	group, err := h.blockGroupUsecase.GetByID(r.Context(), tenantID, projectID, groupID)
 	if err != nil {
 		HandleError(w, err)
 		return
@@ -137,10 +137,10 @@ type UpdateBlockGroupRequest struct {
 	} `json:"size,omitempty"`
 }
 
-// Update handles PUT /api/v1/workflows/{id}/block-groups/{group_id}
+// Update handles PUT /api/v1/projects/{id}/block-groups/{group_id}
 func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -156,7 +156,7 @@ func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	input := usecase.UpdateBlockGroupInput{
 		TenantID:    tenantID,
-		WorkflowID:  workflowID,
+		ProjectID:   projectID,
 		GroupID:     groupID,
 		Name:        req.Name,
 		Config:      req.Config,
@@ -191,10 +191,10 @@ func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusOK, group)
 }
 
-// Delete handles DELETE /api/v1/workflows/{id}/block-groups/{group_id}
+// Delete handles DELETE /api/v1/projects/{id}/block-groups/{group_id}
 func (h *BlockGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -203,7 +203,7 @@ func (h *BlockGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.blockGroupUsecase.Delete(r.Context(), tenantID, workflowID, groupID); err != nil {
+	if err := h.blockGroupUsecase.Delete(r.Context(), tenantID, projectID, groupID); err != nil {
 		HandleError(w, err)
 		return
 	}
@@ -217,10 +217,10 @@ type AddStepToGroupRequest struct {
 	GroupRole string `json:"group_role"`
 }
 
-// AddStepToGroup handles POST /api/v1/workflows/{id}/block-groups/{group_id}/steps
+// AddStepToGroup handles POST /api/v1/projects/{id}/block-groups/{group_id}/steps
 func (h *BlockGroupHandler) AddStepToGroup(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -240,11 +240,11 @@ func (h *BlockGroupHandler) AddStepToGroup(w http.ResponseWriter, r *http.Reques
 	}
 
 	step, err := h.blockGroupUsecase.AddStepToGroup(r.Context(), usecase.AddStepToGroupInput{
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		StepID:     stepID,
-		GroupID:    groupID,
-		GroupRole:  domain.GroupRole(req.GroupRole),
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    stepID,
+		GroupID:   groupID,
+		GroupRole: domain.GroupRole(req.GroupRole),
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -254,10 +254,10 @@ func (h *BlockGroupHandler) AddStepToGroup(w http.ResponseWriter, r *http.Reques
 	JSONData(w, http.StatusOK, step)
 }
 
-// RemoveStepFromGroup handles DELETE /api/v1/workflows/{id}/block-groups/{group_id}/steps/{step_id}
+// RemoveStepFromGroup handles DELETE /api/v1/projects/{id}/block-groups/{group_id}/steps/{step_id}
 func (h *BlockGroupHandler) RemoveStepFromGroup(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -266,7 +266,7 @@ func (h *BlockGroupHandler) RemoveStepFromGroup(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	step, err := h.blockGroupUsecase.RemoveStepFromGroup(r.Context(), tenantID, workflowID, stepID)
+	step, err := h.blockGroupUsecase.RemoveStepFromGroup(r.Context(), tenantID, projectID, stepID)
 	if err != nil {
 		HandleError(w, err)
 		return
@@ -275,10 +275,10 @@ func (h *BlockGroupHandler) RemoveStepFromGroup(w http.ResponseWriter, r *http.R
 	JSONData(w, http.StatusOK, step)
 }
 
-// GetStepsByGroup handles GET /api/v1/workflows/{id}/block-groups/{group_id}/steps
+// GetStepsByGroup handles GET /api/v1/projects/{id}/block-groups/{group_id}/steps
 func (h *BlockGroupHandler) GetStepsByGroup(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -287,7 +287,7 @@ func (h *BlockGroupHandler) GetStepsByGroup(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	steps, err := h.blockGroupUsecase.GetStepsByGroup(r.Context(), tenantID, workflowID, groupID)
+	steps, err := h.blockGroupUsecase.GetStepsByGroup(r.Context(), tenantID, projectID, groupID)
 	if err != nil {
 		HandleError(w, err)
 		return

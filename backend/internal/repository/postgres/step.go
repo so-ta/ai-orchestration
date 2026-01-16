@@ -24,35 +24,38 @@ func NewStepRepository(pool *pgxpool.Pool) *StepRepository {
 // Create creates a new step
 func (r *StepRepository) Create(ctx context.Context, s *domain.Step) error {
 	query := `
-		INSERT INTO steps (id, tenant_id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
-			block_definition_id, credential_bindings, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO steps (id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
 	_, err := r.pool.Exec(ctx, query,
-		s.ID, s.TenantID, s.WorkflowID, s.Name, s.Type, s.Config,
+		s.ID, s.TenantID, s.ProjectID, s.Name, s.Type, s.Config,
 		s.BlockGroupID, s.GroupRole,
 		s.PositionX, s.PositionY,
 		s.BlockDefinitionID, s.CredentialBindings,
+		s.TriggerType, s.TriggerConfig,
 		s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
 
 // GetByID retrieves a step by ID
-func (r *StepRepository) GetByID(ctx context.Context, tenantID, workflowID, id uuid.UUID) (*domain.Step, error) {
+func (r *StepRepository) GetByID(ctx context.Context, tenantID, projectID, id uuid.UUID) (*domain.Step, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
-			block_definition_id, credential_bindings, created_at, updated_at
+		SELECT id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, created_at, updated_at
 		FROM steps
-		WHERE id = $1 AND workflow_id = $2 AND tenant_id = $3
+		WHERE id = $1 AND project_id = $2 AND tenant_id = $3
 	`
 	var s domain.Step
 	var groupRole *string
-	err := r.pool.QueryRow(ctx, query, id, workflowID, tenantID).Scan(
-		&s.ID, &s.TenantID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
+	var triggerType *string
+	err := r.pool.QueryRow(ctx, query, id, projectID, tenantID).Scan(
+		&s.ID, &s.TenantID, &s.ProjectID, &s.Name, &s.Type, &s.Config,
 		&s.BlockGroupID, &groupRole,
 		&s.PositionX, &s.PositionY,
 		&s.BlockDefinitionID, &s.CredentialBindings,
+		&triggerType, &s.TriggerConfig,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -64,19 +67,23 @@ func (r *StepRepository) GetByID(ctx context.Context, tenantID, workflowID, id u
 	if groupRole != nil {
 		s.GroupRole = *groupRole
 	}
+	if triggerType != nil {
+		tt := domain.StepTriggerType(*triggerType)
+		s.TriggerType = &tt
+	}
 	return &s, nil
 }
 
-// ListByWorkflow retrieves all steps for a workflow
-func (r *StepRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Step, error) {
+// ListByProject retrieves all steps for a project
+func (r *StepRepository) ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
-			block_definition_id, credential_bindings, created_at, updated_at
+		SELECT id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, created_at, updated_at
 		FROM steps
-		WHERE workflow_id = $1 AND tenant_id = $2
+		WHERE project_id = $1 AND tenant_id = $2
 		ORDER BY created_at
 	`
-	rows, err := r.pool.Query(ctx, query, workflowID, tenantID)
+	rows, err := r.pool.Query(ctx, query, projectID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -86,17 +93,23 @@ func (r *StepRepository) ListByWorkflow(ctx context.Context, tenantID, workflowI
 	for rows.Next() {
 		var s domain.Step
 		var groupRole *string
+		var triggerType *string
 		if err := rows.Scan(
-			&s.ID, &s.TenantID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
+			&s.ID, &s.TenantID, &s.ProjectID, &s.Name, &s.Type, &s.Config,
 			&s.BlockGroupID, &groupRole,
 			&s.PositionX, &s.PositionY,
 			&s.BlockDefinitionID, &s.CredentialBindings,
+			&triggerType, &s.TriggerConfig,
 			&s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
 		if groupRole != nil {
 			s.GroupRole = *groupRole
+		}
+		if triggerType != nil {
+			tt := domain.StepTriggerType(*triggerType)
+			s.TriggerType = &tt
 		}
 		steps = append(steps, &s)
 	}
@@ -107,8 +120,8 @@ func (r *StepRepository) ListByWorkflow(ctx context.Context, tenantID, workflowI
 // ListByBlockGroup retrieves all steps in a block group
 func (r *StepRepository) ListByBlockGroup(ctx context.Context, tenantID, blockGroupID uuid.UUID) ([]*domain.Step, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, name, type, config, block_group_id, group_role, position_x, position_y,
-			block_definition_id, credential_bindings, created_at, updated_at
+		SELECT id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, created_at, updated_at
 		FROM steps
 		WHERE block_group_id = $1 AND tenant_id = $2
 		ORDER BY created_at
@@ -123,11 +136,13 @@ func (r *StepRepository) ListByBlockGroup(ctx context.Context, tenantID, blockGr
 	for rows.Next() {
 		var s domain.Step
 		var groupRole *string
+		var triggerType *string
 		if err := rows.Scan(
-			&s.ID, &s.TenantID, &s.WorkflowID, &s.Name, &s.Type, &s.Config,
+			&s.ID, &s.TenantID, &s.ProjectID, &s.Name, &s.Type, &s.Config,
 			&s.BlockGroupID, &groupRole,
 			&s.PositionX, &s.PositionY,
 			&s.BlockDefinitionID, &s.CredentialBindings,
+			&triggerType, &s.TriggerConfig,
 			&s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -135,10 +150,93 @@ func (r *StepRepository) ListByBlockGroup(ctx context.Context, tenantID, blockGr
 		if groupRole != nil {
 			s.GroupRole = *groupRole
 		}
+		if triggerType != nil {
+			tt := domain.StepTriggerType(*triggerType)
+			s.TriggerType = &tt
+		}
 		steps = append(steps, &s)
 	}
 
 	return steps, nil
+}
+
+// ListStartSteps retrieves all start steps (steps with trigger_type set) for a project
+func (r *StepRepository) ListStartSteps(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error) {
+	query := `
+		SELECT id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, created_at, updated_at
+		FROM steps
+		WHERE project_id = $1 AND tenant_id = $2 AND trigger_type IS NOT NULL
+		ORDER BY created_at
+	`
+	rows, err := r.pool.Query(ctx, query, projectID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var steps []*domain.Step
+	for rows.Next() {
+		var s domain.Step
+		var groupRole *string
+		var triggerType *string
+		if err := rows.Scan(
+			&s.ID, &s.TenantID, &s.ProjectID, &s.Name, &s.Type, &s.Config,
+			&s.BlockGroupID, &groupRole,
+			&s.PositionX, &s.PositionY,
+			&s.BlockDefinitionID, &s.CredentialBindings,
+			&triggerType, &s.TriggerConfig,
+			&s.CreatedAt, &s.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if groupRole != nil {
+			s.GroupRole = *groupRole
+		}
+		if triggerType != nil {
+			tt := domain.StepTriggerType(*triggerType)
+			s.TriggerType = &tt
+		}
+		steps = append(steps, &s)
+	}
+
+	return steps, nil
+}
+
+// GetStartStepByTriggerType retrieves a start step by its trigger type for a project
+func (r *StepRepository) GetStartStepByTriggerType(ctx context.Context, tenantID, projectID uuid.UUID, triggerType domain.StepTriggerType) (*domain.Step, error) {
+	query := `
+		SELECT id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, created_at, updated_at
+		FROM steps
+		WHERE project_id = $1 AND tenant_id = $2 AND trigger_type = $3
+		LIMIT 1
+	`
+	var s domain.Step
+	var groupRole *string
+	var stepTriggerType *string
+	err := r.pool.QueryRow(ctx, query, projectID, tenantID, string(triggerType)).Scan(
+		&s.ID, &s.TenantID, &s.ProjectID, &s.Name, &s.Type, &s.Config,
+		&s.BlockGroupID, &groupRole,
+		&s.PositionX, &s.PositionY,
+		&s.BlockDefinitionID, &s.CredentialBindings,
+		&stepTriggerType, &s.TriggerConfig,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrStepNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if groupRole != nil {
+		s.GroupRole = *groupRole
+	}
+	if stepTriggerType != nil {
+		stt := domain.StepTriggerType(*stepTriggerType)
+		s.TriggerType = &stt
+	}
+	return &s, nil
 }
 
 // Update updates a step
@@ -147,13 +245,13 @@ func (r *StepRepository) Update(ctx context.Context, s *domain.Step) error {
 	query := `
 		UPDATE steps
 		SET name = $1, type = $2, config = $3, block_group_id = $4, group_role = $5, position_x = $6, position_y = $7,
-			block_definition_id = $8, credential_bindings = $9, updated_at = $10
-		WHERE id = $11 AND workflow_id = $12 AND tenant_id = $13
+			block_definition_id = $8, credential_bindings = $9, trigger_type = $10, trigger_config = $11, updated_at = $12
+		WHERE id = $13 AND project_id = $14 AND tenant_id = $15
 	`
 	result, err := r.pool.Exec(ctx, query,
 		s.Name, s.Type, s.Config, s.BlockGroupID, s.GroupRole, s.PositionX, s.PositionY,
-		s.BlockDefinitionID, s.CredentialBindings, s.UpdatedAt,
-		s.ID, s.WorkflowID, s.TenantID,
+		s.BlockDefinitionID, s.CredentialBindings, s.TriggerType, s.TriggerConfig, s.UpdatedAt,
+		s.ID, s.ProjectID, s.TenantID,
 	)
 	if err != nil {
 		return err
@@ -165,9 +263,9 @@ func (r *StepRepository) Update(ctx context.Context, s *domain.Step) error {
 }
 
 // Delete deletes a step
-func (r *StepRepository) Delete(ctx context.Context, tenantID, workflowID, id uuid.UUID) error {
-	query := `DELETE FROM steps WHERE id = $1 AND workflow_id = $2 AND tenant_id = $3`
-	result, err := r.pool.Exec(ctx, query, id, workflowID, tenantID)
+func (r *StepRepository) Delete(ctx context.Context, tenantID, projectID, id uuid.UUID) error {
+	query := `DELETE FROM steps WHERE id = $1 AND project_id = $2 AND tenant_id = $3`
+	result, err := r.pool.Exec(ctx, query, id, projectID, tenantID)
 	if err != nil {
 		return err
 	}

@@ -17,21 +17,21 @@ import (
 	"github.com/souta/ai-orchestration/internal/repository"
 )
 
-// CopilotUsecase handles AI-assisted workflow building
+// CopilotUsecase handles AI-assisted project building
 type CopilotUsecase struct {
-	workflowRepo repository.WorkflowRepository
-	stepRepo     repository.StepRepository
-	runRepo      repository.RunRepository
-	stepRunRepo  repository.StepRunRepository
-	sessionRepo  repository.CopilotSessionRepository
-	httpClient   *http.Client
-	apiKey       string
-	baseURL      string
+	projectRepo repository.ProjectRepository
+	stepRepo    repository.StepRepository
+	runRepo     repository.RunRepository
+	stepRunRepo repository.StepRunRepository
+	sessionRepo repository.CopilotSessionRepository
+	httpClient  *http.Client
+	apiKey      string
+	baseURL     string
 }
 
 // NewCopilotUsecase creates a new CopilotUsecase
 func NewCopilotUsecase(
-	workflowRepo repository.WorkflowRepository,
+	projectRepo repository.ProjectRepository,
 	stepRepo repository.StepRepository,
 	runRepo repository.RunRepository,
 	stepRunRepo repository.StepRunRepository,
@@ -42,11 +42,11 @@ func NewCopilotUsecase(
 		baseURL = "https://api.openai.com/v1"
 	}
 	return &CopilotUsecase{
-		workflowRepo: workflowRepo,
-		stepRepo:     stepRepo,
-		runRepo:      runRepo,
-		stepRunRepo:  stepRunRepo,
-		sessionRepo:  sessionRepo,
+		projectRepo: projectRepo,
+		stepRepo:    stepRepo,
+		runRepo:     runRepo,
+		stepRunRepo: stepRunRepo,
+		sessionRepo: sessionRepo,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -57,10 +57,10 @@ func NewCopilotUsecase(
 
 // SuggestInput represents input for suggestion request
 type SuggestInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	StepID     *uuid.UUID // Current step (optional)
-	Context    string     // Additional context from user
+	TenantID  uuid.UUID
+	ProjectID uuid.UUID
+	StepID    *uuid.UUID // Current step (optional)
+	Context   string     // Additional context from user
 }
 
 // SuggestOutput represents suggestion response
@@ -77,16 +77,16 @@ type StepSuggestion struct {
 	Reason      string                 `json:"reason"`
 }
 
-// Suggest suggests next steps for a workflow
+// Suggest suggests next steps for a project
 func (u *CopilotUsecase) Suggest(ctx context.Context, input SuggestInput) (*SuggestOutput, error) {
-	// Get workflow with steps
-	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.WorkflowID)
+	// Get project with steps
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build context for LLM
-	prompt := buildSuggestPrompt(workflow, input.StepID, input.Context)
+	prompt := buildSuggestPrompt(project, input.StepID, input.Context)
 
 	// Call LLM
 	response, err := u.callLLM(ctx, prompt)
@@ -104,7 +104,7 @@ func (u *CopilotUsecase) Suggest(ctx context.Context, input SuggestInput) (*Sugg
 				Name:        "Next Step",
 				Description: "Add a tool step to process data",
 				Config:      map[string]interface{}{"adapter_id": "mock"},
-				Reason:      "Suggested based on workflow context",
+				Reason:      "Suggested based on project context",
 			},
 		}
 	}
@@ -140,7 +140,7 @@ type Fix struct {
 	ConfigPatch map[string]interface{} `json:"config_patch,omitempty"`
 }
 
-// Diagnose diagnoses workflow execution errors
+// Diagnose diagnoses project execution errors
 func (u *CopilotUsecase) Diagnose(ctx context.Context, input DiagnoseInput) (*DiagnoseOutput, error) {
 	// Get run with step runs
 	run, err := u.runRepo.GetWithStepRuns(ctx, input.TenantID, input.RunID)
@@ -208,11 +208,11 @@ func (u *CopilotUsecase) Diagnose(ctx context.Context, input DiagnoseInput) (*Di
 	return &result, nil
 }
 
-// ExplainInput represents input for workflow explanation
+// ExplainInput represents input for project explanation
 type ExplainInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
-	StepID     *uuid.UUID // Explain specific step (optional)
+	TenantID  uuid.UUID
+	ProjectID uuid.UUID
+	StepID    *uuid.UUID // Explain specific step (optional)
 }
 
 // ExplainOutput represents explanation response
@@ -228,23 +228,23 @@ type StepExplanation struct {
 	Explanation string `json:"explanation"`
 }
 
-// Explain generates explanation for a workflow or step
+// Explain generates explanation for a project or step
 func (u *CopilotUsecase) Explain(ctx context.Context, input ExplainInput) (*ExplainOutput, error) {
-	// Get workflow with steps
-	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.WorkflowID)
+	// Get project with steps
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build prompt
-	prompt := buildExplainPrompt(workflow, input.StepID)
+	prompt := buildExplainPrompt(project, input.StepID)
 
 	// Call LLM
 	response, err := u.callLLM(ctx, prompt)
 	if err != nil {
 		// Return basic explanation if LLM fails
 		return &ExplainOutput{
-			Summary: fmt.Sprintf("Workflow '%s' contains %d steps.", workflow.Name, len(workflow.Steps)),
+			Summary: fmt.Sprintf("Project '%s' contains %d steps.", project.Name, len(project.Steps)),
 		}, nil
 	}
 
@@ -261,8 +261,8 @@ func (u *CopilotUsecase) Explain(ctx context.Context, input ExplainInput) (*Expl
 
 // OptimizeInput represents input for optimization suggestions
 type OptimizeInput struct {
-	TenantID   uuid.UUID
-	WorkflowID uuid.UUID
+	TenantID  uuid.UUID
+	ProjectID uuid.UUID
 }
 
 // OptimizeOutput represents optimization suggestions
@@ -280,16 +280,16 @@ type Optimization struct {
 	Effort      string `json:"effort"` // high|medium|low
 }
 
-// Optimize suggests optimizations for a workflow
+// Optimize suggests optimizations for a project
 func (u *CopilotUsecase) Optimize(ctx context.Context, input OptimizeInput) (*OptimizeOutput, error) {
-	// Get workflow with steps
-	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.WorkflowID)
+	// Get project with steps
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build prompt
-	prompt := buildOptimizePrompt(workflow)
+	prompt := buildOptimizePrompt(project)
 
 	// Call LLM
 	response, err := u.callLLM(ctx, prompt)
@@ -305,7 +305,7 @@ func (u *CopilotUsecase) Optimize(ctx context.Context, input OptimizeInput) (*Op
 					Effort:      "low",
 				},
 			},
-			Summary: "Review workflow for potential optimizations",
+			Summary: "Review project for potential optimizations",
 		}, nil
 	}
 
@@ -322,22 +322,22 @@ func (u *CopilotUsecase) Optimize(ctx context.Context, input OptimizeInput) (*Op
 
 // ChatInput represents input for general chat
 type ChatInput struct {
-	TenantID   uuid.UUID
-	WorkflowID *uuid.UUID
-	Message    string
-	Context    string // Additional context
+	TenantID  uuid.UUID
+	ProjectID *uuid.UUID
+	Message   string
+	Context   string // Additional context
 }
 
 // ChatOutput represents chat response
 type ChatOutput struct {
-	Response    string                 `json:"response"`
-	Suggestions []StepSuggestion       `json:"suggestions,omitempty"`
-	Actions     []SuggestedAction      `json:"actions,omitempty"`
+	Response    string            `json:"response"`
+	Suggestions []StepSuggestion  `json:"suggestions,omitempty"`
+	Actions     []SuggestedAction `json:"actions,omitempty"`
 }
 
 // SuggestedAction represents an action the user can take
 type SuggestedAction struct {
-	Type        string                 `json:"type"` // add_step|modify_step|delete_step|run_workflow
+	Type        string                 `json:"type"` // add_step|modify_step|delete_step|run_project
 	Label       string                 `json:"label"`
 	Description string                 `json:"description"`
 	Data        map[string]interface{} `json:"data,omitempty"`
@@ -345,15 +345,15 @@ type SuggestedAction struct {
 
 // Chat handles general copilot chat
 func (u *CopilotUsecase) Chat(ctx context.Context, input ChatInput) (*ChatOutput, error) {
-	var workflowContext string
-	if input.WorkflowID != nil {
-		workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, *input.WorkflowID)
+	var projectContext string
+	if input.ProjectID != nil {
+		project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, *input.ProjectID)
 		if err == nil {
-			workflowContext = buildWorkflowContextString(workflow)
+			projectContext = buildProjectContextString(project)
 		}
 	}
 
-	prompt := buildChatPrompt(input.Message, workflowContext, input.Context)
+	prompt := buildChatPrompt(input.Message, projectContext, input.Context)
 
 	response, err := u.callLLM(ctx, prompt)
 	if err != nil {
@@ -401,7 +401,7 @@ func (u *CopilotUsecase) callLLM(ctx context.Context, prompt string) (string, er
 	reqBody := map[string]interface{}{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
-			{"role": "system", "content": "You are an AI assistant for workflow automation. Always respond with valid JSON when instructed to do so."},
+			{"role": "system", "content": "You are an AI assistant for project automation. Always respond with valid JSON when instructed to do so."},
 			{"role": "user", "content": prompt},
 		},
 		"temperature": 0.3,
@@ -456,10 +456,10 @@ func (u *CopilotUsecase) callLLM(ctx context.Context, prompt string) (string, er
 }
 
 // buildSuggestPrompt builds the prompt for step suggestions
-func buildSuggestPrompt(workflow *domain.Workflow, currentStepID *uuid.UUID, context string) string {
+func buildSuggestPrompt(project *domain.Project, currentStepID *uuid.UUID, context string) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI workflow assistant. Suggest the next steps for this workflow.\n\n")
+	sb.WriteString("You are an AI project assistant. Suggest the next steps for this project.\n\n")
 	sb.WriteString("## Available Step Types\n")
 	sb.WriteString("- llm: LLM API calls (OpenAI, Anthropic)\n")
 	sb.WriteString("- tool: External tool/adapter execution\n")
@@ -471,12 +471,12 @@ func buildSuggestPrompt(workflow *domain.Workflow, currentStepID *uuid.UUID, con
 	sb.WriteString("- router: AI-based dynamic routing\n")
 	sb.WriteString("- log: Debug logging\n\n")
 
-	sb.WriteString("## Current Workflow\n")
-	sb.WriteString(fmt.Sprintf("Name: %s\n", workflow.Name))
-	sb.WriteString(fmt.Sprintf("Description: %s\n", workflow.Description))
-	sb.WriteString(fmt.Sprintf("Steps: %d\n\n", len(workflow.Steps)))
+	sb.WriteString("## Current Project\n")
+	sb.WriteString(fmt.Sprintf("Name: %s\n", project.Name))
+	sb.WriteString(fmt.Sprintf("Description: %s\n", project.Description))
+	sb.WriteString(fmt.Sprintf("Steps: %d\n\n", len(project.Steps)))
 
-	for _, step := range workflow.Steps {
+	for _, step := range project.Steps {
 		sb.WriteString(fmt.Sprintf("- %s (%s)\n", step.Name, step.Type))
 	}
 
@@ -495,7 +495,7 @@ func buildSuggestPrompt(workflow *domain.Workflow, currentStepID *uuid.UUID, con
 func buildDiagnosePrompt(run *domain.Run, failedStepRuns []domain.StepRun) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI debugging assistant. Analyze this workflow error.\n\n")
+	sb.WriteString("You are an AI debugging assistant. Analyze this project error.\n\n")
 	sb.WriteString(fmt.Sprintf("## Run Status: %s\n\n", run.Status))
 
 	sb.WriteString("## Failed Steps\n")
@@ -514,16 +514,16 @@ func buildDiagnosePrompt(run *domain.Run, failedStepRuns []domain.StepRun) strin
 	return sb.String()
 }
 
-// buildExplainPrompt builds the prompt for workflow explanation
-func buildExplainPrompt(workflow *domain.Workflow, stepID *uuid.UUID) string {
+// buildExplainPrompt builds the prompt for project explanation
+func buildExplainPrompt(project *domain.Project, stepID *uuid.UUID) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI assistant. Explain this workflow in simple terms.\n\n")
-	sb.WriteString(fmt.Sprintf("## Workflow: %s\n", workflow.Name))
-	sb.WriteString(fmt.Sprintf("Description: %s\n\n", workflow.Description))
+	sb.WriteString("You are an AI assistant. Explain this project in simple terms.\n\n")
+	sb.WriteString(fmt.Sprintf("## Project: %s\n", project.Name))
+	sb.WriteString(fmt.Sprintf("Description: %s\n\n", project.Description))
 
 	sb.WriteString("## Steps\n")
-	for _, step := range workflow.Steps {
+	for _, step := range project.Steps {
 		configJSON, err := json.Marshal(step.Config)
 		if err != nil {
 			slog.Warn("failed to marshal step config", "step_id", step.ID, "error", err)
@@ -533,26 +533,26 @@ func buildExplainPrompt(workflow *domain.Workflow, stepID *uuid.UUID) string {
 	}
 
 	sb.WriteString("\n## Edges\n")
-	for _, edge := range workflow.Edges {
+	for _, edge := range project.Edges {
 		sb.WriteString(fmt.Sprintf("- %s -> %s\n", edge.SourceStepID, edge.TargetStepID))
 	}
 
 	sb.WriteString("\n## Instructions\n")
-	sb.WriteString("Explain what this workflow does. Return JSON:\n")
+	sb.WriteString("Explain what this project does. Return JSON:\n")
 	sb.WriteString(`{"summary": "Overall explanation", "step_details": [{"step_id": "...", "step_name": "...", "explanation": "..."}]}`)
 
 	return sb.String()
 }
 
 // buildOptimizePrompt builds the prompt for optimization suggestions
-func buildOptimizePrompt(workflow *domain.Workflow) string {
+func buildOptimizePrompt(project *domain.Project) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI optimization assistant. Suggest improvements for this workflow.\n\n")
-	sb.WriteString(fmt.Sprintf("## Workflow: %s\n", workflow.Name))
-	sb.WriteString(fmt.Sprintf("Steps: %d\n\n", len(workflow.Steps)))
+	sb.WriteString("You are an AI optimization assistant. Suggest improvements for this project.\n\n")
+	sb.WriteString(fmt.Sprintf("## Project: %s\n", project.Name))
+	sb.WriteString(fmt.Sprintf("Steps: %d\n\n", len(project.Steps)))
 
-	for _, step := range workflow.Steps {
+	for _, step := range project.Steps {
 		configJSON, err := json.Marshal(step.Config)
 		if err != nil {
 			slog.Warn("failed to marshal step config", "step_id", step.ID, "error", err)
@@ -569,14 +569,14 @@ func buildOptimizePrompt(workflow *domain.Workflow) string {
 }
 
 // buildChatPrompt builds the prompt for general chat
-func buildChatPrompt(message, workflowContext, additionalContext string) string {
+func buildChatPrompt(message, projectContext, additionalContext string) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI workflow assistant. Help the user with their workflow.\n\n")
+	sb.WriteString("You are an AI project assistant. Help the user with their project.\n\n")
 
-	if workflowContext != "" {
-		sb.WriteString("## Current Workflow Context\n")
-		sb.WriteString(workflowContext)
+	if projectContext != "" {
+		sb.WriteString("## Current Project Context\n")
+		sb.WriteString(projectContext)
 		sb.WriteString("\n\n")
 	}
 
@@ -591,18 +591,18 @@ func buildChatPrompt(message, workflowContext, additionalContext string) string 
 	sb.WriteString("\n\n")
 
 	sb.WriteString("## Instructions\n")
-	sb.WriteString("Respond helpfully. If suggesting workflow changes, return JSON with 'response' and optional 'suggestions' or 'actions'. Otherwise, just return plain text.")
+	sb.WriteString("Respond helpfully. If suggesting project changes, return JSON with 'response' and optional 'suggestions' or 'actions'. Otherwise, just return plain text.")
 
 	return sb.String()
 }
 
-// buildWorkflowContextString builds a string representation of workflow
-func buildWorkflowContextString(workflow *domain.Workflow) string {
+// buildProjectContextString builds a string representation of project
+func buildProjectContextString(project *domain.Project) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Name: %s\n", workflow.Name))
-	sb.WriteString(fmt.Sprintf("Description: %s\n", workflow.Description))
-	sb.WriteString(fmt.Sprintf("Steps (%d):\n", len(workflow.Steps)))
-	for _, step := range workflow.Steps {
+	sb.WriteString(fmt.Sprintf("Name: %s\n", project.Name))
+	sb.WriteString(fmt.Sprintf("Description: %s\n", project.Description))
+	sb.WriteString(fmt.Sprintf("Steps (%d):\n", len(project.Steps)))
+	for _, step := range project.Steps {
 		sb.WriteString(fmt.Sprintf("  - %s (%s)\n", step.Name, step.Type))
 	}
 	return sb.String()
@@ -617,18 +617,18 @@ func (u *CopilotUsecase) mockLLMResponse(prompt string) string {
 	if strings.Contains(prompt, "diagnose") || strings.Contains(prompt, "error") {
 		return `{"diagnosis": {"root_cause": "Mock diagnosis - API key not configured", "category": "config_error", "severity": "low"}, "fixes": [{"description": "Configure OPENAI_API_KEY", "steps": ["Set OPENAI_API_KEY environment variable"]}], "preventions": ["Configure API credentials"]}`
 	}
-	if strings.Contains(prompt, "Explain this workflow") {
+	if strings.Contains(prompt, "Explain this project") {
 		return `{"summary": "This is a mock explanation. Configure OPENAI_API_KEY for real AI-powered explanations.", "step_details": []}`
 	}
 	if strings.Contains(prompt, "optimization") || strings.Contains(prompt, "improvements") {
 		return `{"optimizations": [{"category": "configuration", "title": "Enable AI features", "description": "Configure OPENAI_API_KEY to enable AI-powered optimizations", "impact": "high", "effort": "low"}], "summary": "Mock response - configure API key for real suggestions"}`
 	}
-	// Workflow generation mock response
-	if strings.Contains(prompt, "workflow generator") || strings.Contains(prompt, "Available Step Types") {
+	// Project generation mock response
+	if strings.Contains(prompt, "project generator") || strings.Contains(prompt, "Available Step Types") {
 		return `{
-  "response": "サンプルワークフローを生成しました。これはモックレスポンスです。OPENAI_API_KEYを設定すると、AIが実際にワークフローを生成します。",
+  "response": "サンプルプロジェクトを生成しました。これはモックレスポンスです。OPENAI_API_KEYを設定すると、AIが実際にプロジェクトを生成します。",
   "steps": [
-    {"temp_id": "step_start", "name": "開始", "type": "start", "description": "ワークフローの開始点", "config": {}, "position_x": 400, "position_y": 50},
+    {"temp_id": "step_start", "name": "開始", "type": "start", "description": "プロジェクトの開始点", "config": {}, "position_x": 400, "position_y": 50},
     {"temp_id": "step_llm", "name": "LLM処理", "type": "llm", "description": "入力をLLMで処理", "config": {"provider": "openai", "model": "gpt-4o-mini", "system_prompt": "You are a helpful assistant.", "user_prompt": "Process the input: {{$.input}}"}, "position_x": 400, "position_y": 200},
     {"temp_id": "step_log", "name": "結果をログ", "type": "log", "description": "処理結果をログに出力", "config": {"message": "Processing complete", "level": "info"}, "position_x": 400, "position_y": 350}
   ],
@@ -640,22 +640,22 @@ func (u *CopilotUsecase) mockLLMResponse(prompt string) string {
 }`
 	}
 	// Default chat response
-	return `{"response": "こんにちは！Copilotのモックモードです。OPENAI_API_KEYを設定すると、AIによる本格的なサポートを受けられます。ワークフローの構築について何かお手伝いできることはありますか？", "suggestions": []}`
+	return `{"response": "こんにちは！Copilotのモックモードです。OPENAI_API_KEYを設定すると、AIによる本格的なサポートを受けられます。プロジェクトの構築について何かお手伝いできることはありますか？", "suggestions": []}`
 }
 
 // ========== Session Management ==========
 
 // GetOrCreateSessionInput represents input for getting or creating a session
 type GetOrCreateSessionInput struct {
-	TenantID   uuid.UUID
-	UserID     string
-	WorkflowID uuid.UUID
+	TenantID  uuid.UUID
+	UserID    string
+	ProjectID uuid.UUID
 }
 
 // GetOrCreateSession gets an existing active session or creates a new one
 func (u *CopilotUsecase) GetOrCreateSession(ctx context.Context, input GetOrCreateSessionInput) (*domain.CopilotSession, error) {
 	// Try to get existing active session
-	session, err := u.sessionRepo.GetActiveByUserAndWorkflow(ctx, input.TenantID, input.UserID, input.WorkflowID)
+	session, err := u.sessionRepo.GetActiveByUserAndProject(ctx, input.TenantID, input.UserID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -665,7 +665,7 @@ func (u *CopilotUsecase) GetOrCreateSession(ctx context.Context, input GetOrCrea
 	}
 
 	// Create new session
-	session = domain.NewCopilotSession(input.TenantID, input.UserID, input.WorkflowID)
+	session = domain.NewCopilotSession(input.TenantID, input.UserID, input.ProjectID)
 	if err := u.sessionRepo.Create(ctx, session); err != nil {
 		return nil, err
 	}
@@ -679,27 +679,27 @@ func (u *CopilotUsecase) GetSessionWithMessages(ctx context.Context, tenantID uu
 
 // ListSessionsInput represents input for listing sessions
 type ListSessionsInput struct {
-	TenantID   uuid.UUID
-	UserID     string
-	WorkflowID uuid.UUID
+	TenantID  uuid.UUID
+	UserID    string
+	ProjectID uuid.UUID
 }
 
-// ListSessions lists all sessions for a user and workflow
+// ListSessions lists all sessions for a user and project
 func (u *CopilotUsecase) ListSessions(ctx context.Context, input ListSessionsInput) ([]*domain.CopilotSession, error) {
-	return u.sessionRepo.ListByUserAndWorkflow(ctx, input.TenantID, input.UserID, input.WorkflowID)
+	return u.sessionRepo.ListByUserAndProject(ctx, input.TenantID, input.UserID, input.ProjectID)
 }
 
 // StartNewSessionInput represents input for starting a new session
 type StartNewSessionInput struct {
-	TenantID   uuid.UUID
-	UserID     string
-	WorkflowID uuid.UUID
+	TenantID  uuid.UUID
+	UserID    string
+	ProjectID uuid.UUID
 }
 
 // StartNewSession closes any existing active session and creates a new one
 func (u *CopilotUsecase) StartNewSession(ctx context.Context, input StartNewSessionInput) (*domain.CopilotSession, error) {
 	// Close any existing active session
-	existingSession, err := u.sessionRepo.GetActiveByUserAndWorkflow(ctx, input.TenantID, input.UserID, input.WorkflowID)
+	existingSession, err := u.sessionRepo.GetActiveByUserAndProject(ctx, input.TenantID, input.UserID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -710,7 +710,7 @@ func (u *CopilotUsecase) StartNewSession(ctx context.Context, input StartNewSess
 	}
 
 	// Create new session
-	session := domain.NewCopilotSession(input.TenantID, input.UserID, input.WorkflowID)
+	session := domain.NewCopilotSession(input.TenantID, input.UserID, input.ProjectID)
 	if err := u.sessionRepo.Create(ctx, session); err != nil {
 		return nil, err
 	}
@@ -719,12 +719,12 @@ func (u *CopilotUsecase) StartNewSession(ctx context.Context, input StartNewSess
 
 // ChatWithSessionInput represents input for chat with session persistence
 type ChatWithSessionInput struct {
-	TenantID   uuid.UUID
-	UserID     string
-	WorkflowID uuid.UUID
-	SessionID  *uuid.UUID // Optional: specific session to use
-	Message    string
-	Context    string
+	TenantID  uuid.UUID
+	UserID    string
+	ProjectID uuid.UUID
+	SessionID *uuid.UUID // Optional: specific session to use
+	Message   string
+	Context   string
 }
 
 // ChatWithSession handles chat with session persistence
@@ -740,9 +740,9 @@ func (u *CopilotUsecase) ChatWithSession(ctx context.Context, input ChatWithSess
 		}
 	} else {
 		session, err = u.GetOrCreateSession(ctx, GetOrCreateSessionInput{
-			TenantID:   input.TenantID,
-			UserID:     input.UserID,
-			WorkflowID: input.WorkflowID,
+			TenantID:  input.TenantID,
+			UserID:    input.UserID,
+			ProjectID: input.ProjectID,
 		})
 		if err != nil {
 			return nil, nil, err
@@ -763,15 +763,15 @@ func (u *CopilotUsecase) ChatWithSession(ctx context.Context, input ChatWithSess
 		}
 	}
 
-	// Get workflow context
-	var workflowContext string
-	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.WorkflowID)
+	// Get project context
+	var projectContext string
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ProjectID)
 	if err == nil {
-		workflowContext = buildWorkflowContextString(workflow)
+		projectContext = buildProjectContextString(project)
 	}
 
 	// Build prompt with conversation history
-	prompt := buildChatPromptWithHistory(input.Message, workflowContext, input.Context, session.Messages)
+	prompt := buildChatPromptWithHistory(input.Message, projectContext, input.Context, session.Messages)
 
 	// Call LLM
 	response, err := u.callLLM(ctx, prompt)
@@ -803,14 +803,14 @@ func (u *CopilotUsecase) ChatWithSession(ctx context.Context, input ChatWithSess
 }
 
 // buildChatPromptWithHistory builds the prompt including conversation history
-func buildChatPromptWithHistory(message, workflowContext, additionalContext string, history []domain.CopilotMessage) string {
+func buildChatPromptWithHistory(message, projectContext, additionalContext string, history []domain.CopilotMessage) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI workflow assistant. Help the user with their workflow.\n\n")
+	sb.WriteString("You are an AI project assistant. Help the user with their project.\n\n")
 
-	if workflowContext != "" {
-		sb.WriteString("## Current Workflow Context\n")
-		sb.WriteString(workflowContext)
+	if projectContext != "" {
+		sb.WriteString("## Current Project Context\n")
+		sb.WriteString(projectContext)
 		sb.WriteString("\n\n")
 	}
 
@@ -843,25 +843,25 @@ func buildChatPromptWithHistory(message, workflowContext, additionalContext stri
 	sb.WriteString("\n\n")
 
 	sb.WriteString("## Instructions\n")
-	sb.WriteString("Respond helpfully in the same language as the user. If suggesting workflow changes, return JSON with 'response' and optional 'suggestions' or 'actions'. Otherwise, just return JSON with 'response' field.")
+	sb.WriteString("Respond helpfully in the same language as the user. If suggesting project changes, return JSON with 'response' and optional 'suggestions' or 'actions'. Otherwise, just return JSON with 'response' field.")
 
 	return sb.String()
 }
 
-// ========== Workflow Generation ==========
+// ========== Project Generation ==========
 
-// GenerateWorkflowInput represents input for workflow generation
-type GenerateWorkflowInput struct {
+// GenerateProjectInput represents input for project generation
+type GenerateProjectInput struct {
 	TenantID    uuid.UUID
-	WorkflowID  uuid.UUID // Target workflow to add steps to
+	ProjectID   uuid.UUID // Target project to add steps to
 	Description string    // Natural language description
 }
 
 // GeneratedStep represents a step to be created
 type GeneratedStep struct {
-	TempID      string                 `json:"temp_id"`      // Temporary ID for edge references
+	TempID      string                 `json:"temp_id"`    // Temporary ID for edge references
 	Name        string                 `json:"name"`
-	Type        string                 `json:"type"`         // llm, tool, condition, etc.
+	Type        string                 `json:"type"`       // llm, tool, condition, etc.
 	Description string                 `json:"description"`
 	Config      map[string]interface{} `json:"config"`
 	PositionX   int                    `json:"position_x"`
@@ -876,24 +876,24 @@ type GeneratedEdge struct {
 	Condition    string `json:"condition,omitempty"`
 }
 
-// GenerateWorkflowOutput represents the generated workflow structure
-type GenerateWorkflowOutput struct {
-	Response    string          `json:"response"`    // Explanation of what was generated
+// GenerateProjectOutput represents the generated project structure
+type GenerateProjectOutput struct {
+	Response    string          `json:"response"`      // Explanation of what was generated
 	Steps       []GeneratedStep `json:"steps"`
 	Edges       []GeneratedEdge `json:"edges"`
 	StartStepID string          `json:"start_step_id"` // TempID of the entry point
 }
 
-// GenerateWorkflow generates a workflow structure from natural language
-func (u *CopilotUsecase) GenerateWorkflow(ctx context.Context, input GenerateWorkflowInput) (*GenerateWorkflowOutput, error) {
-	// Get existing workflow for context
-	var workflowContext string
-	workflow, err := u.workflowRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.WorkflowID)
+// GenerateProject generates a project structure from natural language
+func (u *CopilotUsecase) GenerateProject(ctx context.Context, input GenerateProjectInput) (*GenerateProjectOutput, error) {
+	// Get existing project for context
+	var projectContext string
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ProjectID)
 	if err == nil {
-		workflowContext = buildWorkflowContextString(workflow)
+		projectContext = buildProjectContextString(project)
 	}
 
-	prompt := buildWorkflowGenerationPrompt(input.Description, workflowContext)
+	prompt := buildProjectGenerationPrompt(input.Description, projectContext)
 
 	response, err := u.callLLM(ctx, prompt)
 	if err != nil {
@@ -902,11 +902,11 @@ func (u *CopilotUsecase) GenerateWorkflow(ctx context.Context, input GenerateWor
 
 	// Parse response
 	cleanResponse := stripMarkdownCodeBlock(response)
-	var result GenerateWorkflowOutput
+	var result GenerateProjectOutput
 	if err := json.Unmarshal([]byte(cleanResponse), &result); err != nil {
 		// Return a default response if parsing fails
-		return &GenerateWorkflowOutput{
-			Response: "ワークフローの生成に失敗しました。もう少し具体的に説明していただけますか？",
+		return &GenerateProjectOutput{
+			Response: "プロジェクトの生成に失敗しました。もう少し具体的に説明していただけますか？",
 			Steps:    []GeneratedStep{},
 			Edges:    []GeneratedEdge{},
 		}, nil
@@ -921,15 +921,15 @@ func (u *CopilotUsecase) GenerateWorkflow(ctx context.Context, input GenerateWor
 	return &result, nil
 }
 
-// buildWorkflowGenerationPrompt creates a prompt for workflow generation
-func buildWorkflowGenerationPrompt(description, workflowContext string) string {
+// buildProjectGenerationPrompt creates a prompt for project generation
+func buildProjectGenerationPrompt(description, projectContext string) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are an AI workflow generator. Generate a workflow based on the user's description.\n\n")
+	sb.WriteString("You are an AI project generator. Generate a project based on the user's description.\n\n")
 
-	if workflowContext != "" {
-		sb.WriteString("## Existing Workflow Context\n")
-		sb.WriteString(workflowContext)
+	if projectContext != "" {
+		sb.WriteString("## Existing Project Context\n")
+		sb.WriteString(projectContext)
 		sb.WriteString("\n\n")
 	}
 
@@ -941,7 +941,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 	sb.WriteString("- switch: Multi-way branching (config: expression, cases)\n")
 	sb.WriteString("- map: Parallel array processing (config: input_path, parallel)\n")
 	sb.WriteString("- join: Merge parallel branches (config: join_mode)\n")
-	sb.WriteString("- subflow: Nested workflow (config: workflow_id)\n")
+	sb.WriteString("- subflow: Nested project (config: project_id)\n")
 	sb.WriteString("- wait: Delay/timer (config: duration_ms)\n")
 	sb.WriteString("- function: Custom code execution (config: code, language)\n")
 	sb.WriteString("- router: AI-based dynamic routing (config: routes, provider, model)\n")
@@ -952,7 +952,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 	sb.WriteString("- error: Stop and error (config: message)\n")
 	sb.WriteString("- note: Documentation/comment (config: text)\n")
 	sb.WriteString("- log: Debug logging (config: message, level)\n")
-	sb.WriteString("\nIMPORTANT: Do NOT use 'end' type. Workflow ends when last step completes.\n")
+	sb.WriteString("\nIMPORTANT: Do NOT use 'end' type. Project ends when last step completes.\n")
 	sb.WriteString("\n")
 
 	sb.WriteString("## User Request\n")
@@ -961,7 +961,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 
 	sb.WriteString("## Output Format (JSON)\n")
 	sb.WriteString(`{
-  "response": "Generated workflow explanation in user's language",
+  "response": "Generated project explanation in user's language",
   "steps": [
     {
       "temp_id": "step_1",
@@ -987,7 +987,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 
 	sb.WriteString("## Instructions\n")
 	sb.WriteString("1. ALWAYS include exactly one 'start' step as the entry point\n")
-	sb.WriteString("2. The workflow ends when the last step(s) complete - no 'end' step needed\n")
+	sb.WriteString("2. The project ends when the last step(s) complete - no 'end' step needed\n")
 	sb.WriteString("3. Position steps vertically with 150px spacing\n")
 	sb.WriteString("4. Use descriptive step names in the user's language\n")
 	sb.WriteString("5. Provide meaningful config for each step type\n")
@@ -999,7 +999,7 @@ func buildWorkflowGenerationPrompt(description, workflowContext string) string {
 }
 
 // assignPositions assigns default positions to steps if not provided
-func assignPositions(output *GenerateWorkflowOutput) {
+func assignPositions(output *GenerateProjectOutput) {
 	startX := 400
 	startY := 50
 	ySpacing := 150
@@ -1015,7 +1015,7 @@ func assignPositions(output *GenerateWorkflowOutput) {
 }
 
 // filterInvalidSteps removes steps with invalid types and their related edges
-func filterInvalidSteps(output GenerateWorkflowOutput) GenerateWorkflowOutput {
+func filterInvalidSteps(output GenerateProjectOutput) GenerateProjectOutput {
 	// Valid step types
 	validTypes := map[string]bool{
 		"start":         true,
@@ -1057,7 +1057,7 @@ func filterInvalidSteps(output GenerateWorkflowOutput) GenerateWorkflowOutput {
 		}
 	}
 
-	return GenerateWorkflowOutput{
+	return GenerateProjectOutput{
 		Response:    output.Response,
 		Steps:       validSteps,
 		Edges:       validEdges,

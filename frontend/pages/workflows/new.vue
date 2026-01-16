@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const workflows = useWorkflows()
+const projects = useProjects()
 
 const form = ref({
   name: '',
@@ -17,7 +17,7 @@ async function handleSubmit() {
   try {
     loading.value = true
     error.value = null
-    const response = await workflows.create({
+    const response = await projects.create({
       name: form.value.name,
       description: form.value.description,
     })

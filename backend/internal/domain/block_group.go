@@ -67,7 +67,7 @@ func (r GroupRole) IsValid() bool {
 type BlockGroup struct {
 	ID            uuid.UUID       `json:"id"`
 	TenantID      uuid.UUID       `json:"tenant_id"`
-	WorkflowID    uuid.UUID       `json:"workflow_id"`
+	ProjectID     uuid.UUID       `json:"project_id"`
 	Name          string          `json:"name"`
 	Type          BlockGroupType  `json:"type"`
 	Config        json.RawMessage `json:"config"`
@@ -88,19 +88,19 @@ type BlockGroup struct {
 }
 
 // NewBlockGroup creates a new block group
-func NewBlockGroup(tenantID, workflowID uuid.UUID, name string, groupType BlockGroupType) *BlockGroup {
+func NewBlockGroup(tenantID, projectID uuid.UUID, name string, groupType BlockGroupType) *BlockGroup {
 	now := time.Now().UTC()
 	return &BlockGroup{
-		ID:         uuid.New(),
-		TenantID:   tenantID,
-		WorkflowID: workflowID,
-		Name:       name,
-		Type:       groupType,
-		Config:     json.RawMessage("{}"),
-		Width:      400,
-		Height:     300,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		Name:      name,
+		Type:      groupType,
+		Config:    json.RawMessage("{}"),
+		Width:     400,
+		Height:    300,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }
 

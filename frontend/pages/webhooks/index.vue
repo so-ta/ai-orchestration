@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Webhook, CreateWebhookRequest, UpdateWebhookRequest, Workflow } from '~/types/api'
+import type { Webhook, CreateWebhookRequest, UpdateWebhookRequest, Project } from '~/types/api'
 
 const { t } = useI18n()
 const webhooksApi = useWebhooks()
@@ -8,7 +8,7 @@ const { confirm } = useConfirm()
 
 // State
 const webhooks = ref<Webhook[]>([])
-const workflows = ref<Workflow[]>([])
+const workflows = ref<Project[]>([])
 const loading = ref(false)
 const showModal = ref(false)
 const editingWebhook = ref<Webhook | null>(null)
@@ -21,7 +21,7 @@ const filterWorkflow = ref('')
 const formData = ref({
   name: '',
   description: '',
-  workflow_id: '',
+  project_id: '',
   input_mapping: '{}',
 })
 
@@ -68,7 +68,7 @@ onMounted(() => {
 // Computed
 const filteredWebhooks = computed(() => {
   return webhooks.value.filter((w) => {
-    if (filterWorkflow.value && w.workflow_id !== filterWorkflow.value) return false
+    if (filterWorkflow.value && w.project_id !== filterWorkflow.value) return false
     return true
   })
 })
@@ -106,7 +106,7 @@ const openCreateModal = () => {
   formData.value = {
     name: '',
     description: '',
-    workflow_id: '',
+    project_id: '',
     input_mapping: '{}',
   }
   showModal.value = true
@@ -117,7 +117,7 @@ const openEditModal = (webhook: Webhook) => {
   formData.value = {
     name: webhook.name,
     description: webhook.description || '',
-    workflow_id: webhook.workflow_id,
+    project_id: webhook.project_id,
     input_mapping: webhook.input_mapping ? JSON.stringify(webhook.input_mapping, null, 2) : '{}',
   }
   showModal.value = true
@@ -143,7 +143,7 @@ const handleSubmit = async () => {
       toast.success(t('webhooks.messages.updated'))
     } else {
       const createData: CreateWebhookRequest = {
-        workflow_id: formData.value.workflow_id,
+        project_id: formData.value.project_id,
         name: formData.value.name,
         description: formData.value.description || undefined,
         input_mapping: parsedMapping,
@@ -273,8 +273,8 @@ const handleRegenerateSecret = async (webhook: Webhook) => {
         <div class="webhook-details">
           <div class="detail-row">
             <span class="detail-label">{{ $t('webhooks.table.workflow') }}:</span>
-            <NuxtLink :to="`/workflows/${webhook.workflow_id}`" class="workflow-link">
-              {{ getWorkflowName(webhook.workflow_id) }}
+            <NuxtLink :to="`/workflows/${webhook.project_id}`" class="workflow-link">
+              {{ getWorkflowName(webhook.project_id) }}
             </NuxtLink>
           </div>
 
@@ -384,7 +384,7 @@ X-Webhook-Secret: {{ webhook.secret }}</pre>
 
           <div v-if="!editingWebhook" class="form-group">
             <label>{{ $t('webhooks.form.workflow') }}</label>
-            <select v-model="formData.workflow_id" class="form-input" required>
+            <select v-model="formData.project_id" class="form-input" required>
               <option value="">{{ $t('webhooks.form.workflowPlaceholder') }}</option>
               <option v-for="wf in workflows" :key="wf.id" :value="wf.id">
                 {{ wf.name }}

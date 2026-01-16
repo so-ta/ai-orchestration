@@ -93,8 +93,8 @@ func HandleError(w http.ResponseWriter, err error) {
 	}
 
 	switch {
-	case errors.Is(err, domain.ErrWorkflowNotFound),
-		errors.Is(err, domain.ErrWorkflowVersionNotFound),
+	case errors.Is(err, domain.ErrProjectNotFound),
+		errors.Is(err, domain.ErrProjectVersionNotFound),
 		errors.Is(err, domain.ErrStepNotFound),
 		errors.Is(err, domain.ErrEdgeNotFound),
 		errors.Is(err, domain.ErrRunNotFound),
@@ -126,14 +126,14 @@ func HandleError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrBlockCodeHidden):
 		Error(w, http.StatusForbidden, "CODE_HIDDEN", err.Error(), nil)
 
-	case errors.Is(err, domain.ErrWorkflowAlreadyPublished),
-		errors.Is(err, domain.ErrWorkflowNotEditable),
+	case errors.Is(err, domain.ErrProjectAlreadyPublished),
+		errors.Is(err, domain.ErrProjectNotEditable),
 		errors.Is(err, domain.ErrEdgeDuplicate):
 		Error(w, http.StatusConflict, "CONFLICT", err.Error(), nil)
 
-	case errors.Is(err, domain.ErrWorkflowHasCycle),
-		errors.Is(err, domain.ErrWorkflowHasUnconnected),
-		errors.Is(err, domain.ErrWorkflowHasUnreachable),
+	case errors.Is(err, domain.ErrProjectHasCycle),
+		errors.Is(err, domain.ErrProjectHasUnconnected),
+		errors.Is(err, domain.ErrProjectHasUnreachable),
 		errors.Is(err, domain.ErrEdgeSelfLoop),
 		errors.Is(err, domain.ErrEdgeCreatesCycle),
 		errors.Is(err, domain.ErrInvalidStepType),

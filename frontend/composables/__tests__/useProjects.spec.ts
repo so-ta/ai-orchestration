@@ -13,67 +13,67 @@ vi.mock('../useApi', () => ({
 }))
 
 // Import after mocking
-import { useWorkflows } from '../useWorkflows'
+import { useProjects } from '../useProjects'
 
-describe('useWorkflows', () => {
+describe('useProjects', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   describe('list', () => {
-    it('should list workflows without params', async () => {
-      const mockResponse = { data: [{ id: '1', name: 'Workflow 1' }] }
+    it('should list projects without params', async () => {
+      const mockResponse = { data: [{ id: '1', name: 'Project 1' }] }
       mockApi.get.mockResolvedValue(mockResponse)
 
-      const { list } = useWorkflows()
+      const { list } = useProjects()
       const result = await list()
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects')
       expect(result).toEqual(mockResponse)
     })
 
-    it('should list workflows with status filter', async () => {
+    it('should list projects with status filter', async () => {
       mockApi.get.mockResolvedValue({ data: [] })
 
-      const { list } = useWorkflows()
+      const { list } = useProjects()
       await list({ status: 'published' })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows?status=published')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects?status=published')
     })
 
-    it('should list workflows with pagination', async () => {
+    it('should list projects with pagination', async () => {
       mockApi.get.mockResolvedValue({ data: [] })
 
-      const { list } = useWorkflows()
+      const { list } = useProjects()
       await list({ page: 2, limit: 10 })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows?page=2&limit=10')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects?page=2&limit=10')
     })
   })
 
   describe('get', () => {
-    it('should get workflow by ID', async () => {
-      const mockResponse = { data: { id: '1', name: 'Workflow 1' } }
+    it('should get project by ID', async () => {
+      const mockResponse = { data: { id: '1', name: 'Project 1' } }
       mockApi.get.mockResolvedValue(mockResponse)
 
-      const { get } = useWorkflows()
+      const { get } = useProjects()
       const result = await get('1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows/1')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects/1')
       expect(result).toEqual(mockResponse)
     })
   })
 
   describe('create', () => {
-    it('should create workflow', async () => {
-      const mockResponse = { data: { id: '1', name: 'New Workflow' } }
+    it('should create project', async () => {
+      const mockResponse = { data: { id: '1', name: 'New Project' } }
       mockApi.post.mockResolvedValue(mockResponse)
 
-      const { create } = useWorkflows()
-      const result = await create({ name: 'New Workflow', description: 'Test' })
+      const { create } = useProjects()
+      const result = await create({ name: 'New Project', description: 'Test' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/workflows', {
-        name: 'New Workflow',
+      expect(mockApi.post).toHaveBeenCalledWith('/projects', {
+        name: 'New Project',
         description: 'Test',
       })
       expect(result).toEqual(mockResponse)
@@ -81,56 +81,56 @@ describe('useWorkflows', () => {
   })
 
   describe('update', () => {
-    it('should update workflow', async () => {
-      const mockResponse = { data: { id: '1', name: 'Updated Workflow' } }
+    it('should update project', async () => {
+      const mockResponse = { data: { id: '1', name: 'Updated Project' } }
       mockApi.put.mockResolvedValue(mockResponse)
 
-      const { update } = useWorkflows()
-      const result = await update('1', { name: 'Updated Workflow' })
+      const { update } = useProjects()
+      const result = await update('1', { name: 'Updated Project' })
 
-      expect(mockApi.put).toHaveBeenCalledWith('/workflows/1', {
-        name: 'Updated Workflow',
+      expect(mockApi.put).toHaveBeenCalledWith('/projects/1', {
+        name: 'Updated Project',
       })
       expect(result).toEqual(mockResponse)
     })
   })
 
   describe('remove', () => {
-    it('should delete workflow', async () => {
+    it('should delete project', async () => {
       mockApi.delete.mockResolvedValue(undefined)
 
-      const { remove } = useWorkflows()
+      const { remove } = useProjects()
       await remove('1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/1')
+      expect(mockApi.delete).toHaveBeenCalledWith('/projects/1')
     })
   })
 
   describe('save', () => {
-    it('should save workflow with steps and edges', async () => {
+    it('should save project with steps and edges', async () => {
       const mockResponse = { data: { id: '1', version: 2 } }
       mockApi.post.mockResolvedValue(mockResponse)
 
-      const { save } = useWorkflows()
+      const { save } = useProjects()
       const saveData = {
-        name: 'Workflow',
+        name: 'Project',
         description: 'Test',
         steps: [{ id: 's1', name: 'Step 1', type: 'start', config: {}, position_x: 0, position_y: 0 }],
         edges: [{ id: 'e1', source_step_id: 's1', target_step_id: 's2' }],
       }
       const result = await save('1', saveData)
 
-      expect(mockApi.post).toHaveBeenCalledWith('/workflows/1/save', saveData)
+      expect(mockApi.post).toHaveBeenCalledWith('/projects/1/save', saveData)
       expect(result).toEqual(mockResponse)
     })
   })
 
   describe('saveDraft', () => {
-    it('should save workflow as draft', async () => {
+    it('should save project as draft', async () => {
       const mockResponse = { data: { id: '1', has_draft: true } }
       mockApi.post.mockResolvedValue(mockResponse)
 
-      const { saveDraft } = useWorkflows()
+      const { saveDraft } = useProjects()
       const draftData = {
         name: 'Draft',
         steps: [],
@@ -138,7 +138,7 @@ describe('useWorkflows', () => {
       }
       const result = await saveDraft('1', draftData)
 
-      expect(mockApi.post).toHaveBeenCalledWith('/workflows/1/draft', draftData)
+      expect(mockApi.post).toHaveBeenCalledWith('/projects/1/draft', draftData)
       expect(result).toEqual(mockResponse)
     })
   })
@@ -148,10 +148,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: { id: '1', has_draft: false } }
       mockApi.delete.mockResolvedValue(mockResponse)
 
-      const { discardDraft } = useWorkflows()
+      const { discardDraft } = useProjects()
       const result = await discardDraft('1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/1/draft')
+      expect(mockApi.delete).toHaveBeenCalledWith('/projects/1/draft')
       expect(result).toEqual(mockResponse)
     })
   })
@@ -161,10 +161,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: [{ id: 's1', name: 'Step 1' }] }
       mockApi.get.mockResolvedValue(mockResponse)
 
-      const { listSteps } = useWorkflows()
-      const result = await listSteps('w1')
+      const { listSteps } = useProjects()
+      const result = await listSteps('p1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows/w1/steps')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/steps')
       expect(result).toEqual(mockResponse)
     })
 
@@ -172,10 +172,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: { id: 's1', name: 'New Step' } }
       mockApi.post.mockResolvedValue(mockResponse)
 
-      const { createStep } = useWorkflows()
-      const result = await createStep('w1', { name: 'New Step', type: 'tool' })
+      const { createStep } = useProjects()
+      const result = await createStep('p1', { name: 'New Step', type: 'tool' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/workflows/w1/steps', {
+      expect(mockApi.post).toHaveBeenCalledWith('/projects/p1/steps', {
         name: 'New Step',
         type: 'tool',
       })
@@ -186,10 +186,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: { id: 's1', name: 'Updated Step' } }
       mockApi.put.mockResolvedValue(mockResponse)
 
-      const { updateStep } = useWorkflows()
-      const result = await updateStep('w1', 's1', { name: 'Updated Step' })
+      const { updateStep } = useProjects()
+      const result = await updateStep('p1', 's1', { name: 'Updated Step' })
 
-      expect(mockApi.put).toHaveBeenCalledWith('/workflows/w1/steps/s1', {
+      expect(mockApi.put).toHaveBeenCalledWith('/projects/p1/steps/s1', {
         name: 'Updated Step',
       })
       expect(result).toEqual(mockResponse)
@@ -198,10 +198,10 @@ describe('useWorkflows', () => {
     it('should delete step', async () => {
       mockApi.delete.mockResolvedValue(undefined)
 
-      const { deleteStep } = useWorkflows()
-      await deleteStep('w1', 's1')
+      const { deleteStep } = useProjects()
+      await deleteStep('p1', 's1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/w1/steps/s1')
+      expect(mockApi.delete).toHaveBeenCalledWith('/projects/p1/steps/s1')
     })
   })
 
@@ -210,10 +210,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: [{ id: 'e1' }] }
       mockApi.get.mockResolvedValue(mockResponse)
 
-      const { listEdges } = useWorkflows()
-      const result = await listEdges('w1')
+      const { listEdges } = useProjects()
+      const result = await listEdges('p1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows/w1/edges')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/edges')
       expect(result).toEqual(mockResponse)
     })
 
@@ -221,13 +221,13 @@ describe('useWorkflows', () => {
       const mockResponse = { data: { id: 'e1' } }
       mockApi.post.mockResolvedValue(mockResponse)
 
-      const { createEdge } = useWorkflows()
-      const result = await createEdge('w1', {
+      const { createEdge } = useProjects()
+      const result = await createEdge('p1', {
         source_step_id: 's1',
         target_step_id: 's2',
       })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/workflows/w1/edges', {
+      expect(mockApi.post).toHaveBeenCalledWith('/projects/p1/edges', {
         source_step_id: 's1',
         target_step_id: 's2',
       })
@@ -237,10 +237,10 @@ describe('useWorkflows', () => {
     it('should delete edge', async () => {
       mockApi.delete.mockResolvedValue(undefined)
 
-      const { deleteEdge } = useWorkflows()
-      await deleteEdge('w1', 'e1')
+      const { deleteEdge } = useProjects()
+      await deleteEdge('p1', 'e1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/w1/edges/e1')
+      expect(mockApi.delete).toHaveBeenCalledWith('/projects/p1/edges/e1')
     })
   })
 
@@ -249,10 +249,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: [{ version: 1 }, { version: 2 }] }
       mockApi.get.mockResolvedValue(mockResponse)
 
-      const { listVersions } = useWorkflows()
-      const result = await listVersions('w1')
+      const { listVersions } = useProjects()
+      const result = await listVersions('p1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows/w1/versions')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/versions')
       expect(result).toEqual(mockResponse)
     })
 
@@ -260,10 +260,10 @@ describe('useWorkflows', () => {
       const mockResponse = { data: { version: 1 } }
       mockApi.get.mockResolvedValue(mockResponse)
 
-      const { getVersion } = useWorkflows()
-      const result = await getVersion('w1', 1)
+      const { getVersion } = useProjects()
+      const result = await getVersion('p1', 1)
 
-      expect(mockApi.get).toHaveBeenCalledWith('/workflows/w1/versions/1')
+      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/versions/1')
       expect(result).toEqual(mockResponse)
     })
   })

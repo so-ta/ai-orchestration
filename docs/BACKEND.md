@@ -2,6 +2,8 @@
 
 Go backend code structure, interfaces, and patterns.
 
+> **Migration Note (2026-01)**: Workflow has been renamed to Project. Projects now support multiple Start blocks with different trigger types (manual, schedule, webhook). The webhooks table has been removed; webhook configuration is part of Start block config.
+
 ## Quick Reference
 
 | Item | Value |
@@ -51,45 +53,48 @@ handler -> usecase -> domain
 
 ## Domain Models
 
-### Workflow (domain/workflow.go)
+### Project (domain/project.go, formerly workflow.go)
 
 ```go
-type Workflow struct {
+type Project struct {
     ID          uuid.UUID
     TenantID    uuid.UUID
     Name        string
     Description string
-    Status      WorkflowStatus  // "draft" | "published"
+    Status      ProjectStatus  // "draft" | "published"
     Version     int
-    InputSchema json.RawMessage
+    Variables   json.RawMessage  // Project-level variables (replaces input_schema/output_schema)
     CreatedAt   time.Time
     UpdatedAt   time.Time
     DeletedAt   *time.Time
 }
 
-type WorkflowStatus string
+type ProjectStatus string
 const (
-    WorkflowStatusDraft     WorkflowStatus = "draft"
-    WorkflowStatusPublished WorkflowStatus = "published"
+    ProjectStatusDraft     ProjectStatus = "draft"
+    ProjectStatusPublished ProjectStatus = "published"
 )
 ```
+
+> **Migration Note**: `InputSchema` and `OutputSchema` have been removed from Project. Input/output schemas are now defined per Start block in the Step config.
 
 ### Step (domain/step.go)
 
 ```go
 type Step struct {
-    ID         uuid.UUID
-    WorkflowID uuid.UUID
-    Name       string
-    Type       StepType
-    Config     json.RawMessage
-    Position   Position
-    CreatedAt  time.Time
-    UpdatedAt  time.Time
+    ID        uuid.UUID
+    ProjectID uuid.UUID
+    Name      string
+    Type      StepType
+    Config    json.RawMessage
+    Position  Position
+    CreatedAt time.Time
+    UpdatedAt time.Time
 }
 
 type StepType string
 const (
+    StepTypeStart       StepType = "start"        // Multiple per project, with trigger_type
     StepTypeLLM         StepType = "llm"
     StepTypeTool        StepType = "tool"
     StepTypeCondition   StepType = "condition"
@@ -105,6 +110,29 @@ const (
 ```
 
 ### Step Config Schemas
+
+#### Start Step (Multiple per project supported)
+```json
+{
+  "trigger_type": "manual|schedule|webhook",
+  "trigger_config": {
+    "input_mapping": {},
+    "webhook_secret": "string",
+    "cron": "0 9 * * *",
+    "timezone": "Asia/Tokyo"
+  },
+  "input_schema": {},
+  "output_schema": {}
+}
+```
+
+| Trigger Type | trigger_config Fields |
+|--------------|----------------------|
+| `manual` | None required |
+| `schedule` | `cron`, `timezone` |
+| `webhook` | `webhook_secret`, `input_mapping` |
+
+> **Note**: Projects can have multiple Start blocks. Each Start block can have a different trigger type. This replaces the previous webhooks table functionality.
 
 #### LLM Step
 ```json
@@ -228,7 +256,7 @@ Loop types:
 ```go
 type Edge struct {
     ID           uuid.UUID
-    WorkflowID   uuid.UUID
+    ProjectID    uuid.UUID
     SourceStepID uuid.UUID
     TargetStepID uuid.UUID
     Condition    string  // Optional: "$.success == true"
@@ -243,7 +271,7 @@ Control flow construct that groups multiple steps into a single logical unit.
 ```go
 type BlockGroup struct {
     ID            uuid.UUID
-    WorkflowID    uuid.UUID
+    ProjectID     uuid.UUID
     Name          string
     Type          BlockGroupType
     Config        json.RawMessage
@@ -383,19 +411,20 @@ When executing an inherited block:
 
 ```go
 type Run struct {
-    ID              uuid.UUID
-    WorkflowID      uuid.UUID
-    WorkflowVersion int
-    TenantID        uuid.UUID
-    Status          RunStatus
-    Mode            RunMode
-    TriggerType     TriggerType
-    Input           json.RawMessage
-    Output          json.RawMessage
-    Error           string
-    StartedAt       *time.Time
-    CompletedAt     *time.Time
-    CreatedAt       time.Time
+    ID             uuid.UUID
+    ProjectID      uuid.UUID
+    ProjectVersion int
+    StartStepID    uuid.UUID       // Which Start block triggered this run
+    TenantID       uuid.UUID
+    Status         RunStatus
+    Mode           RunMode
+    TriggerType    TriggerType
+    Input          json.RawMessage
+    Output         json.RawMessage
+    Error          string
+    StartedAt      *time.Time
+    CompletedAt    *time.Time
+    CreatedAt      time.Time
 }
 
 type RunStatus string
@@ -445,24 +474,25 @@ type StepRun struct {
 ### Repository Interface (repository/interfaces.go)
 
 ```go
-type WorkflowRepository interface {
-    Create(ctx context.Context, w *domain.Workflow) error
-    GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error)
-    List(ctx context.Context, tenantID uuid.UUID, filter WorkflowFilter) ([]*domain.Workflow, error)
-    Update(ctx context.Context, w *domain.Workflow) error
+type ProjectRepository interface {
+    Create(ctx context.Context, p *domain.Project) error
+    GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error)
+    List(ctx context.Context, tenantID uuid.UUID, filter ProjectFilter) ([]*domain.Project, error)
+    Update(ctx context.Context, p *domain.Project) error
     Delete(ctx context.Context, tenantID, id uuid.UUID) error
 }
 
 type StepRepository interface {
     Create(ctx context.Context, s *domain.Step) error
-    GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]*domain.Step, error)
+    GetByProjectID(ctx context.Context, projectID uuid.UUID) ([]*domain.Step, error)
+    GetStartBlocks(ctx context.Context, projectID uuid.UUID) ([]*domain.Step, error)  // Get all Start blocks
     Update(ctx context.Context, s *domain.Step) error
     Delete(ctx context.Context, id uuid.UUID) error
 }
 
 type EdgeRepository interface {
     Create(ctx context.Context, e *domain.Edge) error
-    GetByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]*domain.Edge, error)
+    GetByProjectID(ctx context.Context, projectID uuid.UUID) ([]*domain.Edge, error)
     Delete(ctx context.Context, id uuid.UUID) error
 }
 
@@ -470,7 +500,8 @@ type RunRepository interface {
     Create(ctx context.Context, r *domain.Run) error
     GetByID(ctx context.Context, id uuid.UUID) (*domain.Run, error)
     Update(ctx context.Context, r *domain.Run) error
-    ListByWorkflowID(ctx context.Context, workflowID uuid.UUID) ([]*domain.Run, error)
+    ListByProjectID(ctx context.Context, projectID uuid.UUID) ([]*domain.Run, error)
+    ListByStartStepID(ctx context.Context, startStepID uuid.UUID) ([]*domain.Run, error)  // Filter by Start block
 }
 
 type StepRunRepository interface {
@@ -568,13 +599,15 @@ Config:
 
 ### Execution Flow
 
-1. Load workflow definition (steps, edges)
-2. Build execution graph
-3. Find entry steps (no incoming edges)
+1. Load project definition (steps, edges)
+2. Identify the Start block to execute (from `start_step_id`)
+3. Build execution graph from the specified Start block
 4. Execute steps in topological order
 5. Handle branching (condition steps)
 6. Handle parallel execution (map steps)
 7. Collect outputs, update run status
+
+> **Note**: Since projects can have multiple Start blocks, the execution engine now requires `start_step_id` to know which subgraph to execute.
 
 ### Condition Expression Syntax (engine/condition.go)
 
@@ -591,13 +624,14 @@ $.field                # Truthy check
 
 ### Job Queue (engine/queue.go)
 
-Queue name: `workflow:jobs`
+Queue name: `project:jobs`
 
 Job payload:
 ```json
 {
   "run_id": "uuid",
-  "workflow_id": "uuid",
+  "project_id": "uuid",
+  "start_step_id": "uuid",
   "tenant_id": "uuid"
 }
 ```
@@ -798,11 +832,11 @@ Claude Code はこのセクションのパターンに従ってコードを書�
 
 ```go
 // ✅ 正しいパターン
-func (h *WorkflowHandler) Create(c echo.Context) error {
+func (h *ProjectHandler) Create(c echo.Context) error {
     ctx := c.Request().Context()
     tenantID := middleware.GetTenantID(ctx)
 
-    var req CreateWorkflowRequest
+    var req CreateProjectRequest
     if err := c.Bind(&req); err != nil {
         return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
     }
@@ -815,12 +849,12 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
         return h.mapError(err)
     }
 
-    return c.JSON(http.StatusCreated, NewWorkflowResponse(result))
+    return c.JSON(http.StatusCreated, NewProjectResponse(result))
 }
 
 // ❌ 禁止パターン
-func (h *WorkflowHandler) Create(c echo.Context) error {
-    var req CreateWorkflowRequest
+func (h *ProjectHandler) Create(c echo.Context) error {
+    var req CreateProjectRequest
     c.Bind(&req)  // エラー無視 → NG
 
     tenantID, _ := uuid.Parse(c.Request().Header.Get("X-Tenant-ID"))  // middleware 未使用 → NG
@@ -844,39 +878,39 @@ func (h *WorkflowHandler) Create(c echo.Context) error {
 
 ```go
 // ✅ 正しいパターン
-func (u *WorkflowUsecase) Create(ctx context.Context, tenantID uuid.UUID, input *CreateWorkflowInput) (*domain.Workflow, error) {
+func (u *ProjectUsecase) Create(ctx context.Context, tenantID uuid.UUID, input *CreateProjectInput) (*domain.Project, error) {
     // 1. バリデーション
     if input.Name == "" {
         return nil, domain.ErrValidation
     }
 
     // 2. ビジネスロジック
-    workflow := &domain.Workflow{
+    project := &domain.Project{
         ID:        uuid.New(),
         TenantID:  tenantID,
         Name:      input.Name,
-        Status:    domain.WorkflowStatusDraft,
+        Status:    domain.ProjectStatusDraft,
         CreatedAt: time.Now(),
         UpdatedAt: time.Now(),
     }
 
     // 3. 永続化
-    if err := u.repo.Create(ctx, workflow); err != nil {
-        return nil, fmt.Errorf("create workflow: %w", err)
+    if err := u.repo.Create(ctx, project); err != nil {
+        return nil, fmt.Errorf("create project: %w", err)
     }
 
-    return workflow, nil
+    return project, nil
 }
 
 // ❌ 禁止パターン
-func (u *WorkflowUsecase) Create(ctx context.Context, input *CreateWorkflowInput) (*domain.Workflow, error) {
+func (u *ProjectUsecase) Create(ctx context.Context, input *CreateProjectInput) (*domain.Project, error) {
     // tenantID が引数にない → NG
     // ID を外部から受け取る → NG（Usecase 内で生成）
     // time.Now() を外部から受け取る → NG
-    workflow := &domain.Workflow{
+    project := &domain.Project{
         ID: input.ID,  // NG
     }
-    return u.repo.Create(ctx, workflow)
+    return u.repo.Create(ctx, project)
 }
 ```
 
@@ -891,31 +925,31 @@ func (u *WorkflowUsecase) Create(ctx context.Context, input *CreateWorkflowInput
 
 ```go
 // ✅ 正しいパターン
-func (r *WorkflowRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Workflow, error) {
+func (r *ProjectRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error) {
     query := `
         SELECT id, tenant_id, name, status, created_at, updated_at
-        FROM workflows
+        FROM projects
         WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
     `
 
-    var w domain.Workflow
+    var p domain.Project
     err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
-        &w.ID, &w.TenantID, &w.Name, &w.Status, &w.CreatedAt, &w.UpdatedAt,
+        &p.ID, &p.TenantID, &p.Name, &p.Status, &p.CreatedAt, &p.UpdatedAt,
     )
     if err != nil {
         if errors.Is(err, pgx.ErrNoRows) {
             return nil, domain.ErrNotFound
         }
-        return nil, fmt.Errorf("query workflow: %w", err)
+        return nil, fmt.Errorf("query project: %w", err)
     }
 
-    return &w, nil
+    return &p, nil
 }
 
 // ❌ 禁止パターン
-func (r *WorkflowRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Workflow, error) {
+func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Project, error) {
     // tenant_id フィルタなし → NG（テナント分離違反）
-    query := `SELECT * FROM workflows WHERE id = $1`
+    query := `SELECT * FROM projects WHERE id = $1`
 
     // deleted_at チェックなし → NG（論理削除違反）
     // SELECT * 使用 → NG（カラム明示）
@@ -935,23 +969,33 @@ func (r *WorkflowRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain
 
 ```go
 // ✅ 正しいパターン
-func (u *WorkflowUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) error {
-    workflow, err := u.repo.GetByID(ctx, tenantID, id)
+func (u *ProjectUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) error {
+    project, err := u.repo.GetByID(ctx, tenantID, id)
     if err != nil {
         return err  // domain.ErrNotFound がそのまま返る
     }
 
-    if workflow.Status == domain.WorkflowStatusPublished {
+    if project.Status == domain.ProjectStatusPublished {
         return domain.ErrConflict  // 既に公開済み
     }
 
-    steps, err := u.stepRepo.GetByWorkflowID(ctx, workflow.ID)
+    steps, err := u.stepRepo.GetByProjectID(ctx, project.ID)
     if err != nil {
         return fmt.Errorf("get steps: %w", err)
     }
 
     if len(steps) == 0 {
-        return fmt.Errorf("%w: workflow has no steps", domain.ErrValidation)
+        return fmt.Errorf("%w: project has no steps", domain.ErrValidation)
+    }
+
+    // Validate that at least one Start block exists
+    startBlocks, err := u.stepRepo.GetStartBlocks(ctx, project.ID)
+    if err != nil {
+        return fmt.Errorf("get start blocks: %w", err)
+    }
+
+    if len(startBlocks) == 0 {
+        return fmt.Errorf("%w: project has no start blocks", domain.ErrValidation)
     }
 
     // ...
@@ -973,42 +1017,42 @@ func (u *WorkflowUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) e
 
 ```go
 // ✅ 正しいパターン: Table-Driven Tests
-func TestWorkflowUsecase_Create(t *testing.T) {
+func TestProjectUsecase_Create(t *testing.T) {
     tests := []struct {
         name    string
-        input   *CreateWorkflowInput
-        want    *domain.Workflow
+        input   *CreateProjectInput
+        want    *domain.Project
         wantErr error
     }{
         // 正常系
         {
-            name:  "valid input creates workflow",
-            input: &CreateWorkflowInput{Name: "Test Workflow"},
-            want:  &domain.Workflow{Name: "Test Workflow", Status: domain.WorkflowStatusDraft},
+            name:  "valid input creates project",
+            input: &CreateProjectInput{Name: "Test Project"},
+            want:  &domain.Project{Name: "Test Project", Status: domain.ProjectStatusDraft},
         },
         // 異常系 - 必須
         {
             name:    "empty name returns validation error",
-            input:   &CreateWorkflowInput{Name: ""},
+            input:   &CreateProjectInput{Name: ""},
             wantErr: domain.ErrValidation,
         },
         // 境界値
         {
             name:  "max length name succeeds",
-            input: &CreateWorkflowInput{Name: strings.Repeat("a", 255)},
-            want:  &domain.Workflow{Status: domain.WorkflowStatusDraft},
+            input: &CreateProjectInput{Name: strings.Repeat("a", 255)},
+            want:  &domain.Project{Status: domain.ProjectStatusDraft},
         },
         {
             name:    "over max length name fails",
-            input:   &CreateWorkflowInput{Name: strings.Repeat("a", 256)},
+            input:   &CreateProjectInput{Name: strings.Repeat("a", 256)},
             wantErr: domain.ErrValidation,
         },
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            repo := &mockWorkflowRepo{}
-            uc := usecase.NewWorkflowUsecase(repo)
+            repo := &mockProjectRepo{}
+            uc := usecase.NewProjectUsecase(repo)
 
             got, err := uc.Create(ctx, tenantID, tt.input)
 
@@ -1069,29 +1113,42 @@ func (s *Step) GetConfig() *LLMConfig {
 
 ```go
 // ✅ 正しいパターン
-func (u *WorkflowUsecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
-    ctx, span := telemetry.StartSpan(ctx, "WorkflowUsecase.Execute")
+func (u *ProjectUsecase) Execute(ctx context.Context, tenantID, projectID, startStepID uuid.UUID) error {
+    ctx, span := telemetry.StartSpan(ctx, "ProjectUsecase.Execute")
     defer span.End()
 
     span.SetAttributes(
         attribute.String("tenant_id", tenantID.String()),
-        attribute.String("workflow_id", id.String()),
+        attribute.String("project_id", projectID.String()),
+        attribute.String("start_step_id", startStepID.String()),
     )
 
     // ctx を全ての呼び出しに伝播
-    workflow, err := u.repo.GetByID(ctx, tenantID, id)
+    project, err := u.repo.GetByID(ctx, tenantID, projectID)
     if err != nil {
         span.RecordError(err)
         return err
+    }
+
+    // Validate start_step_id belongs to this project
+    startStep, err := u.stepRepo.GetByID(ctx, startStepID)
+    if err != nil {
+        span.RecordError(err)
+        return err
+    }
+
+    if startStep.Type != domain.StepTypeStart {
+        return fmt.Errorf("%w: specified step is not a start block", domain.ErrValidation)
     }
 
     // ...
 }
 
 // ❌ 禁止パターン
-func (u *WorkflowUsecase) Execute(tenantID, id uuid.UUID) error {
+func (u *ProjectUsecase) Execute(tenantID, id uuid.UUID) error {
     // ctx 引数なし → NG
     ctx := context.Background()  // 新規 ctx 作成 → NG（トレース途切れ）
+    // start_step_id なし → NG（multi-start projects require it）
     // ...
 }
 ```

@@ -20,7 +20,7 @@ const (
 type ExecutionMode string
 
 const (
-	// ExecutionModeFull is the default full workflow execution
+	// ExecutionModeFull is the default full project execution
 	ExecutionModeFull ExecutionMode = "full"
 	// ExecutionModeSingleStep executes only a single step
 	ExecutionModeSingleStep ExecutionMode = "single_step"
@@ -28,15 +28,15 @@ const (
 	ExecutionModeResume ExecutionMode = "resume"
 )
 
-// Job represents a workflow execution job
+// Job represents a project execution job
 type Job struct {
-	ID              string          `json:"id"`
-	TenantID        uuid.UUID       `json:"tenant_id"`
-	WorkflowID      uuid.UUID       `json:"workflow_id"`
-	WorkflowVersion int             `json:"workflow_version"`
-	RunID           uuid.UUID       `json:"run_id"`
-	Input           json.RawMessage `json:"input"`
-	CreatedAt       time.Time       `json:"created_at"`
+	ID             string          `json:"id"`
+	TenantID       uuid.UUID       `json:"tenant_id"`
+	ProjectID      uuid.UUID       `json:"project_id"`
+	ProjectVersion int             `json:"project_version"`
+	RunID          uuid.UUID       `json:"run_id"`
+	Input          json.RawMessage `json:"input"`
+	CreatedAt      time.Time       `json:"created_at"`
 
 	// Partial execution fields
 	ExecutionMode   ExecutionMode              `json:"execution_mode,omitempty"`   // "full", "single_step", "resume"

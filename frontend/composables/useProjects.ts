@@ -1,10 +1,10 @@
-// Workflow API composable
-import type { Workflow, Step, Edge, WorkflowVersion, ApiResponse, PaginatedResponse } from '~/types/api'
+// Project API composable
+import type { Project, Step, Edge, ProjectVersion, ApiResponse, PaginatedResponse } from '~/types/api'
 
-export function useWorkflows() {
+export function useProjects() {
   const api = useApi()
 
-  // List workflows
+  // List projects
   async function list(params?: { status?: string; page?: number; limit?: number }) {
     const query = new URLSearchParams()
     if (params?.status) query.set('status', params.status)
@@ -12,32 +12,32 @@ export function useWorkflows() {
     if (params?.limit) query.set('limit', params.limit.toString())
 
     const queryString = query.toString()
-    const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`
+    const endpoint = `/projects${queryString ? `?${queryString}` : ''}`
 
-    return api.get<PaginatedResponse<Workflow>>(endpoint)
+    return api.get<PaginatedResponse<Project>>(endpoint)
   }
 
-  // Get workflow by ID
+  // Get project by ID
   async function get(id: string) {
-    return api.get<ApiResponse<Workflow>>(`/workflows/${id}`)
+    return api.get<ApiResponse<Project>>(`/projects/${id}`)
   }
 
-  // Create workflow
+  // Create project
   async function create(data: { name: string; description?: string; input_schema?: object }) {
-    return api.post<ApiResponse<Workflow>>('/workflows', data)
+    return api.post<ApiResponse<Project>>('/projects', data)
   }
 
-  // Update workflow
+  // Update project
   async function update(id: string, data: { name?: string; description?: string; input_schema?: object }) {
-    return api.put<ApiResponse<Workflow>>(`/workflows/${id}`, data)
+    return api.put<ApiResponse<Project>>(`/projects/${id}`, data)
   }
 
-  // Delete workflow
+  // Delete project
   async function remove(id: string) {
-    return api.delete(`/workflows/${id}`)
+    return api.delete(`/projects/${id}`)
   }
 
-  // Save workflow (creates a new version)
+  // Save project (creates a new version)
   async function save(id: string, data: {
     name: string
     description?: string
@@ -61,10 +61,10 @@ export function useWorkflows() {
       condition?: string
     }>
   }) {
-    return api.post<ApiResponse<Workflow>>(`/workflows/${id}/save`, data)
+    return api.post<ApiResponse<Project>>(`/projects/${id}/save`, data)
   }
 
-  // Save workflow as draft (no version created)
+  // Save project as draft (no version created)
   async function saveDraft(id: string, data: {
     name: string
     description?: string
@@ -88,52 +88,52 @@ export function useWorkflows() {
       condition?: string
     }>
   }) {
-    return api.post<ApiResponse<Workflow>>(`/workflows/${id}/draft`, data)
+    return api.post<ApiResponse<Project>>(`/projects/${id}/draft`, data)
   }
 
   // Discard draft
   async function discardDraft(id: string) {
-    return api.delete<ApiResponse<Workflow>>(`/workflows/${id}/draft`)
+    return api.delete<ApiResponse<Project>>(`/projects/${id}/draft`)
   }
 
   // Restore version
   async function restoreVersion(id: string, version: number) {
-    return api.post<ApiResponse<Workflow>>(`/workflows/${id}/restore`, { version })
+    return api.post<ApiResponse<Project>>(`/projects/${id}/restore`, { version })
   }
 
   // Steps
-  async function listSteps(workflowId: string) {
-    return api.get<ApiResponse<Step[]>>(`/workflows/${workflowId}/steps`)
+  async function listSteps(projectId: string) {
+    return api.get<ApiResponse<Step[]>>(`/projects/${projectId}/steps`)
   }
 
-  async function createStep(workflowId: string, data: {
+  async function createStep(projectId: string, data: {
     name: string
     type: string
     config?: object
     position?: { x: number; y: number }
   }) {
-    return api.post<ApiResponse<Step>>(`/workflows/${workflowId}/steps`, data)
+    return api.post<ApiResponse<Step>>(`/projects/${projectId}/steps`, data)
   }
 
-  async function updateStep(workflowId: string, stepId: string, data: {
+  async function updateStep(projectId: string, stepId: string, data: {
     name?: string
     type?: string
     config?: object
     position?: { x: number; y: number }
   }) {
-    return api.put<ApiResponse<Step>>(`/workflows/${workflowId}/steps/${stepId}`, data)
+    return api.put<ApiResponse<Step>>(`/projects/${projectId}/steps/${stepId}`, data)
   }
 
-  async function deleteStep(workflowId: string, stepId: string) {
-    return api.delete(`/workflows/${workflowId}/steps/${stepId}`)
+  async function deleteStep(projectId: string, stepId: string) {
+    return api.delete(`/projects/${projectId}/steps/${stepId}`)
   }
 
   // Edges
-  async function listEdges(workflowId: string) {
-    return api.get<ApiResponse<Edge[]>>(`/workflows/${workflowId}/edges`)
+  async function listEdges(projectId: string) {
+    return api.get<ApiResponse<Edge[]>>(`/projects/${projectId}/edges`)
   }
 
-  async function createEdge(workflowId: string, data: {
+  async function createEdge(projectId: string, data: {
     source_step_id?: string
     target_step_id?: string
     source_block_group_id?: string
@@ -142,20 +142,20 @@ export function useWorkflows() {
     target_port?: string
     condition?: string
   }) {
-    return api.post<ApiResponse<Edge>>(`/workflows/${workflowId}/edges`, data)
+    return api.post<ApiResponse<Edge>>(`/projects/${projectId}/edges`, data)
   }
 
-  async function deleteEdge(workflowId: string, edgeId: string) {
-    return api.delete(`/workflows/${workflowId}/edges/${edgeId}`)
+  async function deleteEdge(projectId: string, edgeId: string) {
+    return api.delete(`/projects/${projectId}/edges/${edgeId}`)
   }
 
   // Versions
-  async function listVersions(workflowId: string) {
-    return api.get<ApiResponse<WorkflowVersion[]>>(`/workflows/${workflowId}/versions`)
+  async function listVersions(projectId: string) {
+    return api.get<ApiResponse<ProjectVersion[]>>(`/projects/${projectId}/versions`)
   }
 
-  async function getVersion(workflowId: string, version: number) {
-    return api.get<ApiResponse<WorkflowVersion>>(`/workflows/${workflowId}/versions/${version}`)
+  async function getVersion(projectId: string, version: number) {
+    return api.get<ApiResponse<ProjectVersion>>(`/projects/${projectId}/versions/${version}`)
   }
 
   return {

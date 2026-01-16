@@ -29,10 +29,10 @@ type CreateEdgeRequest struct {
 	Condition          string `json:"condition"`
 }
 
-// Create handles POST /api/v1/workflows/{workflow_id}/edges
+// Create handles POST /api/v1/projects/{project_id}/edges
 func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -44,7 +44,7 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	input := usecase.CreateEdgeInput{
 		TenantID:   tenantID,
-		WorkflowID: workflowID,
+		ProjectID:  projectID,
 		SourcePort: req.SourcePort,
 		TargetPort: req.TargetPort,
 		Condition:  req.Condition,
@@ -95,15 +95,15 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusCreated, edge)
 }
 
-// List handles GET /api/v1/workflows/{workflow_id}/edges
+// List handles GET /api/v1/projects/{project_id}/edges
 func (h *EdgeHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
 
-	edges, err := h.edgeUsecase.List(r.Context(), tenantID, workflowID)
+	edges, err := h.edgeUsecase.List(r.Context(), tenantID, projectID)
 	if err != nil {
 		HandleError(w, err)
 		return
@@ -112,10 +112,10 @@ func (h *EdgeHandler) List(w http.ResponseWriter, r *http.Request) {
 	JSONData(w, http.StatusOK, edges)
 }
 
-// Delete handles DELETE /api/v1/workflows/{workflow_id}/edges/{edge_id}
+// Delete handles DELETE /api/v1/projects/{project_id}/edges/{edge_id}
 func (h *EdgeHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
-	workflowID, ok := parseUUID(w, r, "id", "workflow ID")
+	projectID, ok := parseUUID(w, r, "id", "project ID")
 	if !ok {
 		return
 	}
@@ -124,7 +124,7 @@ func (h *EdgeHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.edgeUsecase.Delete(r.Context(), tenantID, workflowID, edgeID); err != nil {
+	if err := h.edgeUsecase.Delete(r.Context(), tenantID, projectID, edgeID); err != nil {
 		HandleError(w, err)
 		return
 	}

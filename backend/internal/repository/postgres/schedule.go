@@ -25,17 +25,18 @@ func NewScheduleRepository(pool *pgxpool.Pool) *ScheduleRepository {
 func (r *ScheduleRepository) Create(ctx context.Context, schedule *domain.Schedule) error {
 	query := `
 		INSERT INTO schedules (
-			id, tenant_id, workflow_id, workflow_version, name, description,
+			id, tenant_id, project_id, project_version, start_step_id, name, description,
 			cron_expression, timezone, input, status, next_run_at, created_by,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
 	_, err := r.pool.Exec(ctx, query,
 		schedule.ID,
 		schedule.TenantID,
-		schedule.WorkflowID,
-		schedule.WorkflowVersion,
+		schedule.ProjectID,
+		schedule.ProjectVersion,
+		schedule.StartStepID,
 		schedule.Name,
 		schedule.Description,
 		schedule.CronExpression,
@@ -53,7 +54,7 @@ func (r *ScheduleRepository) Create(ctx context.Context, schedule *domain.Schedu
 
 func (r *ScheduleRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Schedule, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, workflow_version, name, description,
+		SELECT id, tenant_id, project_id, project_version, start_step_id, name, description,
 			   cron_expression, timezone, input, status, next_run_at, last_run_at,
 			   last_run_id, run_count, created_by, created_at, updated_at
 		FROM schedules
@@ -64,8 +65,9 @@ func (r *ScheduleRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID
 	err := r.pool.QueryRow(ctx, query, tenantID, id).Scan(
 		&schedule.ID,
 		&schedule.TenantID,
-		&schedule.WorkflowID,
-		&schedule.WorkflowVersion,
+		&schedule.ProjectID,
+		&schedule.ProjectVersion,
+		&schedule.StartStepID,
 		&schedule.Name,
 		&schedule.Description,
 		&schedule.CronExpression,
@@ -97,9 +99,9 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	countArgs := []interface{}{tenantID}
 	argIndex := 2
 
-	if filter.WorkflowID != nil {
-		countQuery += fmt.Sprintf(` AND workflow_id = $%d`, argIndex)
-		countArgs = append(countArgs, *filter.WorkflowID)
+	if filter.ProjectID != nil {
+		countQuery += fmt.Sprintf(` AND project_id = $%d`, argIndex)
+		countArgs = append(countArgs, *filter.ProjectID)
 		argIndex++
 	}
 	if filter.Status != nil {
@@ -114,7 +116,7 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 
 	// List query
 	query := `
-		SELECT id, tenant_id, workflow_id, workflow_version, name, description,
+		SELECT id, tenant_id, project_id, project_version, start_step_id, name, description,
 			   cron_expression, timezone, input, status, next_run_at, last_run_at,
 			   last_run_id, run_count, created_by, created_at, updated_at
 		FROM schedules
@@ -123,9 +125,9 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	args := []interface{}{tenantID}
 	argIdx := 2
 
-	if filter.WorkflowID != nil {
-		query += fmt.Sprintf(` AND workflow_id = $%d`, argIdx)
-		args = append(args, *filter.WorkflowID)
+	if filter.ProjectID != nil {
+		query += fmt.Sprintf(` AND project_id = $%d`, argIdx)
+		args = append(args, *filter.ProjectID)
 		argIdx++
 	}
 	if filter.Status != nil {
@@ -148,8 +150,8 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	for rows.Next() {
 		var s domain.Schedule
 		err := rows.Scan(
-			&s.ID, &s.TenantID, &s.WorkflowID, &s.WorkflowVersion,
-			&s.Name, &s.Description, &s.CronExpression, &s.Timezone,
+			&s.ID, &s.TenantID, &s.ProjectID, &s.ProjectVersion,
+			&s.StartStepID, &s.Name, &s.Description, &s.CronExpression, &s.Timezone,
 			&s.Input, &s.Status, &s.NextRunAt, &s.LastRunAt,
 			&s.LastRunID, &s.RunCount, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 		)
@@ -166,17 +168,17 @@ func (r *ScheduleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 	return schedules, total, nil
 }
 
-func (r *ScheduleRepository) ListByWorkflow(ctx context.Context, tenantID, workflowID uuid.UUID) ([]*domain.Schedule, error) {
+func (r *ScheduleRepository) ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Schedule, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, workflow_version, name, description,
+		SELECT id, tenant_id, project_id, project_version, start_step_id, name, description,
 			   cron_expression, timezone, input, status, next_run_at, last_run_at,
 			   last_run_id, run_count, created_by, created_at, updated_at
 		FROM schedules
-		WHERE tenant_id = $1 AND workflow_id = $2
+		WHERE tenant_id = $1 AND project_id = $2
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.pool.Query(ctx, query, tenantID, workflowID)
+	rows, err := r.pool.Query(ctx, query, tenantID, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +188,42 @@ func (r *ScheduleRepository) ListByWorkflow(ctx context.Context, tenantID, workf
 	for rows.Next() {
 		var s domain.Schedule
 		err := rows.Scan(
-			&s.ID, &s.TenantID, &s.WorkflowID, &s.WorkflowVersion,
-			&s.Name, &s.Description, &s.CronExpression, &s.Timezone,
+			&s.ID, &s.TenantID, &s.ProjectID, &s.ProjectVersion,
+			&s.StartStepID, &s.Name, &s.Description, &s.CronExpression, &s.Timezone,
+			&s.Input, &s.Status, &s.NextRunAt, &s.LastRunAt,
+			&s.LastRunID, &s.RunCount, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		schedules = append(schedules, &s)
+	}
+
+	return schedules, nil
+}
+
+func (r *ScheduleRepository) ListByStartStep(ctx context.Context, tenantID, projectID, startStepID uuid.UUID) ([]*domain.Schedule, error) {
+	query := `
+		SELECT id, tenant_id, project_id, project_version, start_step_id, name, description,
+			   cron_expression, timezone, input, status, next_run_at, last_run_at,
+			   last_run_id, run_count, created_by, created_at, updated_at
+		FROM schedules
+		WHERE tenant_id = $1 AND project_id = $2 AND start_step_id = $3
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query, tenantID, projectID, startStepID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var schedules []*domain.Schedule
+	for rows.Next() {
+		var s domain.Schedule
+		err := rows.Scan(
+			&s.ID, &s.TenantID, &s.ProjectID, &s.ProjectVersion,
+			&s.StartStepID, &s.Name, &s.Description, &s.CronExpression, &s.Timezone,
 			&s.Input, &s.Status, &s.NextRunAt, &s.LastRunAt,
 			&s.LastRunID, &s.RunCount, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 		)
@@ -259,7 +295,7 @@ func (r *ScheduleRepository) Delete(ctx context.Context, tenantID, id uuid.UUID)
 
 func (r *ScheduleRepository) GetDueSchedules(ctx context.Context, limit int) ([]*domain.Schedule, error) {
 	query := `
-		SELECT id, tenant_id, workflow_id, workflow_version, name, description,
+		SELECT id, tenant_id, project_id, project_version, start_step_id, name, description,
 			   cron_expression, timezone, input, status, next_run_at, last_run_at,
 			   last_run_id, run_count, created_by, created_at, updated_at
 		FROM schedules
@@ -278,8 +314,8 @@ func (r *ScheduleRepository) GetDueSchedules(ctx context.Context, limit int) ([]
 	for rows.Next() {
 		var s domain.Schedule
 		err := rows.Scan(
-			&s.ID, &s.TenantID, &s.WorkflowID, &s.WorkflowVersion,
-			&s.Name, &s.Description, &s.CronExpression, &s.Timezone,
+			&s.ID, &s.TenantID, &s.ProjectID, &s.ProjectVersion,
+			&s.StartStepID, &s.Name, &s.Description, &s.CronExpression, &s.Timezone,
 			&s.Input, &s.Status, &s.NextRunAt, &s.LastRunAt,
 			&s.LastRunID, &s.RunCount, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt,
 		)

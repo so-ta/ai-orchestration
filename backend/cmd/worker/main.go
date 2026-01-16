@@ -49,10 +49,10 @@ func main() {
 	log.Println("Connected to Redis")
 
 	// Initialize repositories
-	workflowRepo := postgres.NewWorkflowRepository(pool)
+	projectRepo := postgres.NewProjectRepository(pool)
 	runRepo := postgres.NewRunRepository(pool)
 	stepRunRepo := postgres.NewStepRunRepository(pool)
-	versionRepo := postgres.NewWorkflowVersionRepository(pool)
+	versionRepo := postgres.NewProjectVersionRepository(pool)
 	usageRepo := postgres.NewUsageRepository(pool)
 	blockDefRepo := postgres.NewBlockDefinitionRepository(pool)
 
@@ -101,11 +101,11 @@ func main() {
 				logger.Info("Processing job",
 					"job_id", job.ID,
 					"run_id", job.RunID,
-					"workflow_id", job.WorkflowID,
+					"project_id", job.ProjectID,
 				)
 
 				// Process job
-				if err := processJob(ctx, job, workflowRepo, runRepo, stepRunRepo, versionRepo, executor, logger); err != nil {
+				if err := processJob(ctx, job, projectRepo, runRepo, stepRunRepo, versionRepo, executor, logger); err != nil {
 					logger.Error("Job processing failed",
 						"job_id", job.ID,
 						"run_id", job.RunID,
@@ -129,10 +129,10 @@ func main() {
 func processJob(
 	ctx context.Context,
 	job *engine.Job,
-	workflowRepo *postgres.WorkflowRepository,
+	projectRepo *postgres.ProjectRepository,
 	runRepo *postgres.RunRepository,
 	stepRunRepo *postgres.StepRunRepository,
-	versionRepo *postgres.WorkflowVersionRepository,
+	versionRepo *postgres.ProjectVersionRepository,
 	executor *engine.Executor,
 	logger *slog.Logger,
 ) error {
@@ -148,30 +148,30 @@ func processJob(
 		executionMode = engine.ExecutionModeFull
 	}
 
-	// Get workflow definition based on execution mode
-	var def *domain.WorkflowDefinition
+	// Get project definition based on execution mode
+	var def *domain.ProjectDefinition
 
 	if executionMode == engine.ExecutionModeSingleStep || executionMode == engine.ExecutionModeResume {
 		// For partial execution, use versioned definition
-		version, err := versionRepo.GetByWorkflowAndVersion(ctx, job.WorkflowID, job.WorkflowVersion)
+		version, err := versionRepo.GetByProjectAndVersion(ctx, job.ProjectID, job.ProjectVersion)
 		if err != nil {
-			// Fallback to current workflow if version not found
-			logger.Warn("Version not found, falling back to current workflow",
-				"workflow_id", job.WorkflowID,
-				"version", job.WorkflowVersion,
+			// Fallback to current project if version not found
+			logger.Warn("Version not found, falling back to current project",
+				"project_id", job.ProjectID,
+				"version", job.ProjectVersion,
 				"error", err,
 			)
-			workflow, err := workflowRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.WorkflowID)
+			project, err := projectRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.ProjectID)
 			if err != nil {
 				return err
 			}
-			def = &domain.WorkflowDefinition{
-				Name:        workflow.Name,
-				Description: workflow.Description,
-				InputSchema: workflow.InputSchema,
-				Steps:       workflow.Steps,
-				Edges:       workflow.Edges,
-				BlockGroups: workflow.BlockGroups,
+			def = &domain.ProjectDefinition{
+				Name:        project.Name,
+				Description: project.Description,
+				Variables:   project.Variables,
+				Steps:       project.Steps,
+				Edges:       project.Edges,
+				BlockGroups: project.BlockGroups,
 			}
 		} else {
 			if err := json.Unmarshal(version.Definition, &def); err != nil {
@@ -179,18 +179,18 @@ func processJob(
 			}
 		}
 	} else {
-		// For full execution, use current workflow
-		workflow, err := workflowRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.WorkflowID)
+		// For full execution, use current project
+		project, err := projectRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.ProjectID)
 		if err != nil {
 			return err
 		}
-		def = &domain.WorkflowDefinition{
-			Name:        workflow.Name,
-			Description: workflow.Description,
-			InputSchema: workflow.InputSchema,
-			Steps:       workflow.Steps,
-			Edges:       workflow.Edges,
-			BlockGroups: workflow.BlockGroups,
+		def = &domain.ProjectDefinition{
+			Name:        project.Name,
+			Description: project.Description,
+			Variables:   project.Variables,
+			Steps:       project.Steps,
+			Edges:       project.Edges,
+			BlockGroups: project.BlockGroups,
 		}
 	}
 
@@ -221,18 +221,18 @@ func processJob(
 			}
 		}
 
-		// If step not found in version definition, try current workflow (for steps not in flow)
+		// If step not found in version definition, try current project (for steps not in flow)
 		if !stepExistsInDef {
-			logger.Info("Step not found in version definition, trying current workflow",
+			logger.Info("Step not found in version definition, trying current project",
 				"step_id", job.TargetStepID,
-				"workflow_id", job.WorkflowID,
+				"project_id", job.ProjectID,
 			)
-			currentWorkflow, err := workflowRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.WorkflowID)
+			currentProject, err := projectRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.ProjectID)
 			if err != nil {
 				return err
 			}
-			// Look for the step in current workflow
-			for _, s := range currentWorkflow.Steps {
+			// Look for the step in current project
+			for _, s := range currentProject.Steps {
 				if s.ID == *job.TargetStepID {
 					// Add the step to definition for execution
 					def.Steps = append(def.Steps, s)
@@ -252,7 +252,7 @@ func processJob(
 		}
 
 		if !stepExistsInDef {
-			logger.Error("Step not found in version or current workflow",
+			logger.Error("Step not found in version or current project",
 				"step_id", job.TargetStepID,
 			)
 			return domain.ErrStepNotFound
@@ -363,7 +363,7 @@ func processJob(
 		}
 		newAttempt := maxAttempt + 1
 
-		// Execute workflow
+		// Execute project DAG
 		execErr = executor.Execute(ctx, execCtx)
 
 		// Persist step runs to database (all steps in this execution get the same attempt number)

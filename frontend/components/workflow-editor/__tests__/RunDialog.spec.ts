@@ -72,7 +72,7 @@ describe('RunDialog', () => {
   const mockSteps: Step[] = [
     {
       id: 'step-start',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       name: 'Start',
       type: 'start',
       config: {
@@ -91,7 +91,7 @@ describe('RunDialog', () => {
     },
     {
       id: 'step-llm',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       name: 'LLM Step',
       type: 'llm',
       config: { provider: 'openai', model: 'gpt-4' },
@@ -106,7 +106,7 @@ describe('RunDialog', () => {
   const mockStepsWithoutSchema: Step[] = [
     {
       id: 'step-start',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       name: 'Start',
       type: 'start',
       config: {},
@@ -117,7 +117,7 @@ describe('RunDialog', () => {
     },
     {
       id: 'step-llm',
-      workflow_id: 'workflow-1',
+      project_id: 'project-1',
       name: 'LLM Step',
       type: 'llm',
       config: { provider: 'openai', model: 'gpt-4' },
@@ -177,7 +177,7 @@ describe('RunDialog', () => {
 
   const defaultProps = {
     show: true,
-    workflowId: 'workflow-1',
+    workflowId: 'project-1',
     workflowName: 'Test Workflow',
     steps: mockSteps,
     edges: mockEdges,
@@ -284,7 +284,7 @@ describe('RunDialog', () => {
       const stepsWithoutStart: Step[] = [
         {
           id: 'step-llm',
-          workflow_id: 'workflow-1',
+          project_id: 'project-1',
           name: 'LLM Step',
           type: 'llm',
           config: {},
