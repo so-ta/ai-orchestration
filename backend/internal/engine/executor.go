@@ -324,7 +324,12 @@ func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *Exec
 	if e.blockDefRepo != nil {
 		return e.executeCustomBlockStepBySlug(ctx, execCtx, step, input)
 	}
-	// For unimplemented types without block definition, pass through
+	// For unimplemented types without block definition, log warning and pass through
+	e.logger.Warn("Unknown step type without block definition, passing through input",
+		"step_id", step.ID,
+		"step_name", step.Name,
+		"step_type", step.Type,
+	)
 	return input, nil
 }
 

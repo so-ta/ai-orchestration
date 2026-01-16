@@ -1512,74 +1512,114 @@ func TestExecutor_DispatchStepExecution(t *testing.T) {
 	def := &domain.WorkflowDefinition{Name: "test"}
 	execCtx := NewExecutionContext(run, def)
 
-	tests := []struct {
-		name       string
-		stepType   domain.StepType
-		config     json.RawMessage
-		input      json.RawMessage
-		expectErr  bool
-		checkField string
-	}{
-		{
-			name:       "Start step passes through input",
-			stepType:   domain.StepTypeStart,
-			config:     json.RawMessage(`{}`),
-			input:      json.RawMessage(`{"test": "value"}`),
-			expectErr:  false,
-			checkField: "test",
-		},
-		{
-			name:       "Note step passes through input",
-			stepType:   domain.StepTypeNote,
-			config:     json.RawMessage(`{"content": "test note"}`),
-			input:      json.RawMessage(`{"data": "unchanged"}`),
-			expectErr:  false,
-			checkField: "data",
-		},
-		{
-			name:     "Tool step with mock adapter",
-			stepType: domain.StepTypeTool,
-			config:   json.RawMessage(`{"adapter_id": "mock"}`),
-			input:    json.RawMessage(`{"key": "value"}`),
-		},
-		{
-			name:     "Condition step evaluates expression",
-			stepType: domain.StepTypeCondition,
-			config:   json.RawMessage(`{"expression": "$.value > 5"}`),
-			input:    json.RawMessage(`{"value": 10}`),
-		},
-	}
+	t.Run("Start step passes through input", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "start-step",
+			Type:   domain.StepTypeStart,
+			Config: json.RawMessage(`{}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"test": "value"}`)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			step := domain.Step{
-				ID:     uuid.New(),
-				Name:   "test-step",
-				Type:   tt.stepType,
-				Config: tt.config,
-			}
-			stepRun := &domain.StepRun{
-				ID:     uuid.New(),
-				StepID: step.ID,
-			}
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
 
-			output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, tt.input)
+		require.NoError(t, err)
+		require.NotNil(t, output)
 
-			if tt.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, output)
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		assert.Equal(t, "value", result["test"])
+	})
 
-				if tt.checkField != "" {
-					var result map[string]interface{}
-					err := json.Unmarshal(output, &result)
-					require.NoError(t, err)
-					assert.Contains(t, result, tt.checkField)
-				}
-			}
-		})
-	}
+	t.Run("Note step passes through input", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "note-step",
+			Type:   domain.StepTypeNote,
+			Config: json.RawMessage(`{"content": "test note"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"data": "unchanged"}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		assert.Equal(t, "unchanged", result["data"])
+	})
+
+	t.Run("Tool step with mock adapter returns expected fields", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "tool-step",
+			Type:   domain.StepTypeTool,
+			Config: json.RawMessage(`{"adapter_id": "mock"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"key": "value"}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		// Mock adapter returns "success": true, "input": <original input>, "message": ...
+		assert.Equal(t, true, result["success"])
+		assert.Equal(t, "Mock adapter executed successfully", result["message"])
+	})
+
+	t.Run("Condition step evaluates expression and returns result", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "condition-step",
+			Type:   domain.StepTypeCondition,
+			Config: json.RawMessage(`{"expression": "$.value > 5"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"value": 10}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		// Condition step returns "result": true/false based on expression
+		assert.Equal(t, true, result["result"])
+		assert.Equal(t, "$.value > 5", result["expression"])
+	})
+
+	t.Run("Condition step returns false when expression not met", func(t *testing.T) {
+		step := domain.Step{
+			ID:     uuid.New(),
+			Name:   "condition-step-false",
+			Type:   domain.StepTypeCondition,
+			Config: json.RawMessage(`{"expression": "$.value > 5"}`),
+		}
+		stepRun := &domain.StepRun{ID: uuid.New(), StepID: step.ID}
+		input := json.RawMessage(`{"value": 3}`)
+
+		output, err := executor.dispatchStepExecution(context.Background(), execCtx, step, stepRun, input)
+
+		require.NoError(t, err)
+		require.NotNil(t, output)
+
+		var result map[string]interface{}
+		err = json.Unmarshal(output, &result)
+		require.NoError(t, err)
+		assert.Equal(t, false, result["result"])
+	})
 }
 
 func TestExecutor_DispatchStepExecution_Subflow(t *testing.T) {
