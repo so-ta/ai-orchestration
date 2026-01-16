@@ -5,6 +5,7 @@
  * 継承可能なブロック（codeを持つブロック）を選択するためのドロップダウン。
  */
 import type { BlockDefinition } from '~/types/api'
+import { useBlocks } from '~/composables/useBlocks'
 
 const props = defineProps<{
   modelValue?: string

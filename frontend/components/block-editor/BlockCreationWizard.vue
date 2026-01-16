@@ -24,12 +24,14 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 // Template definition
+// Note: displayCategory is for UI grouping, blockCategory is the actual BlockCategory
 interface TemplateDefinition {
   id: string
   name: string
   description: string
   icon: string
-  category: string
+  displayCategory: string  // UI grouping (notification, data, utility)
+  blockCategory: BlockCategory  // Actual block category
   inheritsFrom?: string
   parentBlockSlug?: string
   configDefaults?: Record<string, unknown>
@@ -46,7 +48,8 @@ const templates: TemplateDefinition[] = [
     name: 'Discord通知',
     description: 'Discord Webhookにメッセージを送信',
     icon: '💬',
-    category: 'notification',
+    displayCategory: 'notification',
+    blockCategory: 'apps',
     inheritsFrom: 'HTTP',
     parentBlockSlug: 'http',
     configDefaults: {
@@ -71,7 +74,8 @@ return {
     name: 'Slack通知',
     description: 'Slack Webhookにメッセージを送信',
     icon: '📢',
-    category: 'notification',
+    displayCategory: 'notification',
+    blockCategory: 'apps',
     inheritsFrom: 'HTTP',
     parentBlockSlug: 'http',
     configDefaults: {
@@ -93,7 +97,8 @@ return {
     name: 'JSONトランスフォーマー',
     description: 'JSONデータを変換するカスタムブロック',
     icon: '🔄',
-    category: 'data',
+    displayCategory: 'data',
+    blockCategory: 'flow',
     code: `// input: 変換対象のデータ
 // config.mapping: 変換マッピング定義
 
@@ -121,7 +126,8 @@ return result;`,
     name: 'データバリデーター',
     description: '入力データの検証を行うブロック',
     icon: '✅',
-    category: 'data',
+    displayCategory: 'data',
+    blockCategory: 'flow',
     code: `// config.rules: 検証ルール配列
 // { field: string, type: string, required?: boolean }
 
@@ -172,7 +178,8 @@ return {
     name: 'エラーハンドラー',
     description: 'エラーをフォーマットして通知用に整形',
     icon: '⚠️',
-    category: 'utility',
+    displayCategory: 'utility',
+    blockCategory: 'flow',
     code: `const error = input.error || input;
 
 return {
@@ -187,15 +194,15 @@ return {
   },
 ]
 
-// Group templates by category
+// Group templates by displayCategory
 const groupedTemplates = computed(() => {
   const groups: Record<string, TemplateDefinition[]> = {}
 
   for (const template of templates) {
-    if (!groups[template.category]) {
-      groups[template.category] = []
+    if (!groups[template.displayCategory]) {
+      groups[template.displayCategory] = []
     }
-    groups[template.category].push(template)
+    groups[template.displayCategory].push(template)
   }
 
   return groups
@@ -275,7 +282,7 @@ const templateFormData = computed(() => {
     name: selectedTemplate.value.name,
     description: selectedTemplate.value.description,
     icon: selectedTemplate.value.icon,
-    category: 'custom' as BlockCategory,
+    category: selectedTemplate.value.blockCategory,
     code: selectedTemplate.value.code || '',
     config_schema: JSON.stringify(selectedTemplate.value.configSchema || {}, null, 2),
     config_defaults: JSON.stringify(selectedTemplate.value.configDefaults || {}, null, 2),

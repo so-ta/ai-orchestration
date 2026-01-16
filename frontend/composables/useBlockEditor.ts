@@ -4,6 +4,7 @@
  * ブロックの作成・編集・削除・バージョン管理などのロジックを提供。
  */
 import type { BlockDefinition, BlockCategory } from '~/types/api'
+import { useBlocks, useAdminBlocks } from '~/composables/useBlocks'
 
 // Block form data interface
 export interface BlockFormData {
