@@ -248,6 +248,7 @@ function adjustYByGroupSourcePort(
   groupMap: Map<string, BlockGroup>,
   getGroupOutputPorts: (groupType: BlockGroupType) => OutputPort[],
   nodeSeparation: number,
+  nodeHeight: number,
   gridSize: number
 ): void {
   const snapToGrid = (value: number): number => {
@@ -334,7 +335,6 @@ function adjustYByGroupSourcePort(
     const centerY = sumY / targetResults.length
 
     // Calculate new positions centered around the current center
-    const nodeHeight = DEFAULT_OPTIONS.nodeHeight
     const totalHeight = (targetResults.length - 1) * (nodeHeight + nodeSeparation)
     const startY = centerY - totalHeight / 2
 
@@ -642,7 +642,7 @@ export function calculateLayoutWithGroups(
 
     // Only adjust ungrouped target steps
     const ungroupedResults = stepResults.filter(r => ungroupedStepIds.has(r.stepId))
-    adjustYByGroupSourcePort(ungroupedResults, groupToStepEdges, groupMap, getGroupOutputPorts, opts.nodeSeparation, GRID_SIZE)
+    adjustYByGroupSourcePort(ungroupedResults, groupToStepEdges, groupMap, getGroupOutputPorts, opts.nodeSeparation, opts.nodeHeight, GRID_SIZE)
   }
 
   return { steps: stepResults, groups: groupResults }
