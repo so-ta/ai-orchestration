@@ -30,7 +30,7 @@ func (r *Registry) registerIntegrationBlocks() {
 func HTTPBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "http",
-		Version:     1,
+		Version:     3, // v3: Simplified (removed inheritance support)
 		Name:        "HTTP Request",
 		Description: "Make HTTP API calls",
 		Category:    domain.BlockCategoryApps,
@@ -39,10 +39,10 @@ func HTTPBlock() *SystemBlockDefinition {
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"url": {"type": "string"},
-				"body": {"type": "object"},
-				"method": {"enum": ["GET", "POST", "PUT", "DELETE", "PATCH"], "type": "string"},
-				"headers": {"type": "object"},
+				"url": {"type": "string", "description": "リクエストURL"},
+				"body": {"type": "object", "description": "リクエストボディ"},
+				"method": {"enum": ["GET", "POST", "PUT", "DELETE", "PATCH"], "type": "string", "default": "GET"},
+				"headers": {"type": "object", "description": "追加ヘッダー"},
 				"enable_error_port": {
 					"type": "boolean",
 					"title": "エラーハンドルを有効化",
@@ -54,9 +54,8 @@ func HTTPBlock() *SystemBlockDefinition {
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
-				"body": {"type": "object", "description": "リクエストボディ"},
-				"query": {"type": "object", "description": "クエリパラメータ"},
-				"headers": {"type": "object", "description": "追加ヘッダー"}
+				"body": {"type": "object", "description": "リクエストボディ（config.bodyをオーバーライド）"},
+				"headers": {"type": "object", "description": "追加ヘッダー（config.headersにマージ）"}
 			},
 			"description": "URL/ボディのテンプレートで参照可能なデータ"
 		}`),
@@ -64,10 +63,12 @@ func HTTPBlock() *SystemBlockDefinition {
 		OutputPorts: []domain.OutputPort{},
 		Code: `
 const url = renderTemplate(config.url, input);
+const headers = Object.assign({}, config.headers || {}, input.headers || {});
+const body = input.body !== undefined ? input.body : config.body;
 const response = ctx.http.request(url, {
     method: config.method || 'GET',
-    headers: config.headers || {},
-    body: config.body ? renderTemplate(JSON.stringify(config.body), input) : null
+    headers: headers,
+    body: body ? renderTemplate(JSON.stringify(body), input) : null
 });
 return response;
 `,
