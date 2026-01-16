@@ -15,6 +15,7 @@
 | Backend | `cd backend && go test ./...` | Go コード変更後 |
 | Frontend | `cd frontend && npm run check` | TS/Vue コード変更後 |
 | E2E | `cd backend && go test ./tests/e2e/... -v` | 統合テスト時 |
+| Integration | `cd backend && INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration` | 外部API接続テスト時 |
 
 **コミット前の必須チェック**:
 ```bash
@@ -574,6 +575,94 @@ jobs:
           npm ci
           npm run check
 ```
+
+---
+
+## Integration Tests (External Services)
+
+外部サービス（OpenAI、Anthropic等）と実際に通信するテスト。
+
+### セットアップ
+
+```bash
+# 1. テンプレートをコピー
+cp backend/.env.test.local.example backend/.env.test.local
+
+# 2. APIキーを設定（.env.test.local を編集）
+OPENAI_API_KEY=sk-your-key
+ANTHROPIC_API_KEY=sk-ant-your-key
+
+# 3. 統合テスト実行
+cd backend && INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration
+```
+
+### 環境変数ファイル
+
+| ファイル | 用途 | Git |
+|----------|------|-----|
+| `.env.test.local.example` | テンプレート | ✓ コミット |
+| `.env.test.local` | 実際のAPIキー | ✗ gitignore |
+
+### 対象アダプター
+
+| Adapter | 必要な環境変数 | テスト内容 |
+|---------|---------------|-----------|
+| OpenAI | `OPENAI_API_KEY` | Chat Completion API |
+| Anthropic | `ANTHROPIC_API_KEY` | Messages API |
+| HTTP | なし | httpbin.org を使用 |
+
+### CI での扱い
+
+統合テストは CI では**スキップ**される:
+- `INTEGRATION_TEST=1` が設定されていない場合、自動スキップ
+- API キーがない場合も自動スキップ
+- 通常の `go test ./...` では実行されない
+
+### テストパターン
+
+```go
+func TestOpenAIAdapter_Integration_BasicChat(t *testing.T) {
+    // 1. 統合テストモードかチェック
+    skipIfNotIntegration(t)
+
+    // 2. 環境変数ロード
+    loadTestEnv(t)
+
+    // 3. APIキー確認（なければスキップ）
+    apiKey := requireEnvVar(t, "OPENAI_API_KEY")
+
+    // 4. 実際のAPIコール
+    adapter := NewOpenAIAdapterWithKey(apiKey)
+    resp, err := adapter.Execute(ctx, req)
+
+    // 5. 検証
+    require.NoError(t, err)
+    assert.NotEmpty(t, output["content"])
+}
+```
+
+### 実行例
+
+```bash
+# 全統合テスト
+INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration
+
+# OpenAI のみ
+INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*OpenAI
+
+# Anthropic のみ
+INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*Anthropic
+
+# HTTP のみ（APIキー不要）
+INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration.*HTTP
+```
+
+### 注意事項
+
+- **コスト**: 実際の API 呼び出しが発生するため、課金に注意
+- **レート制限**: 連続実行時は制限に注意
+- **タイムアウト**: 各テストは30秒のタイムアウトを設定
+- **ネットワーク**: インターネット接続が必要
 
 ---
 
