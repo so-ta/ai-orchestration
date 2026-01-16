@@ -263,9 +263,10 @@
     "shortcutCopy": "Copy step",
     "shortcutPaste": "Paste step",
     "tabs": {
-      "settings": "Settings",
+      "config": "Config",
+      "flow": "Flow",
       "copilot": "Copilot",
-      "execution": "Execution"
+      "run": "Run"
     },
     "templatePreview": {
       "title": "Template Variables",
@@ -635,6 +636,68 @@
       "dataHint": "JSON path to additional data (e.g., $.input, $.steps.step1.output)",
       "viewNote": "Log output can be viewed in the step output on the Run details page"
     }
+  },
+  "flow": {
+    "title": "Flow",
+    "noStepSelected": "No step selected",
+    "selectStepHint": "Select a step to configure its I/O ports, scripts, and error handling",
+    "inputPorts": "Input Ports",
+    "outputPorts": "Output Ports",
+    "noInputPorts": "No input ports defined",
+    "noOutputPorts": "No output ports defined",
+    "portName": "Name",
+    "portType": "Type",
+    "portRequired": "Required",
+    "portConnected": "Connected",
+    "portNotConnected": "Not connected",
+    "scripts": {
+      "title": "Scripts",
+      "prescript": {
+        "title": "Pre-script",
+        "description": "Code executed before the step runs",
+        "enabled": "Enable pre-script",
+        "language": "Language",
+        "code": "Code",
+        "codePlaceholder": "// Transform input data before step execution\nreturn input;"
+      },
+      "postscript": {
+        "title": "Post-script",
+        "description": "Code executed after the step completes",
+        "enabled": "Enable post-script",
+        "language": "Language",
+        "code": "Code",
+        "codePlaceholder": "// Transform output data after step execution\nreturn output;"
+      }
+    },
+    "errorHandling": {
+      "title": "Error Handling",
+      "enabled": "Enable error handling",
+      "retry": {
+        "title": "Retry Settings",
+        "maxRetries": "Max retries",
+        "intervalSeconds": "Retry interval (seconds)",
+        "backoffStrategy": "Backoff strategy",
+        "fixed": "Fixed",
+        "exponential": "Exponential"
+      },
+      "timeout": {
+        "title": "Timeout",
+        "seconds": "Timeout (seconds)"
+      },
+      "onError": {
+        "title": "On Error Action",
+        "fail": "Fail workflow",
+        "failDesc": "Stop the workflow immediately",
+        "skip": "Skip step",
+        "skipDesc": "Continue to next step",
+        "fallback": "Use fallback",
+        "fallbackDesc": "Return a fallback value",
+        "fallbackValue": "Fallback value (JSON)"
+      }
+    },
+    "comingSoon": "Coming soon",
+    "phase2Note": "Error handling configuration will be available in a future update",
+    "phase3Note": "Script configuration will be available in a future update"
   },
   "runs": {
     "title": "Runs",

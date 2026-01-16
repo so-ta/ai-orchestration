@@ -3,6 +3,7 @@ import type { Step, StepType, BlockDefinition, InputPort, OutputPort, Run } from
 import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
+import FlowTab from './FlowTab.vue'
 
 const { t } = useI18n()
 const blocks = useBlocks()
@@ -21,7 +22,7 @@ const props = defineProps<{
 }>()
 
 // Active tab state
-const activeTab = ref<'settings' | 'copilot' | 'execution'>('settings')
+const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
 
 // Keep current tab when step changes (no automatic tab switching)
 
@@ -156,11 +157,28 @@ const stepTypeColors: Record<StepType, string> = {
 // Check if step is a start node (cannot be deleted)
 const isStartNode = computed(() => props.step?.type === 'start')
 
+// Flow config from FlowTab (prescript, postscript, error_handling)
+const flowConfig = ref<{
+  prescript?: { enabled: boolean; language: string; code: string }
+  postscript?: { enabled: boolean; language: string; code: string }
+  error_handling?: { enabled: boolean; retry?: object; timeout_seconds?: number; on_error: string; fallback_value?: unknown }
+}>({})
+
+function handleFlowConfigUpdate(config: typeof flowConfig.value) {
+  flowConfig.value = config
+}
+
 function handleSave() {
+  // Merge flow config into the main config
+  const mergedConfig = {
+    ...formConfig.value,
+    ...flowConfig.value
+  }
+
   emit('save', {
     name: formName.value,
     type: formType.value,
-    config: formConfig.value
+    config: mergedConfig
   })
 }
 
@@ -183,7 +201,7 @@ function handleApplySuggestion(suggestion: StepSuggestion) {
   formType.value = suggestion.type as StepType
   formName.value = suggestion.name
   formConfig.value = { ...(suggestion.config || {}) }
-  activeTab.value = 'settings'
+  activeTab.value = 'config'
   toast.success(t('copilot.suggestionApplied'))
 }
 
@@ -507,14 +525,27 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
     <div class="properties-tabs">
       <button
         class="tab-button"
-        :class="{ active: activeTab === 'settings' }"
-        @click="activeTab = 'settings'"
+        :class="{ active: activeTab === 'config' }"
+        @click="activeTab = 'config'"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-        {{ t('editor.tabs.settings') }}
+        {{ t('editor.tabs.config') }}
+      </button>
+      <button
+        class="tab-button"
+        :class="{ active: activeTab === 'flow' }"
+        @click="activeTab = 'flow'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M5 3l-1 9"/>
+          <path d="M19 3l1 9"/>
+          <polyline points="8 14 12 18 16 14"/>
+        </svg>
+        {{ t('editor.tabs.flow') }}
       </button>
       <button
         class="tab-button"
@@ -530,18 +561,18 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       </button>
       <button
         class="tab-button"
-        :class="{ active: activeTab === 'execution' }"
-        @click="activeTab = 'execution'"
+        :class="{ active: activeTab === 'run' }"
+        @click="activeTab = 'run'"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"></polygon>
         </svg>
-        {{ t('editor.tabs.execution') }}
+        {{ t('editor.tabs.run') }}
       </button>
     </div>
 
-    <!-- Settings Tab Content -->
-    <div v-if="activeTab === 'settings'" class="properties-body-wrapper">
+    <!-- Config Tab Content -->
+    <div v-if="activeTab === 'config'" class="properties-body-wrapper">
       <!-- Empty State (no step selected) -->
       <div v-if="!step" class="properties-empty">
         <div class="empty-icon">
@@ -1395,6 +1426,16 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       </div>
     </div>
 
+    <!-- Flow Tab Content -->
+    <div v-if="activeTab === 'flow'" class="properties-body flow-container">
+      <FlowTab
+        :step="step"
+        :block-definitions="blockDefinitions"
+        :readonly-mode="readonlyMode"
+        @update:flow-config="handleFlowConfigUpdate"
+      />
+    </div>
+
     <!-- Copilot Tab Content (always available) -->
     <div v-if="activeTab === 'copilot'" class="properties-body copilot-container">
       <CopilotTab
@@ -1405,13 +1446,13 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       />
     </div>
 
-    <!-- Execution Tab Content -->
-    <div v-if="activeTab === 'execution'" class="properties-body execution-container">
+    <!-- Run Tab Content -->
+    <div v-if="activeTab === 'run'" class="properties-body execution-container">
       <ExecutionTab
         :step="step"
         :workflow-id="workflowId"
         :latest-run="latestRun || null"
-        :is-active="activeTab === 'execution'"
+        :is-active="activeTab === 'run'"
         :steps="steps || []"
         :edges="edges || []"
         :blocks="blockDefinitions || []"
@@ -1661,6 +1702,11 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
 
 .tab-button.active svg {
   opacity: 1;
+}
+
+/* Flow Container */
+.flow-container {
+  padding: 0;
 }
 
 /* Copilot Container */

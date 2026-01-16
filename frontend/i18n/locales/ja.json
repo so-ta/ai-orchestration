@@ -263,9 +263,10 @@
     "shortcutCopy": "ステップをコピー",
     "shortcutPaste": "ステップを貼り付け",
     "tabs": {
-      "settings": "設定",
+      "config": "設定",
+      "flow": "フロー",
       "copilot": "Copilot",
-      "execution": "実行"
+      "run": "実行"
     },
     "templatePreview": {
       "title": "テンプレート変数",
@@ -635,6 +636,68 @@
       "dataHint": "ログに含める追加データのJSONパス（例: $.input, $.steps.step1.output）",
       "viewNote": "ログ出力はRun詳細画面のステップ出力で確認できます"
     }
+  },
+  "flow": {
+    "title": "フロー",
+    "noStepSelected": "ステップが選択されていません",
+    "selectStepHint": "ステップを選択して、I/Oポート、スクリプト、エラーハンドリングを設定",
+    "inputPorts": "入力ポート",
+    "outputPorts": "出力ポート",
+    "noInputPorts": "入力ポートが定義されていません",
+    "noOutputPorts": "出力ポートが定義されていません",
+    "portName": "名前",
+    "portType": "型",
+    "portRequired": "必須",
+    "portConnected": "接続済み",
+    "portNotConnected": "未接続",
+    "scripts": {
+      "title": "スクリプト",
+      "prescript": {
+        "title": "前処理（Prescript）",
+        "description": "ステップ実行前に実行されるコード",
+        "enabled": "前処理を有効化",
+        "language": "言語",
+        "code": "コード",
+        "codePlaceholder": "// ステップ実行前に入力データを変換\nreturn input;"
+      },
+      "postscript": {
+        "title": "後処理（Postscript）",
+        "description": "ステップ実行後に実行されるコード",
+        "enabled": "後処理を有効化",
+        "language": "言語",
+        "code": "コード",
+        "codePlaceholder": "// ステップ実行後に出力データを変換\nreturn output;"
+      }
+    },
+    "errorHandling": {
+      "title": "エラーハンドリング",
+      "enabled": "エラーハンドリングを有効化",
+      "retry": {
+        "title": "リトライ設定",
+        "maxRetries": "最大リトライ回数",
+        "intervalSeconds": "リトライ間隔（秒）",
+        "backoffStrategy": "バックオフ戦略",
+        "fixed": "固定",
+        "exponential": "指数関数的"
+      },
+      "timeout": {
+        "title": "タイムアウト",
+        "seconds": "タイムアウト（秒）"
+      },
+      "onError": {
+        "title": "エラー時アクション",
+        "fail": "ワークフロー失敗",
+        "failDesc": "ワークフローを即座に停止",
+        "skip": "スキップ",
+        "skipDesc": "次のステップへ続行",
+        "fallback": "フォールバック",
+        "fallbackDesc": "フォールバック値を返す",
+        "fallbackValue": "フォールバック値（JSON）"
+      }
+    },
+    "comingSoon": "近日公開",
+    "phase2Note": "エラーハンドリング設定は今後のアップデートで利用可能になります",
+    "phase3Note": "スクリプト設定は今後のアップデートで利用可能になります"
   },
   "runs": {
     "title": "実行履歴",

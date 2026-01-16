@@ -835,15 +835,124 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		stepRun.Fail(fmt.Sprintf("failed to prepare step input: %v", err))
 		return fmt.Errorf("failed to prepare step input: %w", err)
 	}
+
+	// Get step config as map for scripts
+	var stepConfigMap map[string]interface{}
+	if step.Config != nil {
+		json.Unmarshal(step.Config, &stepConfigMap)
+	}
+
+	// Run prescript if enabled
+	prescript := getScriptConfig(step.Config, "prescript")
+	if prescript != nil && prescript.Enabled {
+		e.logger.Debug("Running prescript", "step_id", step.ID)
+		input, err = e.runStepScript(ctx, prescript, input, stepConfigMap)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			stepRun.Fail(fmt.Sprintf("prescript failed: %v", err))
+			return fmt.Errorf("prescript failed: %w", err)
+		}
+	}
+
 	stepRun.Start(input)
 
-	// Execute step using unified dispatch
-	output, err := e.dispatchStepExecution(ctx, execCtx, step, stepRun, input)
+	// Get error handling config
+	ehConfig := getErrorHandlingConfig(step.Config)
+
+	// Execute step with error handling (retry/timeout)
+	var output json.RawMessage
+	maxAttempts := 1
+	if ehConfig != nil && ehConfig.Enabled && ehConfig.Retry != nil {
+		maxAttempts = ehConfig.Retry.MaxRetries + 1
+	}
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if attempt > 1 {
+			// Wait before retry
+			interval := 1
+			if ehConfig != nil && ehConfig.Retry != nil {
+				interval = ehConfig.Retry.IntervalSeconds
+				if ehConfig.Retry.BackoffStrategy == "exponential" {
+					interval = interval * (1 << (attempt - 2)) // Exponential backoff
+				}
+			}
+			e.logger.Info("Retrying step execution",
+				"step_id", step.ID,
+				"attempt", attempt,
+				"wait_seconds", interval,
+			)
+			time.Sleep(time.Duration(interval) * time.Second)
+			stepRun.Attempt = attempt
+		}
+
+		// Apply timeout if configured
+		stepCtx := ctx
+		if ehConfig != nil && ehConfig.Enabled && ehConfig.TimeoutSeconds != nil && *ehConfig.TimeoutSeconds > 0 {
+			var cancel context.CancelFunc
+			stepCtx, cancel = context.WithTimeout(ctx, time.Duration(*ehConfig.TimeoutSeconds)*time.Second)
+			defer cancel()
+		}
+
+		// Execute step using unified dispatch
+		output, lastErr = e.dispatchStepExecution(stepCtx, execCtx, step, stepRun, input)
+		if lastErr == nil {
+			break // Success
+		}
+
+		e.logger.Warn("Step execution failed",
+			"step_id", step.ID,
+			"attempt", attempt,
+			"error", lastErr,
+		)
+	}
+	err = lastErr
 
 	// Determine output port (default is "output")
 	outputPort := "output"
 
 	if err != nil {
+		// Handle error based on error_handling config
+		if ehConfig != nil && ehConfig.Enabled {
+			switch ehConfig.OnError {
+			case "skip":
+				// Skip this step and continue
+				e.logger.Info("Skipping step due to error (on_error=skip)",
+					"step_id", step.ID,
+					"error", err.Error(),
+				)
+				output = []byte(`{"skipped": true}`)
+				stepRun.Complete(output)
+				execCtx.mu.Lock()
+				execCtx.StepData[step.ID] = output
+				execCtx.StepOutputPorts[step.ID] = "output"
+				execCtx.mu.Unlock()
+				span.SetStatus(codes.Ok, "step skipped")
+				return nil
+
+			case "fallback":
+				// Use fallback value
+				e.logger.Info("Using fallback value due to error (on_error=fallback)",
+					"step_id", step.ID,
+					"error", err.Error(),
+				)
+				if ehConfig.FallbackValue != nil {
+					output, _ = json.Marshal(ehConfig.FallbackValue)
+				} else {
+					output = []byte(`{}`)
+				}
+				stepRun.Complete(output)
+				execCtx.mu.Lock()
+				execCtx.StepData[step.ID] = output
+				execCtx.StepOutputPorts[step.ID] = "output"
+				execCtx.mu.Unlock()
+				span.SetStatus(codes.Ok, "step used fallback")
+				return nil
+			}
+			// Default: fall through to existing error handling
+		}
+
 		// Check if error port is enabled in step config
 		enableErrorPort := getConfigBool(step.Config, "enable_error_port")
 		if enableErrorPort && e.hasEdgeFromPort(graph, step.ID, "error") {
@@ -882,6 +991,20 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		var cleanedOutput json.RawMessage
 		outputPort, cleanedOutput = e.extractOutputPortAndData(step, output)
 		output = cleanedOutput
+
+		// Run postscript if enabled
+		postscript := getScriptConfig(step.Config, "postscript")
+		if postscript != nil && postscript.Enabled {
+			e.logger.Debug("Running postscript", "step_id", step.ID)
+			output, err = e.runStepScript(ctx, postscript, output, stepConfigMap)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				stepRun.Fail(fmt.Sprintf("postscript failed: %v", err))
+				return fmt.Errorf("postscript failed: %w", err)
+			}
+		}
+
 		stepRun.Complete(output)
 	}
 
@@ -939,6 +1062,129 @@ func getConfigStringArray(config json.RawMessage, key string) []string {
 		return result
 	}
 	return nil
+}
+
+// ScriptConfig represents prescript/postscript configuration
+type ScriptConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Language string `json:"language"`
+	Code     string `json:"code"`
+}
+
+// ErrorHandlingConfig represents error handling configuration
+type ErrorHandlingConfig struct {
+	Enabled        bool                   `json:"enabled"`
+	Retry          *RetryConfig           `json:"retry,omitempty"`
+	TimeoutSeconds *int                   `json:"timeout_seconds,omitempty"`
+	OnError        string                 `json:"on_error"` // "fail", "skip", "fallback"
+	FallbackValue  map[string]interface{} `json:"fallback_value,omitempty"`
+}
+
+// RetryConfig represents retry settings
+type RetryConfig struct {
+	MaxRetries      int    `json:"max_retries"`
+	IntervalSeconds int    `json:"interval_seconds"`
+	BackoffStrategy string `json:"backoff_strategy"` // "fixed", "exponential"
+}
+
+// getScriptConfig extracts script configuration from step config
+func getScriptConfig(config json.RawMessage, key string) *ScriptConfig {
+	if config == nil {
+		return nil
+	}
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return nil
+	}
+	scriptData, ok := configMap[key].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	sc := &ScriptConfig{}
+	if enabled, ok := scriptData["enabled"].(bool); ok {
+		sc.Enabled = enabled
+	}
+	if language, ok := scriptData["language"].(string); ok {
+		sc.Language = language
+	}
+	if code, ok := scriptData["code"].(string); ok {
+		sc.Code = code
+	}
+	return sc
+}
+
+// getErrorHandlingConfig extracts error handling configuration from step config
+func getErrorHandlingConfig(config json.RawMessage) *ErrorHandlingConfig {
+	if config == nil {
+		return nil
+	}
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return nil
+	}
+	ehData, ok := configMap["error_handling"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	eh := &ErrorHandlingConfig{OnError: "fail"}
+	if enabled, ok := ehData["enabled"].(bool); ok {
+		eh.Enabled = enabled
+	}
+	if onError, ok := ehData["on_error"].(string); ok {
+		eh.OnError = onError
+	}
+	if timeout, ok := ehData["timeout_seconds"].(float64); ok {
+		t := int(timeout)
+		eh.TimeoutSeconds = &t
+	}
+	if fallback, ok := ehData["fallback_value"].(map[string]interface{}); ok {
+		eh.FallbackValue = fallback
+	}
+	if retryData, ok := ehData["retry"].(map[string]interface{}); ok {
+		eh.Retry = &RetryConfig{
+			MaxRetries:      3,
+			IntervalSeconds: 1,
+			BackoffStrategy: "fixed",
+		}
+		if maxRetries, ok := retryData["max_retries"].(float64); ok {
+			eh.Retry.MaxRetries = int(maxRetries)
+		}
+		if interval, ok := retryData["interval_seconds"].(float64); ok {
+			eh.Retry.IntervalSeconds = int(interval)
+		}
+		if backoff, ok := retryData["backoff_strategy"].(string); ok {
+			eh.Retry.BackoffStrategy = backoff
+		}
+	}
+	return eh
+}
+
+// runStepScript runs prescript or postscript code
+func (e *Executor) runStepScript(ctx context.Context, sc *ScriptConfig, input json.RawMessage, config map[string]interface{}) (json.RawMessage, error) {
+	if sc == nil || !sc.Enabled || sc.Code == "" {
+		return input, nil
+	}
+
+	var inputMap map[string]interface{}
+	if err := json.Unmarshal(input, &inputMap); err != nil {
+		inputMap = map[string]interface{}{"data": input}
+	}
+
+	// Prepare sandbox context (nil is acceptable for simple scripts)
+	sandboxCtx := &sandbox.ExecutionContext{}
+
+	result, err := e.runHookCode(ctx, sc.Code, inputMap, config, sandboxCtx, "script", 0)
+	if err != nil {
+		return nil, fmt.Errorf("script execution failed: %w", err)
+	}
+
+	output, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal script result: %w", err)
+	}
+	return output, nil
 }
 
 // hasEdgeFromPort checks if there's an edge from the step with the specified source port
