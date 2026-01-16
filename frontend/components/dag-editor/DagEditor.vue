@@ -101,49 +101,24 @@ const toast = useToast()
 
 // Selected edge for deletion
 const selectedEdgeId = ref<string | null>(null)
+// Store the click position in flow coordinates for delete button placement
+const edgeClickFlowPosition = ref<{ x: number; y: number } | null>(null)
+// Reference to the dag editor container for coordinate conversion
+const dagEditorRef = ref<HTMLElement | null>(null)
 
-// Delete button size constraints
-const DELETE_BUTTON_BASE_SIZE = 28
-const DELETE_BUTTON_MIN_SCALE = 0.7
-const DELETE_BUTTON_MAX_SCALE = 1.5
+// Compute button position from flow coordinates, reactive to viewport changes
+const edgeDeleteButtonPosition = computed(() => {
+  if (!edgeClickFlowPosition.value) return null
 
-// Compute delete button scale based on zoom level
-const deleteButtonScale = computed(() => {
-  const zoom = viewport.value.zoom
-  // Clamp scale between min and max
-  return Math.min(DELETE_BUTTON_MAX_SCALE, Math.max(DELETE_BUTTON_MIN_SCALE, zoom))
-})
+  // Convert flow coordinates to screen position using current viewport
+  // This makes the button follow pan/zoom just like blocks do
+  const screenX = edgeClickFlowPosition.value.x * viewport.value.zoom + viewport.value.x
+  const screenY = edgeClickFlowPosition.value.y * viewport.value.zoom + viewport.value.y
 
-// Compute selected edge position for delete button
-const selectedEdgePosition = computed(() => {
-  if (!selectedEdgeId.value) return null
-
-  const selectedEdge = flowEdges.value.find(e => e.id === selectedEdgeId.value)
-  if (!selectedEdge) return null
-
-  const nodes = getNodes.value
-  const sourceNode = nodes.find(n => n.id === selectedEdge.source)
-  const targetNode = nodes.find(n => n.id === selectedEdge.target)
-
-  if (!sourceNode || !targetNode) return null
-
-  // Calculate midpoint between source and target
-  const sourceX = sourceNode.position.x + (sourceNode.dimensions?.width || 180) / 2
-  const sourceY = sourceNode.position.y + (sourceNode.dimensions?.height || 60) / 2
-  const targetX = targetNode.position.x + (targetNode.dimensions?.width || 180) / 2
-  const targetY = targetNode.position.y + (targetNode.dimensions?.height || 60) / 2
-
-  // Midpoint in flow coordinates
-  const midX = (sourceX + targetX) / 2
-  const midY = (sourceY + targetY) / 2
-
-  // Convert to screen coordinates using viewport
-  const screenX = midX * viewport.value.zoom + viewport.value.x
-  const screenY = midY * viewport.value.zoom + viewport.value.y
-
-  // Offset above the edge (scale offset with zoom)
-  const offset = 30 * deleteButtonScale.value
-  return { x: screenX, y: screenY - offset }
+  return {
+    x: screenX + 10, // Offset to top-right
+    y: screenY - 30,
+  }
 })
 
 // Drag state
@@ -1198,7 +1173,7 @@ onConnect((params) => {
 })
 
 // Handle edge click - select edge for deletion
-onEdgeClick(({ edge }) => {
+onEdgeClick(({ edge, event }) => {
   if (!props.readonly) {
     // Find the actual edge ID from our edges array using source/target
     const actualEdge = props.edges.find(e => {
@@ -1208,8 +1183,20 @@ onEdgeClick(({ edge }) => {
       return e.id === flowEdgeId || flowEdgeId.includes(e.id)
     })
 
-    if (actualEdge) {
+    if (actualEdge && dagEditorRef.value) {
       selectedEdgeId.value = actualEdge.id
+      // Store click position in flow coordinates
+      // This allows the delete button to follow pan/zoom
+      const mouseEvent = event as MouseEvent
+      const rect = dagEditorRef.value.getBoundingClientRect()
+      const flowPos = project({
+        x: mouseEvent.clientX - rect.left,
+        y: mouseEvent.clientY - rect.top,
+      })
+      edgeClickFlowPosition.value = {
+        x: flowPos.x,
+        y: flowPos.y,
+      }
     }
   }
 })
@@ -1229,12 +1216,14 @@ function handleDeleteSelectedEdge() {
   if (selectedEdgeId.value) {
     emit('edge:delete', selectedEdgeId.value)
     selectedEdgeId.value = null
+    edgeClickFlowPosition.value = null
   }
 }
 
 // Clear edge selection when clicking on pane
 onPaneClick(() => {
   selectedEdgeId.value = null
+  edgeClickFlowPosition.value = null
   emit('pane:click')
 })
 
@@ -1836,6 +1825,7 @@ onNodeDragStop((event) => {
 function onNodeClick(event: { node: Node }) {
   // Clear edge selection when clicking on a node
   selectedEdgeId.value = null
+  edgeClickFlowPosition.value = null
 
   // Check if this is a group node
   if (event.node.type === 'group') {
@@ -2393,6 +2383,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
 <template>
   <div
+    ref="dagEditorRef"
     :class="['dag-editor', { 'drag-over': isDragOver }]"
     tabindex="0"
     @dragenter="handleDragEnter"
@@ -2666,14 +2657,13 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 
     </VueFlow>
 
-    <!-- Edge Delete Button (positioned at edge center, scales with zoom) -->
+    <!-- Edge Delete Button (positioned relative to dag-editor container) -->
     <div
-      v-if="selectedEdgePosition && !readonly"
+      v-if="edgeDeleteButtonPosition && selectedEdgeId && !readonly"
       class="edge-delete-button-container"
       :style="{
-        left: `${selectedEdgePosition.x}px`,
-        top: `${selectedEdgePosition.y}px`,
-        '--button-scale': deleteButtonScale,
+        left: `${edgeDeleteButtonPosition.x}px`,
+        top: `${edgeDeleteButtonPosition.y}px`,
       }"
     >
       <button
@@ -2715,6 +2705,7 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     radial-gradient(circle, #e5e5e5 1px, transparent 1px);
   background-size: 24px 24px;
   position: relative;
+  overflow: hidden;
   transition: background-color 0.2s;
 }
 
@@ -3342,13 +3333,11 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   opacity: 1;
 }
 
-/* Edge Delete Button (floating on selected edge, scales with zoom) */
+/* Edge Delete Button (positioned relative to dag-editor container) */
 .edge-delete-button-container {
   position: absolute;
   z-index: 100;
-  transform: translate(-50%, -50%) scale(var(--button-scale, 1));
   pointer-events: auto;
-  transition: transform 0.1s ease;
 }
 
 .edge-delete-button-floating {
