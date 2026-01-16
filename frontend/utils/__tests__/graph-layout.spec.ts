@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateLayout, calculateLayoutWithGroups } from '../graph-layout'
-import type { Step, Edge, OutputPort, StepType } from '~/types/api'
+import type { Step, Edge, OutputPort, StepType, BlockGroup, BlockGroupType } from '~/types/api'
 
 // Helper to create a minimal step
 function createStep(id: string, type: string, x = 0, y = 0): Step {
@@ -26,6 +26,35 @@ function createEdge(sourceId: string, targetId: string, sourcePort?: string): Ed
     target_step_id: targetId,
     source_port: sourcePort,
     created_at: new Date().toISOString(),
+  }
+}
+
+// Helper to create an edge from a block group
+function createGroupEdge(sourceGroupId: string, targetId: string, sourcePort: string): Edge {
+  return {
+    id: `edge-group-${sourceGroupId}-${targetId}`,
+    workflow_id: 'test-workflow',
+    source_block_group_id: sourceGroupId,
+    target_step_id: targetId,
+    source_port: sourcePort,
+    created_at: new Date().toISOString(),
+  }
+}
+
+// Helper to create a block group
+function createBlockGroup(id: string, type: BlockGroupType): BlockGroup {
+  return {
+    id,
+    workflow_id: 'test-workflow',
+    name: `Group ${id}`,
+    type,
+    config: {},
+    position_x: 0,
+    position_y: 0,
+    width: 200,
+    height: 150,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 }
 
@@ -252,6 +281,90 @@ describe('graph-layout', () => {
 
       // target1 (out) should be above target2 (error)
       expect(target1Result.y).toBeLessThan(target2Result.y)
+    })
+
+    it('should apply port ordering for edges from block groups', () => {
+      // Create a step inside the group and steps outside
+      const innerStep = { ...createStep('inner', 'tool'), block_group_id: 'group1' }
+      const target1 = createStep('target1', 'tool')
+      const target2 = createStep('target2', 'tool')
+      const steps: Step[] = [innerStep, target1, target2]
+
+      // Block group with two output ports (out, error)
+      const group = createBlockGroup('group1', 'parallel')
+      const blockGroups: BlockGroup[] = [group]
+
+      // Edges from group to ungrouped steps (out of order intentionally)
+      const edges: Edge[] = [
+        createGroupEdge('group1', 'target2', 'error'),  // Should be last (bottom)
+        createGroupEdge('group1', 'target1', 'out'),    // Should be first (top)
+      ]
+
+      const getOutputPorts = (stepType: StepType): OutputPort[] => {
+        return [{ name: 'out', label: 'Output', is_default: false }]
+      }
+
+      const getGroupOutputPorts = (groupType: BlockGroupType): OutputPort[] => {
+        if (groupType === 'parallel') {
+          return [
+            { name: 'out', label: 'Output', is_default: true },
+            { name: 'error', label: 'Error', is_default: false },
+          ]
+        }
+        return [{ name: 'out', label: 'Output', is_default: true }]
+      }
+
+      const results = calculateLayoutWithGroups(steps, edges, blockGroups, {
+        getOutputPorts,
+        getGroupOutputPorts,
+      })
+
+      const target1Result = results.steps.find(r => r.stepId === 'target1')!
+      const target2Result = results.steps.find(r => r.stepId === 'target2')!
+
+      // target1 (out) should be above target2 (error)
+      expect(target1Result.y).toBeLessThan(target2Result.y)
+    })
+
+    it('should handle try_catch group with out and error ports', () => {
+      const innerStep = { ...createStep('inner', 'tool'), block_group_id: 'group1' }
+      const successHandler = createStep('success', 'tool')
+      const errorHandler = createStep('error-handler', 'tool')
+      const steps: Step[] = [innerStep, successHandler, errorHandler]
+
+      const group = createBlockGroup('group1', 'try_catch')
+      const blockGroups: BlockGroup[] = [group]
+
+      // Error port comes first in edges (intentionally wrong order)
+      const edges: Edge[] = [
+        createGroupEdge('group1', 'error-handler', 'error'),
+        createGroupEdge('group1', 'success', 'out'),
+      ]
+
+      const getOutputPorts = (): OutputPort[] => {
+        return [{ name: 'out', label: 'Output', is_default: false }]
+      }
+
+      const getGroupOutputPorts = (groupType: BlockGroupType): OutputPort[] => {
+        if (groupType === 'try_catch') {
+          return [
+            { name: 'out', label: 'Output', is_default: true },
+            { name: 'error', label: 'Error', is_default: false },
+          ]
+        }
+        return [{ name: 'out', label: 'Output', is_default: true }]
+      }
+
+      const results = calculateLayoutWithGroups(steps, edges, blockGroups, {
+        getOutputPorts,
+        getGroupOutputPorts,
+      })
+
+      const successResult = results.steps.find(r => r.stepId === 'success')!
+      const errorResult = results.steps.find(r => r.stepId === 'error-handler')!
+
+      // success (out) should be above error-handler (error)
+      expect(successResult.y).toBeLessThan(errorResult.y)
     })
   })
 })
