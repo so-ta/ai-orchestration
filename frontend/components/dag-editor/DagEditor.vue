@@ -1026,11 +1026,11 @@ const flowEdges = computed<FlowEdge[]>(() => {
       color = '#8b5cf6' // purple for group edges
     }
 
-    // Check if this edge is selected
+    // Check if this edge is selected (use same blue color as selected blocks)
     const isSelected = selectedEdgeId.value === edge.id
     if (isSelected) {
-      color = '#f97316' // orange for selected edge
-      strokeWidth = 4
+      color = '#3b82f6' // blue for selected edge (matches selected blocks)
+      strokeWidth = 3
     }
 
     result.push({
@@ -1172,9 +1172,16 @@ function handleKeyDown(event: KeyboardEvent) {
   if (props.readonly) return
 
   if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdgeId.value) {
+    handleDeleteSelectedEdge()
+    event.preventDefault()
+  }
+}
+
+// Handle delete button click for selected edge
+function handleDeleteSelectedEdge() {
+  if (selectedEdgeId.value) {
     emit('edge:delete', selectedEdgeId.value)
     selectedEdgeId.value = null
-    event.preventDefault()
   }
 }
 
@@ -2622,6 +2629,23 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     <div v-if="!readonly && !isDragOver" class="dag-editor-hint">
       Drag blocks here to add steps
     </div>
+
+    <!-- Edge selection toolbar -->
+    <div v-if="selectedEdgeId && !readonly" class="edge-selection-toolbar">
+      <button
+        class="edge-delete-button"
+        @click="handleDeleteSelectedEdge"
+        title="エッジを削除 (Delete/Backspace)"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+        <span>エッジを削除</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -3259,5 +3283,50 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
 :deep(.vue-flow__node-group:hover .vue-flow__resize-control),
 :deep(.vue-flow__node-group.selected .vue-flow__resize-control) {
   opacity: 1;
+}
+
+/* Edge Selection Toolbar */
+.edge-selection-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.edge-delete-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.edge-delete-button:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.edge-delete-button:active {
+  background: #fecaca;
+}
+
+.edge-delete-button svg {
+  flex-shrink: 0;
 }
 </style>
