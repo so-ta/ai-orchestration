@@ -1,5 +1,5 @@
 import dagre from 'dagre'
-import type { Step, Edge, BlockGroup, OutputPort } from '~/types/api'
+import type { Step, Edge, BlockGroup, OutputPort, StepType } from '~/types/api'
 
 export interface LayoutOptions {
   direction?: 'TB' | 'BT' | 'LR' | 'RL' // Top-Bottom, Bottom-Top, Left-Right, Right-Left
@@ -15,7 +15,7 @@ export interface LayoutOptions {
 export interface LayoutOptionsWithPorts extends LayoutOptions {
   // Function to get output ports for a step type
   // Returns ports in order (top to bottom)
-  getOutputPorts?: (stepType: string, step?: Step) => OutputPort[]
+  getOutputPorts?: (stepType: StepType, step?: Step) => OutputPort[]
 }
 
 export interface LayoutResult {
@@ -125,7 +125,7 @@ function adjustYBySourcePort(
   results: LayoutResult[],
   steps: Step[],
   edges: Edge[],
-  getOutputPorts: (stepType: string, step?: Step) => OutputPort[],
+  getOutputPorts: (stepType: StepType, step?: Step) => OutputPort[],
   nodeSeparation: number,
   gridSize: number
 ): void {

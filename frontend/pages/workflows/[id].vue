@@ -896,7 +896,7 @@ async function handlePasteStep(data: { type: StepType; name: string; config: Rec
 }
 
 // Get output ports for a step type (used for auto-layout port ordering)
-function getOutputPortsForLayout(stepType: string, step?: Step): OutputPort[] {
+function getOutputPortsForLayout(stepType: StepType, step?: Step): OutputPort[] {
   const config = step?.config as Record<string, unknown> | undefined
 
   // Special handling for switch blocks - generate dynamic ports from cases
