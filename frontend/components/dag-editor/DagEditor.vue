@@ -1061,6 +1061,11 @@ function countOutgoingEdges(stepId: string): number {
   return props.edges.filter(e => e.source_step_id === stepId).length
 }
 
+// Count existing outgoing edges from a group
+function countOutgoingEdgesFromGroup(groupId: string): number {
+  return props.edges.filter(e => e.source_block_group_id === groupId).length
+}
+
 // Get default source port for a node (step or group)
 function getDefaultSourcePort(nodeId: string, step: Step | undefined): string | undefined {
   if (step) {
@@ -1096,26 +1101,47 @@ function getDefaultTargetPort(nodeId: string): string | undefined {
 // Handle new connection
 onConnect((params) => {
   if (!props.readonly) {
-    const sourceStepId = params.source
-    const sourceStep = props.steps.find(s => s.id === sourceStepId)
+    const sourceNodeId = params.source
+    const sourceStep = props.steps.find(s => s.id === sourceNodeId)
 
-    // Check if this is a branching block (condition/switch) trying to create multiple outputs outside a Block Group
-    if (sourceStep && (sourceStep.type === 'condition' || sourceStep.type === 'switch')) {
-      const existingOutgoingEdges = countOutgoingEdges(sourceStepId)
+    // Check if source is a group
+    const isSourceGroup = sourceNodeId?.startsWith(GROUP_NODE_PREFIX)
 
-      // If this branching block is not in a Block Group and already has an outgoing edge, block the connection
-      if (!sourceStep.block_group_id && existingOutgoingEdges > 0) {
+    if (isSourceGroup) {
+      // Source is a Block Group - only allow 1 outgoing edge
+      const groupId = getGroupUuidFromNodeId(sourceNodeId)
+      const existingOutgoingEdges = countOutgoingEdgesFromGroup(groupId)
+      if (existingOutgoingEdges > 0) {
         toast.error(
-          'Connection blocked',
-          'Branching blocks (Condition/Switch) with multiple outputs must be inside a Block Group'
+          '接続がブロックされました',
+          '1つのブロックからは1本のエッジのみ接続できます'
         )
         return
+      }
+    } else if (sourceStep) {
+      // Source is a step
+      const isBranchingBlock = sourceStep.type === 'condition' || sourceStep.type === 'switch'
+      const existingOutgoingEdges = countOutgoingEdges(sourceNodeId)
+
+      if (existingOutgoingEdges > 0) {
+        // Branching blocks inside a Block Group are allowed multiple outputs
+        if (isBranchingBlock && sourceStep.block_group_id) {
+          // Allow - branching block inside group can have multiple outputs
+        } else {
+          toast.error(
+            '接続がブロックされました',
+            isBranchingBlock
+              ? '分岐ブロック（Condition/Switch）の複数出力はグループ内でのみ可能です'
+              : '1つのブロックからは1本のエッジのみ接続できます'
+          )
+          return
+        }
       }
     }
 
     // sourceHandle/targetHandle contain the port names when connecting from/to specific ports
     // If not set, use the default (first) port of the source/target (supports both steps and groups)
-    const sourcePort = params.sourceHandle || getDefaultSourcePort(sourceStepId, sourceStep)
+    const sourcePort = params.sourceHandle || getDefaultSourcePort(sourceNodeId, sourceStep)
     const targetPort = params.targetHandle || getDefaultTargetPort(params.target)
     emit('edge:add', params.source, params.target, sourcePort, targetPort)
   }
