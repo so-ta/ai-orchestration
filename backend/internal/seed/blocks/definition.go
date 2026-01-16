@@ -53,6 +53,18 @@ type SystemBlockDefinition struct {
 	GroupKind   domain.BlockGroupKind `json:"group_kind,omitempty"`
 	IsContainer bool                  `json:"is_container,omitempty"`
 
+	// === Block Inheritance/Extension fields ===
+	// ParentBlockSlug: Slug of the parent block to inherit from (resolved to ID at migration time)
+	ParentBlockSlug string `json:"parent_block_slug,omitempty"`
+	// ConfigDefaults: Default values for parent's config_schema (merged at execution time)
+	ConfigDefaults json.RawMessage `json:"config_defaults,omitempty"`
+	// PreProcess: JavaScript code executed before main code (input transformation)
+	PreProcess string `json:"pre_process,omitempty"`
+	// PostProcess: JavaScript code executed after main code (output transformation)
+	PostProcess string `json:"post_process,omitempty"`
+	// InternalSteps: Array of steps to execute sequentially inside the block
+	InternalSteps []domain.InternalStep `json:"internal_steps,omitempty"`
+
 	// Test cases (for testing only, not stored in DB)
 	TestCases []BlockTestCase `json:"-"`
 }

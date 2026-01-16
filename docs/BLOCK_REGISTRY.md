@@ -31,7 +31,7 @@
 | Item | Value |
 |------|-------|
 | Table | `block_definitions` |
-| System Blocks | `tenant_id = NULL` (25 blocks: 18 core + 7 RAG) |
+| System Blocks | `tenant_id = NULL` (46 blocks: 18 core + 10 foundation + 11 integration + 7 RAG) |
 | Tenant Blocks | `tenant_id = UUID` |
 | Executor | Goja JavaScript VM |
 | Version History | `block_versions` table |
@@ -145,25 +145,77 @@ type ErrorCodeDef struct {
 ### Block Inheritance/Extension
 
 ブロック継承により、既存ブロックを拡張して再利用可能なブロックを作成できます。
+**多段継承**により、認証パターンやサービス固有の設定を階層的に定義できます。
+
+#### 継承階層アーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Hierarchical Block Inheritance                        │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  http (Level 0: Base)                                                    │
+│  ├── webhook (Level 1: Pattern)                                         │
+│  │   ├── slack (Level 2: Concrete)                                      │
+│  │   └── discord (Level 2: Concrete)                                    │
+│  │                                                                       │
+│  ├── rest-api (Level 1: Pattern)                                        │
+│  │   ├── bearer-api (Level 2: Auth)                                     │
+│  │   │   ├── github-api (Level 3: Service)                              │
+│  │   │   │   ├── github_create_issue (Level 4: Operation)               │
+│  │   │   │   └── github_add_comment (Level 4: Operation)                │
+│  │   │   ├── notion-api (Level 3: Service)                              │
+│  │   │   │   ├── notion_query_db (Level 4: Operation)                   │
+│  │   │   │   └── notion_create_page (Level 4: Operation)                │
+│  │   │   └── email_sendgrid (Level 3: Concrete)                         │
+│  │   ├── api-key-header (Level 2: Auth)                                 │
+│  │   ├── api-key-query (Level 2: Auth)                                  │
+│  │   │   └── google-api (Level 3: Service)                              │
+│  │   │       ├── gsheets_append (Level 4: Operation)                    │
+│  │   │       └── gsheets_read (Level 4: Operation)                      │
+│  │   └── web_search (Level 2: Concrete)                                 │
+│  │                                                                       │
+│  └── graphql (Level 1: Pattern) ← inherits rest-api                     │
+│      └── linear-api (Level 2: Service)                                  │
+│          └── linear_create_issue (Level 3: Operation)                   │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 各レベルの責務
+
+| Level | 名称 | 責務 | 例 |
+|-------|------|------|-----|
+| 0 | Base | 基本的な実行ロジック | `http` |
+| 1 | Pattern | 通信パターン、基本認証 | `webhook`, `rest-api`, `graphql` |
+| 2 | Auth | 認証方式の抽象化 | `bearer-api`, `api-key-header`, `api-key-query` |
+| 3 | Service | サービス固有の設定 | `github-api`, `notion-api`, `google-api` |
+| 4+ | Operation | 具体的な操作 | `github_create_issue`, `notion_query_db` |
 
 #### 継承の仕組み
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                  Block Inheritance Chain                          │
+│          Multi-Level Inheritance Execution Flow                   │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                    │
-│  discord-notify (child)                                           │
-│    ├── parent_block_id: http (root)                              │
-│    ├── config_defaults: { webhook_url: "...", method: "POST" }   │
-│    ├── pre_process: "formats message for Discord"                │
-│    └── post_process: null                                        │
+│  github_create_issue → github-api → bearer-api → rest-api → http │
 │                                                                    │
-│  Execution Flow:                                                   │
-│  1. preProcess (discord-notify) - Format input                   │
-│  2. Resolve config: merge config_defaults with step config       │
-│  3. Execute http block code                                       │
-│  4. postProcess (discord-notify) - Transform output              │
+│  Execution Order:                                                  │
+│  1. PreProcess Chain (child → root):                              │
+│     github_create_issue.preProcess → github-api.preProcess →      │
+│     bearer-api.preProcess → rest-api.preProcess                   │
+│                                                                    │
+│  2. Config Merge (root → child):                                  │
+│     rest-api.configDefaults ← bearer-api.configDefaults ←        │
+│     github-api.configDefaults ← github_create_issue.configDefaults│
+│     ← step.config (runtime)                                       │
+│                                                                    │
+│  3. Execute Code (from root ancestor: http.code)                  │
+│                                                                    │
+│  4. PostProcess Chain (root → child):                             │
+│     rest-api.postProcess → bearer-api.postProcess →               │
+│     github-api.postProcess → github_create_issue.postProcess      │
 │                                                                    │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -173,52 +225,117 @@ type ErrorCodeDef struct {
 | ルール | 説明 |
 |--------|------|
 | コードを持つブロックのみ継承可能 | `Code != ""` |
-| 最大継承深度 | 10レベル |
-| 循環継承禁止 | A→B→C→A のような循環は不可 |
+| 最大継承深度 | 50レベル（実用上は4-5レベル） |
+| 循環継承禁止 | A→B→C→A のような循環は不可（トポロジカルソートで検出） |
 | テナント分離 | 同一テナント内またはシステムブロックからのみ継承可能 |
+| マイグレーション順序 | トポロジカルソートにより親ブロックが先に処理される |
 
 #### ConfigDefaults のマージ順序
 
 ```
-root ancestor defaults
+root ancestor defaults (rest-api)
     ↓ (override)
-middle ancestor defaults
+auth level defaults (bearer-api: auth_type=bearer)
     ↓ (override)
-child defaults
+service defaults (github-api: base_url, secret_key)
+    ↓ (override)
+child defaults (github_create_issue: specific settings)
     ↓ (override)
 step config (execution time)
 ```
 
-#### 継承ブロックの例
+#### 継承ブロックの例（新アーキテクチャ）
 
 ```javascript
-// discord-error-notify (inherits from http block)
-// parent_block_id: http ブロックのUUID
-// config_defaults:
+// github_create_issue (inherits from github-api → bearer-api → rest-api → http)
+
+// ConfigDefaults (親からのマージ):
+// From rest-api: { auth_type: "bearer" }
+// From github-api: { base_url: "https://api.github.com", secret_key: "GITHUB_TOKEN" }
+
+// PreProcess (このブロック固有):
+const payload = {
+    title: renderTemplate(config.title, input),
+    body: config.body ? renderTemplate(config.body, input) : undefined,
+    labels: config.labels,
+    assignees: config.assignees
+};
+return {
+    ...input,
+    url: '/repos/' + config.owner + '/' + config.repo + '/issues',
+    method: 'POST',
+    body: payload
+};
+
+// PostProcess (このブロック固有):
+if (input.status >= 400) {
+    const errorMsg = input.body?.message || 'Unknown error';
+    throw new Error('[GITHUB_002] Issue作成失敗: ' + errorMsg);
+}
+return {
+    id: input.body.id,
+    number: input.body.number,
+    url: input.body.url,
+    html_url: input.body.html_url
+};
+
+// 親のPreProcessチェーン（自動実行）:
+// 1. github-api: GitHub APIヘッダー追加 (Accept, X-GitHub-Api-Version)
+// 2. bearer-api: token → auth_key マッピング
+// 3. rest-api: Authorization: Bearer ヘッダー追加、URL構築
+// 4. http: 実際のHTTPリクエスト実行
+
+// 親のPostProcessチェーン（自動実行）:
+// 1. rest-api: レート制限・エラーステータスチェック
+// 2. github-api: 404エラーのカスタムメッセージ
+```
+
+#### 新規サービス追加の例
+
+```javascript
+// 例: Jira Issue作成を追加（~20行で実装可能）
+
+// Step 1: jira-api 基盤ブロック作成
 {
-    "method": "POST",
-    "headers": { "Content-Type": "application/json" }
+    slug: "jira-api",
+    parent_block_slug: "bearer-api",
+    config_defaults: {
+        "base_url": "https://{domain}.atlassian.net/rest/api/3",
+        "secret_key": "JIRA_API_TOKEN"
+    },
+    pre_process: `
+        // Basic Auth用のヘッダー変換
+        const email = ctx.secrets.JIRA_EMAIL;
+        const token = config.auth_key || ctx.secrets[config.secret_key];
+        const basicAuth = btoa(email + ':' + token);
+        return {
+            ...input,
+            headers: { ...input.headers, 'Authorization': 'Basic ' + basicAuth }
+        };
+    `
 }
 
-// pre_process (入力変換):
-const webhookUrl = ctx.secrets.DISCORD_ERROR_WEBHOOK || config.webhook_url;
-return {
-    url: webhookUrl,
-    body: {
-        content: "🚨 Error Alert",
-        embeds: [{
-            title: input.error_type || "Error",
-            description: input.message,
-            color: 15158332  // Red
-        }]
-    }
-};
-
-// post_process (出力変換):
-return {
-    success: input.status < 400,
-    notified_at: new Date().toISOString()
-};
+// Step 2: jira_create_issue 操作ブロック作成
+{
+    slug: "jira_create_issue",
+    parent_block_slug: "jira-api",
+    pre_process: `
+        return {
+            url: '/issue',
+            method: 'POST',
+            body: {
+                fields: {
+                    project: { key: config.project_key },
+                    summary: renderTemplate(config.summary, input),
+                    issuetype: { name: config.issue_type || 'Task' }
+                }
+            }
+        };
+    `,
+    post_process: `
+        return { key: input.body.key, id: input.body.id };
+    `
+}
 ```
 
 #### InternalSteps（複合ブロック）
@@ -446,21 +563,38 @@ func (e *BlockError) Error() string {
 
 > **Note**: `join`ブロックは廃止されました。Block Group外での分岐ブロック（Condition/Switch）の複数出力は禁止されており、Block Group内では出力が自動的に集約されるため、joinブロックは不要になりました。
 
+### 基盤/パターンブロック一覧（継承階層用）
+
+これらのブロックは具体的な連携ブロックの親として機能し、認証やエラーハンドリングを共通化します。
+
+| Slug | Name | Category | 親 | 説明 |
+|------|------|----------|-----|------|
+| `webhook` | Webhook | integration | `http` | Webhook POST通知パターン |
+| `rest-api` | REST API | integration | `http` | REST API with 認証（Bearer/API Key対応） |
+| `graphql` | GraphQL | integration | `rest-api` | GraphQL API呼び出しパターン |
+| `bearer-api` | Bearer Token API | integration | `rest-api` | Bearer Token認証API |
+| `api-key-header` | API Key Header | integration | `rest-api` | API Key Headerベース認証 |
+| `api-key-query` | API Key Query | integration | `rest-api` | API Key Queryパラメータ認証 |
+| `github-api` | GitHub API | integration | `bearer-api` | GitHub API共通設定 |
+| `notion-api` | Notion API | integration | `bearer-api` | Notion API共通設定 |
+| `google-api` | Google API | integration | `api-key-query` | Google API共通設定 |
+| `linear-api` | Linear API | integration | `graphql` | Linear GraphQL API共通設定 |
+
 ### 外部連携ブロック一覧
 
-| Slug | Name | Category | 説明 | 必要シークレット |
-|------|------|----------|------|-----------------|
-| `slack` | Slack | integration | Slackチャンネルにメッセージ送信 | `SLACK_WEBHOOK_URL` |
-| `discord` | Discord | integration | Discord Webhookに通知 | `DISCORD_WEBHOOK_URL` |
-| `notion_create_page` | Notion: ページ作成 | integration | Notionにページを作成 | `NOTION_API_KEY` |
-| `notion_query_db` | Notion: DB検索 | integration | Notionデータベースを検索 | `NOTION_API_KEY` |
-| `gsheets_append` | Google Sheets: 行追加 | integration | スプレッドシートに行を追加 | `GOOGLE_API_KEY` |
-| `gsheets_read` | Google Sheets: 読み取り | integration | スプレッドシートから読み取り | `GOOGLE_API_KEY` |
-| `github_create_issue` | GitHub: Issue作成 | integration | GitHubにIssueを作成 | `GITHUB_TOKEN` |
-| `github_add_comment` | GitHub: コメント追加 | integration | Issue/PRにコメント追加 | `GITHUB_TOKEN` |
-| `web_search` | Web検索 | integration | Tavily APIでWeb検索 | `TAVILY_API_KEY` |
-| `email_sendgrid` | Email (SendGrid) | integration | SendGridでメール送信 | `SENDGRID_API_KEY` |
-| `linear_create_issue` | Linear: Issue作成 | integration | LinearにIssueを作成 | `LINEAR_API_KEY` |
+| Slug | Name | 親ブロック | 説明 | 必要シークレット |
+|------|------|-----------|------|-----------------|
+| `slack` | Slack | `webhook` | Slackチャンネルにメッセージ送信 | `SLACK_WEBHOOK_URL` |
+| `discord` | Discord | `webhook` | Discord Webhookに通知 | `DISCORD_WEBHOOK_URL` |
+| `github_create_issue` | GitHub: Issue作成 | `github-api` | GitHubにIssueを作成 | `GITHUB_TOKEN` |
+| `github_add_comment` | GitHub: コメント追加 | `github-api` | Issue/PRにコメント追加 | `GITHUB_TOKEN` |
+| `notion_create_page` | Notion: ページ作成 | `notion-api` | Notionにページを作成 | `NOTION_API_KEY` |
+| `notion_query_db` | Notion: DB検索 | `notion-api` | Notionデータベースを検索 | `NOTION_API_KEY` |
+| `gsheets_append` | Google Sheets: 行追加 | `google-api` | スプレッドシートに行を追加 | `GOOGLE_API_KEY` |
+| `gsheets_read` | Google Sheets: 読み取り | `google-api` | スプレッドシートから読み取り | `GOOGLE_API_KEY` |
+| `email_sendgrid` | Email (SendGrid) | `api-key-header` | SendGridでメール送信 | `SENDGRID_API_KEY` |
+| `web_search` | Web検索 | `api-key-header` | Tavily APIでWeb検索 | `TAVILY_API_KEY` |
+| `linear_create_issue` | Linear: Issue作成 | `linear-api` | LinearにIssueを作成 | `LINEAR_API_KEY` |
 
 ### RAGブロック一覧
 
@@ -904,11 +1038,13 @@ Block config formはJSON Schemaから動的に生成:
 |-------|--------|-------------|
 | DB Schema | ✅ 完了 | `block_definitions`, `block_versions` テーブル |
 | System Blocks | ✅ 完了 | 18個のシステムブロック登録済み |
-| Integration Blocks | ✅ 完了 | 11個の外部連携ブロック（013_add_integration_blocks.sql） |
+| Foundation Blocks | ✅ 完了 | 10個の基盤/パターンブロック（継承階層） |
+| Integration Blocks | ✅ 完了 | 11個の外部連携ブロック（継承アーキテクチャに移行済み） |
 | RAG Blocks | ✅ 完了 | 7個のRAGブロック（seed.sql） |
 | Sandbox (ctx) | ✅ 完了 | http, llm, workflow, human, adapter, embedding, vector |
 | Admin API | ✅ 完了 | バージョン管理、ロールバック |
 | Frontend | ✅ 完了 | StepPalette, PropertiesPanel |
+| Multi-Level Inheritance | ✅ 完了 | トポロジカルソート、最大深度50 |
 
 ## Block Groups (Control Flow Constructs)
 
