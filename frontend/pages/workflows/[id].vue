@@ -891,13 +891,13 @@ async function handleDeleteStep() {
     await workflows.deleteStep(workflowId, stepId)
 
     // Remove step and related edges from local state instead of reloading
-    // Note: Also filter edges where this step is the source/target via block group
+    // Only removes edges directly connected to this step (source_step_id/target_step_id)
+    // Group edges (source_block_group_id/target_block_group_id) are preserved
+    // since they connect to groups, not individual steps
     workflow.value.steps = (workflow.value.steps || []).filter(s => s.id !== stepId)
     workflow.value.edges = (workflow.value.edges || []).filter(
       e => e.source_step_id !== stepId && e.target_step_id !== stepId
     )
-    // Note: Group edges (source_block_group_id/target_block_group_id) are preserved
-    // since they connect to groups, not individual steps
   } catch (e) {
     toast.error('Failed to delete step', e instanceof Error ? e.message : undefined)
   } finally {
