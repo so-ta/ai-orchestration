@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -106,8 +107,14 @@ func (q *Queue) Dequeue(ctx context.Context, timeout time.Duration) (*Job, error
 		return nil, fmt.Errorf("failed to unmarshal job %s: %w", jobID, err)
 	}
 
-	// Delete job data after dequeue (best effort, ignore errors)
-	_ = q.client.Del(ctx, dataKey).Err()
+	// Delete job data after dequeue (best effort, log errors)
+	if err := q.client.Del(ctx, dataKey).Err(); err != nil {
+		slog.Warn("Failed to delete job data from Redis",
+			"job_id", jobID,
+			"key", dataKey,
+			"error", err,
+		)
+	}
 
 	return &job, nil
 }
