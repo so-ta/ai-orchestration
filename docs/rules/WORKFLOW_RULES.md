@@ -1,8 +1,8 @@
-# Development Workflow Rules
+# 開発ワークフロールール
 
 開発作業全般のルール。AIエージェントは必ず従うこと。
 
-## Task Type Decision
+## タスク種類の判別
 
 作業開始前にタスクの種類と影響範囲を判別する。
 
@@ -27,17 +27,17 @@
 
 ---
 
-## Before Any Code Change
+## コード変更前の確認
 
 ```
-1. Read docs/INDEX.md to find relevant document
-2. Read the relevant document
-3. Verify understanding matches implementation
+1. docs/INDEX.md を読んで関連ドキュメントを見つける
+2. 関連ドキュメントを読む
+3. 理解が実装と一致していることを確認
 ```
 
 ---
 
-## Service Restart After Code Changes (REQUIRED)
+## コード変更後のサービス再起動（必須）
 
 **バックエンドコード変更後は、必ず関連サービスを再起動すること。**
 
@@ -56,18 +56,18 @@
 
 ---
 
-## Self-Verification Checklist
+## セルフ検証チェックリスト
 
 作業完了時に確認:
 
-### Backend
+### バックエンド
 
 - [ ] `go build ./...` がパス
 - [ ] `go test ./...` がパス
 - [ ] 不要なデバッグコードを削除
 - [ ] サービスを再起動して動作確認
 
-### Frontend
+### フロントエンド
 
 - [ ] `npm run typecheck` がパス
 - [ ] `npm run lint` がパス
@@ -82,26 +82,26 @@
 
 ---
 
-## Code Conventions
+## コード規約
 
 ### Go
 
 - gofmt/goimports
-- Explicit error handling (no `_` ignore)
-- log/slog for logging
-- testify for tests
+- 明示的なエラーハンドリング（`_` での無視禁止）
+- log/slog でログ出力
+- testify でテスト
 
 ### Vue/TS
 
 - Composition API
 - `<script setup lang="ts">`
-- PascalCase components
-- `use` prefix for composables
+- PascalCase コンポーネント
+- `use` プレフィックス for composables
 - **ブラウザのalert/confirm/promptは使用禁止** - `useToast()`を使用
 
 ---
 
-## Error Handling Decision
+## エラーハンドリング判断
 
 ### ビルドエラー
 
@@ -130,7 +130,7 @@
 
 ---
 
-## User Confirmation Required
+## ユーザー確認が必要なケース
 
 以下のケースでは、ユーザーに確認してから進める:
 
@@ -144,7 +144,7 @@
 
 ---
 
-## Session Management
+## セッション管理
 
 ### セッション終了時の引き継ぎ
 
@@ -163,7 +163,7 @@
 
 ---
 
-## DAG Editor Modification
+## DAG エディタ修正
 
 **ワークフローエディタ（DAGエディタ）を修正する場合、必ず以下を確認すること：**
 
@@ -188,13 +188,13 @@
 
 ---
 
-## Rules with Context (Why and Past Failures)
+## ルールの背景と過去の失敗例
 
 各ルールの背景と過去の失敗例を記載。Claude Code がルールの重要性を理解するため。
 
-### Rule 1: バックエンドコード変更後の再起動必須
+### ルール 1: バックエンドコード変更後の再起動必須
 
-**Why:**
+**理由:**
 Docker コンテナは起動時にバイナリをロードする。コード変更してもコンテナ内の古いバイナリが動作し続ける。
 
 **過去の失敗例:**
@@ -210,9 +210,9 @@ Docker コンテナは起動時にバイナリをロードする。コード変�
 
 ---
 
-### Rule 2: 座標計算のキャッシュ禁止（DAG Editor）
+### ルール 2: 座標計算のキャッシュ禁止（DAG エディタ）
 
-**Why:**
+**理由:**
 グループのリサイズやドラッグ時、内部要素の座標は親の変更に連動して再計算される必要がある。
 `computed` でキャッシュすると、依存関係が正しく追跡されず古い座標が返される。
 
@@ -236,9 +236,9 @@ function getCurrentBounds(node: Node) {
 
 ---
 
-### Rule 3: テナント分離の徹底
+### ルール 3: テナント分離の徹底
 
-**Why:**
+**理由:**
 マルチテナント SaaS では、テナント A のデータをテナント B が参照できてはならない。
 `tenant_id` フィルタを忘れると、セキュリティ違反となる。
 
@@ -260,9 +260,9 @@ query := `SELECT * FROM workflows WHERE id = $1 AND tenant_id = $2 AND deleted_a
 
 ---
 
-### Rule 4: 論理削除（Soft Delete）の一貫性
+### ルール 4: 論理削除（ソフトデリート）の一貫性
 
-**Why:**
+**理由:**
 `deleted_at` カラムを持つテーブルは論理削除方式。物理削除すると外部キー制約や監査ログに問題が発生する。
 
 **過去の失敗例:**
@@ -283,9 +283,9 @@ UPDATE workflows SET deleted_at = NOW() WHERE id = $1 AND tenant_id = $2
 
 ---
 
-### Rule 5: ブラウザダイアログ（alert/confirm/prompt）の禁止
+### ルール 5: ブラウザダイアログ（alert/confirm/prompt）の禁止
 
-**Why:**
+**理由:**
 1. SSR 環境（Nuxt）ではブラウザ API が存在しない
 2. ブロッキングダイアログは UX が悪い
 3. スタイリングができない
@@ -309,9 +309,9 @@ toast.add({ title: 'Deleted', color: 'green' })
 
 ---
 
-### Rule 6: Context 伝播の徹底
+### ルール 6: コンテキスト伝播の徹底
 
-**Why:**
+**理由:**
 OpenTelemetry トレースは `context.Context` を通じて親子関係を追跡する。
 `context.Background()` で新しいコンテキストを作ると、トレースが途切れて問題の追跡が困難になる。
 
@@ -340,9 +340,9 @@ func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
 
 ---
 
-### Rule 7: 既存パターンの踏襲
+### ルール 7: 既存パターンの踏襲
 
-**Why:**
+**理由:**
 コードベースの一貫性を保つため。異なるパターンが混在すると、読み手の認知負荷が増加し、バグが発生しやすくなる。
 
 **過去の失敗例:**
@@ -361,9 +361,9 @@ func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
 
 ---
 
-### Rule 8: ドキュメント更新の同期
+### ルール 8: ドキュメント更新の同期
 
-**Why:**
+**理由:**
 コードとドキュメントが乖離すると、次の開発者（または AI エージェント）が誤った情報に基づいて作業する。
 
 **過去の失敗例:**
@@ -379,9 +379,9 @@ func (u *Usecase) Execute(ctx context.Context, tenantID, id uuid.UUID) error {
 
 ---
 
-### Rule 9: グループノードとステップノードの区別（DAG Editor）
+### ルール 9: グループノードとステップノードの区別（DAG エディタ）
 
-**Why:**
+**理由:**
 DAG Editorでは、ステップノード（UUID形式）とグループノード（`group_${UUID}`形式）が異なるID体系を持つ。
 エッジはステップ間接続（`source_step_id`/`target_step_id`）とグループ接続（`source_block_group_id`/`target_block_group_id`）の両方をサポートする。
 これらを混同すると、エッジが正しく保存・表示されない。
@@ -433,7 +433,7 @@ edges.map(e => ({
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
 - [GIT_RULES.md](./GIT_RULES.md) - Git操作ルール
 - [TESTING.md](../TESTING.md) - テスト統合ガイド

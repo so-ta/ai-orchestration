@@ -5,9 +5,9 @@
 
 ---
 
-## Project Overview
+## プロジェクト概要
 
-**AI Orchestration** - Multi-tenant SaaS for designing, executing, and monitoring DAG workflows with LLM and tool integrations.
+**AI Orchestration** - LLMとツール連携を備えたDAGワークフローの設計・実行・監視を行うマルチテナントSaaS。
 
 | Item | Value |
 |------|-------|
@@ -20,11 +20,11 @@
 
 ---
 
-## Review Guidelines
+## レビューガイドライン
 
 PRレビュー時にCodexが従うべきガイドラインです。
 
-### 1. Code Quality Standards
+### 1. コード品質基準
 
 #### Backend (Go)
 
@@ -71,7 +71,7 @@ export default {
 </script>
 ```
 
-### 2. Security Review Points
+### 2. セキュリティレビュー項目
 
 | カテゴリ | チェック項目 |
 |---------|------------|
@@ -90,7 +90,7 @@ row := db.QueryRow(ctx, query, tenantID, workflowID)
 query := fmt.Sprintf("SELECT * FROM workflows WHERE id = '%s'", id)
 ```
 
-### 3. Performance Review Points
+### 3. パフォーマンスレビュー項目
 
 | 観点 | チェック項目 |
 |------|------------|
@@ -99,7 +99,7 @@ query := fmt.Sprintf("SELECT * FROM workflows WHERE id = '%s'", id)
 | **メモリ** | 大きなスライスの事前割り当て |
 | **並行処理** | goroutine リーク、デッドロック |
 
-### 4. Test Coverage Requirements
+### 4. テストカバレッジ要件
 
 **新規コードにはテストが必須です。**
 
@@ -131,7 +131,7 @@ func TestCreateWorkflow(t *testing.T) {
 }
 ```
 
-### 5. Documentation Requirements
+### 5. ドキュメント要件
 
 | 変更内容 | 更新するドキュメント |
 |---------|-------------------|
@@ -141,7 +141,7 @@ func TestCreateWorkflow(t *testing.T) {
 | バックエンド構造 | `docs/BACKEND.md` |
 | フロントエンド構造 | `docs/FRONTEND.md` |
 
-### 6. Architecture Constraints
+### 6. アーキテクチャ制約
 
 | 制約 | 説明 |
 |------|------|
@@ -152,9 +152,9 @@ func TestCreateWorkflow(t *testing.T) {
 
 ---
 
-## Code Style
+## コードスタイル
 
-### Commit Message Format
+### コミットメッセージ形式
 
 ```
 <type>: <summary>
@@ -171,7 +171,7 @@ func TestCreateWorkflow(t *testing.T) {
 | `test` | テスト |
 | `chore` | ビルド、CI/CD |
 
-### Branch Naming
+### ブランチ命名規則
 
 | パターン | 用途 |
 |---------|------|
@@ -181,33 +181,33 @@ func TestCreateWorkflow(t *testing.T) {
 
 ---
 
-## Review Response Format
+## レビュー結果出力形式
 
 レビュー結果は以下の形式で出力してください：
 
 ```markdown
-## Summary
+## サマリー
 （変更内容の要約）
 
-## Good Points
+## 良い点
 （良い変更点）
 
-## Suggestions
+## 提案
 （改善提案）
 
-## Required Changes
+## 修正必要
 （修正が必要な問題）
 
-## Verdict
+## 判定
 （APPROVE / REQUEST_CHANGES / COMMENT）
 ```
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
-| Document | Purpose |
-|----------|---------|
+| ドキュメント | 目的 |
+|-------------|------|
 | [CLAUDE.md](./CLAUDE.md) | プロジェクトルール全般 |
 | [docs/BACKEND.md](./docs/BACKEND.md) | バックエンド構造 |
 | [docs/FRONTEND.md](./docs/FRONTEND.md) | フロントエンド構造 |

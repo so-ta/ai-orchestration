@@ -9,7 +9,7 @@
 
 ## 実装ステータス
 
-| Phase | Status | Description |
+| フェーズ | ステータス | 説明 |
 |-------|--------|-------------|
 | **Phase A** | ✅ Complete | グループ統廃合（4種類）、pre/post_process対応、bodyロールのみ |
 | **Phase B** | ✅ Complete | BlockDefinitionへの統合（group_kind, is_container） |

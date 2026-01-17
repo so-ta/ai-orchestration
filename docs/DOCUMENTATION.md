@@ -1,4 +1,4 @@
-# Documentation Guidelines
+# ドキュメントガイドライン
 
 ドキュメント作成・管理・同期の統合ガイド。
 
@@ -8,9 +8,9 @@
 
 ---
 
-## Document Principles
+## ドキュメント原則
 
-### 1. Single Source of Truth
+### 1. 単一の情報源（Single Source of Truth）
 
 各情報の正は 1 箇所のみ。他の場所では参照のみ。
 
@@ -22,18 +22,18 @@
 | DB スキーマ | [DATABASE.md](./DATABASE.md) |
 | API エンドポイント | [API.md](./API.md) |
 
-### 2. MECE (Mutually Exclusive, Collectively Exhaustive)
+### 2. MECE（相互排他的・全体網羅）
 
-- **Mutually Exclusive**: ドキュメント間に重複なし
-- **Collectively Exhaustive**: 全情報をどこかに記載
+- **相互排他的（Mutually Exclusive）**: ドキュメント間に重複なし
+- **全体網羅（Collectively Exhaustive）**: 全情報をどこかに記載
 
-### 3. Show, Don't Tell
+### 3. 例で示す（Show, Don't Tell）
 
 ルールだけでなく、正しい例と間違った例を必ず添える。
 
 ---
 
-## Document Hierarchy
+## ドキュメント階層
 
 ```
 CLAUDE.md (エントリーポイント)
@@ -63,7 +63,7 @@ docs/INDEX.md (ナビゲーション)
 
 ---
 
-## Update Mapping (コード変更時の更新ルール)
+## 更新マッピング（コード変更時の更新ルール）
 
 ### コード変更 → ドキュメント更新
 
@@ -90,7 +90,7 @@ docs/INDEX.md (ナビゲーション)
 
 ---
 
-## Document Creation Rules
+## ドキュメント作成ルール
 
 ### 新規ドキュメントを作成する基準
 
@@ -139,7 +139,7 @@ docs/INDEX.md (ナビゲーション)
 
 ---
 
-## Writing Guidelines
+## 執筆ガイドライン
 
 ### Claude Code 最適化ルール
 
@@ -182,7 +182,7 @@ Handler は適切にコンテキストを扱ってください。
 
 ---
 
-## Document Maintenance
+## ドキュメントメンテナンス
 
 ### 定期レビュー
 
@@ -204,7 +204,7 @@ Handler は適切にコンテキストを扱ってください。
 
 ---
 
-## Document Dependencies
+## ドキュメント依存関係
 
 ### 参照関係図
 
@@ -225,7 +225,7 @@ A → B → C → A のような循環参照は禁止。
 
 ---
 
-## Discrepancy Resolution
+## 矛盾の解決
 
 ドキュメント間で矛盾を発見した場合：
 
@@ -250,7 +250,7 @@ A → B → C → A のような循環参照は禁止。
 
 ---
 
-## AI-Driven Documentation
+## AI駆動ドキュメンテーション
 
 このプロジェクトは AI エージェントが実装・保守する。
 ドキュメントも AI エージェントが更新する前提で設計されている。
@@ -276,7 +276,7 @@ PR 作成時に確認：
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
 - [INDEX.md](./INDEX.md) - ドキュメントナビゲーション
 - [WORKFLOW_RULES.md](./rules/WORKFLOW_RULES.md) - 開発ワークフロー

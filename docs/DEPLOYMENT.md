@@ -1,102 +1,102 @@
-# Deployment Reference
+# デプロイメントリファレンス
 
-Docker, Kubernetes, and environment configuration for development and production.
+Docker、Kubernetes、および開発・本番環境の設定。
 
-## Quick Reference
+## クイックリファレンス
 
-| Item | Value |
+| 項目 | 値 |
 |------|-------|
-| Development | Docker Compose |
-| Production | ECS (別途構築) |
-| Container Registry | Local build / Custom |
-| API Port | 8080 |
-| Frontend Port | 3000 |
-| Keycloak Port | 8180 |
-| Jaeger Port | 16686 |
-| Health Endpoint | `/health`, `/ready` |
+| 開発環境 | Docker Compose |
+| 本番環境 | ECS（別途構築） |
+| コンテナレジストリ | ローカルビルド / カスタム |
+| API ポート | 8080 |
+| フロントエンドポート | 3000 |
+| Keycloak ポート | 8180 |
+| Jaeger ポート | 16686 |
+| ヘルスエンドポイント | `/health`, `/ready` |
 
-## Development Environment
+## 開発環境
 
-### Docker Compose Services
+### Docker Compose サービス
 
-| Service | Image | Port | Description |
+| サービス | イメージ | ポート | 説明 |
 |---------|-------|------|-------------|
-| postgres | postgres:16-alpine | 5432 | PostgreSQL database |
-| redis | redis:7-alpine | 6379 | Cache & job queue |
-| keycloak | keycloak:24.0 | 8180 | OIDC authentication |
-| api | ./backend | 8080 | Go API server |
-| worker | ./backend | - | Job processor |
-| frontend | ./frontend | 3000 | Nuxt web UI |
-| jaeger | jaegertracing/all-in-one | 16686 | Distributed tracing |
+| postgres | postgres:16-alpine | 5432 | PostgreSQL データベース |
+| redis | redis:7-alpine | 6379 | キャッシュ & ジョブキュー |
+| keycloak | keycloak:24.0 | 8180 | OIDC 認証 |
+| api | ./backend | 8080 | Go API サーバー |
+| worker | ./backend | - | ジョブプロセッサー |
+| frontend | ./frontend | 3000 | Nuxt Web UI |
+| jaeger | jaegertracing/all-in-one | 16686 | 分散トレーシング |
 
-### Commands
+### コマンド
 
 ```bash
-# Start all services
+# 全サービス起動
 docker compose up -d
 
-# Start with build
+# ビルドして起動
 docker compose up -d --build
 
-# View logs
+# ログ表示
 docker compose logs -f api
 docker compose logs -f worker
 docker compose logs -f frontend
 
-# Restart single service
+# 単一サービス再起動
 docker compose restart api
 
-# Stop all
+# 全停止
 docker compose down
 
-# Stop and remove volumes
+# 停止してボリュームも削除
 docker compose down -v
 
-# Rebuild single service
+# 単一サービスを再ビルド
 docker compose up -d --build api
 ```
 
-### Environment Variables
+### 環境変数
 
-Create `.env` file in project root:
+プロジェクトルートに `.env` ファイルを作成:
 
 ```bash
-# LLM API Keys
+# LLM API キー
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 
-# Enable telemetry
+# テレメトリ有効化
 TELEMETRY_ENABLED=true
 ```
 
-### Service URLs
+### サービス URL
 
-| Service | URL |
+| サービス | URL |
 |---------|-----|
 | API | http://localhost:8080 |
-| Frontend | http://localhost:3000 |
-| Keycloak Admin | http://localhost:8180/admin (admin/admin) |
+| フロントエンド | http://localhost:3000 |
+| Keycloak 管理画面 | http://localhost:8180/admin (admin/admin) |
 | Jaeger UI | http://localhost:16686 |
 | PostgreSQL | localhost:5432 |
 | Redis | localhost:6379 |
 
-### Default Credentials
+### デフォルト認証情報
 
-| Service | User | Password |
+| サービス | ユーザー | パスワード |
 |---------|------|----------|
 | PostgreSQL | aio | aio_password |
-| Keycloak Admin | admin | admin |
-| Test User (admin) | admin@example.com | admin123 |
-| Test User (builder) | builder@example.com | builder123 |
+| Keycloak 管理者 | admin | admin |
+| テストユーザー（admin） | admin@example.com | admin123 |
+| テストユーザー（builder） | builder@example.com | builder123 |
 
 ---
 
-## Production Dockerfile
+## 本番用 Dockerfile
 
-### Backend
+### バックエンド
 
 ```dockerfile
-# Build stage
+# ビルドステージ
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -105,7 +105,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /worker ./cmd/worker
 
-# Production stage
+# 本番ステージ
 FROM alpine:3.19
 RUN apk --no-cache add ca-certificates tzdata
 RUN adduser -D -g '' appuser
@@ -116,10 +116,10 @@ EXPOSE 8080
 CMD ["./api"]
 ```
 
-### Frontend
+### フロントエンド
 
 ```dockerfile
-# Build stage
+# ビルドステージ
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
@@ -127,7 +127,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Production stage
+# 本番ステージ
 FROM node:20-alpine
 WORKDIR /app
 COPY --from=builder /app/.output ./.output
@@ -137,13 +137,13 @@ CMD ["node", ".output/server/index.mjs"]
 
 ---
 
-## Health Endpoints
+## ヘルスエンドポイント
 
 ### Liveness (/health)
 
-- Returns immediately
-- Checks process is alive
-- Used by: K8s livenessProbe
+- 即座にレスポンス
+- プロセスが生存しているか確認
+- 用途: K8s livenessProbe
 
 ```json
 {"status": "ok"}
@@ -151,9 +151,9 @@ CMD ["node", ".output/server/index.mjs"]
 
 ### Readiness (/ready)
 
-- Checks dependencies
-- Returns 503 if unhealthy
-- Used by: K8s readinessProbe
+- 依存関係をチェック
+- 異常時は 503 を返す
+- 用途: K8s readinessProbe
 
 ```json
 {
@@ -167,15 +167,15 @@ CMD ["node", ".output/server/index.mjs"]
 
 ---
 
-## Monitoring
+## モニタリング
 
 ### OpenTelemetry
 
-Enable: `TELEMETRY_ENABLED=true`
+有効化: `TELEMETRY_ENABLED=true`
 
-Traces exported to: `OTEL_EXPORTER_OTLP_ENDPOINT`
+トレースのエクスポート先: `OTEL_EXPORTER_OTLP_ENDPOINT`
 
-### Jaeger Setup
+### Jaeger 設定
 
 ```yaml
 # docker-compose
@@ -187,60 +187,60 @@ jaeger:
     - "4318:4318"    # OTLP HTTP
 ```
 
-### Key Metrics
+### 主要メトリクス
 
-- Request latency (P50, P95, P99)
-- Error rate
-- DAG execution duration
-- Step execution duration
-- Queue depth
-- Active runs count
+- リクエストレイテンシ（P50, P95, P99）
+- エラーレート
+- DAG 実行時間
+- ステップ実行時間
+- キュー深度
+- アクティブ Run 数
 
 ---
 
-## Troubleshooting
+## トラブルシューティング
 
-### Common Issues
+### よくある問題
 
-| Issue | Cause | Fix |
+| 問題 | 原因 | 解決策 |
 |-------|-------|-----|
-| API 502 | DB connection failed | Check DATABASE_URL, postgres health |
-| Worker not processing | Redis connection | Check REDIS_URL, redis health |
-| Auth errors | Keycloak unavailable | Check KEYCLOAK_URL, keycloak health |
-| Slow queries | Missing indexes | Check database logs, EXPLAIN |
-| OOM killed | Memory limit too low | Increase limits in deployment |
+| API 502 | DB 接続失敗 | DATABASE_URL、postgres の状態を確認 |
+| Worker が処理しない | Redis 接続 | REDIS_URL、redis の状態を確認 |
+| 認証エラー | Keycloak 利用不可 | KEYCLOAK_URL、keycloak の状態を確認 |
+| クエリが遅い | インデックス不足 | データベースログを確認、EXPLAIN |
+| OOM killed | メモリ制限が低すぎる | デプロイメントの制限を増加 |
 
-### Debug Commands
+### デバッグコマンド
 
 ```bash
-# Docker Compose logs
+# Docker Compose ログ
 docker compose logs -f api
 docker compose logs -f worker
 
-# Exec into container
+# コンテナに入る
 docker compose exec api sh
 
-# Check DB connection
+# DB 接続確認
 docker compose exec api psql $DATABASE_URL -c "SELECT 1"
 
-# Check Redis
+# Redis 確認
 docker compose exec api redis-cli -u $REDIS_URL PING
 ```
 
 ---
 
-## Scaling Considerations
+## スケーリング考慮事項
 
-| Component | Strategy | Notes |
+| コンポーネント | 戦略 | 注記 |
 |-----------|----------|-------|
-| API | Horizontal scaling | Stateless, CPU-based autoscaling recommended |
-| Worker | Queue-based scaling | Each worker processes sequentially, more workers = more parallelism |
-| Database | Connection pooling | PgBouncer recommended, read replicas for read-heavy |
-| Redis | Cluster mode | Separate instances for cache vs queue (optional) |
+| API | 水平スケーリング | ステートレス、CPU ベースのオートスケーリング推奨 |
+| Worker | キューベースのスケーリング | 各 Worker は順次処理、Worker 数増加 = 並列性向上 |
+| データベース | コネクションプーリング | PgBouncer 推奨、読み取り重視の場合はリードレプリカ |
+| Redis | クラスターモード | キャッシュ用とキュー用で別インスタンス（オプション） |
 
-## Related Documents
+## 関連ドキュメント
 
-- [BACKEND.md](./BACKEND.md) - Backend architecture
-- [FRONTEND.md](./FRONTEND.md) - Frontend architecture
-- [DATABASE.md](./DATABASE.md) - Database schema and connection settings
-- [API.md](./API.md) - Health check endpoints
+- [BACKEND.md](./BACKEND.md) - バックエンドアーキテクチャ
+- [FRONTEND.md](./FRONTEND.md) - フロントエンドアーキテクチャ
+- [DATABASE.md](./DATABASE.md) - データベーススキーマと接続設定
+- [API.md](./API.md) - ヘルスチェックエンドポイント

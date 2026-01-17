@@ -1,48 +1,48 @@
-# Backend Technical Reference
+# バックエンド技術リファレンス
 
-Go backend code structure, interfaces, and patterns.
+Goバックエンドのコード構造、インターフェース、パターン。
 
-> **Migration Note (2026-01)**: Workflow has been renamed to Project. Projects now support multiple Start blocks with different trigger types (manual, schedule, webhook). The webhooks table has been removed; webhook configuration is part of Start block config.
+> **移行メモ (2026-01)**: WorkflowはProjectに名称変更されました。Projectは異なるトリガータイプ（manual、schedule、webhook）を持つ複数のStartブロックをサポートするようになりました。webhooksテーブルは削除され、Webhook設定はStartブロックのconfigの一部になりました。
 
-## Quick Reference
+## クイックリファレンス
 
-| Item | Value |
+| 項目 | 値 |
 |------|-------|
-| Language | Go 1.22+ |
-| Architecture | Clean Architecture (Handler → Usecase → Domain → Repository) |
-| Entry Points | `cmd/api/main.go`, `cmd/worker/main.go` |
-| Domain Models | `internal/domain/` |
-| API Handlers | `internal/handler/` |
-| Business Logic | `internal/usecase/` |
-| Database | `internal/repository/postgres/` |
-| External APIs | `internal/adapter/` |
-| DAG Engine | `internal/engine/` |
+| 言語 | Go 1.22+ |
+| アーキテクチャ | クリーンアーキテクチャ (Handler → Usecase → Domain → Repository) |
+| エントリーポイント | `cmd/api/main.go`, `cmd/worker/main.go` |
+| ドメインモデル | `internal/domain/` |
+| APIハンドラー | `internal/handler/` |
+| ビジネスロジック | `internal/usecase/` |
+| データベース | `internal/repository/postgres/` |
+| 外部API | `internal/adapter/` |
+| DAGエンジン | `internal/engine/` |
 
-## Directory Structure
+## ディレクトリ構造
 
 ```
 backend/
 ├── cmd/
-│   ├── api/main.go         # HTTP server, routing, middleware setup
-│   └── worker/main.go      # Job consumer, DAG executor
+│   ├── api/main.go         # HTTPサーバー、ルーティング、ミドルウェア設定
+│   └── worker/main.go      # ジョブコンシューマー、DAGエグゼキューター
 ├── internal/
-│   ├── domain/             # Entities, business rules
-│   ├── usecase/            # Application logic
-│   ├── handler/            # HTTP handlers
-│   ├── repository/         # Data access
-│   │   └── postgres/       # PostgreSQL implementation
-│   ├── adapter/            # External service integrations
-│   ├── engine/             # DAG execution engine
-│   └── middleware/         # HTTP middleware
+│   ├── domain/             # エンティティ、ビジネスルール
+│   ├── usecase/            # アプリケーションロジック
+│   ├── handler/            # HTTPハンドラー
+│   ├── repository/         # データアクセス
+│   │   └── postgres/       # PostgreSQL実装
+│   ├── adapter/            # 外部サービス連携
+│   ├── engine/             # DAG実行エンジン
+│   └── middleware/         # HTTPミドルウェア
 ├── pkg/
-│   ├── database/           # DB connection pool
-│   ├── redis/              # Redis client wrapper
+│   ├── database/           # DB接続プール
+│   ├── redis/              # Redisクライアントラッパー
 │   └── telemetry/          # OpenTelemetry SDK
-├── migrations/             # SQL migrations
-└── tests/e2e/              # Integration tests
+├── migrations/             # SQLマイグレーション
+└── tests/e2e/              # 統合テスト
 ```
 
-## Layer Dependencies
+## レイヤー依存関係
 
 ```
 handler -> usecase -> domain
@@ -51,9 +51,9 @@ handler -> usecase -> domain
                   -> engine
 ```
 
-## Domain Models
+## ドメインモデル
 
-### Project (domain/project.go, formerly workflow.go)
+### Project (domain/project.go、旧workflow.go)
 
 ```go
 type Project struct {
@@ -63,7 +63,7 @@ type Project struct {
     Description string
     Status      ProjectStatus  // "draft" | "published"
     Version     int
-    Variables   json.RawMessage  // Project-level variables (replaces input_schema/output_schema)
+    Variables   json.RawMessage  // プロジェクトレベル変数（input_schema/output_schemaを置換）
     CreatedAt   time.Time
     UpdatedAt   time.Time
     DeletedAt   *time.Time
@@ -76,7 +76,7 @@ const (
 )
 ```
 
-> **Migration Note**: `InputSchema` and `OutputSchema` have been removed from Project. Input/output schemas are now defined per Start block in the Step config.
+> **移行メモ**: `InputSchema`と`OutputSchema`はProjectから削除されました。入出力スキーマはStepのconfigでStartブロックごとに定義されるようになりました。
 
 ### Step (domain/step.go)
 
@@ -94,7 +94,7 @@ type Step struct {
 
 type StepType string
 const (
-    StepTypeStart       StepType = "start"        // Multiple per project, with trigger_type
+    StepTypeStart       StepType = "start"        // プロジェクトごとに複数可、trigger_type付き
     StepTypeLLM         StepType = "llm"
     StepTypeTool        StepType = "tool"
     StepTypeCondition   StepType = "condition"
@@ -109,9 +109,9 @@ const (
 )
 ```
 
-### Step Config Schemas
+### Step Config スキーマ
 
-#### Start Step (Multiple per project supported)
+#### Start Step（プロジェクトごとに複数サポート）
 ```json
 {
   "trigger_type": "manual|schedule|webhook",
@@ -126,20 +126,20 @@ const (
 }
 ```
 
-| Trigger Type | trigger_config Fields |
+| トリガータイプ | trigger_configフィールド |
 |--------------|----------------------|
-| `manual` | None required |
+| `manual` | 不要 |
 | `schedule` | `cron`, `timezone` |
 | `webhook` | `webhook_secret`, `input_mapping` |
 
-> **Note**: Projects can have multiple Start blocks. Each Start block can have a different trigger type. This replaces the previous webhooks table functionality.
+> **注意**: プロジェクトは複数のStartブロックを持つことができます。各Startブロックは異なるトリガータイプを持つことができます。これは以前のwebhooksテーブルの機能を置き換えます。
 
 #### LLM Step
 ```json
 {
   "provider": "openai|anthropic",
   "model": "gpt-4|claude-3-opus-20240229",
-  "prompt": "template with {{input.field}}",
+  "prompt": "{{input.field}} を含むテンプレート",
   "temperature": 0.7,
   "max_tokens": 1000
 }
@@ -149,7 +149,7 @@ const (
 ```json
 {
   "adapter_id": "mock|http|openai|anthropic",
-  "...adapter_specific_fields"
+  "...アダプター固有フィールド"
 }
 ```
 
@@ -173,68 +173,68 @@ const (
 ```json
 {
   "loop_type": "for|forEach|while|doWhile",
-  "count": 10,                    // for: number of iterations
-  "input_path": "$.items",        // forEach: path to array
-  "condition": "$.index < 10",    // while/doWhile: condition expression
-  "max_iterations": 100,          // safety limit (default: 100)
-  "adapter_id": "mock"            // optional: adapter to execute per iteration
+  "count": 10,                    // for: 反復回数
+  "input_path": "$.items",        // forEach: 配列へのパス
+  "condition": "$.index < 10",    // while/doWhile: 条件式
+  "max_iterations": 100,          // 安全制限（デフォルト: 100）
+  "adapter_id": "mock"            // オプション: 各反復で実行するアダプター
 }
 ```
 
-Loop types:
-- `for`: Fixed count iterations
-- `forEach`: Iterate over array elements
-- `while`: Continue while condition is true (check before execution)
-- `doWhile`: Execute at least once, then check condition
+ループタイプ:
+- `for`: 固定回数の反復
+- `forEach`: 配列要素の反復
+- `while`: 条件がtrueの間継続（実行前にチェック）
+- `doWhile`: 最低1回実行し、その後条件をチェック
 
 #### Wait Step
 ```json
 {
-  "duration_ms": 5000,            // delay in milliseconds
-  "until": "2024-01-15T10:00:00Z" // OR wait until ISO8601 datetime
+  "duration_ms": 5000,            // ミリ秒単位の遅延
+  "until": "2024-01-15T10:00:00Z" // または ISO8601 日時まで待機
 }
 ```
 
-| Constraint | Value |
+| 制約 | 値 |
 |------------|-------|
-| Maximum duration | 1 hour (3600000 ms) |
+| 最大待機時間 | 1時間 (3600000 ms) |
 
 #### Function Step
 ```json
 {
   "code": "return input.value * 2",
-  "language": "javascript",       // currently only javascript
-  "timeout_ms": 5000              // execution timeout
+  "language": "javascript",       // 現在はjavascriptのみ
+  "timeout_ms": 5000              // 実行タイムアウト
 }
 ```
 
-| Status | Description |
+| ステータス | 説明 |
 |--------|-------------|
-| Implementation | Partial - passes through input with warning |
+| 実装状態 | 部分的 - 警告付きで入力をパススルー |
 
 #### Router Step
 ```json
 {
   "routes": [
-    {"name": "support", "description": "Customer support requests"},
-    {"name": "sales", "description": "Sales inquiries"}
+    {"name": "support", "description": "カスタマーサポートリクエスト"},
+    {"name": "sales", "description": "営業問い合わせ"}
   ],
-  "provider": "openai|anthropic", // LLM provider for classification
-  "model": "gpt-4",               // model for routing decision
-  "prompt": "Classify this input" // optional custom prompt
+  "provider": "openai|anthropic", // 分類用LLMプロバイダー
+  "model": "gpt-4",               // ルーティング判断用モデル
+  "prompt": "この入力を分類してください" // オプションのカスタムプロンプト
 }
 ```
 
-| Behavior | Description |
+| 動作 | 説明 |
 |----------|-------------|
-| Routing | Uses LLM to classify input and select appropriate route |
+| ルーティング | LLMを使用して入力を分類し、適切なルートを選択 |
 
 #### Human-in-Loop Step
 ```json
 {
-  "instructions": "Please review and approve",
+  "instructions": "確認して承認してください",
   "timeout_hours": 24,
-  "approval_url": true,           // generate approval URL
+  "approval_url": true,           // 承認URLを生成
   "notification": {
     "type": "email|slack|webhook",
     "target": "user@example.com"
@@ -246,10 +246,10 @@ Loop types:
 }
 ```
 
-| Mode | Behavior |
+| モード | 動作 |
 |------|----------|
-| Test | Auto-approved |
-| Production | Workflow pauses until approval received |
+| Test | 自動承認 |
+| Production | 承認受信までワークフロー一時停止 |
 
 ### Edge (domain/edge.go)
 
@@ -259,14 +259,14 @@ type Edge struct {
     ProjectID    uuid.UUID
     SourceStepID uuid.UUID
     TargetStepID uuid.UUID
-    Condition    string  // Optional: "$.success == true"
+    Condition    string  // オプション: "$.success == true"
     CreatedAt    time.Time
 }
 ```
 
 ### BlockGroup (domain/block_group.go)
 
-Control flow construct that groups multiple steps into a single logical unit.
+複数のステップを単一の論理単位にグループ化する制御フロー構造。
 
 ```go
 type BlockGroup struct {
@@ -275,7 +275,7 @@ type BlockGroup struct {
     Name          string
     Type          BlockGroupType
     Config        json.RawMessage
-    ParentGroupID *uuid.UUID      // For nested groups
+    ParentGroupID *uuid.UUID      // ネストされたグループ用
     PositionX     int
     PositionY     int
     Width         int
@@ -286,16 +286,16 @@ type BlockGroup struct {
 
 type BlockGroupType string
 const (
-    BlockGroupTypeParallel   BlockGroupType = "parallel"    // Parallel execution
-    BlockGroupTypeTryCatch   BlockGroupType = "try_catch"   // Error handling
-    BlockGroupTypeIfElse     BlockGroupType = "if_else"     // Conditional branch
-    BlockGroupTypeSwitchCase BlockGroupType = "switch_case" // Multi-branch routing
-    BlockGroupTypeForeach    BlockGroupType = "foreach"     // Array iteration
-    BlockGroupTypeWhile      BlockGroupType = "while"       // Condition loop
+    BlockGroupTypeParallel   BlockGroupType = "parallel"    // 並列実行
+    BlockGroupTypeTryCatch   BlockGroupType = "try_catch"   // エラーハンドリング
+    BlockGroupTypeIfElse     BlockGroupType = "if_else"     // 条件分岐
+    BlockGroupTypeSwitchCase BlockGroupType = "switch_case" // 多分岐ルーティング
+    BlockGroupTypeForeach    BlockGroupType = "foreach"     // 配列反復
+    BlockGroupTypeWhile      BlockGroupType = "while"       // 条件ループ
 )
 ```
 
-#### BlockGroup Config Examples
+#### BlockGroup Config例
 
 ```json
 // parallel
@@ -314,59 +314,59 @@ const (
 { "condition": "$.count < 10", "max_iterations": 100 }
 ```
 
-#### Step Group Roles
+#### Step グループロール
 
-Steps within a BlockGroup have a `group_role` field:
+BlockGroup内のステップは`group_role`フィールドを持ちます:
 
-| Role | Block Type | Description |
+| ロール | ブロックタイプ | 説明 |
 |------|-----------|-------------|
-| `body` | parallel, foreach, while | Main execution steps |
-| `try` | try_catch | Try block steps |
-| `catch` | try_catch | Error handling steps |
-| `finally` | try_catch | Cleanup steps |
-| `then` | if_else | True branch steps |
-| `else` | if_else | False branch steps |
-| `case_N` | switch_case | Case branch steps |
-| `default` | switch_case | Default branch steps |
+| `body` | parallel, foreach, while | メイン実行ステップ |
+| `try` | try_catch | tryブロックステップ |
+| `catch` | try_catch | エラーハンドリングステップ |
+| `finally` | try_catch | クリーンアップステップ |
+| `then` | if_else | trueブランチステップ |
+| `else` | if_else | falseブランチステップ |
+| `case_N` | switch_case | caseブランチステップ |
+| `default` | switch_case | defaultブランチステップ |
 
 ### BlockDefinition (domain/block.go)
 
-Block definitions represent reusable execution units that can be inherited and extended.
+ブロック定義は継承・拡張可能な再利用可能な実行単位を表します。
 
 ```go
 type BlockDefinition struct {
     ID            uuid.UUID
-    TenantID      *uuid.UUID       // nil for system blocks
-    Slug          string           // unique identifier
+    TenantID      *uuid.UUID       // システムブロックはnil
+    Slug          string           // 一意識別子
     Name          string
     Description   string
     Category      BlockCategory
     Icon          string
-    ConfigSchema  json.RawMessage  // JSON Schema for config
-    InputSchema   json.RawMessage  // JSON Schema for input
-    OutputSchema  json.RawMessage  // JSON Schema for output
+    ConfigSchema  json.RawMessage  // config用JSONスキーマ
+    InputSchema   json.RawMessage  // 入力用JSONスキーマ
+    OutputSchema  json.RawMessage  // 出力用JSONスキーマ
     InputPorts    []InputPort
     OutputPorts   []OutputPort
     ErrorCodes    []ErrorCodeDef
 
-    // Unified Block Model
-    Code          string           // JavaScript code executed in sandbox
-    UIConfig      json.RawMessage  // UI metadata (icon, color, etc.)
-    IsSystem      bool             // System blocks can only be edited by admins
-    Version       int              // Version number
+    // 統一ブロックモデル
+    Code          string           // サンドボックスで実行されるJavaScriptコード
+    UIConfig      json.RawMessage  // UIメタデータ（アイコン、色など）
+    IsSystem      bool             // システムブロックは管理者のみ編集可能
+    Version       int              // バージョン番号
 
-    // Block Inheritance/Extension
-    ParentBlockID *uuid.UUID       // Reference to parent block
-    ConfigDefaults json.RawMessage // Default values for parent's config
-    PreProcess    string           // JavaScript for input transformation
-    PostProcess   string           // JavaScript for output transformation
-    InternalSteps []InternalStep   // Composite block internal steps
+    // ブロック継承/拡張
+    ParentBlockID *uuid.UUID       // 親ブロックへの参照
+    ConfigDefaults json.RawMessage // 親のconfigのデフォルト値
+    PreProcess    string           // 入力変換用JavaScript
+    PostProcess   string           // 出力変換用JavaScript
+    InternalSteps []InternalStep   // コンポジットブロック内部ステップ
 
-    // Resolved fields (populated by backend)
-    PreProcessChain        []string         // Chain of preProcess (child→root)
-    PostProcessChain       []string         // Chain of postProcess (root→child)
-    ResolvedCode           string           // Code from root ancestor
-    ResolvedConfigDefaults json.RawMessage  // Merged config defaults
+    // 解決済みフィールド（バックエンドで設定）
+    PreProcessChain        []string         // preProcessのチェーン（子→ルート）
+    PostProcessChain       []string         // postProcessのチェーン（ルート→子）
+    ResolvedCode           string           // ルート祖先からのコード
+    ResolvedConfigDefaults json.RawMessage  // マージされたconfigデフォルト
 
     Enabled    bool
     CreatedAt  time.Time
@@ -374,9 +374,9 @@ type BlockDefinition struct {
 }
 
 type InternalStep struct {
-    Type      string          `json:"type"`       // Block slug to execute
-    Config    json.RawMessage `json:"config"`     // Step configuration
-    OutputKey string          `json:"output_key"` // Key for storing output
+    Type      string          `json:"type"`       // 実行するブロックslug
+    Config    json.RawMessage `json:"config"`     // ステップ設定
+    OutputKey string          `json:"output_key"` // 出力格納用キー
 }
 
 type BlockCategory string
@@ -390,22 +390,22 @@ const (
 )
 ```
 
-#### Block Inheritance Constraints
+#### ブロック継承制約
 
-| Constraint | Value |
+| 制約 | 値 |
 |------------|-------|
-| Only blocks with code can be inherited | `Code != ""` |
-| Maximum inheritance depth | 50 levels（実用上は4-5レベル） |
-| Circular inheritance | Not allowed（トポロジカルソートで検出） |
-| Tenant isolation | 同一テナント内またはシステムブロックからのみ継承可能 |
+| コードを持つブロックのみ継承可能 | `Code != ""` |
+| 最大継承深度 | 50レベル（実用上は4-5レベル） |
+| 循環継承 | 禁止（トポロジカルソートで検出） |
+| テナント分離 | 同一テナント内またはシステムブロックからのみ継承可能 |
 
-#### Block Execution Flow
+#### ブロック実行フロー
 
-When executing an inherited block:
-1. **PreProcess Chain** (child → root): Transform input through each preProcess
-2. **Internal Steps** (if any): Execute internal steps sequentially
-3. **Code Execution**: Run the resolved code from root ancestor
-4. **PostProcess Chain** (root → child): Transform output through each postProcess
+継承されたブロックを実行する際:
+1. **PreProcessチェーン** (子 → ルート): 各preProcessで入力を変換
+2. **内部ステップ** (ある場合): 内部ステップを順次実行
+3. **コード実行**: ルート祖先からの解決済みコードを実行
+4. **PostProcessチェーン** (ルート → 子): 各postProcessで出力を変換
 
 ### Run (domain/run.go)
 
@@ -414,7 +414,7 @@ type Run struct {
     ID             uuid.UUID
     ProjectID      uuid.UUID
     ProjectVersion int
-    StartStepID    uuid.UUID       // Which Start block triggered this run
+    StartStepID    uuid.UUID       // この実行をトリガーしたStartブロック
     TenantID       uuid.UUID
     Status         RunStatus
     Mode           RunMode
@@ -469,9 +469,9 @@ type StepRun struct {
 }
 ```
 
-## Interfaces
+## インターフェース
 
-### Repository Interface (repository/interfaces.go)
+### Repository インターフェース (repository/interfaces.go)
 
 ```go
 type ProjectRepository interface {
@@ -485,7 +485,7 @@ type ProjectRepository interface {
 type StepRepository interface {
     Create(ctx context.Context, s *domain.Step) error
     GetByProjectID(ctx context.Context, projectID uuid.UUID) ([]*domain.Step, error)
-    GetStartBlocks(ctx context.Context, projectID uuid.UUID) ([]*domain.Step, error)  // Get all Start blocks
+    GetStartBlocks(ctx context.Context, projectID uuid.UUID) ([]*domain.Step, error)  // 全Startブロックを取得
     Update(ctx context.Context, s *domain.Step) error
     Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -501,7 +501,7 @@ type RunRepository interface {
     GetByID(ctx context.Context, id uuid.UUID) (*domain.Run, error)
     Update(ctx context.Context, r *domain.Run) error
     ListByProjectID(ctx context.Context, projectID uuid.UUID) ([]*domain.Run, error)
-    ListByStartStepID(ctx context.Context, startStepID uuid.UUID) ([]*domain.Run, error)  // Filter by Start block
+    ListByStartStepID(ctx context.Context, startStepID uuid.UUID) ([]*domain.Run, error)  // Startブロックでフィルタ
 }
 
 type StepRunRepository interface {
@@ -511,7 +511,7 @@ type StepRunRepository interface {
 }
 ```
 
-### Adapter Interface (adapter/adapter.go)
+### Adapter インターフェース (adapter/adapter.go)
 
 ```go
 type Adapter interface {
@@ -541,23 +541,23 @@ type ResponseMetadata struct {
 }
 ```
 
-## Adapter Implementations
+## アダプター実装
 
 ### MockAdapter (adapter/mock.go)
 
-Config:
+設定:
 ```json
 {
   "response": {"key": "value"},
   "delay_ms": 100,
-  "error": "optional error message",
+  "error": "オプションのエラーメッセージ",
   "status_code": 200
 }
 ```
 
 ### OpenAIAdapter (adapter/openai.go)
 
-Config:
+設定:
 ```json
 {
   "model": "gpt-4",
@@ -567,11 +567,11 @@ Config:
 }
 ```
 
-Environment: `OPENAI_API_KEY`
+環境変数: `OPENAI_API_KEY`
 
 ### AnthropicAdapter (adapter/anthropic.go)
 
-Config:
+設定:
 ```json
 {
   "model": "claude-3-opus-20240229",
@@ -580,11 +580,11 @@ Config:
 }
 ```
 
-Environment: `ANTHROPIC_API_KEY`
+環境変数: `ANTHROPIC_API_KEY`
 
 ### HTTPAdapter (adapter/http.go)
 
-Config:
+設定:
 ```json
 {
   "url": "https://api.example.com/endpoint",
@@ -595,38 +595,38 @@ Config:
 }
 ```
 
-## DAG Engine (engine/executor.go)
+## DAGエンジン (engine/executor.go)
 
-### Execution Flow
+### 実行フロー
 
-1. Load project definition (steps, edges)
-2. Identify the Start block to execute (from `start_step_id`)
-3. Build execution graph from the specified Start block
-4. Execute steps in topological order
-5. Handle branching (condition steps)
-6. Handle parallel execution (map steps)
-7. Collect outputs, update run status
+1. プロジェクト定義（ステップ、エッジ）をロード
+2. 実行するStartブロックを特定（`start_step_id`から）
+3. 指定されたStartブロックから実行グラフを構築
+4. トポロジカル順序でステップを実行
+5. 分岐を処理（conditionステップ）
+6. 並列実行を処理（mapステップ）
+7. 出力を収集し、実行ステータスを更新
 
-> **Note**: Since projects can have multiple Start blocks, the execution engine now requires `start_step_id` to know which subgraph to execute.
+> **注意**: プロジェクトは複数のStartブロックを持つことができるため、実行エンジンはどのサブグラフを実行するか知るために`start_step_id`が必要です。
 
-### Condition Expression Syntax (engine/condition.go)
+### 条件式構文 (engine/condition.go)
 
 ```
-$.field == "value"     # String equality
-$.field != "value"     # String inequality
-$.field > 10           # Numeric comparison
+$.field == "value"     # 文字列等価
+$.field != "value"     # 文字列不等価
+$.field > 10           # 数値比較
 $.field >= 10
 $.field < 10
 $.field <= 10
-$.nested.field         # Nested path access
-$.field                # Truthy check
+$.nested.field         # ネストされたパスアクセス
+$.field                # truthy チェック
 ```
 
-### Job Queue (engine/queue.go)
+### ジョブキュー (engine/queue.go)
 
-Queue name: `project:jobs`
+キュー名: `project:jobs`
 
-Job payload:
+ジョブペイロード:
 ```json
 {
   "run_id": "uuid",
@@ -636,29 +636,29 @@ Job payload:
 }
 ```
 
-## Middleware
+## ミドルウェア
 
-### Auth Middleware (middleware/auth.go)
+### 認証ミドルウェア (middleware/auth.go)
 
 ```go
-// Extracts from JWT:
-// - tenant_id (claim: "tenant_id" or from resource_access)
-// - user_id (claim: "sub")
-// - email (claim: "email")
-// - roles (claim: "realm_access.roles")
+// JWTから抽出:
+// - tenant_id (クレーム: "tenant_id" または resource_access から)
+// - user_id (クレーム: "sub")
+// - email (クレーム: "email")
+// - roles (クレーム: "realm_access.roles")
 
-// Context keys:
+// コンテキストキー:
 ctx.Value("tenant_id").(uuid.UUID)
 ctx.Value("user_id").(string)
 ctx.Value("email").(string)
 ctx.Value("roles").([]string)
 ```
 
-Bypass: Set `AUTH_ENABLED=false` or use `X-Tenant-ID` header in dev mode.
+バイパス: 開発モードでは`AUTH_ENABLED=false`を設定するか`X-Tenant-ID`ヘッダーを使用。
 
-## Telemetry (pkg/telemetry/)
+## テレメトリ (pkg/telemetry/)
 
-### Initialization
+### 初期化
 
 ```go
 cleanup, err := telemetry.Init(ctx, telemetry.Config{
@@ -669,7 +669,7 @@ cleanup, err := telemetry.Init(ctx, telemetry.Config{
 defer cleanup()
 ```
 
-### Span Creation
+### Span作成
 
 ```go
 ctx, span := telemetry.StartSpan(ctx, "operation_name")
@@ -680,9 +680,9 @@ span.SetAttributes(
 )
 ```
 
-## Error Handling
+## エラーハンドリング
 
-### Domain Errors (domain/errors.go)
+### ドメインエラー (domain/errors.go)
 
 ```go
 var (
@@ -696,7 +696,7 @@ var (
 )
 ```
 
-### Handler Error Response
+### ハンドラーエラーレスポンス
 
 ```go
 func respondError(w http.ResponseWriter, code string, message string, status int) {
@@ -709,9 +709,9 @@ func respondError(w http.ResponseWriter, code string, message string, status int
 }
 ```
 
-## Testing Patterns
+## テストパターン
 
-### Unit Test
+### ユニットテスト
 
 ```go
 func TestWorkflowUsecase_Create(t *testing.T) {
@@ -725,45 +725,45 @@ func TestWorkflowUsecase_Create(t *testing.T) {
 }
 ```
 
-### E2E Test
+### E2Eテスト
 
 ```go
 func TestWorkflowE2E(t *testing.T) {
-    // Setup: create workflow via API
+    // セットアップ: API経由でワークフロー作成
     resp, _ := http.Post(baseURL+"/api/v1/workflows", "application/json", body)
 
-    // Assert
+    // アサート
     assert.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 ```
 
-## Build Commands
+## ビルドコマンド
 
 以下のコマンドは`backend/`ディレクトリ内で実行します：
 
 ```bash
 cd backend
 
-# Build API
+# APIをビルド
 go build -o bin/api ./cmd/api
 
-# Build Worker
+# Workerをビルド
 go build -o bin/worker ./cmd/worker
 
-# Build Seeder
+# Seederをビルド
 go build -o bin/seeder ./cmd/seeder
 
-# Run tests
+# テスト実行
 go test ./...
 
-# Run with race detector
+# race検出器付きで実行
 go test -race ./...
 
-# Generate mocks (if using mockgen)
+# モック生成（mockgen使用時）
 go generate ./...
 ```
 
-## Block Seeding Commands
+## ブロックシーディングコマンド
 
 プログラム的なブロック定義のマイグレーションコマンドです。
 
@@ -797,13 +797,13 @@ DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmod
 
 **Note**: `make seed-blocks` コマンドはMakefile内でDATABASE_URLを自動設定します。
 
-### Seeder マイグレーション処理
+### Seederマイグレーション処理
 
-Seeder は多段継承を正しく処理するため、Kahn's Algorithm によるトポロジカルソートを使用：
+Seederは多段継承を正しく処理するため、Kahn's Algorithmによるトポロジカルソートを使用：
 
 ```
 http (Level 0)
-  ↓ sorted first
+  ↓ 最初にソート
 rest-api (Level 1)
   ↓
 bearer-api (Level 2)
@@ -811,7 +811,7 @@ bearer-api (Level 2)
 github-api (Level 3)
   ↓
 github_create_issue (Level 4)
-  ↓ sorted last
+  ↓ 最後にソート
 ```
 
 **処理フロー**:
@@ -821,14 +821,14 @@ github_create_issue (Level 4)
 4. 循環依存を検出（エラー時はマイグレーション中止）
 5. 親から子の順にUPSERT実行
 
-**See**: `internal/seed/migration/migrator.go` - `topologicalSort()` 関数
+**参照**: `internal/seed/migration/migrator.go` - `topologicalSort()` 関数
 
-## Canonical Code Patterns (必須)
+## 標準コードパターン (必須)
 
-Claude Code はこのセクションのパターンに従ってコードを書くこと。
+Claude Codeはこのセクションのパターンに従ってコードを書くこと。
 既存コードが異なるパターンを使っていても、このパターンを優先する。
 
-### Handler パターン
+### Handlerパターン
 
 ```go
 // ✅ 正しいパターン
@@ -841,7 +841,7 @@ func (h *ProjectHandler) Create(c echo.Context) error {
         return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
     }
     if err := c.Validate(&req); err != nil {
-        return err // validation middleware handles response
+        return err // バリデーションミドルウェアがレスポンスを処理
     }
 
     result, err := h.usecase.Create(ctx, tenantID, req.ToInput())
@@ -874,7 +874,7 @@ func (h *ProjectHandler) Create(c echo.Context) error {
 
 ---
 
-### Usecase パターン
+### Usecaseパターン
 
 ```go
 // ✅ 正しいパターン
@@ -921,7 +921,7 @@ func (u *ProjectUsecase) Create(ctx context.Context, input *CreateProjectInput) 
 
 ---
 
-### Repository パターン
+### Repositoryパターン
 
 ```go
 // ✅ 正しいパターン
@@ -965,7 +965,7 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.
 
 ---
 
-### Domain Error パターン
+### Domain Errorパターン
 
 ```go
 // ✅ 正しいパターン
@@ -988,7 +988,7 @@ func (u *ProjectUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) er
         return fmt.Errorf("%w: project has no steps", domain.ErrValidation)
     }
 
-    // Validate that at least one Start block exists
+    // 少なくとも1つのStartブロックが存在することを検証
     startBlocks, err := u.stepRepo.GetStartBlocks(ctx, project.ID)
     if err != nil {
         return fmt.Errorf("get start blocks: %w", err)
@@ -1002,7 +1002,7 @@ func (u *ProjectUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) er
 }
 ```
 
-**標準 Domain Error**:
+**標準Domain Error**:
 | Error | HTTP Status | 用途 |
 |-------|-------------|------|
 | `domain.ErrNotFound` | 404 | リソースが存在しない |
@@ -1016,7 +1016,7 @@ func (u *ProjectUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) er
 ### テストパターン
 
 ```go
-// ✅ 正しいパターン: Table-Driven Tests
+// ✅ 正しいパターン: テーブル駆動テスト
 func TestProjectUsecase_Create(t *testing.T) {
     tests := []struct {
         name    string
@@ -1026,24 +1026,24 @@ func TestProjectUsecase_Create(t *testing.T) {
     }{
         // 正常系
         {
-            name:  "valid input creates project",
+            name:  "有効な入力でプロジェクト作成",
             input: &CreateProjectInput{Name: "Test Project"},
             want:  &domain.Project{Name: "Test Project", Status: domain.ProjectStatusDraft},
         },
         // 異常系 - 必須
         {
-            name:    "empty name returns validation error",
+            name:    "空の名前でバリデーションエラー",
             input:   &CreateProjectInput{Name: ""},
             wantErr: domain.ErrValidation,
         },
         // 境界値
         {
-            name:  "max length name succeeds",
+            name:  "最大長の名前で成功",
             input: &CreateProjectInput{Name: strings.Repeat("a", 255)},
             want:  &domain.Project{Status: domain.ProjectStatusDraft},
         },
         {
-            name:    "over max length name fails",
+            name:    "最大長超過の名前で失敗",
             input:   &CreateProjectInput{Name: strings.Repeat("a", 256)},
             wantErr: domain.ErrValidation,
         },
@@ -1078,7 +1078,7 @@ func TestProjectUsecase_Create(t *testing.T) {
 
 ---
 
-### JSON 処理パターン
+### JSON処理パターン
 
 ```go
 // ✅ 正しいパターン
@@ -1109,7 +1109,7 @@ func (s *Step) GetConfig() *LLMConfig {
 
 ---
 
-### Context 伝播パターン
+### Context伝播パターン
 
 ```go
 // ✅ 正しいパターン
@@ -1130,7 +1130,7 @@ func (u *ProjectUsecase) Execute(ctx context.Context, tenantID, projectID, start
         return err
     }
 
-    // Validate start_step_id belongs to this project
+    // start_step_id がこのプロジェクトに属することを検証
     startStep, err := u.stepRepo.GetByID(ctx, startStepID)
     if err != nil {
         span.RecordError(err)
@@ -1148,17 +1148,17 @@ func (u *ProjectUsecase) Execute(ctx context.Context, tenantID, projectID, start
 func (u *ProjectUsecase) Execute(tenantID, id uuid.UUID) error {
     // ctx 引数なし → NG
     ctx := context.Background()  // 新規 ctx 作成 → NG（トレース途切れ）
-    // start_step_id なし → NG（multi-start projects require it）
+    // start_step_id なし → NG（マルチスタートプロジェクトでは必須）
     // ...
 }
 ```
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
-- [API.md](./API.md) - REST API endpoints and schemas
-- [DATABASE.md](./DATABASE.md) - Database schema and queries
-- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definitions and error codes
-- [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - Block execution architecture
+- [API.md](./API.md) - REST APIエンドポイントとスキーマ
+- [DATABASE.md](./DATABASE.md) - データベーススキーマとクエリ
+- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - ブロック定義とエラーコード
+- [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - ブロック実行アーキテクチャ
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - エラー対処法

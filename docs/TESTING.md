@@ -1,4 +1,4 @@
-# Testing Guide
+# テストガイド
 
 テスト作成・実行の統合ガイド。
 
@@ -8,14 +8,14 @@
 
 ---
 
-## Quick Reference
+## クイックリファレンス
 
-| Environment | Command | When to Run |
-|-------------|---------|-------------|
-| Backend | `cd backend && go test ./...` | Go コード変更後 |
-| Frontend | `cd frontend && npm run check` | TS/Vue コード変更後 |
+| 環境 | コマンド | 実行タイミング |
+|------|---------|---------------|
+| バックエンド | `cd backend && go test ./...` | Go コード変更後 |
+| フロントエンド | `cd frontend && npm run check` | TS/Vue コード変更後 |
 | E2E | `cd backend && go test ./tests/e2e/... -v` | 統合テスト時 |
-| Integration | `cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration` | 外部API接続テスト時 |
+| 統合テスト | `cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration` | 外部API接続テスト時 |
 
 **コミット前の必須チェック**:
 ```bash
@@ -31,7 +31,7 @@ cd backend && go test ./... && cd ../frontend && npm run check
 
 ---
 
-## Testing Priority Matrix
+## テスト優先度マトリクス
 
 Claude Code はこの優先度に従ってテストを作成する。
 
@@ -39,18 +39,18 @@ Claude Code はこの優先度に従ってテストを作成する。
 
 | 優先度 | 対象 | 理由 |
 |--------|------|------|
-| 1 | Domain Logic | ビジネスルールの検証 |
-| 2 | Error Paths | 全エラーパスの確認 |
-| 3 | Validation | 入力値の境界条件 |
-| 4 | Security | 認証・認可・テナント分離 |
+| 1 | ドメインロジック | ビジネスルールの検証 |
+| 2 | エラーパス | 全エラーパスの確認 |
+| 3 | バリデーション | 入力値の境界条件 |
+| 4 | セキュリティ | 認証・認可・テナント分離 |
 
 ### 推奨テスト対象
 
 | 優先度 | 対象 | 理由 |
 |--------|------|------|
-| 5 | Repository Query | 複雑な SQL の動作確認 |
-| 6 | Handler Parsing | リクエストバインディング |
-| 7 | API Integration | 外部 API 呼び出し |
+| 5 | リポジトリクエリ | 複雑な SQL の動作確認 |
+| 6 | ハンドラパース | リクエストバインディング |
+| 7 | API 統合 | 外部 API 呼び出し |
 
 ### テスト不要
 
@@ -60,7 +60,7 @@ Claude Code はこの優先度に従ってテストを作成する。
 
 ---
 
-## Backend Testing (Go)
+## バックエンドテスト (Go)
 
 ### テストファイル配置
 
@@ -82,7 +82,7 @@ backend/
         └── workflow_test.go      # 統合テスト
 ```
 
-### Table-Driven Tests パターン（必須）
+### テーブル駆動テストパターン（必須）
 
 ```go
 func TestWorkflowUsecase_Create(t *testing.T) {
@@ -195,14 +195,14 @@ func TestWorkflowE2E_CRUD(t *testing.T) {
         t.Skip("skipping e2e test")
     }
 
-    // Setup
+    // セットアップ
     db := setupTestDB(t)
     defer cleanupTestDB(t, db)
 
     client := &http.Client{}
     baseURL := "http://localhost:8080"
 
-    // Create
+    // 作成
     body := `{"name": "E2E Test Workflow"}`
     req, _ := http.NewRequest("POST", baseURL+"/api/v1/workflows", strings.NewReader(body))
     req.Header.Set("Content-Type", "application/json")
@@ -216,18 +216,18 @@ func TestWorkflowE2E_CRUD(t *testing.T) {
     json.NewDecoder(resp.Body).Decode(&created)
     resp.Body.Close()
 
-    // Verify
+    // 検証
     assert.NotEmpty(t, created.ID)
     assert.Equal(t, "E2E Test Workflow", created.Name)
 
-    // Cleanup
+    // クリーンアップ
     // ...
 }
 ```
 
 ---
 
-## Frontend Testing (Vue/Nuxt)
+## フロントエンドテスト (Vue/Nuxt)
 
 ### テストファイル配置
 
@@ -266,14 +266,14 @@ describe('useWorkflows', () => {
 
   describe('fetchWorkflows', () => {
     it('fetches workflows successfully', async () => {
-      // Arrange
+      // 準備
       const mockWorkflows = [
         { id: '1', name: 'Test Workflow', status: 'draft' },
       ]
       const { get } = useApi()
       vi.mocked(get).mockResolvedValue({ workflows: mockWorkflows })
 
-      // Act
+      // 実行
       const { workflows, loading, error, fetchWorkflows } = useWorkflows()
       expect(loading.value).toBe(false)
 
@@ -282,42 +282,42 @@ describe('useWorkflows', () => {
 
       await fetchPromise
 
-      // Assert
+      // 検証
       expect(loading.value).toBe(false)
       expect(error.value).toBeNull()
       expect(workflows.value).toEqual(mockWorkflows)
     })
 
     it('handles API error', async () => {
-      // Arrange
+      // 準備
       const { get } = useApi()
       vi.mocked(get).mockRejectedValue(new Error('Network error'))
 
-      // Act
+      // 実行
       const { error, fetchWorkflows } = useWorkflows()
       await fetchWorkflows()
 
-      // Assert
+      // 検証
       expect(error.value).toBe('Network error')
     })
 
     it('handles empty response', async () => {
-      // Arrange
+      // 準備
       const { get } = useApi()
       vi.mocked(get).mockResolvedValue({ workflows: [] })
 
-      // Act
+      // 実行
       const { workflows, fetchWorkflows } = useWorkflows()
       await fetchWorkflows()
 
-      // Assert
+      // 検証
       expect(workflows.value).toEqual([])
     })
   })
 })
 ```
 
-### Component テスト
+### コンポーネントテスト
 
 ```typescript
 import { describe, it, expect } from 'vitest'
@@ -359,7 +359,7 @@ describe('StepNode', () => {
         props: { data: { id: '1', name: 'Test', type } },
       })
 
-      // Each type should have a unique icon
+      // 各タイプにはユニークなアイコンが必要
       expect(wrapper.find('.step-icon').exists()).toBe(true)
     })
   })
@@ -384,7 +384,7 @@ npm run test:coverage
 
 ---
 
-## Bug Fix Testing Flow
+## バグ修正テストフロー
 
 バグ修正時は TDD アプローチを使用。
 
@@ -411,7 +411,7 @@ npm run test:coverage
 ### 例
 
 ```go
-// Step 1: 再現テスト作成（失敗するはず）
+// ステップ 1: 再現テスト作成（失敗するはず）
 func TestWorkflowPublish_WithNoSteps_ShouldFail(t *testing.T) {
     // バグ: ステップがないワークフローを公開できてしまう
     repo := setupTestRepo()
@@ -428,9 +428,9 @@ func TestWorkflowPublish_WithNoSteps_ShouldFail(t *testing.T) {
     assert.ErrorIs(t, err, domain.ErrValidation)
 }
 
-// Step 3: バグ修正後、テストが成功するようになる
+// ステップ 3: バグ修正後、テストが成功するようになる
 
-// Step 5: エッジケース追加
+// ステップ 5: エッジケース追加
 func TestWorkflowPublish_EdgeCases(t *testing.T) {
     tests := []struct {
         name      string
@@ -447,7 +447,7 @@ func TestWorkflowPublish_EdgeCases(t *testing.T) {
 
 ---
 
-## Coverage Requirements
+## カバレッジ要件
 
 | 領域 | 最小カバレッジ | 推奨カバレッジ |
 |------|--------------|--------------|
@@ -460,17 +460,17 @@ func TestWorkflowPublish_EdgeCases(t *testing.T) {
 ### カバレッジ確認
 
 ```bash
-# Backend
+# バックエンド
 cd backend && go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 
-# Frontend
+# フロントエンド
 cd frontend && npm run test:coverage
 ```
 
 ---
 
-## Common Testing Mistakes
+## よくあるテストの間違い
 
 ### ❌ 避けるべきパターン
 
@@ -514,7 +514,7 @@ func TestXxx(t *testing.T) {
 
 ---
 
-## Test Data Management
+## テストデータ管理
 
 ### Fixture パターン
 
@@ -553,7 +553,7 @@ func TestXxx(t *testing.T) {
 
 ---
 
-## CI Integration
+## CI 統合
 
 ### GitHub Actions での実行
 
@@ -564,12 +564,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Backend tests
+      - name: バックエンドテスト
         run: |
           cd backend
           go test -race -coverprofile=coverage.out ./...
 
-      - name: Frontend tests
+      - name: フロントエンドテスト
         run: |
           cd frontend
           npm ci
@@ -578,7 +578,7 @@ jobs:
 
 ---
 
-## Integration Tests (External Services)
+## 統合テスト（外部サービス）
 
 外部サービス（OpenAI、Anthropic等）と実際に通信するテスト。
 
@@ -604,17 +604,17 @@ cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration
 
 ### 対象サービス
 
-#### LLM Adapters (`internal/adapter/`)
+#### LLM アダプター (`internal/adapter/`)
 
-| Service | 環境変数 | テスト内容 |
+| サービス | 環境変数 | テスト内容 |
 |---------|---------|-----------|
 | OpenAI | `OPENAI_API_KEY` | Chat Completion API |
 | Anthropic | `ANTHROPIC_API_KEY` | Messages API |
 | HTTP | なし | httpbin.org を使用 |
 
-#### Preset Blocks (`internal/block/sandbox/`)
+#### プリセットブロック (`internal/block/sandbox/`)
 
-| Service | 環境変数 | テスト内容 |
+| サービス | 環境変数 | テスト内容 |
 |---------|---------|-----------|
 | Slack | `SLACK_WEBHOOK_URL` | Webhook メッセージ送信 |
 | Discord | `DISCORD_WEBHOOK_URL` | Webhook メッセージ送信 |
@@ -638,10 +638,10 @@ cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration
 # 全統合テスト
 cd backend && INTEGRATION_TEST=1 go test ./... -v -run Integration
 
-# Adapter テストのみ（OpenAI, Anthropic, HTTP）
+# アダプターテストのみ（OpenAI, Anthropic, HTTP）
 INTEGRATION_TEST=1 go test ./internal/adapter/... -v -run Integration
 
-# Block テストのみ（Slack, Discord, GitHub等）
+# ブロックテストのみ（Slack, Discord, GitHub等）
 INTEGRATION_TEST=1 go test ./internal/block/sandbox/... -v -run Integration
 
 # 特定サービスのみ
@@ -683,7 +683,7 @@ func TestSlackBlock_Integration_SendMessage(t *testing.T) {
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
 - [BACKEND.md](./BACKEND.md) - テストパターン（Canonical Code Patterns）
 - [FRONTEND.md](./FRONTEND.md) - フロントエンドテストパターン

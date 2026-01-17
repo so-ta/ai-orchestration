@@ -1,31 +1,31 @@
-# Backend Testing Guidelines
+# バックエンドテストガイドライン
 
-> **Last Updated**: 2026-01-12
-> **Related**: [TESTING.md](./TESTING.md), [BACKEND.md](./BACKEND.md)
+> **最終更新**: 2026-01-12
+> **関連**: [TESTING.md](./TESTING.md), [BACKEND.md](./BACKEND.md)
 
 このドキュメントはGoバックエンドのテストガイドラインを定義します。
 
-## Table of Contents
+## 目次
 
-1. [Test Structure](#test-structure)
-2. [Testing Patterns](#testing-patterns)
-3. [Package-Specific Guidelines](#package-specific-guidelines)
-4. [Test Templates](#test-templates)
-5. [Mocking Guidelines](#mocking-guidelines)
-6. [Test Commands](#test-commands)
+1. [テスト構造](#テスト構造)
+2. [テストパターン](#テストパターン)
+3. [パッケージ別ガイドライン](#パッケージ別ガイドライン)
+4. [テストテンプレート](#テストテンプレート)
+5. [モックガイドライン](#モックガイドライン)
+6. [テストコマンド](#テストコマンド)
 
 ---
 
-## Test Structure
+## テスト構造
 
-### Directory Layout
+### ディレクトリレイアウト
 
 ```
 backend/
 ├── internal/
 │   ├── handler/
 │   │   ├── workflow.go
-│   │   └── workflow_test.go       # Same directory as source
+│   │   └── workflow_test.go       # ソースと同じディレクトリ
 │   ├── usecase/
 │   │   ├── workflow.go
 │   │   └── workflow_test.go
@@ -39,9 +39,9 @@ backend/
 │       ├── executor.go
 │       └── executor_test.go
 ├── tests/
-│   ├── e2e/                       # End-to-end tests
+│   ├── e2e/                       # エンドツーエンドテスト
 │   │   └── workflow_test.go
-│   └── integration/               # Integration tests (future)
+│   └── integration/               # 統合テスト（将来）
 │       └── workflow_test.go
 └── pkg/
     └── crypto/
@@ -49,21 +49,21 @@ backend/
         └── encryptor_test.go
 ```
 
-### Naming Conventions
+### 命名規則
 
-| Item | Convention | Example |
+| 項目 | 規則 | 例 |
 |------|------------|---------|
-| Test file | `{source}_test.go` | `workflow_test.go` |
-| Test function | `Test{Function}_{Scenario}` | `TestCreateWorkflow_EmptyName` |
-| Table test name | Descriptive, lowercase | `"empty name returns error"` |
-| Mock | `Mock{Interface}` | `MockWorkflowRepository` |
-| Helper | `setup{Component}`, `create{Fixture}` | `setupTestHandler`, `createTestWorkflow` |
+| テストファイル | `{source}_test.go` | `workflow_test.go` |
+| テスト関数 | `Test{関数名}_{シナリオ}` | `TestCreateWorkflow_EmptyName` |
+| テーブルテスト名 | 説明的、小文字 | `"empty name returns error"` |
+| モック | `Mock{インターフェース}` | `MockWorkflowRepository` |
+| ヘルパー | `setup{コンポーネント}`, `create{フィクスチャ}` | `setupTestHandler`, `createTestWorkflow` |
 
 ---
 
-## Testing Patterns
+## テストパターン
 
-### Table-Driven Tests (Recommended)
+### テーブル駆動テスト（推奨）
 
 ```go
 func TestCreateWorkflow(t *testing.T) {
@@ -94,13 +94,13 @@ func TestCreateWorkflow(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Setup
+            // セットアップ
             h := setupTestHandler(t)
 
-            // Execute
+            // 実行
             resp, err := h.CreateWorkflow(tt.input)
 
-            // Assert
+            // 検証
             if tt.expectedError != "" {
                 assert.Error(t, err)
                 assert.Contains(t, err.Error(), tt.expectedError)
@@ -113,7 +113,7 @@ func TestCreateWorkflow(t *testing.T) {
 }
 ```
 
-### Subtests for Related Scenarios
+### 関連シナリオのサブテスト
 
 ```go
 func TestWorkflowUsecase(t *testing.T) {
@@ -135,7 +135,7 @@ func TestWorkflowUsecase(t *testing.T) {
 }
 ```
 
-### Test Fixtures
+### テストフィクスチャ
 
 ```go
 // fixtures_test.go
@@ -169,9 +169,9 @@ func WithStatus(status domain.WorkflowStatus) WorkflowOption {
 
 ---
 
-## Package-Specific Guidelines
+## パッケージ別ガイドライン
 
-### Handler Tests
+### Handler テスト
 
 **目的**: HTTP リクエスト/レスポンスの検証
 
@@ -227,7 +227,7 @@ func TestWorkflowHandler_Create(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Setup
+            // セットアップ
             mockUsecase := &MockWorkflowUsecase{}
             handler := NewWorkflowHandler(mockUsecase)
 
@@ -238,10 +238,10 @@ func TestWorkflowHandler_Create(t *testing.T) {
             }
             rec := httptest.NewRecorder()
 
-            // Execute
+            // 実行
             handler.Create(rec, req)
 
-            // Assert
+            // 検証
             assert.Equal(t, tt.expectedStatus, rec.Code)
             if tt.expectedBody != nil {
                 var resp map[string]interface{}
@@ -253,7 +253,7 @@ func TestWorkflowHandler_Create(t *testing.T) {
 }
 ```
 
-### Usecase Tests
+### Usecase テスト
 
 **目的**: ビジネスロジックの検証
 
@@ -312,7 +312,7 @@ func TestWorkflowUsecase_Publish(t *testing.T) {
                 m.On("GetByID", mock.Anything, "wf-1").Return(&domain.Workflow{
                     ID:     "wf-1",
                     Status: domain.WorkflowStatusDraft,
-                    Steps:  []domain.Step{{Type: "tool"}}, // No start
+                    Steps:  []domain.Step{{Type: "tool"}}, // start なし
                 }, nil)
             },
             expectedError: "workflow must have exactly one start node",
@@ -339,7 +339,7 @@ func TestWorkflowUsecase_Publish(t *testing.T) {
 }
 ```
 
-### Repository Tests
+### Repository テスト
 
 **目的**: データベース操作の検証
 
@@ -387,7 +387,7 @@ func setupTestDB(t *testing.T) *sql.DB {
     db, err := sql.Open("postgres", connStr)
     require.NoError(t, err)
 
-    // Run migrations
+    // マイグレーション実行
     runMigrations(t, db)
 
     return db
@@ -409,27 +409,27 @@ func TestWorkflowRepository_Create(t *testing.T) {
         require.NoError(t, err)
         assert.NotEmpty(t, workflow.ID)
 
-        // Verify in DB
+        // DBで検証
         fetched, err := repo.GetByID(ctx, workflow.ID)
         require.NoError(t, err)
         assert.Equal(t, workflow.Name, fetched.Name)
     })
 
     t.Run("enforces tenant isolation", func(t *testing.T) {
-        // Create workflow in tenant-1
+        // tenant-1 でワークフローを作成
         workflow := &domain.Workflow{TenantID: "tenant-1", Name: "Private"}
         repo.Create(ctx, workflow)
 
-        // Try to fetch from tenant-2 context
+        // tenant-2 のコンテキストで取得を試みる
         ctx2 := context.WithValue(ctx, "tenant_id", "tenant-2")
         _, err := repo.GetByID(ctx2, workflow.ID)
 
-        assert.Error(t, err) // Should not find
+        assert.Error(t, err) // 見つからないはず
     })
 }
 ```
 
-### Adapter Tests
+### Adapter テスト
 
 **目的**: 外部サービス連携の検証
 
@@ -482,9 +482,9 @@ func TestOpenAIAdapter_Complete(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Setup mock server
+            // モックサーバーセットアップ
             server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                // Verify request
+                // リクエスト検証
                 assert.Equal(t, "POST", r.Method)
                 assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
                 assert.Contains(t, r.Header.Get("Authorization"), "Bearer ")
@@ -513,7 +513,7 @@ func TestOpenAIAdapter_Complete(t *testing.T) {
 }
 ```
 
-### Engine Tests
+### Engine テスト
 
 **目的**: DAG実行ロジックの検証
 
@@ -543,7 +543,7 @@ func TestExecutor_MapStep(t *testing.T) {
             name:           "parallel processing",
             input:          []interface{}{"a", "b", "c"},
             parallel:       true,
-            expectedOutput: []interface{}{"A", "B", "C"}, // Order may vary
+            expectedOutput: []interface{}{"A", "B", "C"}, // 順序は異なる可能性あり
         },
         {
             name:           "empty input",
@@ -580,12 +580,12 @@ func TestExecutor_MapStep(t *testing.T) {
 
 ---
 
-## Mocking Guidelines
+## モックガイドライン
 
-### Interface-Based Mocking
+### インターフェースベースのモック
 
 ```go
-// Repository interface
+// Repository インターフェース
 type WorkflowRepository interface {
     Create(ctx context.Context, workflow *domain.Workflow) error
     GetByID(ctx context.Context, id string) (*domain.Workflow, error)
@@ -593,7 +593,7 @@ type WorkflowRepository interface {
     Delete(ctx context.Context, id string) error
 }
 
-// Mock implementation
+// モック実装
 type MockWorkflowRepository struct {
     mock.Mock
 }
@@ -612,7 +612,7 @@ func (m *MockWorkflowRepository) GetByID(ctx context.Context, id string) (*domai
 }
 ```
 
-### HTTP Mock Server
+### HTTP モックサーバー
 
 ```go
 func createMockAPIServer(t *testing.T, responses map[string]mockResponse) *httptest.Server {
@@ -630,54 +630,54 @@ func createMockAPIServer(t *testing.T, responses map[string]mockResponse) *httpt
 }
 ```
 
-### What to Mock vs What Not to Mock
+### モックすべきもの vs モックしないもの
 
-| Mock | Don't Mock |
+| モックする | モックしない |
 |------|------------|
-| External APIs (OpenAI, etc.) | Domain logic |
-| Database connections | Pure functions |
-| Time (`time.Now()`) | Data transformations |
-| File system | Validation rules |
-| Network calls | Business rules |
-| Environment variables | Calculations |
+| 外部 API（OpenAI 等） | ドメインロジック |
+| データベース接続 | 純粋関数 |
+| 時刻（`time.Now()`） | データ変換 |
+| ファイルシステム | バリデーションルール |
+| ネットワーク呼び出し | ビジネスルール |
+| 環境変数 | 計算処理 |
 
 ---
 
-## Test Commands
+## テストコマンド
 
-### Running Tests
+### テストの実行
 
 ```bash
-# All tests
+# 全テスト
 cd backend && go test ./...
 
-# Specific package
+# 特定パッケージ
 go test ./internal/handler/...
 
-# With verbose output
+# 詳細出力
 go test -v ./...
 
-# With coverage
+# カバレッジ付き
 go test -cover ./...
 
-# Generate coverage report
+# カバレッジレポート生成
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out -o coverage.html
 
-# Run specific test
+# 特定テスト実行
 go test -run TestWorkflowHandler_Create ./internal/handler/...
 
-# Run with race detector
+# レースディテクター付き
 go test -race ./...
 
-# E2E tests
+# E2E テスト
 go test -v ./tests/e2e/...
 ```
 
-### Coverage Commands
+### カバレッジコマンド
 
 ```bash
-# Check coverage threshold
+# カバレッジ閾値チェック
 go test -coverprofile=coverage.out ./...
 COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
 if (( $(echo "$COVERAGE < 50" | bc -l) )); then
@@ -686,24 +686,24 @@ if (( $(echo "$COVERAGE < 50" | bc -l) )); then
 fi
 ```
 
-### Useful Test Flags
+### 便利なテストフラグ
 
-| Flag | Purpose | Example |
+| フラグ | 用途 | 例 |
 |------|---------|---------|
-| `-v` | Verbose output | `go test -v` |
-| `-run` | Run specific tests | `go test -run TestCreate` |
-| `-count` | Run tests N times | `go test -count=10` |
-| `-race` | Detect race conditions | `go test -race` |
-| `-timeout` | Set timeout | `go test -timeout 30s` |
-| `-short` | Skip long tests | `go test -short` |
-| `-parallel` | Set parallelism | `go test -parallel 4` |
+| `-v` | 詳細出力 | `go test -v` |
+| `-run` | 特定テスト実行 | `go test -run TestCreate` |
+| `-count` | N回実行 | `go test -count=10` |
+| `-race` | レース検出 | `go test -race` |
+| `-timeout` | タイムアウト設定 | `go test -timeout 30s` |
+| `-short` | 長いテストをスキップ | `go test -short` |
+| `-parallel` | 並列数設定 | `go test -parallel 4` |
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
-| Document | Description |
+| ドキュメント | 説明 |
 |----------|-------------|
-| [TESTING.md](./TESTING.md) | Test integration guide |
-| [BACKEND.md](./BACKEND.md) | Backend architecture |
-| [frontend/docs/TESTING.md](../frontend/docs/TESTING.md) | Frontend testing rules |
+| [TESTING.md](./TESTING.md) | テスト統合ガイド |
+| [BACKEND.md](./BACKEND.md) | バックエンドアーキテクチャ |
+| [frontend/docs/TESTING.md](../frontend/docs/TESTING.md) | フロントエンドテストルール |

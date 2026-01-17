@@ -1,32 +1,32 @@
-# Database Reference
+# データベースリファレンス
 
-PostgreSQL schema, migrations, and query patterns.
+PostgreSQL スキーマ、マイグレーション、クエリパターン。
 
-> **Migration Note (2026-01)**: The `workflows` table has been renamed to `projects`. Projects now support multiple Start blocks, each with its own `trigger_type` and `trigger_config`. The `webhooks` table has been removed; webhook functionality is now part of Start block configuration. The `input_schema`/`output_schema` columns have been replaced with `variables` at the project level.
+> **マイグレーション注記 (2026-01)**: `workflows` テーブルは `projects` にリネームされました。プロジェクトは複数の Start ブロックをサポートし、各 Start ブロックは独自の `trigger_type` と `trigger_config` を持ちます。`webhooks` テーブルは削除され、Webhook 機能は Start ブロックの設定に統合されました。`input_schema`/`output_schema` カラムはプロジェクトレベルの `variables` に置き換えられました。
 
-## Quick Reference
+## クイックリファレンス
 
-| Item | Value |
+| 項目 | 値 |
 |------|-------|
-| Driver | PostgreSQL 16 + pgvector |
-| Connection URL | `postgres://user:pass@localhost:5432/ai_orchestration?sslmode=disable` |
-| Pool | pgx connection pool |
-| Migrations | `backend/migrations/` |
-| Default Tenant | `00000000-0000-0000-0000-000000000001` |
-| Soft Delete | `deleted_at` column |
+| ドライバー | PostgreSQL 16 + pgvector |
+| 接続 URL | `postgres://user:pass@localhost:5432/ai_orchestration?sslmode=disable` |
+| プール | pgx コネクションプール |
+| マイグレーション | `backend/migrations/` |
+| デフォルトテナント | `00000000-0000-0000-0000-000000000001` |
+| ソフトデリート | `deleted_at` カラム |
 
-## Schema Overview
+## スキーマ概要
 
 ```
 tenants
   └── users
-  └── projects (formerly workflows)
-        └── project_versions (formerly workflow_versions)
-        └── steps (multiple start blocks supported)
+  └── projects（旧 workflows）
+        └── project_versions（旧 workflow_versions）
+        └── steps（複数の Start ブロックをサポート）
         └── edges
         └── block_groups
-        └── schedules (now requires start_step_id)
-  └── runs (now includes start_step_id)
+        └── schedules（start_step_id が必須）
+  └── runs（start_step_id を含む）
         └── step_runs
         └── block_group_runs
         └── usage_records
@@ -35,35 +35,35 @@ tenants
   └── secrets
   └── audit_logs
   └── adapters
-  └── block_definitions (※ tenant_id NULL = system)
+  └── block_definitions（※ tenant_id NULL = システムブロック）
         └── block_versions
-  └── vector_collections (RAG)
-        └── vector_documents (RAG)
+  └── vector_collections（RAG）
+        └── vector_documents（RAG）
 ```
 
-> **Note**: The `webhooks` table has been removed. Webhook functionality is now configured via Start block's `trigger_type` and `trigger_config`.
+> **注記**: `webhooks` テーブルは削除されました。Webhook 機能は Start ブロックの `trigger_type` と `trigger_config` で設定されます。
 
-## Tables
+## テーブル
 
 ### tenants
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | name | VARCHAR(255) | NOT NULL | |
-| slug | VARCHAR(255) | NOT NULL, UNIQUE | URL-safe identifier |
-| settings | JSONB | DEFAULT '{}' | Tenant config |
+| slug | VARCHAR(255) | NOT NULL, UNIQUE | URL セーフな識別子 |
+| settings | JSONB | DEFAULT '{}' | テナント設定 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
-| deleted_at | TIMESTAMPTZ | | Soft delete |
+| deleted_at | TIMESTAMPTZ | | ソフトデリート |
 
-Default tenant: `00000000-0000-0000-0000-000000000001`
+デフォルトテナント: `00000000-0000-0000-0000-000000000001`
 
 ### users
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
-| id | UUID | PK | Keycloak user ID |
+| id | UUID | PK | Keycloak ユーザー ID |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
 | email | VARCHAR(255) | NOT NULL | |
 | name | VARCHAR(255) | | |
@@ -72,66 +72,66 @@ Default tenant: `00000000-0000-0000-0000-000000000001`
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (tenant_id, email)
+ユニーク: (tenant_id, email)
 
-### projects (formerly workflows)
+### projects（旧 workflows）
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | |
 | description | TEXT | | |
 | status | VARCHAR(50) | NOT NULL DEFAULT 'draft' | draft, published |
-| version | INTEGER | NOT NULL DEFAULT 1 | Increments on publish |
-| variables | JSONB | | Project-level variables (replaces input_schema/output_schema) |
+| version | INTEGER | NOT NULL DEFAULT 1 | 公開時にインクリメント |
+| variables | JSONB | | プロジェクトレベル変数（input_schema/output_schema を置換） |
 | created_by | UUID | FK users(id) | |
 | published_at | TIMESTAMPTZ | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
-| deleted_at | TIMESTAMPTZ | | Soft delete |
+| deleted_at | TIMESTAMPTZ | | ソフトデリート |
 
-> **Migration Note**: `input_schema` and `output_schema` have been removed. Input/output schemas are now defined per Start block in the `steps` table config.
+> **マイグレーション注記**: `input_schema` と `output_schema` は削除されました。入出力スキーマは `steps` テーブルの Start ブロック config 内で定義されます。
 
-Indexes:
+インデックス:
 - `idx_projects_tenant` ON (tenant_id)
 - `idx_projects_status` ON (status)
 
-### project_versions (formerly workflow_versions)
+### project_versions（旧 workflow_versions）
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | project_id | UUID | FK projects(id), NOT NULL | |
 | version | INTEGER | NOT NULL | |
-| definition | JSONB | NOT NULL | Full snapshot (steps, edges) |
+| definition | JSONB | NOT NULL | 完全なスナップショット（steps, edges） |
 | published_by | UUID | FK users(id) | |
 | published_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (project_id, version)
+ユニーク: (project_id, version)
 
 ### steps
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
 | project_id | UUID | FK projects(id) ON DELETE CASCADE, NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | |
 | type | VARCHAR(50) | NOT NULL | start, llm, tool, condition, switch, map, join, subflow, wait, function, router, human_in_loop, filter, split, aggregate, error, note, log |
-| config | JSONB | NOT NULL DEFAULT '{}' | Type-specific config (see below for Start block) |
-| block_group_id | UUID | FK block_groups(id) ON DELETE SET NULL | Parent block group |
-| group_role | VARCHAR(50) | | Role within block group (body only) |
-| block_definition_id | UUID | FK block_definitions(id) | Registry block reference |
-| credential_bindings | JSONB | DEFAULT '{}' | Mapping of credential names to tenant credential IDs |
-| position_x | INTEGER | DEFAULT 0 | UI position |
-| position_y | INTEGER | DEFAULT 0 | UI position |
+| config | JSONB | NOT NULL DEFAULT '{}' | 型固有の設定（Start ブロックについては下記参照） |
+| block_group_id | UUID | FK block_groups(id) ON DELETE SET NULL | 親ブロックグループ |
+| group_role | VARCHAR(50) | | ブロックグループ内の役割（body のみ） |
+| block_definition_id | UUID | FK block_definitions(id) | レジストリブロック参照 |
+| credential_bindings | JSONB | DEFAULT '{}' | クレデンシャル名からテナントクレデンシャル ID へのマッピング |
+| position_x | INTEGER | DEFAULT 0 | UI 位置 |
+| position_y | INTEGER | DEFAULT 0 | UI 位置 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-**Start Block Config Schema** (for `type = 'start'`):
+**Start ブロック Config スキーマ**（`type = 'start'` の場合）:
 
-A project can have multiple Start blocks, each with its own trigger configuration:
+プロジェクトは複数の Start ブロックを持つことができ、各ブロックは独自のトリガー設定を持ちます:
 
 ```json
 {
@@ -147,95 +147,95 @@ A project can have multiple Start blocks, each with its own trigger configuratio
 }
 ```
 
-| Trigger Type | trigger_config Fields |
+| トリガータイプ | trigger_config フィールド |
 |--------------|----------------------|
-| `manual` | None required |
-| `schedule` | `cron`, `timezone` (schedule also requires entry in schedules table) |
+| `manual` | 必須フィールドなし |
+| `schedule` | `cron`, `timezone`（schedules テーブルへのエントリも必要） |
 | `webhook` | `webhook_secret`, `input_mapping` |
 
 ### edges
 
-Connects steps and/or block groups. Either source/target can be a step or a block group.
+ステップおよび/またはブロックグループを接続します。ソース/ターゲットはステップまたはブロックグループのいずれかです。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | project_id | UUID | FK projects(id) ON DELETE CASCADE, NOT NULL | |
-| source_step_id | UUID | FK steps(id) ON DELETE CASCADE | Nullable if source is a group |
-| target_step_id | UUID | FK steps(id) ON DELETE CASCADE | Nullable if target is a group |
-| source_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | Nullable if source is a step |
-| target_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | Nullable if target is a step |
-| source_port | VARCHAR(100) | DEFAULT 'output' | Output port name |
-| target_port | VARCHAR(100) | DEFAULT 'input' | Input port name |
-| condition | TEXT | | Expression for conditional routing |
+| source_step_id | UUID | FK steps(id) ON DELETE CASCADE | ソースがグループの場合は Null |
+| target_step_id | UUID | FK steps(id) ON DELETE CASCADE | ターゲットがグループの場合は Null |
+| source_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | ソースがステップの場合は Null |
+| target_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | ターゲットがステップの場合は Null |
+| source_port | VARCHAR(100) | DEFAULT 'output' | 出力ポート名 |
+| target_port | VARCHAR(100) | DEFAULT 'input' | 入力ポート名 |
+| condition | TEXT | | 条件分岐ルーティング用の式 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: edges_unique_connection (one source/target pair)
+ユニーク: edges_unique_connection（ソース/ターゲットペアは一意）
 
 ### block_groups
 
-Control flow constructs that group multiple steps.
+複数のステップをグループ化する制御フロー構造。
 
-> **Updated**: 2026-01-15 - Simplified to 4 types, added pre_process/post_process
+> **更新**: 2026-01-15 - 4 タイプに簡素化、pre_process/post_process を追加
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | project_id | UUID | FK projects(id) ON DELETE CASCADE, NOT NULL | |
-| name | VARCHAR(255) | NOT NULL | Display name |
-| type | VARCHAR(50) | NOT NULL, CHECK | **4 types only**: parallel, try_catch, foreach, while |
-| config | JSONB | NOT NULL DEFAULT '{}' | Type-specific configuration |
-| parent_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | For nested groups |
-| pre_process | TEXT | | JS code: external IN → internal IN |
-| post_process | TEXT | | JS code: internal OUT → external OUT |
-| position_x | INT | DEFAULT 0 | UI position X |
-| position_y | INT | DEFAULT 0 | UI position Y |
-| width | INT | DEFAULT 400 | UI width |
-| height | INT | DEFAULT 300 | UI height |
+| name | VARCHAR(255) | NOT NULL | 表示名 |
+| type | VARCHAR(50) | NOT NULL, CHECK | **4 タイプのみ**: parallel, try_catch, foreach, while |
+| config | JSONB | NOT NULL DEFAULT '{}' | タイプ固有の設定 |
+| parent_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | ネストされたグループ用 |
+| pre_process | TEXT | | JS コード: 外部 IN → 内部 IN |
+| post_process | TEXT | | JS コード: 内部 OUT → 外部 OUT |
+| position_x | INT | DEFAULT 0 | UI 位置 X |
+| position_y | INT | DEFAULT 0 | UI 位置 Y |
+| width | INT | DEFAULT 400 | UI 幅 |
+| height | INT | DEFAULT 300 | UI 高さ |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_block_groups_project` ON (project_id)
 - `idx_block_groups_parent` ON (parent_group_id)
 
-**Type CHECK constraint**: `type IN ('parallel', 'try_catch', 'foreach', 'while')`
+**タイプ CHECK 制約**: `type IN ('parallel', 'try_catch', 'foreach', 'while')`
 
-**Removed types**: `if_else` (use condition block), `switch_case` (use switch block)
+**削除されたタイプ**: `if_else`（condition ブロックを使用）、`switch_case`（switch ブロックを使用）
 
-**Note**: Steps can belong to a block group via `steps.block_group_id` and `steps.group_role` (body only).
+**注記**: ステップは `steps.block_group_id` と `steps.group_role`（body のみ）を通じてブロックグループに所属できます。
 
 ### block_group_runs
 
-Execution tracking for block groups.
+ブロックグループの実行追跡。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | run_id | UUID | FK runs(id) ON DELETE CASCADE, NOT NULL | |
 | block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE, NOT NULL | |
 | status | VARCHAR(50) | DEFAULT 'pending' | pending, running, completed, failed, skipped |
-| iteration | INT | DEFAULT 0 | For loop groups |
-| input | JSONB | | Group input |
-| output | JSONB | | Group output |
-| error | TEXT | | Error message |
+| iteration | INT | DEFAULT 0 | ループグループ用 |
+| input | JSONB | | グループ入力 |
+| output | JSONB | | グループ出力 |
+| error | TEXT | | エラーメッセージ |
 | started_at | TIMESTAMPTZ | | |
 | completed_at | TIMESTAMPTZ | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_block_group_runs_run` ON (run_id)
 - `idx_block_group_runs_block_group` ON (block_group_id)
 
 ### runs
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
 | project_id | UUID | FK projects(id), NOT NULL | |
-| project_version | INTEGER | NOT NULL | Snapshot version |
-| start_step_id | UUID | FK steps(id) | Which Start block triggered this run |
+| project_version | INTEGER | NOT NULL | スナップショットバージョン |
+| start_step_id | UUID | FK steps(id) | この Run をトリガーした Start ブロック |
 | status | VARCHAR(50) | NOT NULL DEFAULT 'pending' | pending, running, completed, failed, cancelled |
 | mode | VARCHAR(50) | NOT NULL DEFAULT 'production' | test, production |
 | input | JSONB | | |
@@ -247,9 +247,9 @@ Indexes:
 | completed_at | TIMESTAMPTZ | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-> **Migration Note**: `start_step_id` is now required to identify which Start block triggered the run, since projects can have multiple Start blocks.
+> **マイグレーション注記**: `start_step_id` は、プロジェクトが複数の Start ブロックを持つことができるため、どの Start ブロックが Run をトリガーしたかを識別するために必須です。
 
-Indexes:
+インデックス:
 - `idx_runs_tenant` ON (tenant_id)
 - `idx_runs_project` ON (project_id)
 - `idx_runs_start_step` ON (start_step_id)
@@ -257,14 +257,14 @@ Indexes:
 
 ### step_runs
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | run_id | UUID | FK runs(id) ON DELETE CASCADE, NOT NULL | |
-| step_id | UUID | NOT NULL | Reference to step at execution time |
-| step_name | VARCHAR(255) | NOT NULL | Snapshot of step name |
+| step_id | UUID | NOT NULL | 実行時のステップ参照 |
+| step_name | VARCHAR(255) | NOT NULL | ステップ名のスナップショット |
 | status | VARCHAR(50) | NOT NULL DEFAULT 'pending' | pending, running, completed, failed |
-| attempt | INTEGER | NOT NULL DEFAULT 1 | Retry count |
+| attempt | INTEGER | NOT NULL DEFAULT 1 | リトライ回数 |
 | input | JSONB | | |
 | output | JSONB | | |
 | error | TEXT | | |
@@ -273,25 +273,25 @@ Indexes:
 | duration_ms | INTEGER | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_step_runs_run` ON (run_id)
 
 ### schedules
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
 | project_id | UUID | FK projects(id), NOT NULL | |
-| start_step_id | UUID | FK steps(id), NOT NULL | Which Start block to trigger |
+| start_step_id | UUID | FK steps(id), NOT NULL | トリガーする Start ブロック |
 | project_version | INTEGER | NOT NULL DEFAULT 1 | |
 | name | VARCHAR(255) | NOT NULL | |
 | description | TEXT | | |
-| cron_expression | VARCHAR(100) | NOT NULL | Standard cron format |
-| timezone | VARCHAR(50) | NOT NULL DEFAULT 'UTC' | IANA timezone |
-| input | JSONB | | Default input for runs |
+| cron_expression | VARCHAR(100) | NOT NULL | 標準 cron 形式 |
+| timezone | VARCHAR(50) | NOT NULL DEFAULT 'UTC' | IANA タイムゾーン |
+| input | JSONB | | Run のデフォルト入力 |
 | status | VARCHAR(50) | NOT NULL DEFAULT 'active' | active, paused |
-| next_run_at | TIMESTAMPTZ | | Computed next execution |
+| next_run_at | TIMESTAMPTZ | | 計算された次回実行時刻 |
 | last_run_at | TIMESTAMPTZ | | |
 | last_run_id | UUID | FK runs(id) | |
 | run_count | INTEGER | NOT NULL DEFAULT 0 | |
@@ -299,36 +299,36 @@ Indexes:
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-> **Migration Note**: `start_step_id` is now required to specify which Start block the schedule should trigger when it fires.
+> **マイグレーション注記**: `start_step_id` は、スケジュール発火時にどの Start ブロックをトリガーするかを指定するために必須です。
 
-Indexes:
+インデックス:
 - `idx_schedules_tenant` ON (tenant_id)
 - `idx_schedules_project` ON (project_id)
 - `idx_schedules_start_step` ON (start_step_id)
 - `idx_schedules_next_run` ON (next_run_at) WHERE status = 'active'
 
-### webhooks (REMOVED)
+### webhooks（削除済み）
 
-> **Migration Note**: The `webhooks` table has been removed. Webhook functionality is now configured directly in Start blocks via the `trigger_type` and `trigger_config` fields.
+> **マイグレーション注記**: `webhooks` テーブルは削除されました。Webhook 機能は Start ブロックの `trigger_type` と `trigger_config` フィールドで直接設定されます。
 >
-> To migrate existing webhooks:
-> 1. Create a Start block with `type: 'start'` and `config.trigger_type: 'webhook'`
-> 2. Move `secret` to `config.trigger_config.webhook_secret`
-> 3. Move `input_mapping` to `config.trigger_config.input_mapping`
-> 4. The webhook endpoint becomes `/projects/{project_id}/webhook/{start_step_id}`
+> 既存の Webhook を移行するには:
+> 1. `type: 'start'` と `config.trigger_type: 'webhook'` を持つ Start ブロックを作成
+> 2. `secret` を `config.trigger_config.webhook_secret` に移動
+> 3. `input_mapping` を `config.trigger_config.input_mapping` に移動
+> 4. Webhook エンドポイントは `/projects/{project_id}/webhook/{start_step_id}` になります
 
 ### adapters
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | VARCHAR(100) | PK | mock, openai, anthropic, http |
-| tenant_id | UUID | FK tenants(id) | NULL = global |
+| tenant_id | UUID | FK tenants(id) | NULL = グローバル |
 | name | VARCHAR(255) | NOT NULL | |
 | description | TEXT | | |
 | type | VARCHAR(50) | NOT NULL | builtin, custom |
-| config | JSONB | | Default config |
-| input_schema | JSONB | | JSON Schema |
-| output_schema | JSONB | | JSON Schema |
+| config | JSONB | | デフォルト設定 |
+| input_schema | JSONB | | JSON スキーマ |
+| output_schema | JSONB | | JSON スキーマ |
 | enabled | BOOLEAN | NOT NULL DEFAULT true | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
@@ -337,86 +337,86 @@ Indexes:
 
 ブロック定義（Unified Block Model）。システムブロックとテナントカスタムブロックを管理。
 
-> **Updated**: 2026-01-15 - Phase B: グループブロック統合（group_kind, is_container 追加）
+> **更新**: 2026-01-15 - Phase B: グループブロック統合（group_kind, is_container 追加）
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT gen_random_uuid() | |
-| tenant_id | UUID | FK tenants(id) | NULL = system block |
-| slug | VARCHAR(100) | NOT NULL | Unique identifier |
-| name | VARCHAR(255) | NOT NULL | Display name |
+| tenant_id | UUID | FK tenants(id) | NULL = システムブロック |
+| slug | VARCHAR(100) | NOT NULL | ユニーク識別子 |
+| name | VARCHAR(255) | NOT NULL | 表示名 |
 | description | TEXT | | |
 | category | VARCHAR(50) | NOT NULL, CHECK | ai, flow, apps, custom, **group** |
 | subcategory | VARCHAR(50) | CHECK | chat, rag, routing, branching, data, control, utility, slack, discord, notion, github, google, linear, email, web |
-| icon | VARCHAR(50) | | Icon identifier |
-| config_schema | JSONB | NOT NULL DEFAULT '{}' | Config JSON Schema |
-| input_schema | JSONB | | Input JSON Schema |
-| output_schema | JSONB | | Output JSON Schema |
-| code | TEXT | | JavaScript code (Unified Block Model) |
+| icon | VARCHAR(50) | | アイコン識別子 |
+| config_schema | JSONB | NOT NULL DEFAULT '{}' | Config JSON スキーマ |
+| input_schema | JSONB | | 入力 JSON スキーマ |
+| output_schema | JSONB | | 出力 JSON スキーマ |
+| code | TEXT | | JavaScript コード（Unified Block Model） |
 | ui_config | JSONB | NOT NULL DEFAULT '{}' | {icon, color, configSchema} |
-| is_system | BOOLEAN | NOT NULL DEFAULT FALSE | System block = admin only |
-| version | INTEGER | NOT NULL DEFAULT 1 | Version number |
-| error_codes | JSONB | DEFAULT '[]' | Error code definitions |
-| group_kind | VARCHAR(50) | CHECK | **Phase B**: parallel, try_catch, foreach, while (グループブロック用) |
+| is_system | BOOLEAN | NOT NULL DEFAULT FALSE | システムブロック = 管理者のみ |
+| version | INTEGER | NOT NULL DEFAULT 1 | バージョン番号 |
+| error_codes | JSONB | DEFAULT '[]' | エラーコード定義 |
+| group_kind | VARCHAR(50) | CHECK | **Phase B**: parallel, try_catch, foreach, while（グループブロック用） |
 | is_container | BOOLEAN | NOT NULL DEFAULT FALSE | **Phase B**: TRUE = 他のステップを含むことができる |
 | enabled | BOOLEAN | DEFAULT true | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (tenant_id, slug)
+ユニーク: (tenant_id, slug)
 
-Indexes:
+インデックス:
 - `idx_block_definitions_tenant` ON (tenant_id)
 - `idx_block_definitions_category` ON (category)
 - `idx_block_definitions_enabled` ON (enabled)
 
-**Constraints**:
+**制約**:
 - `valid_block_category`: category IN ('ai', 'flow', 'apps', 'custom', 'group')
 - `valid_block_subcategory`: subcategory IS NULL OR subcategory IN ('chat', 'rag', 'routing', 'branching', 'data', 'control', 'utility', 'slack', 'discord', 'notion', 'github', 'google', 'linear', 'email', 'web')
 - `valid_group_kind`: group_kind IS NULL OR group_kind IN ('parallel', 'try_catch', 'foreach', 'while')
 
-**Group Blocks (Phase B)**:
+**グループブロック（Phase B）**:
 - `category = 'group'` かつ `is_container = TRUE` のブロックはグループブロック
 - Block Palette からドラッグ＆ドロップで配置可能
 - システムブロック: parallel, try_catch, foreach, while
 
-**See**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md), [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md)
+**参照**: [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md), [BLOCK_GROUP_REDESIGN.md](./designs/BLOCK_GROUP_REDESIGN.md)
 
 ### block_versions
 
 ブロック定義のバージョン履歴。ロールバック機能をサポート。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT gen_random_uuid() | |
 | block_id | UUID | FK block_definitions(id) ON DELETE CASCADE, NOT NULL | |
-| version | INTEGER | NOT NULL | Version number |
-| code | TEXT | NOT NULL | Code snapshot |
-| config_schema | JSONB | NOT NULL | Config schema snapshot |
-| input_schema | JSONB | | Input schema snapshot |
-| output_schema | JSONB | | Output schema snapshot |
-| ui_config | JSONB | NOT NULL | UI config snapshot |
-| change_summary | TEXT | | Change description |
-| changed_by | UUID | | User who made the change |
+| version | INTEGER | NOT NULL | バージョン番号 |
+| code | TEXT | NOT NULL | コードスナップショット |
+| config_schema | JSONB | NOT NULL | Config スキーマスナップショット |
+| input_schema | JSONB | | 入力スキーマスナップショット |
+| output_schema | JSONB | | 出力スキーマスナップショット |
+| ui_config | JSONB | NOT NULL | UI 設定スナップショット |
+| change_summary | TEXT | | 変更説明 |
+| changed_by | UUID | | 変更者ユーザー |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 
-Unique: (block_id, version)
+ユニーク: (block_id, version)
 
-Indexes:
+インデックス:
 - `idx_block_versions_block_id` ON (block_id)
 - `idx_block_versions_created_at` ON (created_at)
 
 ### vector_collections
 
-RAG用ベクトルコレクション。テナントごとに分離されたベクトルデータを管理。
+RAG 用ベクトルコレクション。テナントごとに分離されたベクトルデータを管理。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT gen_random_uuid() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | ⚠️ テナント分離必須 |
 | name | VARCHAR(100) | NOT NULL | コレクション名（テナント内でユニーク） |
 | description | TEXT | | |
-| embedding_provider | VARCHAR(50) | DEFAULT 'openai' | 使用するEmbeddingプロバイダー |
+| embedding_provider | VARCHAR(50) | DEFAULT 'openai' | 使用する Embedding プロバイダー |
 | embedding_model | VARCHAR(100) | DEFAULT 'text-embedding-3-small' | 使用するモデル |
 | dimension | INT | NOT NULL DEFAULT 1536 | ベクトル次元数 |
 | document_count | INT | DEFAULT 0 | ドキュメント数（キャッシュ） |
@@ -424,76 +424,76 @@ RAG用ベクトルコレクション。テナントごとに分離されたベ�
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (tenant_id, name)
+ユニーク: (tenant_id, name)
 
-Indexes:
+インデックス:
 - `idx_vector_collections_tenant` ON (tenant_id)
 
 ### vector_documents
 
-RAG用ベクトルドキュメント。pgvector拡張を使用。
+RAG 用ベクトルドキュメント。pgvector 拡張を使用。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT gen_random_uuid() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | ⚠️ テナント分離必須 |
 | collection_id | UUID | FK vector_collections(id) ON DELETE CASCADE, NOT NULL | 所属コレクション |
 | content | TEXT | NOT NULL | ドキュメント本文 |
 | metadata | JSONB | DEFAULT '{}' | カスタムメタデータ |
-| embedding | vector(1536) | | pgvectorベクトル型 |
-| source_url | TEXT | | 元URLなど |
+| embedding | vector(1536) | | pgvector ベクトル型 |
+| source_url | TEXT | | 元 URL など |
 | source_type | VARCHAR(50) | | api, file, web |
 | chunk_index | INT | | チャンク分割時のインデックス |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_vector_documents_tenant_collection` ON (tenant_id, collection_id) - 複合インデックス
 - `idx_vector_documents_embedding` ON (embedding) USING ivfflat WITH (lists = 100) - 類似検索用
 - `idx_vector_documents_metadata` ON (metadata) USING gin - メタデータフィルタ用
 
-**Note**: pgvector拡張が必要です（`CREATE EXTENSION IF NOT EXISTS vector;`）
+**注記**: pgvector 拡張が必要です（`CREATE EXTENSION IF NOT EXISTS vector;`）
 
 ### usage_records
 
-Individual LLM API call records for cost tracking.
+コスト追跡のための個別 LLM API 呼び出しレコード。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| project_id | UUID | FK projects(id) | Nullable for non-project calls |
+| project_id | UUID | FK projects(id) | プロジェクト外呼び出しの場合は Null |
 | run_id | UUID | FK runs(id) | |
 | step_run_id | UUID | FK step_runs(id) | |
 | provider | VARCHAR(50) | NOT NULL | openai, anthropic, google |
-| model | VARCHAR(100) | NOT NULL | gpt-4o, claude-3-opus, etc. |
+| model | VARCHAR(100) | NOT NULL | gpt-4o, claude-3-opus など |
 | operation | VARCHAR(50) | NOT NULL | chat, completion, embedding |
-| input_tokens | INT | NOT NULL DEFAULT 0 | Prompt tokens |
-| output_tokens | INT | NOT NULL DEFAULT 0 | Completion tokens |
+| input_tokens | INT | NOT NULL DEFAULT 0 | プロンプトトークン |
+| output_tokens | INT | NOT NULL DEFAULT 0 | 完了トークン |
 | total_tokens | INT | NOT NULL DEFAULT 0 | input + output |
-| input_cost_usd | DECIMAL(12, 8) | NOT NULL DEFAULT 0 | Cost for input tokens |
-| output_cost_usd | DECIMAL(12, 8) | NOT NULL DEFAULT 0 | Cost for output tokens |
-| total_cost_usd | DECIMAL(12, 8) | NOT NULL DEFAULT 0 | Total cost |
-| latency_ms | INT | | Response time |
-| success | BOOLEAN | NOT NULL DEFAULT TRUE | Whether call succeeded |
-| error_message | TEXT | | Error details if failed |
+| input_cost_usd | DECIMAL(12, 8) | NOT NULL DEFAULT 0 | 入力トークンのコスト |
+| output_cost_usd | DECIMAL(12, 8) | NOT NULL DEFAULT 0 | 出力トークンのコスト |
+| total_cost_usd | DECIMAL(12, 8) | NOT NULL DEFAULT 0 | 合計コスト |
+| latency_ms | INT | | 応答時間 |
+| success | BOOLEAN | NOT NULL DEFAULT TRUE | 呼び出しが成功したかどうか |
+| error_message | TEXT | | 失敗時のエラー詳細 |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_usage_records_tenant_created` ON (tenant_id, created_at DESC)
 - `idx_usage_records_project` ON (project_id) WHERE project_id IS NOT NULL
 - `idx_usage_records_run` ON (run_id) WHERE run_id IS NOT NULL
 
 ### usage_daily_aggregates
 
-Pre-aggregated daily usage for dashboard performance.
+ダッシュボードパフォーマンスのための日次使用量集計。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| project_id | UUID | FK projects(id) | NULL for tenant-wide aggregate |
-| date | DATE | NOT NULL | Aggregation date |
+| project_id | UUID | FK projects(id) | テナント全体の集計の場合は NULL |
+| date | DATE | NOT NULL | 集計日 |
 | provider | VARCHAR(50) | NOT NULL | |
 | model | VARCHAR(100) | NOT NULL | |
 | total_requests | INT | NOT NULL DEFAULT 0 | |
@@ -504,66 +504,66 @@ Pre-aggregated daily usage for dashboard performance.
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 
-Unique: (tenant_id, project_id, date, provider, model)
+ユニーク: (tenant_id, project_id, date, provider, model)
 
-Indexes:
+インデックス:
 - `idx_usage_daily_tenant_date` ON (tenant_id, date DESC)
 
 ### usage_budgets
 
-Budget limits and alert thresholds.
+予算制限とアラートしきい値。
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| project_id | UUID | FK projects(id) | NULL for tenant-wide budget |
+| project_id | UUID | FK projects(id) | テナント全体の予算の場合は NULL |
 | budget_type | VARCHAR(50) | NOT NULL | monthly, daily |
-| budget_amount_usd | DECIMAL(12, 2) | NOT NULL | Budget limit |
-| alert_threshold | DECIMAL(3, 2) | NOT NULL DEFAULT 0.80 | 0.0-1.0, triggers alert |
+| budget_amount_usd | DECIMAL(12, 2) | NOT NULL | 予算上限 |
+| alert_threshold | DECIMAL(3, 2) | NOT NULL DEFAULT 0.80 | 0.0-1.0、アラートをトリガー |
 | enabled | BOOLEAN | NOT NULL DEFAULT TRUE | |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_usage_budgets_tenant` ON (tenant_id)
 - `idx_usage_budgets_project` ON (project_id) WHERE project_id IS NOT NULL
 
 ### secrets
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
 | name | VARCHAR(255) | NOT NULL | |
-| encrypted_value | TEXT | NOT NULL | AES-256 encrypted |
+| encrypted_value | TEXT | NOT NULL | AES-256 暗号化 |
 | created_by | UUID | FK users(id) | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Unique: (tenant_id, name)
+ユニーク: (tenant_id, name)
 
 ### audit_logs
 
-| Column | Type | Constraints | Description |
+| カラム | 型 | 制約 | 説明 |
 |--------|------|-------------|-------------|
 | id | UUID | PK, DEFAULT uuid_generate_v4() | |
 | tenant_id | UUID | FK tenants(id), NOT NULL | |
-| actor_id | UUID | | User who performed action |
+| actor_id | UUID | | アクションを実行したユーザー |
 | actor_email | VARCHAR(255) | | |
 | action | VARCHAR(100) | NOT NULL | create, update, delete, publish, execute |
 | resource_type | VARCHAR(100) | NOT NULL | project, run, secret |
 | resource_id | UUID | | |
-| metadata | JSONB | | Additional context |
+| metadata | JSONB | | 追加コンテキスト |
 | ip_address | INET | | |
 | user_agent | TEXT | | |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 
-Indexes:
+インデックス:
 - `idx_audit_logs_tenant` ON (tenant_id)
 - `idx_audit_logs_created` ON (created_at)
 
-## Canonical Query Patterns (必須)
+## 正規クエリパターン（必須）
 
 Claude Code はこのセクションのパターンに従ってクエリを書くこと。
 
@@ -591,9 +591,9 @@ SELECT * FROM projects WHERE id = $1;
 
 ---
 
-## Query Patterns
+## クエリパターン
 
-### List Projects (with tenant isolation)
+### プロジェクト一覧取得（テナント分離あり）
 
 ```sql
 SELECT *
@@ -604,23 +604,23 @@ ORDER BY updated_at DESC
 LIMIT $2 OFFSET $3;
 ```
 
-### Get Project with Steps and Edges
+### プロジェクトとステップ・エッジの取得
 
 ```sql
--- Project
+-- プロジェクト
 SELECT * FROM projects WHERE id = $1 AND tenant_id = $2;
 
--- Steps (including multiple Start blocks)
+-- ステップ（複数の Start ブロックを含む）
 SELECT * FROM steps WHERE project_id = $1 ORDER BY created_at;
 
--- Edges
+-- エッジ
 SELECT * FROM edges WHERE project_id = $1;
 ```
 
-### Get Start Blocks for Project
+### プロジェクトの Start ブロック取得
 
 ```sql
--- Get all Start blocks with their trigger configurations
+-- トリガー設定を含むすべての Start ブロックを取得
 SELECT id, name, config
 FROM steps
 WHERE project_id = $1
@@ -628,7 +628,7 @@ WHERE project_id = $1
 ORDER BY created_at;
 ```
 
-### Get Run with StepRuns
+### Run と StepRuns の取得
 
 ```sql
 SELECT r.*, json_agg(sr.*) AS step_runs
@@ -638,7 +638,7 @@ WHERE r.id = $1
 GROUP BY r.id;
 ```
 
-### Find Active Schedules Due
+### 実行待ちのアクティブスケジュール検索
 
 ```sql
 SELECT *
@@ -648,7 +648,7 @@ WHERE status = 'active'
 ORDER BY next_run_at;
 ```
 
-### Count Runs by Status (for dashboard)
+### ステータス別 Run カウント（ダッシュボード用）
 
 ```sql
 SELECT status, COUNT(*) as count
@@ -658,7 +658,7 @@ WHERE tenant_id = $1
 GROUP BY status;
 ```
 
-### Get Usage Summary by Period
+### 期間別使用量サマリー取得
 
 ```sql
 SELECT
@@ -674,7 +674,7 @@ WHERE tenant_id = $1
   AND created_at < $3;
 ```
 
-### Get Usage by Model
+### モデル別使用量取得
 
 ```sql
 SELECT
@@ -693,9 +693,9 @@ GROUP BY provider, model
 ORDER BY total_cost_usd DESC;
 ```
 
-### Vector Similarity Search (RAG)
+### ベクトル類似検索（RAG）
 
-⚠️ **重要**: すべてのベクトルクエリは`tenant_id`フィルタを必須とする。
+⚠️ **重要**: すべてのベクトルクエリは `tenant_id` フィルタを必須とする。
 
 ```sql
 -- コレクション取得/作成
@@ -731,37 +731,37 @@ ORDER BY vd.embedding <=> $3::vector
 LIMIT $5;
 ```
 
-## Migration Commands
+## マイグレーションコマンド
 
 ```bash
-# Apply migrations (using golang-migrate)
+# マイグレーション適用（golang-migrate 使用）
 docker compose exec api migrate -path /migrations -database "$DATABASE_URL" up
 
-# Rollback last migration
+# 直前のマイグレーションをロールバック
 docker compose exec api migrate -path /migrations -database "$DATABASE_URL" down 1
 
-# Force version (dangerous)
+# バージョン強制（危険）
 docker compose exec api migrate -path /migrations -database "$DATABASE_URL" force VERSION
 ```
 
-## Soft Delete Pattern
+## ソフトデリートパターン
 
-All tenant-owned tables support soft delete via `deleted_at` column:
+テナント所有のすべてのテーブルは `deleted_at` カラムによるソフトデリートをサポート:
 
 ```sql
--- "Delete"
+-- 「削除」
 UPDATE projects SET deleted_at = NOW() WHERE id = $1;
 
--- Query (exclude deleted)
+-- クエリ（削除済みを除外）
 SELECT * FROM projects WHERE deleted_at IS NULL;
 
--- Hard delete (admin only)
+-- ハードデリート（管理者のみ）
 DELETE FROM projects WHERE id = $1;
 ```
 
-## Multi-Tenancy Pattern
+## マルチテナンシーパターン
 
-All queries MUST include `tenant_id`:
+すべてのクエリに `tenant_id` を含める必要があります:
 
 ```go
 func (r *ProjectRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error) {
@@ -772,18 +772,18 @@ func (r *ProjectRepo) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*dom
 }
 ```
 
-## JSONB Column Usage
+## JSONB カラムの使用法
 
-| Table | Column | Content |
+| テーブル | カラム | 内容 |
 |-------|--------|---------|
 | tenants | settings | `{"data_retention_days": 30, "max_concurrent_runs": 10}` |
-| projects | variables | Project-level variables |
-| steps | config | Step type-specific config (Start blocks include trigger_type, trigger_config, input_schema, output_schema) |
-| runs | input | Execution input |
-| runs | output | Execution result |
-| audit_logs | metadata | Action-specific details |
+| projects | variables | プロジェクトレベル変数 |
+| steps | config | ステップタイプ固有の設定（Start ブロックは trigger_type, trigger_config, input_schema, output_schema を含む） |
+| runs | input | 実行入力 |
+| runs | output | 実行結果 |
+| audit_logs | metadata | アクション固有の詳細 |
 
-## Connection Pool Settings
+## コネクションプール設定
 
 ```go
 config := pgxpool.Config{
@@ -795,20 +795,20 @@ config := pgxpool.Config{
 }
 ```
 
-## Backup
+## バックアップ
 
 ```bash
-# Dump
+# ダンプ
 pg_dump -h localhost -U postgres ai_orchestration > backup.sql
 
-# Restore
+# リストア
 psql -h localhost -U postgres ai_orchestration < backup.sql
 ```
 
-## Related Documents
+## 関連ドキュメント
 
-- [BACKEND.md](./BACKEND.md) - Repository interfaces and data access patterns
-- [API.md](./API.md) - API endpoints that interact with database
-- [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - Block definitions schema
-- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - Block definition tables (RAGブロック含む)
-- [RAG_IMPLEMENTATION_PLAN.md](./plans/RAG_IMPLEMENTATION_PLAN.md) - RAG機能の設計書
+- [BACKEND.md](./BACKEND.md) - リポジトリインターフェースとデータアクセスパターン
+- [API.md](./API.md) - データベースとやり取りする API エンドポイント
+- [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) - ブロック定義スキーマ
+- [BLOCK_REGISTRY.md](./BLOCK_REGISTRY.md) - ブロック定義テーブル（RAG ブロック含む）
+- [RAG_IMPLEMENTATION_PLAN.md](./plans/RAG_IMPLEMENTATION_PLAN.md) - RAG 機能の設計書

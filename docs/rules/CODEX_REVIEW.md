@@ -1,4 +1,4 @@
-# Codex PR Review Workflow
+# Codex PRレビューワークフロー
 
 AIエージェントがPRをpushした後のレビューフロー。
 
@@ -240,7 +240,7 @@ gh pr merge <PR番号> --squash --delete-branch
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
 - [GIT_RULES.md](./GIT_RULES.md) - Git操作ルール
 - [WORKFLOW_RULES.md](./WORKFLOW_RULES.md) - 開発ワークフロー

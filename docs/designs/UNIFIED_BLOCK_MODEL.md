@@ -1624,6 +1624,6 @@ func (r *Runtime) Execute(goCtx context.Context, code string, input json.RawMess
 ## 関連ドキュメント
 
 - [BACKEND.md](../BACKEND.md) - バックエンド実装パターン
-- [API.md](../API.md) - API設計規約
-- [DATABASE.md](../DATABASE.md) - データベース設計規約
+- [API.md](../API.md) - API設計
+- [DATABASE.md](../DATABASE.md) - データベース設計
 - [FRONTEND.md](../FRONTEND.md) - フロントエンド実装パターン

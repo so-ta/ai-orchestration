@@ -1,58 +1,58 @@
-# Frontend Technical Reference
+# フロントエンド技術リファレンス
 
-Vue 3 / Nuxt 3 frontend structure, composables, and components.
+Vue 3 / Nuxt 3 フロントエンドの構造、Composables、コンポーネント。
 
-## Quick Reference
+## クイックリファレンス
 
-| Item | Value |
+| 項目 | 値 |
 |------|-------|
-| Framework | Nuxt 3 + Vue 3 |
-| Language | TypeScript |
-| State Management | Composables (Vue 3 Composition API) |
-| DAG Editor | @vue-flow/core |
-| Auth | Keycloak OIDC |
-| Pages | `pages/` (file-based routing) |
-| Components | `components/` |
+| フレームワーク | Nuxt 3 + Vue 3 |
+| 言語 | TypeScript |
+| 状態管理 | Composables（Vue 3 Composition API） |
+| DAG エディタ | @vue-flow/core |
+| 認証 | Keycloak OIDC |
+| ページ | `pages/`（ファイルベースルーティング） |
+| コンポーネント | `components/` |
 | Composables | `composables/` |
-| Types | `types/api.ts` |
+| 型定義 | `types/api.ts` |
 
-## Directory Structure
+## ディレクトリ構造
 
 ```
 frontend/
-├── app.vue                 # Root component
-├── nuxt.config.ts          # Nuxt configuration
-├── pages/                  # File-based routing
-│   ├── index.vue           # Dashboard /
+├── app.vue                 # ルートコンポーネント
+├── nuxt.config.ts          # Nuxt 設定
+├── pages/                  # ファイルベースルーティング
+│   ├── index.vue           # ダッシュボード /
 │   ├── workflows/
-│   │   ├── index.vue       # List /workflows
-│   │   ├── new.vue         # Create /workflows/new
-│   │   └── [id].vue        # Detail /workflows/:id
+│   │   ├── index.vue       # 一覧 /workflows
+│   │   ├── new.vue         # 作成 /workflows/new
+│   │   └── [id].vue        # 詳細 /workflows/:id
 │   ├── runs/
-│   │   ├── index.vue       # List /runs
-│   │   └── [id].vue        # Detail /runs/:id
+│   │   ├── index.vue       # 一覧 /runs
+│   │   └── [id].vue        # 詳細 /runs/:id
 │   ├── schedules/
-│   │   └── index.vue       # List /schedules
+│   │   └── index.vue       # 一覧 /schedules
 │   └── settings/
-│       └── index.vue       # Settings /settings
+│       └── index.vue       # 設定 /settings
 ├── components/
-│   └── dag-editor/         # DAG visual editor
-├── composables/            # Vue 3 composables
-│   ├── useAuth.ts          # Keycloak auth
-│   ├── useApi.ts           # API client
-│   ├── useWorkflows.ts     # Workflow operations
-│   └── useRuns.ts          # Run operations
+│   └── dag-editor/         # DAG ビジュアルエディタ
+├── composables/            # Vue 3 Composables
+│   ├── useAuth.ts          # Keycloak 認証
+│   ├── useApi.ts           # API クライアント
+│   ├── useWorkflows.ts     # Workflow 操作
+│   └── useRuns.ts          # Run 操作
 ├── plugins/
-│   └── auth.client.ts      # Keycloak initialization
+│   └── auth.client.ts      # Keycloak 初期化
 ├── layouts/
-│   └── default.vue         # Base layout
+│   └── default.vue         # ベースレイアウト
 ├── types/
-│   └── api.ts              # TypeScript interfaces
+│   └── api.ts              # TypeScript インターフェース
 └── assets/css/
-    └── main.css            # Global styles
+    └── main.css            # グローバルスタイル
 ```
 
-## Configuration (nuxt.config.ts)
+## 設定 (nuxt.config.ts)
 
 ```typescript
 export default defineNuxtConfig({
@@ -69,7 +69,7 @@ export default defineNuxtConfig({
 })
 ```
 
-## Type Definitions (types/api.ts)
+## 型定義 (types/api.ts)
 
 ```typescript
 interface Workflow {
@@ -181,8 +181,8 @@ const {
   del     // (path: string) => Promise<void>
 } = useApi()
 
-// Auto-injects Authorization header from useAuth
-// Auto-injects X-Tenant-ID header
+// useAuth から Authorization ヘッダーを自動注入
+// X-Tenant-ID ヘッダーを自動注入
 ```
 
 ### useWorkflows (composables/useWorkflows.ts)
@@ -227,11 +227,11 @@ const {
 } = useRuns()
 ```
 
-## Components
+## コンポーネント
 
-### Dynamic Config Form (components/workflow-editor/config/)
+### 動的設定フォーム (components/workflow-editor/config/)
 
-Schema-driven form generation for block configuration. JSON Schema から自動的にフォームを生成。
+スキーマ駆動のフォーム生成。JSON Schema から自動的にフォームを生成。
 
 ```
 components/workflow-editor/config/
@@ -247,7 +247,7 @@ components/workflow-editor/config/
 │   └── KeyValueWidget.vue      # キー・バリュー入力
 ├── composables/
 │   ├── useSchemaParser.ts      # スキーマ解析
-│   └── useValidation.ts        # ajvバリデーション
+│   └── useValidation.ts        # ajv バリデーション
 └── types/
     └── config-schema.ts        # 型定義
 ```
@@ -259,7 +259,7 @@ components/workflow-editor/config/
 | `type: "string"` | TextWidget |
 | `type: "string"` + `enum` | SelectWidget |
 | `type: "string"` + `maxLength > 100` | TextareaWidget |
-| `type: "string"` + `format: "uri"` | URL入力 |
+| `type: "string"` + `format: "uri"` | URL 入力 |
 | `type: "number"` / `type: "integer"` | NumberWidget |
 | `type: "boolean"` | CheckboxWidget |
 | `type: "array"` | ArrayWidget |
@@ -278,9 +278,9 @@ components/workflow-editor/config/
 
 **設計詳細**: [designs/BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md)
 
-### DAG Editor (components/dag-editor/)
+### DAG エディタ (components/dag-editor/)
 
-Built with [@vue-flow/core](https://vueflow.dev/)
+[@vue-flow/core](https://vueflow.dev/) を使用
 
 ```vue
 <template>
@@ -299,21 +299,21 @@ Built with [@vue-flow/core](https://vueflow.dev/)
 ```
 
 Props:
-| Prop | Type | Description |
+| Prop | 型 | 説明 |
 |------|------|-------------|
-| `workflowId` | `string` | Workflow ID to edit |
-| `readonly` | `boolean` | Disable editing |
+| `workflowId` | `string` | 編集するワークフロー ID |
+| `readonly` | `boolean` | 編集を無効化 |
 
 Events:
-| Event | Payload | Description |
+| イベント | ペイロード | 説明 |
 |-------|---------|-------------|
-| `step-added` | `Step` | New step created |
-| `step-updated` | `Step` | Step config changed |
-| `step-deleted` | `string` | Step ID deleted |
-| `edge-added` | `Edge` | Connection created |
-| `edge-deleted` | `string` | Edge ID deleted |
+| `step-added` | `Step` | 新規ステップ作成 |
+| `step-updated` | `Step` | ステップ設定変更 |
+| `step-deleted` | `string` | ステップ ID 削除 |
+| `edge-added` | `Edge` | 接続作成 |
+| `edge-deleted` | `string` | エッジ ID 削除 |
 
-#### Block Group Push Logic
+#### ブロックグループ押出ロジック
 
 ブロック/ブロックグループが移動したときに境界線と被った場合の押出ロジック。
 
@@ -377,15 +377,15 @@ Events:
 | `findGroupBoundaryCollision()` | ブロックとグループ境界の衝突検出 |
 | `snapToValidPosition()` | 境界上のブロックを有効な位置にスナップ |
 
-#### Group Resize Logic
+#### グループリサイズロジック
 
 グループブロックのリサイズ時の挙動と衝突判定。
 
 **重要な前提条件**
 
 ```
-1. Vue Flowでは親ノード（グループ）の子ノードは相対座標で管理される
-2. グループリサイズ時、Vue Flowは子ノードを自動的に移動させる
+1. Vue Flow では親ノード（グループ）の子ノードは相対座標で管理される
+2. グループリサイズ時、Vue Flow は子ノードを自動的に移動させる
 3. ブロックの「絶対位置」を維持するには、リアルタイムで位置補正が必要
 4. グループのネストは非対応（グループ内にグループをドロップすると外側にスナップ）
 ```
@@ -448,18 +448,18 @@ const onBoundary = !fullyInside && !fullyOutside
 
 | 注意点 | 説明 |
 |--------|------|
-| 位置補正のタイミング | `onGroupResize`でリアルタイム補正必須。`onGroupResizeEnd`のみでは視覚的なジャンプが発生 |
+| 位置補正のタイミング | `onGroupResize` でリアルタイム補正必須。`onGroupResizeEnd` のみでは視覚的なジャンプが発生 |
 | 衝突判定の順序 | `fullyInside` → `fullyOutside` → `onBoundary` の順で判定 |
 | 押出方向 | 境界と重なるブロックは最短距離で外側に押し出す |
 | イベント発火順 | `group:update` → `group:resize-complete` の順で発火必須 |
-| 相対座標 vs 絶対座標 | 子ノードはparentNodeからの相対座標、押出後は絶対座標に変換 |
+| 相対座標 vs 絶対座標 | 子ノードは parentNode からの相対座標、押出後は絶対座標に変換 |
 
 **関連ファイル**
 
 | ファイル | 役割 |
 |----------|------|
 | `components/dag-editor/DagEditor.vue` | リサイズハンドラ、衝突判定ロジック |
-| `pages/workflows/[id].vue` | `handleGroupResizeComplete`でAPI永続化 |
+| `pages/workflows/[id].vue` | `handleGroupResizeComplete` で API 永続化 |
 
 **デバッグ時のチェックポイント**
 
@@ -477,29 +477,29 @@ const onBoundary = !fullyInside && !fullyOutside
    → parentNode が undefined に設定されているか
 ```
 
-## Pages
+## ページ
 
-| Page | Path | Features |
+| ページ | パス | 機能 |
 |------|------|----------|
-| Dashboard | `pages/index.vue` | Recent workflows, Recent runs (status badges), Quick actions |
-| Workflow List | `pages/workflows/index.vue` | Filter by status, Search by name, Create/Edit/Delete/Publish |
-| Workflow Detail | `pages/workflows/[id].vue` | DAG Editor + Config Panel + Run button |
-| Run List | `pages/runs/index.vue` | Workflow name, Status badge, Trigger type, Duration |
-| Run Detail | `pages/runs/[id].vue` | Run metadata, Step timeline, Step I/O, Error details |
-| Schedules | `pages/schedules/index.vue` | CRUD for scheduled executions |
-| Settings | `pages/settings/index.vue` | Tenant configuration |
+| ダッシュボード | `pages/index.vue` | 最近のワークフロー、最近の Run（ステータスバッジ）、クイックアクション |
+| ワークフロー一覧 | `pages/workflows/index.vue` | ステータスでフィルタ、名前で検索、作成/編集/削除/公開 |
+| ワークフロー詳細 | `pages/workflows/[id].vue` | DAG エディタ + 設定パネル + 実行ボタン |
+| Run 一覧 | `pages/runs/index.vue` | ワークフロー名、ステータスバッジ、トリガータイプ、所要時間 |
+| Run 詳細 | `pages/runs/[id].vue` | Run メタデータ、ステップタイムライン、ステップ I/O、エラー詳細 |
+| スケジュール | `pages/schedules/index.vue` | スケジュール実行の CRUD |
+| 設定 | `pages/settings/index.vue` | テナント設定 |
 
-### Workflow Detail Layout
+### ワークフロー詳細レイアウト
 
 ```
 +------------------+------------------+
-|  DAG Editor      |  Config Panel    |
-|                  |  - Step config   |
-|                  |  - Run button    |
+|  DAG エディタ     |  設定パネル      |
+|                  |  - ステップ設定   |
+|                  |  - 実行ボタン     |
 +------------------+------------------+
 ```
 
-## Auth Plugin (plugins/auth.client.ts)
+## 認証プラグイン (plugins/auth.client.ts)
 
 ```typescript
 export default defineNuxtPlugin(async () => {
@@ -522,54 +522,54 @@ export default defineNuxtPlugin(async () => {
 })
 ```
 
-## Routing
+## ルーティング
 
-| Path | Page | Auth Required |
+| パス | ページ | 認証必須 |
 |------|------|---------------|
-| `/` | Dashboard | Yes |
-| `/workflows` | Workflow list | Yes |
-| `/workflows/new` | Create workflow | Yes (builder+) |
-| `/workflows/:id` | Workflow detail | Yes |
-| `/runs` | Run list | Yes |
-| `/runs/:id` | Run detail | Yes |
-| `/schedules` | Schedule list | Yes |
-| `/settings` | Settings | Yes (admin) |
+| `/` | ダッシュボード | はい |
+| `/workflows` | ワークフロー一覧 | はい |
+| `/workflows/new` | ワークフロー作成 | はい（builder 以上） |
+| `/workflows/:id` | ワークフロー詳細 | はい |
+| `/runs` | Run 一覧 | はい |
+| `/runs/:id` | Run 詳細 | はい |
+| `/schedules` | スケジュール一覧 | はい |
+| `/settings` | 設定 | はい（admin） |
 
-## Styling
+## スタイリング
 
-- Utility-first CSS
-- CSS variables for theming
-- Component-scoped styles with `<style scoped>`
+- ユーティリティファースト CSS
+- テーマ用の CSS 変数
+- `<style scoped>` でコンポーネントスコープスタイル
 
-## Build Commands
+## ビルドコマンド
 
 ```bash
-# Development
+# 開発
 npm run dev
 
-# Build
+# ビルド
 npm run build
 
-# Preview production build
+# 本番ビルドのプレビュー
 npm run preview
 
-# Lint
+# リント
 npm run lint
 
-# Type check
+# 型チェック
 npm run typecheck
 ```
 
-## Environment Variables
+## 環境変数
 
-| Variable | Description |
+| 変数 | 説明 |
 |----------|-------------|
-| `NUXT_PUBLIC_API_BASE` | Backend API URL |
+| `NUXT_PUBLIC_API_BASE` | バックエンド API URL |
 | `NUXT_PUBLIC_KEYCLOAK_URL` | Keycloak URL |
-| `NUXT_PUBLIC_KEYCLOAK_REALM` | Keycloak realm |
-| `NUXT_PUBLIC_KEYCLOAK_CLIENT_ID` | Keycloak client ID |
+| `NUXT_PUBLIC_KEYCLOAK_REALM` | Keycloak レルム |
+| `NUXT_PUBLIC_KEYCLOAK_CLIENT_ID` | Keycloak クライアント ID |
 
-## Canonical Code Patterns (必須)
+## 正規コードパターン（必須）
 
 Claude Code はこのセクションのパターンに従ってコードを書くこと。
 既存コードが異なるパターンを使っていても、このパターンを優先する。
@@ -683,7 +683,7 @@ await fetchWorkflows()
 
 ---
 
-### API呼び出しパターン
+### API 呼び出しパターン
 
 ```typescript
 // ✅ 正しいパターン
@@ -927,10 +927,10 @@ describe('useWorkflows', () => {
 
 ---
 
-## Related Documents
+## 関連ドキュメント
 
-- [API.md](./API.md) - REST API endpoints and schemas
-- [TESTING.md](../frontend/docs/TESTING.md) - Frontend testing rules
-- [BACKEND.md](./BACKEND.md) - Backend architecture
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Docker and Kubernetes deployment
+- [API.md](./API.md) - REST API エンドポイントとスキーマ
+- [TESTING.md](../frontend/docs/TESTING.md) - フロントエンドテストルール
+- [BACKEND.md](./BACKEND.md) - バックエンドアーキテクチャ
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Docker と Kubernetes デプロイ
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - エラー対処法
