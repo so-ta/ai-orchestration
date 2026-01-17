@@ -381,26 +381,6 @@ CREATE TABLE public.step_runs (
 
 COMMENT ON COLUMN public.step_runs.sequence_number IS 'Execution order within the same run and attempt (1-indexed)';
 
---
--- Name: block_group_runs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.block_group_runs (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
-    run_id uuid NOT NULL,
-    block_group_id uuid NOT NULL,
-    status character varying(50) DEFAULT 'pending'::character varying,
-    iteration integer DEFAULT 0,
-    input jsonb,
-    output jsonb,
-    error text,
-    started_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT valid_block_group_run_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'running'::character varying, 'completed'::character varying, 'failed'::character varying, 'skipped'::character varying])::text[])))
-);
-
 -- ============================================================================
 -- Scheduling
 -- ============================================================================
@@ -590,7 +570,7 @@ COMMENT ON TABLE public.usage_budgets IS 'Budget settings for cost control and a
 COMMENT ON COLUMN public.usage_budgets.alert_threshold IS 'Percentage (0.00-1.00) at which to trigger alert';
 
 -- ============================================================================
--- Audit & Adapters
+-- Audit
 -- ============================================================================
 
 --
@@ -609,24 +589,6 @@ CREATE TABLE public.audit_logs (
     ip_address inet,
     user_agent text,
     created_at timestamp with time zone DEFAULT now()
-);
-
---
--- Name: adapters; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.adapters (
-    id character varying(100) NOT NULL,
-    tenant_id uuid,
-    name character varying(255) NOT NULL,
-    description text,
-    type character varying(50) NOT NULL,
-    config jsonb,
-    input_schema jsonb,
-    output_schema jsonb,
-    enabled boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
 );
 
 -- ============================================================================
@@ -689,7 +651,6 @@ ALTER TABLE ONLY public.block_versions ADD CONSTRAINT block_versions_block_id_ve
 ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.run_number_sequences ADD CONSTRAINT run_number_sequences_pkey PRIMARY KEY (project_id, triggered_by);
 ALTER TABLE ONLY public.step_runs ADD CONSTRAINT step_runs_pkey PRIMARY KEY (id);
-ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_pkey PRIMARY KEY (id);
 
@@ -705,7 +666,6 @@ ALTER TABLE ONLY public.usage_daily_aggregates ADD CONSTRAINT usage_daily_aggreg
 ALTER TABLE ONLY public.usage_budgets ADD CONSTRAINT usage_budgets_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.audit_logs ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (id);
-ALTER TABLE ONLY public.adapters ADD CONSTRAINT adapters_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.copilot_messages ADD CONSTRAINT copilot_messages_pkey PRIMARY KEY (id);
@@ -783,11 +743,6 @@ CREATE INDEX idx_runs_start_step ON public.runs USING btree (start_step_id) WHER
 -- Step Runs
 CREATE INDEX idx_step_runs_tenant ON public.step_runs USING btree (tenant_id);
 CREATE INDEX idx_step_runs_run ON public.step_runs USING btree (run_id);
-
--- Block Group Runs
-CREATE INDEX idx_block_group_runs_tenant ON public.block_group_runs USING btree (tenant_id);
-CREATE INDEX idx_block_group_runs_run ON public.block_group_runs USING btree (run_id);
-CREATE INDEX idx_block_group_runs_block_group ON public.block_group_runs USING btree (block_group_id);
 
 -- Schedules
 CREATE INDEX idx_schedules_tenant ON public.schedules USING btree (tenant_id);
@@ -924,11 +879,6 @@ ALTER TABLE ONLY public.run_number_sequences ADD CONSTRAINT run_number_sequences
 ALTER TABLE ONLY public.step_runs ADD CONSTRAINT step_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 ALTER TABLE ONLY public.step_runs ADD CONSTRAINT step_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
 
--- Block Group Runs
-ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
-ALTER TABLE ONLY public.block_group_runs ADD CONSTRAINT block_group_runs_block_group_id_fkey FOREIGN KEY (block_group_id) REFERENCES public.block_groups(id) ON DELETE CASCADE;
-
 -- Schedules
 ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 ALTER TABLE ONLY public.schedules ADD CONSTRAINT schedules_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
@@ -957,9 +907,6 @@ ALTER TABLE ONLY public.usage_budgets ADD CONSTRAINT usage_budgets_project_id_fk
 
 -- Audit
 ALTER TABLE ONLY public.audit_logs ADD CONSTRAINT audit_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-
--- Adapters
-ALTER TABLE ONLY public.adapters ADD CONSTRAINT adapters_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
 
 -- Copilot
 ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);

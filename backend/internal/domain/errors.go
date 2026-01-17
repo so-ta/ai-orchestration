@@ -38,9 +38,8 @@ var (
 	ErrStepRunNotFound = errors.New("step run not found")
 
 	// Block Group errors
-	ErrBlockGroupNotFound      = errors.New("block group not found")
-	ErrBlockGroupRunNotFound   = errors.New("block group run not found")
-	ErrBlockGroupInvalidType   = errors.New("invalid block group type")
+	ErrBlockGroupNotFound    = errors.New("block group not found")
+	ErrBlockGroupInvalidType = errors.New("invalid block group type")
 	ErrStepCannotBeInGroup     = errors.New("this step type cannot be added to a block group")
 	ErrBlockGroupInvalidRole   = errors.New("invalid group role for this block group type")
 

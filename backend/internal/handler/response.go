@@ -102,7 +102,6 @@ func HandleError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrWebhookNotFound),
 		errors.Is(err, domain.ErrTenantNotFound),
 		errors.Is(err, domain.ErrBlockGroupNotFound),
-		errors.Is(err, domain.ErrBlockGroupRunNotFound),
 		errors.Is(err, domain.ErrCredentialNotFound),
 		errors.Is(err, domain.ErrSystemCredentialNotFound),
 		errors.Is(err, domain.ErrBlockDefinitionNotFound),
