@@ -216,28 +216,30 @@ function calculateRunDuration(run: Run): string {
   gap: 4px;
 }
 
-/* Run Row */
+/* Run Row - Glassmorphism */
 .run-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 0.75rem;
-  background: white;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
 }
 
 .run-row:hover {
-  border-color: rgba(0, 0, 0, 0.1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
 }
 
 .run-row.selected {
-  border-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.04);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .run-number {

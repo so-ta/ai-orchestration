@@ -11,7 +11,7 @@
  * - クイック検索モーダル（⌘K）
  */
 
-import type { Project, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort } from '~/types/api'
+import type { Project, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort, StepRun } from '~/types/api'
 import type DagEditor from '~/components/dag-editor/DagEditor.vue'
 import type { SlideOutPanel } from '~/composables/useEditorState'
 import { calculateLayout, calculateLayoutWithGroups, parseNodeId } from '~/utils/graph-layout'
@@ -47,8 +47,10 @@ const {
   bottomPanelHeight,
   bottomPanelResizing,
   selectedRun,
+  selectedStepRun,
   setBottomPanelHeight,
   setSelectedRun,
+  setSelectedStepRun,
 } = useEditorState()
 
 // Project state
@@ -333,9 +335,78 @@ const rightPanelTitle = computed(() => {
   return undefined // RunDetailPanel has its own header
 })
 
+// Nested panel for step details
+const showNestedPanel = computed(() => selectedStepRun.value !== null)
+
+// Primary panel shift when nested panel is open (360px width + 12px gap)
+const primaryPanelShift = computed(() => showNestedPanel.value ? 372 : 0)
+
+// Step run selection handler
+function handleStepRunSelect(stepRun: StepRun) {
+  setSelectedStepRun(stepRun)
+}
+
+// Close nested panel
+function handleCloseNestedPanel() {
+  setSelectedStepRun(null)
+}
+
+// Handle run created/updated from execution panel - auto-transition to run details
+function handleRunCreated(run: Run) {
+  // Check if this is an update to the current run (polling update)
+  if (selectedRun.value?.id === run.id) {
+    // Update run data without resetting step selection
+    const currentStepRunId = selectedStepRun.value?.id
+    selectedRun.value = run
+
+    // Update selected step run with fresh data
+    if (currentStepRunId && run.step_runs) {
+      const updatedStepRun = run.step_runs.find(sr => sr.id === currentStepRunId)
+      if (updatedStepRun) {
+        setSelectedStepRun(updatedStepRun)
+      }
+    }
+  } else {
+    // New run - clear block selection and show run details
+    clearSelection()
+    selectedGroupId.value = null
+    setSelectedRun(run)
+  }
+}
+
+// Handle run refresh request from RunDetailPanel
+async function handleRunRefresh() {
+  if (!selectedRun.value) return
+  try {
+    const currentStepRunId = selectedStepRun.value?.id
+    const response = await runs.get(selectedRun.value.id)
+
+    // Update selected run without triggering step reset
+    selectedRun.value = response.data
+
+    // If a step was selected, update it with fresh data from the new run
+    if (currentStepRunId && response.data.step_runs) {
+      const updatedStepRun = response.data.step_runs.find(sr => sr.id === currentStepRunId)
+      if (updatedStepRun) {
+        setSelectedStepRun(updatedStepRun)
+      }
+    }
+  } catch (e) {
+    console.error('Failed to refresh run:', e)
+  }
+}
+
+// Reset step selection only when run ID changes (not on refresh)
+watch(() => selectedRun.value?.id, (newId, oldId) => {
+  if (newId !== oldId) {
+    setSelectedStepRun(null)
+  }
+})
+
 function handleCloseRightPanel() {
   clearSelection()
   setSelectedRun(null)
+  setSelectedStepRun(null)
 }
 
 // Handle pane click (deselect)
@@ -1344,10 +1415,12 @@ onMounted(async () => {
         @set-zoom="handleSetZoom"
       />
 
-      <!-- Right Floating Panel -->
+      <!-- Right Floating Panel (Primary) -->
       <FloatingRightPanel
         :show="showRightPanel"
         :title="rightPanelTitle"
+        :shift-left="primaryPanelShift"
+        :level="1"
         @close="handleCloseRightPanel"
       >
         <!-- Block Properties Panel -->
@@ -1362,13 +1435,30 @@ onMounted(async () => {
           @save="handleSaveStep"
           @delete="handleDeleteStep"
           @update:name="handleUpdateStepName"
+          @run:created="handleRunCreated"
         />
 
         <!-- Run Details Panel -->
         <RunDetailPanel
           v-else-if="rightPanelMode === 'run' && selectedRun"
           :run="selectedRun"
+          :selected-step-run-id="selectedStepRun?.id"
           @close="handleCloseRightPanel"
+          @step:select="handleStepRunSelect"
+          @refresh="handleRunRefresh"
+        />
+      </FloatingRightPanel>
+
+      <!-- Nested Floating Panel (Step Details) -->
+      <FloatingRightPanel
+        :show="showNestedPanel"
+        :title="t('execution.stepDetails')"
+        :level="2"
+        @close="handleCloseNestedPanel"
+      >
+        <StepDetailPanel
+          v-if="selectedStepRun"
+          :step-run="selectedStepRun"
         />
       </FloatingRightPanel>
 

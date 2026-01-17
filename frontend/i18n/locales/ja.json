@@ -434,6 +434,7 @@
     "error": "エラー",
     "input": "入力",
     "output": "出力",
+    "stepDetails": "ステップ詳細",
     "noInputData": "入力データがありません",
     "noOutputData": "出力データがありません",
     "pollingTimeout": "タイムアウトしました",

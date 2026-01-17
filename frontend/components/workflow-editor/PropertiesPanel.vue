@@ -42,6 +42,7 @@ const emit = defineEmits<{
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
   (e: 'update:name', name: string): void
   (e: 'update:trigger', data: { trigger_type: StartTriggerType; trigger_config: object }): void
+  (e: 'run:created', run: Run): void
 }>()
 
 // Step config type - dynamic form configuration with common known fields
@@ -548,7 +549,9 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         </svg>
         {{ t('editor.tabs.config') }}
       </button>
+      <!-- Flow Tab (hidden for start blocks since they don't have flow config) -->
       <button
+        v-if="!isGenericStartBlock"
         class="tab-button"
         :class="{ active: activeTab === 'flow' }"
         @click="activeTab = 'flow'"
@@ -696,6 +699,24 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
             :schema="configSchema"
             :ui-config="uiConfig"
             :disabled="readonlyMode"
+          />
+        </div>
+
+        <!-- Trigger Configuration (integrated into Config tab for start blocks) -->
+        <div v-if="isGenericStartBlock" class="form-section trigger-section">
+          <h4 class="section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            {{ t('editor.tabs.trigger') }}
+          </h4>
+          <TriggerConfigPanel
+            :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
+            :trigger-config="step?.trigger_config as object || {}"
+            :step-id="step?.id"
+            :readonly="readonlyMode"
+            class="integrated-trigger-panel"
+            @update:trigger="handleTriggerUpdate"
           />
         </div>
 
@@ -1496,6 +1517,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         :blocks="blockDefinitions || []"
         @execute="(data) => emit('execute', data)"
         @execute-workflow="(mode, input) => emit('execute-workflow', mode, input)"
+        @run:created="(run) => emit('run:created', run)"
       />
     </div>
 
@@ -2042,6 +2064,22 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
   background: var(--color-background);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+/* Integrated Trigger Panel (inside Config tab) */
+.integrated-trigger-panel {
+  margin-top: 0.5rem;
+}
+
+/* Trigger Section */
+.trigger-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trigger-section .section-title svg {
+  opacity: 0.7;
 }
 
 /* Footer */

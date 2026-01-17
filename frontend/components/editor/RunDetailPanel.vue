@@ -1,32 +1,81 @@
 <script setup lang="ts">
 /**
  * RunDetailPanel.vue
- * Run詳細パネル（ステップ一覧 + ステップ詳細）
+ * Run詳細パネル（ステップ一覧のみ表示、詳細は外部パネルに委譲）
+ * - 実行中は3秒ごとに自動更新
+ * - 実行中の視覚的フィードバック（プログレスバー）
  */
 import type { Run, StepRun } from '~/types/api'
 import {
-  ArrowLeft,
   CheckCircle2,
   XCircle,
   Clock,
   Loader2,
   AlertCircle,
-  Copy,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-vue-next'
 
 const props = defineProps<{
   run: Run
+  /** 現在選択されているステップのID */
+  selectedStepRunId?: string | null
 }>()
 
-defineEmits<{
-  (e: 'close'): void
+const emit = defineEmits<{
+  (e: 'close' | 'refresh'): void
+  (e: 'step:select', stepRun: StepRun): void
 }>()
 
 const { t } = useI18n()
 
-// Currently selected step run for detail view
-const selectedStepRun = ref<StepRun | null>(null)
+// Auto-refresh state
+const refreshing = ref(false)
+let refreshInterval: ReturnType<typeof setInterval> | null = null
+
+// Check if run is active (needs refresh)
+const isActiveRun = computed(() => {
+  return ['pending', 'running'].includes(props.run.status)
+})
+
+// Start auto-refresh when run is active
+function startAutoRefresh() {
+  if (refreshInterval) return
+  refreshInterval = setInterval(() => {
+    if (isActiveRun.value) {
+      refreshing.value = true
+      emit('refresh')
+      // Reset refreshing state after a short delay
+      setTimeout(() => {
+        refreshing.value = false
+      }, 500)
+    } else {
+      stopAutoRefresh()
+    }
+  }, 3000) // 3 seconds
+}
+
+// Stop auto-refresh
+function stopAutoRefresh() {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+    refreshInterval = null
+  }
+}
+
+// Watch for run changes to manage auto-refresh
+watch(() => props.run.status, (newStatus) => {
+  if (['pending', 'running'].includes(newStatus)) {
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
+}, { immediate: true })
+
+// Cleanup on unmount
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 
 // Get status icon
 function getStatusIcon(status: string) {
@@ -65,160 +114,122 @@ function formatDate(dateStr?: string): string {
   return new Date(dateStr).toLocaleString()
 }
 
-// Format JSON for display
-function formatJson(data: unknown): string {
-  if (data === undefined || data === null) return '-'
-  try {
-    return JSON.stringify(data, null, 2)
-  } catch {
-    return String(data)
+// Calculate run duration (updates in real-time for active runs)
+const runDuration = ref('-')
+let durationInterval: ReturnType<typeof setInterval> | null = null
+
+function updateDuration() {
+  if (!props.run.started_at) {
+    runDuration.value = '-'
+    return
   }
-}
-
-// Copy to clipboard
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch (e) {
-    console.error('Failed to copy:', e)
-  }
-}
-
-// Select a step run
-function selectStepRun(stepRun: StepRun) {
-  selectedStepRun.value = stepRun
-}
-
-// Go back to step list
-function backToStepList() {
-  selectedStepRun.value = null
-}
-
-// Calculate run duration
-function calculateRunDuration(): string {
-  if (!props.run.started_at) return '-'
   const start = new Date(props.run.started_at).getTime()
   const end = props.run.completed_at ? new Date(props.run.completed_at).getTime() : Date.now()
-  return formatDuration(end - start)
+  runDuration.value = formatDuration(end - start)
 }
 
-// Watch for run changes - reset selected step
-watch(() => props.run.id, () => {
-  selectedStepRun.value = null
+// Start duration timer for active runs
+function startDurationTimer() {
+  if (durationInterval) return
+  updateDuration()
+  durationInterval = setInterval(updateDuration, 1000)
+}
+
+function stopDurationTimer() {
+  if (durationInterval) {
+    clearInterval(durationInterval)
+    durationInterval = null
+  }
+}
+
+watch(() => props.run.status, (newStatus) => {
+  if (['pending', 'running'].includes(newStatus)) {
+    startDurationTimer()
+  } else {
+    stopDurationTimer()
+    updateDuration() // Final update
+  }
+}, { immediate: true })
+
+onUnmounted(() => {
+  stopDurationTimer()
 })
+
+// Handle step click
+function handleStepClick(stepRun: StepRun) {
+  emit('step:select', stepRun)
+}
+
+// Manual refresh
+function handleManualRefresh() {
+  refreshing.value = true
+  emit('refresh')
+  setTimeout(() => {
+    refreshing.value = false
+  }, 500)
+}
 </script>
 
 <template>
-  <div class="run-detail-panel">
-    <!-- Step Detail View -->
-    <template v-if="selectedStepRun">
-      <!-- Step Detail Header -->
-      <div class="panel-section-header">
-        <button class="back-btn" @click="backToStepList">
-          <ArrowLeft :size="16" />
-        </button>
-        <span class="step-name">{{ selectedStepRun.step_name }}</span>
-        <span :class="['status-badge', 'small', selectedStepRun.status]">
-          <component :is="getStatusIcon(selectedStepRun.status)" :size="10" />
-          {{ formatStatus(selectedStepRun.status) }}
+  <div class="run-detail-panel" :class="{ 'is-active': isActiveRun }">
+    <!-- Running Progress Bar -->
+    <div v-if="isActiveRun" class="running-progress">
+      <div class="progress-bar" />
+    </div>
+
+    <!-- Run Header -->
+    <div class="run-header">
+      <div class="run-title">
+        <span class="run-number">#{{ run.run_number }}</span>
+        <span :class="['status-badge', run.status]">
+          <component :is="getStatusIcon(run.status)" :size="12" :class="{ spinning: run.status === 'running' }" />
+          {{ formatStatus(run.status) }}
         </span>
-      </div>
-
-      <!-- Step Meta -->
-      <div class="step-meta">
-        <div class="meta-item">
-          <span class="meta-label">{{ t('execution.duration') }}</span>
-          <span class="meta-value">{{ formatDuration(selectedStepRun.duration_ms) }}</span>
-        </div>
-        <div v-if="selectedStepRun.started_at" class="meta-item">
-          <span class="meta-label">{{ t('execution.startedAt') }}</span>
-          <span class="meta-value">{{ formatDate(selectedStepRun.started_at) }}</span>
-        </div>
-      </div>
-
-      <!-- Error -->
-      <div v-if="selectedStepRun.error" class="step-section error-section">
-        <div class="section-header">
-          <span class="section-title error">{{ t('execution.error') }}</span>
-        </div>
-        <pre class="section-content error">{{ selectedStepRun.error }}</pre>
-      </div>
-
-      <!-- Input -->
-      <div class="step-section">
-        <div class="section-header">
-          <span class="section-title">{{ t('execution.input') }}</span>
-          <button
-            class="copy-btn"
-            :title="t('common.copy')"
-            @click="copyToClipboard(formatJson(selectedStepRun.input))"
-          >
-            <Copy :size="12" />
-          </button>
-        </div>
-        <pre class="section-content">{{ formatJson(selectedStepRun.input) }}</pre>
-      </div>
-
-      <!-- Output -->
-      <div class="step-section">
-        <div class="section-header">
-          <span class="section-title">{{ t('execution.output') }}</span>
-          <button
-            class="copy-btn"
-            :title="t('common.copy')"
-            @click="copyToClipboard(formatJson(selectedStepRun.output))"
-          >
-            <Copy :size="12" />
-          </button>
-        </div>
-        <pre class="section-content">{{ formatJson(selectedStepRun.output) }}</pre>
-      </div>
-    </template>
-
-    <!-- Step List View -->
-    <template v-else>
-      <!-- Run Header -->
-      <div class="run-header">
-        <div class="run-title">
-          <span class="run-number">#{{ run.run_number }}</span>
-          <span :class="['status-badge', run.status]">
-            <component :is="getStatusIcon(run.status)" :size="12" :class="{ spinning: run.status === 'running' }" />
-            {{ formatStatus(run.status) }}
-          </span>
-        </div>
-        <div class="run-meta">
-          <span class="meta-item">{{ calculateRunDuration() }}</span>
-          <span class="meta-item">{{ formatDate(run.created_at) }}</span>
-        </div>
-      </div>
-
-      <!-- Step List -->
-      <div class="step-list">
-        <div class="step-list-header">
-          <span class="step-list-title">{{ t('execution.steps') }}</span>
-          <span class="step-count">{{ run.step_runs?.length || 0 }}</span>
-        </div>
-
-        <div v-if="!run.step_runs || run.step_runs.length === 0" class="empty-steps">
-          {{ t('execution.noSteps') }}
-        </div>
-
-        <div
-          v-for="stepRun in run.step_runs"
-          v-else
-          :key="stepRun.id"
-          class="step-row"
-          @click="selectStepRun(stepRun)"
+        <button
+          v-if="isActiveRun"
+          class="refresh-btn"
+          :class="{ refreshing: refreshing }"
+          :title="t('common.refresh')"
+          @click="handleManualRefresh"
         >
-          <span :class="['step-status', stepRun.status]">
-            <component :is="getStatusIcon(stepRun.status)" :size="14" :class="{ spinning: stepRun.status === 'running' }" />
-          </span>
-          <span class="step-name">{{ stepRun.step_name }}</span>
-          <span class="step-duration">{{ formatDuration(stepRun.duration_ms) }}</span>
-          <ChevronRight :size="14" class="step-arrow" />
-        </div>
+          <RefreshCw :size="12" :class="{ spinning: refreshing }" />
+        </button>
       </div>
-    </template>
+      <div class="run-meta">
+        <span class="meta-item duration" :class="{ 'is-live': isActiveRun }">
+          {{ runDuration }}
+        </span>
+        <span class="meta-item">{{ formatDate(run.created_at) }}</span>
+      </div>
+    </div>
+
+    <!-- Step List -->
+    <div class="step-list">
+      <div class="step-list-header">
+        <span class="step-list-title">{{ t('execution.steps') }}</span>
+        <span class="step-count">{{ run.step_runs?.length || 0 }}</span>
+      </div>
+
+      <div v-if="!run.step_runs || run.step_runs.length === 0" class="empty-steps">
+        {{ t('execution.noSteps') }}
+      </div>
+
+      <div
+        v-for="stepRun in run.step_runs"
+        v-else
+        :key="stepRun.id"
+        class="step-row"
+        :class="{ selected: stepRun.id === selectedStepRunId }"
+        @click="handleStepClick(stepRun)"
+      >
+        <span :class="['step-status', stepRun.status]">
+          <component :is="getStatusIcon(stepRun.status)" :size="14" :class="{ spinning: stepRun.status === 'running' }" />
+        </span>
+        <span class="step-name">{{ stepRun.step_name }}</span>
+        <span class="step-duration">{{ formatDuration(stepRun.duration_ms) }}</span>
+        <ChevronRight :size="14" class="step-arrow" />
+      </div>
+    </div>
   </div>
 </template>
 
@@ -228,6 +239,38 @@ watch(() => props.run.id, () => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+.run-detail-panel.is-active {
+  border-top: 2px solid #3b82f6;
+}
+
+/* Running Progress Bar */
+.running-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(59, 130, 246, 0.2);
+  overflow: hidden;
+}
+
+.progress-bar {
+  width: 30%;
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  animation: progress-slide 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
 }
 
 /* Run Header */
@@ -235,6 +278,38 @@ watch(() => props.run.id, () => {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   background: rgba(248, 250, 252, 0.5);
+}
+
+/* Refresh Button */
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  color: #3b82f6;
+  transition: all 0.15s;
+  margin-left: auto;
+}
+
+.refresh-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.refresh-btn.refreshing {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+/* Live Duration Indicator */
+.meta-item.duration.is-live {
+  color: #3b82f6;
+  font-weight: 500;
+  font-family: 'SF Mono', Monaco, monospace;
 }
 
 .run-title {
@@ -270,11 +345,6 @@ watch(() => props.run.id, () => {
   font-weight: 500;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-}
-
-.status-badge.small {
-  font-size: 0.625rem;
-  padding: 0.125rem 0.375rem;
 }
 
 .status-badge.completed {
@@ -353,12 +423,18 @@ watch(() => props.run.id, () => {
   gap: 0.625rem;
   padding: 0.625rem 1rem;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
   border-bottom: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .step-row:hover {
   background: rgba(0, 0, 0, 0.02);
+}
+
+.step-row.selected {
+  background: rgba(59, 130, 246, 0.06);
+  border-left: 3px solid #3b82f6;
+  padding-left: calc(1rem - 3px);
 }
 
 .step-row:last-child {
@@ -412,148 +488,15 @@ watch(() => props.run.id, () => {
 .step-arrow {
   color: #cbd5e1;
   flex-shrink: 0;
+  transition: transform 0.15s;
 }
 
-/* Step Detail View */
-.panel-section-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(248, 250, 252, 0.5);
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
-  transition: all 0.15s;
-}
-
-.back-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #1e293b;
-}
-
-.panel-section-header .step-name {
-  flex: 1;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #1e293b;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Step Meta */
-.step-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-  padding: 0.625rem 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-  background: rgba(248, 250, 252, 0.3);
-}
-
-.step-meta .meta-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.step-meta .meta-label {
-  font-size: 0.625rem;
-  font-weight: 500;
+.step-row:hover .step-arrow {
+  transform: translateX(2px);
   color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
 }
 
-.step-meta .meta-value {
-  font-size: 0.75rem;
-  color: #475569;
-  font-family: 'SF Mono', Monaco, monospace;
-}
-
-/* Step Section (Input/Output/Error) */
-.step-section {
-  display: flex;
-  flex-direction: column;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-}
-
-.step-section:last-child {
-  border-bottom: none;
-  flex: 1;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: rgba(248, 250, 252, 0.5);
-}
-
-.section-title {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-}
-
-.section-title.error {
-  color: #dc2626;
-}
-
-.copy-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  border-radius: 4px;
-  cursor: pointer;
-  color: #94a3b8;
-  transition: all 0.15s;
-}
-
-.copy-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #64748b;
-}
-
-.section-content {
-  margin: 0;
-  padding: 0.75rem 1rem;
-  font-size: 0.75rem;
-  font-family: 'SF Mono', Monaco, monospace;
-  line-height: 1.5;
-  color: #475569;
-  background: rgba(248, 250, 252, 0.3);
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 200px;
-}
-
-.section-content.error {
-  color: #dc2626;
-  background: rgba(254, 226, 226, 0.3);
-}
-
-.error-section {
-  flex-shrink: 0;
+.step-row.selected .step-arrow {
+  color: #3b82f6;
 }
 </style>
