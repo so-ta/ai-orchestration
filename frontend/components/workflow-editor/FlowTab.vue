@@ -283,29 +283,39 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
   line-height: 1.5;
 }
 
-/* Content */
+/* Content - Matching PropertiesPanel form-section style */
 .flow-content {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
 
-/* Section */
+/* Section - Matching PropertiesPanel form-section style with visual separation */
 .flow-section {
-  background: var(--color-surface-raised);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.flow-section:last-child {
+  margin-bottom: 0;
 }
 
 .section-title {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-text);
   margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.section-title svg {
+  opacity: 0.7;
 }
 
 /* Ports */
@@ -317,7 +327,7 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
 
 .port-item {
   background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.625rem 0.75rem;
 }
@@ -341,11 +351,12 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
 
 .port-type {
   font-size: 0.6875rem;
-  background: var(--color-surface-raised);
+  background: var(--color-surface);
   color: var(--color-text-secondary);
   padding: 0.125rem 0.375rem;
   border-radius: 4px;
-  font-family: var(--font-mono);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  border: 1px solid var(--color-border);
 }
 
 .port-required {
@@ -364,7 +375,7 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
 }
 
 .port-description {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--color-text-secondary);
   margin: 0.375rem 0 0 0;
   line-height: 1.4;
@@ -374,14 +385,16 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
   font-size: 0.75rem;
   color: var(--color-text-tertiary);
   font-style: italic;
-  padding: 0.5rem;
+  padding: 0.75rem;
   text-align: center;
+  background: var(--color-surface);
+  border-radius: 6px;
 }
 
 /* Scripts Container */
 .scripts-container {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 </style>

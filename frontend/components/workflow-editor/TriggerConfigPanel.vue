@@ -176,31 +176,27 @@ const timezoneOptions = [
 <template>
   <div class="trigger-config-panel">
     <!-- Trigger Type Selection -->
-    <div class="mb-6">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    <div class="trigger-type-section">
+      <label class="trigger-label">
         {{ t('trigger.selectType') }}
       </label>
-      <div class="space-y-2">
+      <div class="trigger-options">
         <button
           v-for="option in triggerTypeOptions"
           :key="option.value"
           type="button"
-          class="w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left"
-          :class="[
-            localTriggerType === option.value
-              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600',
-          ]"
+          class="trigger-option"
+          :class="{ selected: localTriggerType === option.value }"
           :disabled="readonly"
           @click="handleTypeChange(option.value as StartTriggerType)"
         >
-          <span class="text-lg">{{ option.icon }}</span>
-          <div class="flex-1">
-            <div class="font-medium text-gray-900 dark:text-gray-100">{{ option.label }}</div>
-            <div class="text-sm text-gray-500 dark:text-gray-400">{{ option.description }}</div>
+          <span class="trigger-icon">{{ option.icon }}</span>
+          <div class="trigger-option-content">
+            <div class="trigger-option-label">{{ option.label }}</div>
+            <div class="trigger-option-desc">{{ option.description }}</div>
           </div>
-          <div v-if="localTriggerType === option.value" class="text-primary-500">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <div v-if="localTriggerType === option.value" class="trigger-check">
+            <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20">
               <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
             </svg>
           </div>
@@ -211,71 +207,71 @@ const timezoneOptions = [
     <!-- Type-specific Configuration -->
     <div class="trigger-config-form">
       <!-- Manual - No config needed -->
-      <div v-if="localTriggerType === 'manual'" class="text-sm text-gray-500 dark:text-gray-400 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+      <div v-if="localTriggerType === 'manual'" class="trigger-manual-hint">
         <p>{{ t('trigger.manualDescription') }}</p>
       </div>
 
       <!-- Webhook Config -->
-      <div v-else-if="localTriggerType === 'webhook'" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div v-else-if="localTriggerType === 'webhook'" class="trigger-form-fields">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('trigger.webhook.secret') }}
           </label>
           <input
             :value="webhookConfig.secret"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            class="form-input"
             :placeholder="t('trigger.webhook.secretPlaceholder')"
             :disabled="readonly"
             @input="updateField('secret', ($event.target as HTMLInputElement).value)"
           >
-          <p class="mt-1 text-xs text-gray-500">{{ t('trigger.webhook.secretHint') }}</p>
+          <p class="form-hint">{{ t('trigger.webhook.secretHint') }}</p>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('trigger.webhook.allowedIps') }}
           </label>
           <input
             :value="(webhookConfig.allowed_ips || []).join(', ')"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            class="form-input"
             :placeholder="t('trigger.webhook.allowedIpsPlaceholder')"
             :disabled="readonly"
             @input="updateField('allowed_ips', ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean))"
           >
-          <p class="mt-1 text-xs text-gray-500">{{ t('trigger.webhook.allowedIpsHint') }}</p>
+          <p class="form-hint">{{ t('trigger.webhook.allowedIpsHint') }}</p>
         </div>
       </div>
 
       <!-- Schedule Config -->
-      <div v-else-if="localTriggerType === 'schedule'" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div v-else-if="localTriggerType === 'schedule'" class="trigger-form-fields">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('schedules.form.cronExpression') }}
           </label>
           <input
             :value="scheduleConfig.cron_expression"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono"
+            class="form-input code-input"
             placeholder="0 9 * * *"
             :disabled="readonly"
             @input="updateField('cron_expression', ($event.target as HTMLInputElement).value)"
           >
-          <p class="mt-1 text-xs text-gray-500">{{ t('schedules.form.cronHint') }}</p>
+          <p class="form-hint">{{ t('schedules.form.cronHint') }}</p>
         </div>
 
         <!-- Cron Examples -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('schedules.cronExamples.title') }}
           </label>
-          <div class="flex flex-wrap gap-2">
+          <div class="cron-examples">
             <button
               v-for="example in cronExamples"
               :key="example.value"
               type="button"
-              class="px-2 py-1 text-xs border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              class="cron-example-chip"
               :disabled="readonly"
               @click="updateField('cron_expression', example.value)"
             >
@@ -284,13 +280,13 @@ const timezoneOptions = [
           </div>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('schedules.form.timezone') }}
           </label>
           <select
             :value="scheduleConfig.timezone"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            class="form-input"
             :disabled="readonly"
             @change="updateField('timezone', ($event.target as HTMLSelectElement).value)"
           >
@@ -300,19 +296,20 @@ const timezoneOptions = [
       </div>
 
       <!-- Slack Config -->
-      <div v-else-if="localTriggerType === 'slack'" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div v-else-if="localTriggerType === 'slack'" class="trigger-form-fields">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('trigger.slack.eventTypes') }}
           </label>
-          <div class="space-y-2">
+          <div class="checkbox-group">
             <label
               v-for="option in slackEventOptions"
               :key="option.value"
-              class="flex items-center gap-2"
+              class="checkbox-item"
             >
               <input
                 type="checkbox"
+                class="checkbox-input"
                 :checked="(slackConfig.event_types || []).includes(option.value)"
                 :disabled="readonly"
                 @change="() => {
@@ -323,42 +320,42 @@ const timezoneOptions = [
                   updateField('event_types', newValue)
                 }"
               >
-              <span class="text-sm text-gray-700 dark:text-gray-300">{{ option.label }}</span>
+              <span class="checkbox-label">{{ option.label }}</span>
             </label>
           </div>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('trigger.slack.channelFilter') }}
           </label>
           <input
             :value="(slackConfig.channel_filter || []).join(', ')"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            class="form-input"
             :placeholder="t('trigger.slack.channelFilterPlaceholder')"
             :disabled="readonly"
             @input="updateField('channel_filter', ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean))"
           >
-          <p class="mt-1 text-xs text-gray-500">{{ t('trigger.slack.channelFilterHint') }}</p>
+          <p class="form-hint">{{ t('trigger.slack.channelFilterHint') }}</p>
         </div>
       </div>
 
       <!-- Email Config -->
-      <div v-else-if="localTriggerType === 'email'" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+      <div v-else-if="localTriggerType === 'email'" class="trigger-form-fields">
+        <div class="form-group">
+          <label class="form-label">
             {{ t('trigger.email.triggerCondition') }}
           </label>
           <input
             :value="emailConfig.trigger_condition"
             type="text"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            class="form-input"
             :placeholder="t('trigger.email.triggerConditionPlaceholder')"
             :disabled="readonly"
             @input="updateField('trigger_condition', ($event.target as HTMLInputElement).value)"
           >
-          <p class="mt-1 text-xs text-gray-500">{{ t('trigger.email.triggerConditionHint') }}</p>
+          <p class="form-hint">{{ t('trigger.email.triggerConditionHint') }}</p>
         </div>
       </div>
     </div>
@@ -367,6 +364,205 @@ const timezoneOptions = [
 
 <style scoped>
 .trigger-config-panel {
-  @apply p-4;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Trigger Type Section */
+.trigger-type-section {
+  margin-bottom: 0.5rem;
+}
+
+.trigger-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+}
+
+.trigger-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.trigger-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background, #fff);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.trigger-option:hover:not(:disabled) {
+  border-color: var(--color-border-hover, #d1d5db);
+  background: var(--color-surface-hover, #f9fafb);
+}
+
+.trigger-option.selected {
+  border-color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.trigger-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.trigger-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.trigger-option-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.trigger-option-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.trigger-option-desc {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.125rem;
+}
+
+.trigger-check {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* Form Fields */
+.trigger-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.trigger-manual-hint {
+  padding: 0.75rem;
+  background: var(--color-surface);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.trigger-manual-hint p {
+  margin: 0;
+}
+
+/* Form Elements - matching PropertiesPanel */
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: 0.375rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-background, #fff);
+  color: var(--color-text);
+  transition: border-color 0.15s;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-input:disabled {
+  background: var(--color-surface);
+  cursor: not-allowed;
+}
+
+.code-input {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+}
+
+.form-hint {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+/* Cron Examples */
+.cron-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.cron-example-chip {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-background, #fff);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cron-example-chip:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-border-hover, #d1d5db);
+  color: var(--color-text);
+}
+
+.cron-example-chip:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Checkbox Group */
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.checkbox-input {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 4px;
+  accent-color: var(--color-primary);
+}
+
+.checkbox-label {
+  font-size: 0.8125rem;
+  color: var(--color-text);
 }
 </style>

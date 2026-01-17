@@ -25,7 +25,7 @@ const props = defineProps<{
 }>()
 
 // Active tab state
-const activeTab = ref<'config' | 'flow' | 'trigger' | 'copilot' | 'run'>('config')
+const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
 
 // Check if step is a generic start block (not specialized trigger blocks)
 // Specialized trigger blocks (schedule_trigger, webhook_trigger) configure via Config tab, not Trigger tab
@@ -549,7 +549,9 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         </svg>
         {{ t('editor.tabs.config') }}
       </button>
+      <!-- Flow Tab (hidden for start blocks since they don't have flow config) -->
       <button
+        v-if="!isGenericStartBlock"
         class="tab-button"
         :class="{ active: activeTab === 'flow' }"
         @click="activeTab = 'flow'"
@@ -561,18 +563,6 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
           <polyline points="8 14 12 18 16 14"/>
         </svg>
         {{ t('editor.tabs.flow') }}
-      </button>
-      <!-- Trigger Tab (only for generic Start block, not specialized trigger blocks) -->
-      <button
-        v-if="isGenericStartBlock"
-        class="tab-button"
-        :class="{ active: activeTab === 'trigger' }"
-        @click="activeTab = 'trigger'"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-        {{ t('editor.tabs.trigger') }}
       </button>
       <button
         class="tab-button"
@@ -697,6 +687,24 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
             :schema="configSchema"
             :ui-config="uiConfig"
             :disabled="readonlyMode"
+          />
+        </div>
+
+        <!-- Trigger Configuration (integrated into Config tab for start blocks) -->
+        <div v-if="isGenericStartBlock" class="form-section trigger-section">
+          <h4 class="section-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            {{ t('editor.tabs.trigger') }}
+          </h4>
+          <TriggerConfigPanel
+            :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
+            :trigger-config="step?.trigger_config as object || {}"
+            :step-id="step?.id"
+            :readonly="readonlyMode"
+            class="integrated-trigger-panel"
+            @update:trigger="handleTriggerUpdate"
           />
         </div>
 
@@ -1464,17 +1472,6 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       />
     </div>
 
-    <!-- Trigger Tab Content (only for generic Start block) -->
-    <div v-if="activeTab === 'trigger' && isGenericStartBlock" class="properties-body trigger-container">
-      <TriggerConfigPanel
-        :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
-        :trigger-config="step?.trigger_config as object || {}"
-        :step-id="step?.id"
-        :readonly="readonlyMode"
-        @update:trigger="handleTriggerUpdate"
-      />
-    </div>
-
     <!-- Copilot Tab Content (always available) -->
     <div v-if="activeTab === 'copilot'" class="properties-body copilot-container">
       <CopilotTab
@@ -2044,6 +2041,22 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
   background: var(--color-background);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
+}
+
+/* Integrated Trigger Panel (inside Config tab) */
+.integrated-trigger-panel {
+  margin-top: 0.5rem;
+}
+
+/* Trigger Section */
+.trigger-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.trigger-section .section-title svg {
+  opacity: 0.7;
 }
 
 /* Footer */
