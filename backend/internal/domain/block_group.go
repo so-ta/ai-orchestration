@@ -153,32 +153,3 @@ type WhileConfig struct {
 	MaxIterations int    `json:"max_iterations,omitempty"` // Safety limit (default: 100)
 	DoWhile       bool   `json:"do_while,omitempty"`       // Execute at least once before checking condition
 }
-
-// BlockGroupRun represents the execution state of a block group
-type BlockGroupRun struct {
-	ID           uuid.UUID       `json:"id"`
-	TenantID     uuid.UUID       `json:"tenant_id"`
-	RunID        uuid.UUID       `json:"run_id"`
-	BlockGroupID uuid.UUID       `json:"block_group_id"`
-	Status       StepRunStatus   `json:"status"`
-	Iteration    int             `json:"iteration,omitempty"` // For loop groups
-	Input        json.RawMessage `json:"input,omitempty"`
-	Output       json.RawMessage `json:"output,omitempty"`
-	Error        string          `json:"error,omitempty"`
-	StartedAt    *time.Time      `json:"started_at,omitempty"`
-	CompletedAt  *time.Time      `json:"completed_at,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
-}
-
-// NewBlockGroupRun creates a new block group run
-func NewBlockGroupRun(tenantID, runID, blockGroupID uuid.UUID) *BlockGroupRun {
-	now := time.Now().UTC()
-	return &BlockGroupRun{
-		ID:           uuid.New(),
-		TenantID:     tenantID,
-		RunID:        runID,
-		BlockGroupID: blockGroupID,
-		Status:       StepRunStatusPending,
-		CreatedAt:    now,
-	}
-}

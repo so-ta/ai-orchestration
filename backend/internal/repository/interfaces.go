@@ -192,14 +192,6 @@ type BlockGroupRepository interface {
 	Delete(ctx context.Context, tenantID, id uuid.UUID) error
 }
 
-// BlockGroupRunRepository defines the interface for block group run persistence
-type BlockGroupRunRepository interface {
-	Create(ctx context.Context, run *domain.BlockGroupRun) error
-	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroupRun, error)
-	ListByRun(ctx context.Context, tenantID, runID uuid.UUID) ([]*domain.BlockGroupRun, error)
-	Update(ctx context.Context, run *domain.BlockGroupRun) error
-}
-
 // CredentialRepository defines the interface for credential persistence
 type CredentialRepository interface {
 	// Create creates a new credential
