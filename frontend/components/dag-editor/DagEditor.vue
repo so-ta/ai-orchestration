@@ -7,11 +7,8 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
-import TriggerBadge from './TriggerBadge.vue'
 import NodeIcon from './NodeIcon.vue'
 import { getBlockIcon } from '~/composables/useBlockIcons'
-
-type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
 // Constants for group node ID prefix
 const GROUP_NODE_PREFIX = 'group_'
@@ -928,7 +925,6 @@ const stepNodes = computed<Node[]>(() => {
         stepRun,  // Include step run data if available
         inputPorts,   // Include input ports for multiple handles
         outputPorts,  // Include output ports for multiple handles
-        triggerType: step.type === 'start' ? (step.trigger_type as StartTriggerType || 'manual') : undefined, // Trigger type for Start blocks
         icon: getStepIcon(step.type), // Icon for Miro-style display
       },
     }
@@ -2599,15 +2595,6 @@ defineExpose({
             type="target"
             :position="Position.Left"
             class="dag-handle-miro dag-handle-target dag-handle-center"
-          />
-
-          <!-- Trigger Badge for Start blocks (positioned top-left of icon box) -->
-          <TriggerBadge
-            v-if="isStartNode(data.type)"
-            :trigger-type="data.triggerType"
-            :step-type="data.type"
-            size="sm"
-            class="dag-node-trigger-badge-miro"
           />
 
           <!-- Icon Box (main visual element) -->

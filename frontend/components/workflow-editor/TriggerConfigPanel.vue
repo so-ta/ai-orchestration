@@ -6,8 +6,6 @@
  * トリガータイプ選択とタイプ別の設定フォームを提供
  */
 
-import TriggerBadge from '~/components/dag-editor/TriggerBadge.vue'
-
 const { t } = useI18n()
 
 type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
@@ -177,14 +175,6 @@ const timezoneOptions = [
 
 <template>
   <div class="trigger-config-panel">
-    <!-- Current Trigger Badge -->
-    <div class="mb-4">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        {{ t('trigger.currentTrigger') }}
-      </label>
-      <TriggerBadge :trigger-type="localTriggerType" size="md" />
-    </div>
-
     <!-- Trigger Type Selection -->
     <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
