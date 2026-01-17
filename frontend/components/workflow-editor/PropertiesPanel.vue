@@ -27,8 +27,10 @@ const props = defineProps<{
 // Active tab state
 const activeTab = ref<'config' | 'flow' | 'trigger' | 'copilot' | 'run'>('config')
 
-// Check if step is a start block (for showing trigger tab)
-const isStartBlock = computed(() => props.step?.type === 'start')
+// Check if step is a generic start block (not specialized trigger blocks)
+// Specialized trigger blocks (schedule_trigger, webhook_trigger) configure via Config tab, not Trigger tab
+// Generic start block shows Trigger tab to allow selecting trigger type
+const isGenericStartBlock = computed(() => props.step?.type === 'start')
 
 // Keep current tab when step changes (no automatic tab switching)
 
@@ -560,9 +562,9 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         </svg>
         {{ t('editor.tabs.flow') }}
       </button>
-      <!-- Trigger Tab (only for Start blocks) -->
+      <!-- Trigger Tab (only for generic Start block, not specialized trigger blocks) -->
       <button
-        v-if="isStartBlock"
+        v-if="isGenericStartBlock"
         class="tab-button"
         :class="{ active: activeTab === 'trigger' }"
         @click="activeTab = 'trigger'"
@@ -1462,8 +1464,8 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       />
     </div>
 
-    <!-- Trigger Tab Content (only for Start blocks) -->
-    <div v-if="activeTab === 'trigger' && isStartBlock" class="properties-body trigger-container">
+    <!-- Trigger Tab Content (only for generic Start block) -->
+    <div v-if="activeTab === 'trigger' && isGenericStartBlock" class="properties-body trigger-container">
       <TriggerConfigPanel
         :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
         :trigger-config="step?.trigger_config as object || {}"

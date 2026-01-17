@@ -6,8 +6,6 @@
  * トリガータイプ選択とタイプ別の設定フォームを提供
  */
 
-import TriggerBadge from '~/components/dag-editor/TriggerBadge.vue'
-
 const { t } = useI18n()
 
 type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
@@ -66,7 +64,7 @@ watch(() => props.triggerConfig, (newVal) => {
 
 // Trigger type options
 const triggerTypeOptions = [
-  { value: 'manual', label: t('trigger.type.manual'), icon: '▶', description: t('trigger.description.manual') },
+  { value: 'manual', label: t('trigger.type.manual'), icon: '👤', description: t('trigger.description.manual') },
   { value: 'webhook', label: t('trigger.type.webhook'), icon: '↗', description: t('trigger.description.webhook') },
   { value: 'schedule', label: t('trigger.type.schedule'), icon: '⏰', description: t('trigger.description.schedule') },
   { value: 'slack', label: t('trigger.type.slack'), icon: '#', description: t('trigger.description.slack') },
@@ -177,14 +175,6 @@ const timezoneOptions = [
 
 <template>
   <div class="trigger-config-panel">
-    <!-- Current Trigger Badge -->
-    <div class="mb-4">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        {{ t('trigger.currentTrigger') }}
-      </label>
-      <TriggerBadge :trigger-type="localTriggerType" size="md" />
-    </div>
-
     <!-- Trigger Type Selection -->
     <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

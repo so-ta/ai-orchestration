@@ -8,6 +8,8 @@ import (
 
 func (r *Registry) registerControlBlocks() {
 	r.register(StartBlock())
+	r.register(ScheduleTriggerBlock())
+	r.register(WebhookTriggerBlock())
 	r.register(WaitBlock())
 	r.register(ErrorBlock())
 	r.register(HumanInLoopBlock())
@@ -180,5 +182,160 @@ return ctx.human.requestApproval({
 			{Code: "HIL_002", Name: "REJECTED", Description: "Human rejected", Retryable: false},
 		},
 		Enabled: true,
+	}
+}
+
+// ScheduleTriggerBlock defines a schedule-based workflow trigger
+func ScheduleTriggerBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "schedule_trigger",
+		Version:         1,
+		Name:            "Schedule Trigger",
+		Description:     "ワークフローを定期実行するトリガー",
+		Category:        domain.BlockCategoryFlow,
+		Subcategory:     domain.BlockSubcategoryControl,
+		Icon:            "clock",
+		ParentBlockSlug: "start",
+		ConfigDefaults:  json.RawMessage(`{"trigger_type": "schedule"}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"required": ["cron_expression"],
+			"properties": {
+				"cron_expression": {
+					"type": "string",
+					"title": "Cron式",
+					"description": "実行スケジュール（例: 0 9 * * *）",
+					"default": "0 9 * * *"
+				},
+				"timezone": {
+					"type": "string",
+					"title": "タイムゾーン",
+					"default": "Asia/Tokyo",
+					"enum": ["Asia/Tokyo", "UTC", "America/New_York", "Europe/London"]
+				},
+				"enabled": {
+					"type": "boolean",
+					"title": "有効",
+					"default": true
+				},
+				"input_schema": {
+					"type": "object",
+					"title": "入力スキーマ",
+					"description": "ワークフロー実行時の入力データのスキーマを定義"
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Scheduled execution input"},
+		},
+		Code: `return input;`,
+		PreProcess: `
+if (!config.cron_expression) {
+    throw new Error('[SCHED_001] Cron expression is required');
+}
+return input;
+`,
+		UIConfig: json.RawMessage(`{"icon": "clock", "color": "#22c55e"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "SCHED_001", Name: "INVALID_CRON", Description: "Cron式が無効です", Retryable: false},
+		},
+		Enabled: true,
+		TestCases: []BlockTestCase{
+			{
+				Name:           "passthrough with schedule config",
+				Input:          map[string]interface{}{"data": "test"},
+				Config:         map[string]interface{}{"cron_expression": "0 9 * * *", "timezone": "Asia/Tokyo"},
+				ExpectedOutput: map[string]interface{}{"data": "test"},
+			},
+		},
+	}
+}
+
+// WebhookTriggerBlock defines a webhook-based workflow trigger
+func WebhookTriggerBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "webhook_trigger",
+		Version:         1,
+		Name:            "Webhook Trigger",
+		Description:     "Webhook経由でワークフローをトリガー",
+		Category:        domain.BlockCategoryFlow,
+		Subcategory:     domain.BlockSubcategoryControl,
+		Icon:            "webhook",
+		ParentBlockSlug: "start",
+		ConfigDefaults:  json.RawMessage(`{"trigger_type": "webhook"}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"secret": {
+					"type": "string",
+					"title": "シークレット",
+					"description": "Webhook検証用シークレット"
+				},
+				"allowed_ips": {
+					"type": "array",
+					"items": {"type": "string"},
+					"title": "許可IPアドレス",
+					"description": "空の場合は全IP許可"
+				},
+				"input_mapping": {
+					"type": "object",
+					"title": "入力マッピング",
+					"description": "Webhookペイロードから入力へのマッピング"
+				},
+				"input_schema": {
+					"type": "object",
+					"title": "入力スキーマ",
+					"description": "ワークフロー実行時の入力データのスキーマを定義"
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Webhook payload data"},
+		},
+		Code: `return input;`,
+		PreProcess: `
+// IP address validation
+if (config.allowed_ips && config.allowed_ips.length > 0) {
+    const clientIP = input.__webhook_client_ip;
+    if (clientIP && !config.allowed_ips.includes(clientIP)) {
+        throw new Error('[WEBHOOK_002] IP address not in allowlist: ' + clientIP);
+    }
+}
+
+// HMAC signature validation
+if (config.secret) {
+    const signature = input.__webhook_signature;
+    const payload = input.__webhook_raw_body;
+    if (signature && payload) {
+        const expectedSignature = ctx.crypto.hmacSha256(config.secret, payload);
+        if (signature !== expectedSignature && signature !== 'sha256=' + expectedSignature) {
+            throw new Error('[WEBHOOK_001] Invalid webhook signature');
+        }
+    }
+}
+
+// Remove internal webhook metadata before passing to workflow
+const cleanInput = { ...input };
+delete cleanInput.__webhook_client_ip;
+delete cleanInput.__webhook_signature;
+delete cleanInput.__webhook_raw_body;
+return cleanInput;
+`,
+		UIConfig: json.RawMessage(`{"icon": "webhook", "color": "#3b82f6"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "WEBHOOK_001", Name: "INVALID_SIGNATURE", Description: "署名が無効です", Retryable: false},
+			{Code: "WEBHOOK_002", Name: "IP_NOT_ALLOWED", Description: "IPアドレスが許可されていません", Retryable: false},
+		},
+		Enabled: true,
+		TestCases: []BlockTestCase{
+			{
+				Name:           "passthrough webhook payload without validation",
+				Input:          map[string]interface{}{"event": "push", "data": "payload"},
+				Config:         map[string]interface{}{},
+				ExpectedOutput: map[string]interface{}{"event": "push", "data": "payload"},
+			},
+		},
 	}
 }
