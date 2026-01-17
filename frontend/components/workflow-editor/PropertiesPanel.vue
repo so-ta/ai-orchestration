@@ -595,6 +595,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
       </button>
     </div>
 
+
     <!-- Config Tab Content -->
     <div v-if="activeTab === 'config'" class="properties-body-wrapper">
       <!-- Empty State (no step selected) -->
@@ -1526,7 +1527,6 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
   height: 100%;
   background: var(--color-surface);
 }
-
 /* Body Wrapper for Settings Tab */
 .properties-body-wrapper {
   flex: 1;

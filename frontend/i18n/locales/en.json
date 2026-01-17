@@ -29,7 +29,12 @@
     "success": "Success",
     "all": "All",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "justNow": "Just now",
+    "minutesAgo": "{count}m ago",
+    "hoursAgo": "{count}h ago",
+    "copied": "{item} copied",
+    "copyFailed": "Failed to copy"
   },
   "nav": {
     "projects": "Projects",
@@ -291,6 +296,8 @@
     "addToFavorites": "Add to favorites",
     "removeFromFavorites": "Remove from favorites",
     "autoLayout": "Auto Layout",
+    "blockDetails": "Block Details",
+    "executionDetails": "Execution",
     "groupDeleted": "Group deleted",
     "groupDeleteFailed": "Failed to delete group",
     "stepTypes": {
@@ -477,6 +484,26 @@
     "expectedFields": "Expected Input Fields",
     "required": "Required",
     "jsonHint": "Enter the above fields as JSON",
+    "runHistory": "Run History",
+    "noRuns": "No runs yet",
+    "noSteps": "No steps in this run",
+    "steps": "Steps",
+    "showOnDag": "Show on DAG",
+    "showDetails": "Show Details",
+    "selectStepRun": "Select a step",
+    "selectStepRunHint": "Select a run from the bottom panel and click a step to view details",
+    "filter": {
+      "all": "All",
+      "test": "Test",
+      "production": "Production"
+    },
+    "trigger": {
+      "manual": "Manual",
+      "test": "Test",
+      "schedule": "Schedule",
+      "webhook": "Webhook",
+      "internal": "Internal"
+    },
     "errors": {
       "noRunAvailable": "No run available. Execute the workflow first.",
       "noStepSelected": "No step selected",

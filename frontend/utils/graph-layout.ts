@@ -55,10 +55,10 @@ export interface GroupLayoutResult {
 
 const DEFAULT_OPTIONS: Required<LayoutOptions> = {
   direction: 'LR', // Left-to-Right layout
-  nodeWidth: 180,
-  nodeHeight: 60,
-  nodeSeparation: 60,
-  rankSeparation: 40, // Reduced from 120 to 40 (1/3)
+  nodeWidth: 80,   // Miro-style: 48px icon + label (~72px) + margin
+  nodeHeight: 70,  // Miro-style: 48px icon + 2px gap + ~14px label + margin
+  nodeSeparation: 40,
+  rankSeparation: 40,
 }
 
 /**
@@ -763,7 +763,7 @@ export function calculateLayoutWithGroups(
     const groupSteps = stepsByGroup.get(group.id) || []
     if (groupSteps.length === 0) {
       // Empty group - use minimum size
-      groupSizes.set(group.id, { width: 200, height: 150 })
+      groupSizes.set(group.id, { width: 160, height: 150 })
       groupInternalLayouts.set(group.id, [])
       continue
     }
@@ -835,7 +835,7 @@ export function calculateLayoutWithGroups(
     const groupWidth = snapToGrid(maxX - minX + GROUP_PADDING * 2)
     const groupHeight = snapToGrid(maxY - minY + GROUP_PADDING * 2 + GROUP_HEADER_HEIGHT)
     groupSizes.set(group.id, {
-      width: Math.max(200, groupWidth),
+      width: Math.max(160, groupWidth),
       height: Math.max(150, groupHeight),
     })
   }

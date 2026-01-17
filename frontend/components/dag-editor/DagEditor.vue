@@ -8,6 +8,8 @@ import '@vue-flow/minimap/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
 import TriggerBadge from './TriggerBadge.vue'
+import NodeIcon from './NodeIcon.vue'
+import { getBlockIcon } from '~/composables/useBlockIcons'
 
 type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
@@ -74,7 +76,7 @@ const emit = defineEmits<{
   (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: GroupRole, movedGroups?: MovedGroup[]): void
   (e: 'edge:add', source: string, target: string, sourcePort?: string, targetPort?: string): void
   (e: 'edge:delete', edgeId: string): void
-  (e: 'pane:click'): void
+  (e: 'pane:click' | 'autoLayout'): void
   (e: 'step:showDetails', stepRun: StepRun): void
   // Block group events
   (e: 'group:select', group: BlockGroup): void
@@ -99,6 +101,12 @@ const emit = defineEmits<{
 }>()
 
 const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, viewport, zoomIn, zoomOut, zoomTo } = useVueFlow()
+
+// Right offset for auto-layout button (shift left when properties panel is open)
+const autoLayoutRightOffset = computed(() => {
+  // When a step is selected, the floating right panel (360px width + 12px right + 12px gap) is open
+  return props.selectedStepId ? 360 + 12 + 12 : 12
+})
 
 // Selected edge for deletion
 const selectedEdgeId = ref<string | null>(null)
@@ -361,8 +369,9 @@ const GROUP_PADDING = 10
 const GROUP_BOUNDARY_WIDTH = 20
 
 // Default step node size (used as fallback when actual size is not available)
-const DEFAULT_STEP_NODE_WIDTH = 150
-const DEFAULT_STEP_NODE_HEIGHT = 60
+// Miro-style: 48px icon + label width (~80px total), 48px icon + 2px gap + ~14px label (~70px total)
+const DEFAULT_STEP_NODE_WIDTH = 80
+const DEFAULT_STEP_NODE_HEIGHT = 70
 
 // Default group size for new groups
 const DEFAULT_GROUP_WIDTH = 400
@@ -920,6 +929,7 @@ const stepNodes = computed<Node[]>(() => {
         inputPorts,   // Include input ports for multiple handles
         outputPorts,  // Include output ports for multiple handles
         triggerType: step.type === 'start' ? (step.trigger_type as StartTriggerType || 'manual') : undefined, // Trigger type for Start blocks
+        icon: getStepIcon(step.type), // Icon for Miro-style display
       },
     }
   })
@@ -1054,6 +1064,9 @@ const flowEdges = computed<FlowEdge[]>(() => {
       strokeWidth = 3
     }
 
+    // Skip edge labels for edges involving group blocks (both from and to groups)
+    const edgeLabel = isGroupEdge ? undefined : getEdgeLabel(edge.source_port, edge.condition)
+
     result.push({
       id: edge.id,
       source,
@@ -1062,7 +1075,7 @@ const flowEdges = computed<FlowEdge[]>(() => {
       targetHandle: edge.target_port || undefined, // Connect to specific input port
       type: 'smoothstep',
       animated: flowStatus.animated || isSelected,
-      label: getEdgeLabel(edge.source_port, edge.condition),
+      label: edgeLabel,
       labelBgStyle: { fill: 'white', fillOpacity: 0.9 },
       labelStyle: { fill: color, fontWeight: 500, fontSize: 11 },
       labelShowBg: true,
@@ -1854,8 +1867,8 @@ function getStepRunStatusColor(status?: string): string {
   return colors[status] || '#94a3b8'
 }
 
-// Get step run status icon
-function getStepRunStatusIcon(status?: string): string {
+// Get step run status icon (unused in Miro design but kept for potential future use)
+function _getStepRunStatusIcon(status?: string): string {
   if (!status) return ''
   const icons: Record<string, string> = {
     pending: '○',
@@ -2021,13 +2034,26 @@ function getStepColor(type: string) {
   return colors[type] || '#64748b'
 }
 
+// Get step icon based on type
+function getStepIcon(type: string): string {
+  // Use blockDefinitions if available to get custom icon
+  if (props.blockDefinitions) {
+    const blockDef = props.blockDefinitions.find(b => b.slug === type)
+    if (blockDef?.icon) {
+      return blockDef.icon
+    }
+  }
+  // Fall back to default icon mapping
+  return getBlockIcon(type)
+}
+
 // Check if step type is start
 function isStartNode(type: string): boolean {
   return type === 'start'
 }
 
-// Minimum size for group nodes
-const MIN_GROUP_WIDTH = 200
+// Minimum size for group nodes (Miro-style: fits one 80x70 node with padding)
+const MIN_GROUP_WIDTH = 160
 const MIN_GROUP_HEIGHT = 150
 
 // Track resize state for position compensation
@@ -2519,29 +2545,18 @@ defineExpose({
                 '--handle-color': port.color,
               }"
             />
-            <!-- Output Port Labels -->
-            <div
-              v-for="(port, index) in data.outputPorts"
-              :key="`label-${port.name}`"
-              class="dag-group-port-label"
-              :style="{
-                top: `${50 + (index - (data.outputPorts.length - 1) / 2) * 40}%`,
-                color: port.color,
-              }"
-            >
-              {{ port.label }}
-            </div>
+            <!-- Output Port Labels (hidden for cleaner look) -->
           </div>
 
           <!-- Group content area is handled by Vue Flow's built-in group functionality -->
         </div>
       </template>
 
-      <!-- Custom Node Template with Handles -->
+      <!-- Custom Node Template - Miro-style Icon Design -->
       <template #node-custom="{ data }">
         <div
           :class="[
-            'dag-node',
+            'dag-node-miro',
             { 'dag-node-selected': data.isSelected },
             { 'dag-node-start': isStartNode(data.type) },
             { 'dag-node-has-run': data.stepRun },
@@ -2550,20 +2565,18 @@ defineExpose({
             { 'dag-node-failed': data.stepRun?.status === 'failed' }
           ]"
           :style="{
-            borderColor: getStepColor(data.type),
+            '--node-color': getStepColor(data.type),
           }"
         >
-          <!-- Step Run Status Indicator -->
+          <!-- Step Run Status Indicator (top-right corner of icon box) -->
           <div
             v-if="data.stepRun"
-            class="dag-node-status"
+            class="dag-node-status-miro"
             :style="{ backgroundColor: getStepRunStatusColor(data.stepRun.status) }"
             :title="`${data.stepRun.status} - Click for details`"
-          >
-            {{ getStepRunStatusIcon(data.stepRun.status) }}
-          </div>
+          />
 
-          <!-- Input Handles (left) - Multiple for merging blocks like join/aggregate -->
+          <!-- Input Handles (left side of icon box) -->
           <template v-if="!isStartNode(data.type) && data.inputPorts && data.inputPorts.length > 1">
             <Handle
               v-for="(port, index) in data.inputPorts"
@@ -2571,25 +2584,12 @@ defineExpose({
               :key="port.name"
               type="target"
               :position="Position.Left"
-              :class="['dag-handle', 'dag-handle-target', 'dag-handle-multi']"
+              :class="['dag-handle-miro', 'dag-handle-target']"
               :style="{
-                '--handle-top': `${25 + (index * 50 / (data.inputPorts.length - 1 || 1))}%`,
+                '--handle-top': `${24 + (index - (data.inputPorts.length - 1) / 2) * 12}px`,
               }"
               :title="port.label"
             />
-            <!-- Port labels on the left side -->
-            <div class="dag-port-labels dag-port-labels-left">
-              <div
-                v-for="(port, index) in data.inputPorts"
-                :key="`input-label-${port.name}`"
-                class="dag-port-label dag-port-label-left"
-                :style="{
-                  top: `${25 + (index * 50 / (data.inputPorts.length - 1 || 1))}%`,
-                }"
-              >
-                {{ port.label }}
-              </div>
-            </div>
           </template>
           <!-- Single input handle for standard blocks (hidden for Start nodes) -->
           <Handle
@@ -2597,30 +2597,31 @@ defineExpose({
             id="input"
             type="target"
             :position="Position.Left"
-            class="dag-handle dag-handle-target"
+            class="dag-handle-miro dag-handle-target dag-handle-center"
           />
 
-          <!-- Trigger Badge for Start blocks -->
+          <!-- Trigger Badge for Start blocks (positioned top-left of icon box) -->
           <TriggerBadge
             v-if="data.triggerType"
             :trigger-type="data.triggerType"
             size="sm"
-            class="dag-node-trigger-badge"
+            class="dag-node-trigger-badge-miro"
           />
 
-          <!-- Minimal Linear: Header with dot indicator -->
-          <div class="dag-node-header">
-            <span class="dag-node-indicator" :style="{ backgroundColor: getStepColor(data.type) }" />
-            <span class="dag-node-type">{{ data.type }}</span>
+          <!-- Icon Box (main visual element) -->
+          <div class="dag-node-icon-box">
+            <NodeIcon :icon="data.icon" :color="getStepColor(data.type)" />
           </div>
-          <div class="dag-node-label">{{ data.label }}</div>
+
+          <!-- Label (below icon box) -->
+          <div class="dag-node-label-miro">{{ data.label }}</div>
 
           <!-- Duration indicator for completed step runs -->
-          <div v-if="data.stepRun?.duration_ms" class="dag-node-duration">
+          <div v-if="data.stepRun?.duration_ms" class="dag-node-duration-miro">
             {{ data.stepRun.duration_ms < 1000 ? `${data.stepRun.duration_ms}ms` : `${(data.stepRun.duration_ms / 1000).toFixed(1)}s` }}
           </div>
 
-          <!-- Output Handles (right) - Multiple for branching blocks -->
+          <!-- Output Handles (right side of icon box) - Multiple for branching blocks -->
           <template v-if="data.outputPorts && data.outputPorts.length > 1">
             <Handle
               v-for="(port, index) in data.outputPorts"
@@ -2628,22 +2629,22 @@ defineExpose({
               :key="port.name"
               type="source"
               :position="Position.Right"
-              :class="['dag-handle', 'dag-handle-source', 'dag-handle-multi', 'dag-handle-colored']"
+              :class="['dag-handle-miro', 'dag-handle-source', 'dag-handle-colored']"
               :style="{
-                '--handle-top': `${25 + (index * 50 / (data.outputPorts.length - 1 || 1))}%`,
+                '--handle-top': `${24 + (index - (data.outputPorts.length - 1) / 2) * 12}px`,
                 '--handle-bg': getPortColor(port.name),
                 '--handle-border': getPortColor(port.name),
               }"
               :title="port.label"
             />
-            <!-- Port labels on the right side -->
-            <div class="dag-port-labels">
+            <!-- Port labels (below icon, next to output) -->
+            <div class="dag-port-labels-miro">
               <div
                 v-for="(port, index) in data.outputPorts"
                 :key="`label-${port.name}`"
-                class="dag-port-label"
+                class="dag-port-label-miro"
                 :style="{
-                  top: `${25 + (index * 50 / (data.outputPorts.length - 1 || 1))}%`,
+                  '--label-top': `${24 + (index - (data.outputPorts.length - 1) / 2) * 12}px`,
                   color: getPortColor(port.name),
                 }"
               >
@@ -2657,7 +2658,7 @@ defineExpose({
             id="output"
             type="source"
             :position="Position.Right"
-            class="dag-handle dag-handle-source"
+            class="dag-handle-miro dag-handle-source dag-handle-center"
           />
         </div>
       </template>
@@ -2708,6 +2709,22 @@ defineExpose({
     <div v-if="!readonly && !isDragOver" class="dag-editor-hint">
       Drag blocks here to add steps
     </div>
+
+    <!-- Auto Layout Button -->
+    <button
+      v-if="!readonly"
+      class="auto-layout-button"
+      :style="{ right: autoLayoutRightOffset + 'px' }"
+      data-tooltip="整形する"
+      @click="emit('autoLayout')"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="3" width="7" height="7" rx="1"/>
+        <rect x="14" y="14" width="7" height="7" rx="1"/>
+        <rect x="3" y="14" width="7" height="7" rx="1"/>
+      </svg>
+    </button>
 
   </div>
 </template>
@@ -3390,5 +3407,268 @@ defineExpose({
 
 .edge-delete-button-floating:active {
   background: #fee2e2;
+}
+
+/* Auto Layout Button */
+.auto-layout-button {
+  position: absolute;
+  bottom: 70px;
+  /* right is set dynamically via inline style */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: white;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease, right 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.auto-layout-button:hover {
+  background: #f8fafc;
+  color: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.auto-layout-button:active {
+  transform: scale(0.95);
+}
+
+.auto-layout-button[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 6px 10px;
+  background: #1f2937;
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 6px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.auto-layout-button[data-tooltip]::after {
+  content: '';
+  position: absolute;
+  right: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 4px solid transparent;
+  border-left-color: #1f2937;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.auto-layout-button[data-tooltip]:hover::before,
+.auto-layout-button[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ========================================
+   Miro-style Icon Node Design
+   ======================================== */
+
+/* Hide Vue Flow's default node selection outline for Miro-style nodes */
+:deep(.vue-flow__node-custom.selected),
+:deep(.vue-flow__node-custom:focus),
+:deep(.vue-flow__node-custom:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.dag-node-miro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  width: 48px; /* Fixed width to match icon box */
+  min-width: 48px;
+  overflow: visible; /* Allow label to extend beyond node bounds */
+}
+
+/* Icon Box - Main visual element */
+.dag-node-icon-box {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+/* Selected state for Miro nodes - remove outer box-shadow, only style icon wrapper */
+.dag-node-miro.dag-node-selected {
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+.dag-node-miro.dag-node-selected .dag-node-icon-box :deep(.node-icon-wrapper) {
+  border-color: #3b82f6 !important;
+  box-shadow: none !important;
+}
+
+/* Running state - pulse animation */
+.dag-node-running .dag-node-icon-box :deep(.node-icon-wrapper) {
+  animation: miro-node-pulse 1.5s ease-in-out infinite;
+  border-color: #3b82f6 !important;
+}
+
+@keyframes miro-node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.1);
+  }
+}
+
+/* Completed state - green border */
+.dag-node-completed .dag-node-icon-box :deep(.node-icon-wrapper) {
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+/* Failed state - red border */
+.dag-node-failed .dag-node-icon-box :deep(.node-icon-wrapper) {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+}
+
+/* Label below icon */
+.dag-node-label-miro {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #374151;
+  text-align: center;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+/* Status indicator - top-right corner */
+.dag-node-status-miro {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid white;
+  z-index: 10;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dag-node-running .dag-node-status-miro {
+  animation: status-pulse 1s ease-in-out infinite;
+}
+
+/* Duration indicator */
+.dag-node-duration-miro {
+  margin-top: 2px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.6rem;
+  color: #64748b;
+  font-family: 'SF Mono', Monaco, monospace;
+  white-space: nowrap;
+}
+
+/* Trigger badge position for Miro design */
+.dag-node-trigger-badge-miro {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+/* Miro-style Handle Styles */
+.dag-handle-miro {
+  width: 10px !important;
+  height: 10px !important;
+  background: #ffffff !important;
+  border: 2px solid #d1d5db !important;
+  border-radius: 50% !important;
+  opacity: 0;
+  transition: opacity 0.15s, border-color 0.15s, background-color 0.15s, transform 0.15s;
+}
+
+.dag-node-miro:hover .dag-handle-miro {
+  opacity: 1;
+}
+
+.dag-handle-miro:hover {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  transform: scale(1.3);
+}
+
+/* Handle positioning - attached to 48px icon box edges */
+.dag-handle-miro.dag-handle-target {
+  left: -5px !important; /* Center handle on icon edge (handle is 10px wide) */
+  top: var(--handle-top, 24px) !important;
+  transform: translateY(-50%);
+}
+
+.dag-handle-miro.dag-handle-source {
+  right: -5px !important; /* Center handle on icon edge (handle is 10px wide) */
+  top: var(--handle-top, 24px) !important;
+  transform: translateY(-50%);
+}
+
+/* Center position for single handles - vertically centered on icon box */
+.dag-handle-miro.dag-handle-center {
+  top: 24px !important; /* Center of 48px icon box */
+}
+
+/* Colored handles for branching blocks */
+.dag-handle-miro.dag-handle-colored {
+  background: var(--handle-bg, white) !important;
+  border-color: var(--handle-border, #94a3b8) !important;
+}
+
+.dag-handle-miro.dag-handle-colored:hover {
+  filter: brightness(1.1);
+  transform: scale(1.3);
+}
+
+/* Port labels for Miro design */
+.dag-port-labels-miro {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 8px;
+  pointer-events: none;
+}
+
+.dag-port-label-miro {
+  position: absolute;
+  top: var(--label-top, 24px);
+  transform: translateY(-50%);
+  font-size: 0.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 </style>

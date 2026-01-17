@@ -43,6 +43,12 @@ const {
   closeSlideOut,
   setCurrentProjectId,
   getLastProjectId,
+  // Bottom panel state
+  bottomPanelHeight,
+  bottomPanelResizing,
+  selectedRun,
+  setBottomPanelHeight,
+  setSelectedRun,
 } = useEditorState()
 
 // Project state
@@ -57,6 +63,9 @@ const running = ref(false)
 
 // Run dialog state
 const showRunDialog = ref(false)
+
+// Right panel mode: 'block' for properties, 'run' for run details
+type RightPanelMode = 'block' | 'run'
 
 // Quick search modal
 const showQuickSearch = ref(false)
@@ -190,6 +199,7 @@ async function handleSelectProject(projectId: string) {
     setProjectInUrl(projectId)
     clearSelection()
     selectedGroupId.value = null
+    setSelectedRun(null)
     closeSlideOut()
   } catch {
     toast.error(t('projects.loadFailed'))
@@ -203,6 +213,7 @@ async function handleCreateProject() {
     await createNewProject()
     clearSelection()
     selectedGroupId.value = null
+    setSelectedRun(null)
     closeSlideOut()
   } catch {
     toast.error(t('projects.createFailed'))
@@ -282,18 +293,63 @@ function handleSelectGroupType(type: BlockGroupType) {
 function handleSelectStep(step: Step) {
   selectStep(step.id)
   selectedGroupId.value = null
+  // Clear run selection when editing a block
+  setSelectedRun(null)
+}
+
+// Bottom panel event handlers
+function handleRunSelect(run: Run) {
+  setSelectedRun(run)
+  // Clear block selection when viewing run details
+  clearSelection()
+  selectedGroupId.value = null
+}
+
+function handleBottomPanelHeightChange(height: number) {
+  setBottomPanelHeight(height)
+}
+
+// Step runs for DAG visualization
+const stepRunsForDag = computed(() => {
+  return selectedRun.value?.step_runs || []
+})
+
+// Right panel visibility and mode
+const showRightPanel = computed(() => {
+  return editorState.selectedStep.value !== null || selectedRun.value !== null
+})
+
+const rightPanelMode = computed<RightPanelMode>(() => {
+  // Block editing takes priority
+  if (editorState.selectedStep.value !== null) return 'block'
+  // Otherwise show run details
+  return 'run'
+})
+
+const rightPanelTitle = computed(() => {
+  if (rightPanelMode.value === 'block') {
+    return t('editor.blockDetails')
+  }
+  return undefined // RunDetailPanel has its own header
+})
+
+function handleCloseRightPanel() {
+  clearSelection()
+  setSelectedRun(null)
 }
 
 // Handle pane click (deselect)
 function handlePaneClick() {
   clearSelection()
   selectedGroupId.value = null
+  setSelectedRun(null)
 }
 
 // Block Group Handlers
 function handleSelectGroup(group: BlockGroup) {
   selectedGroupId.value = group.id
   clearSelection()
+  setSelectedRun(null)
 }
 
 // Delete block group
@@ -948,6 +1004,7 @@ async function handleDeleteStep() {
     saving.value = true
     const stepId = step.id
     clearSelection()
+    setSelectedRun(null)
     await projects.deleteStep(project.value.id, stepId)
 
     project.value.steps = (project.value.steps || []).filter(s => s.id !== stepId)
@@ -1039,8 +1096,8 @@ function getGroupOutputPortsForLayout(groupType: BlockGroupType): OutputPort[] {
   return GROUP_OUTPUT_PORTS_FOR_LAYOUT[groupType] || [{ name: 'out', label: 'Output', is_default: true }]
 }
 
-// Auto-layout (available for future use)
-async function _handleAutoLayout() {
+// Auto-layout
+async function handleAutoLayout() {
   if (!project.value || isReadonly.value) return
   const steps = project.value.steps || []
   const edges = project.value.edges || []
@@ -1155,6 +1212,7 @@ useKeyboardShortcuts({
   onClearSelection: () => {
     clearSelection()
     selectedGroupId.value = null
+    setSelectedRun(null)
   },
 })
 
@@ -1210,30 +1268,43 @@ onMounted(async () => {
 
     <!-- Main editor -->
     <template v-else-if="project">
-      <!-- Full Canvas -->
-      <div class="canvas-container">
-        <DagEditor
-          ref="dagEditorRef"
-          :steps="project.steps || []"
-          :edges="project.edges || []"
-          :block-groups="blockGroups"
-          :block-definitions="blockDefinitions"
-          :readonly="isReadonly"
-          :selected-step-id="selectedStepId"
-          :selected-group-id="selectedGroupId"
-          :show-minimap="false"
-          @step:select="handleSelectStep"
-          @step:update="handleUpdateStepPosition"
-          @step:drop="handleStepDrop"
-          @step:assign-group="handleStepAssignGroup"
-          @edge:add="handleAddEdge"
-          @edge:delete="handleDeleteEdge"
-          @pane:click="handlePaneClick"
-          @group:select="handleSelectGroup"
-          @group:update="handleUpdateGroupPosition"
-          @group:drop="handleGroupDrop"
-          @group:move-complete="handleGroupMoveComplete"
-          @group:resize-complete="handleGroupResizeComplete"
+      <!-- Editor Layout with Bottom Panel -->
+      <div class="editor-layout">
+        <!-- Top Area (DAG Canvas) -->
+        <div class="canvas-container" :style="{ height: `calc(100% - ${bottomPanelHeight}px)` }">
+          <DagEditor
+            ref="dagEditorRef"
+            :steps="project.steps || []"
+            :edges="project.edges || []"
+            :block-groups="blockGroups"
+            :block-definitions="blockDefinitions"
+            :step-runs="stepRunsForDag"
+            :readonly="isReadonly"
+            :selected-step-id="selectedStepId"
+            :selected-group-id="selectedGroupId"
+            :show-minimap="false"
+            @step:select="handleSelectStep"
+            @step:update="handleUpdateStepPosition"
+            @step:drop="handleStepDrop"
+            @step:assign-group="handleStepAssignGroup"
+            @edge:add="handleAddEdge"
+            @edge:delete="handleDeleteEdge"
+            @pane:click="handlePaneClick"
+            @group:select="handleSelectGroup"
+            @group:update="handleUpdateGroupPosition"
+            @group:drop="handleGroupDrop"
+            @group:move-complete="handleGroupMoveComplete"
+            @group:resize-complete="handleGroupResizeComplete"
+            @auto-layout="handleAutoLayout"
+          />
+        </div>
+
+        <!-- Bottom Panel (Run History) -->
+        <BottomPanel
+          :workflow-id="project.id"
+          :selected-run-id="selectedRun?.id"
+          @run:select="handleRunSelect"
+          @height-change="handleBottomPanelHeightChange"
         />
       </div>
 
@@ -1266,17 +1337,22 @@ onMounted(async () => {
       <!-- Floating Zoom Control -->
       <FloatingZoomControl
         :zoom="zoomLevel"
-        :panel-open="!!editorState.selectedStep.value"
+        :panel-open="showRightPanel"
         @zoom-in="handleZoomIn"
         @zoom-out="handleZoomOut"
         @zoom-reset="handleZoomReset"
         @set-zoom="handleSetZoom"
       />
 
-      <!-- Right Properties Panel (fixed position) -->
-      <div class="properties-panel-container" :class="{ visible: editorState.selectedStep.value }">
+      <!-- Right Floating Panel -->
+      <FloatingRightPanel
+        :show="showRightPanel"
+        :title="rightPanelTitle"
+        @close="handleCloseRightPanel"
+      >
+        <!-- Block Properties Panel -->
         <PropertiesPanel
-          v-if="editorState.selectedStep.value"
+          v-if="rightPanelMode === 'block' && editorState.selectedStep.value"
           :step="editorState.selectedStep.value"
           :workflow-id="project.id"
           :saving="saving"
@@ -1287,7 +1363,14 @@ onMounted(async () => {
           @delete="handleDeleteStep"
           @update:name="handleUpdateStepName"
         />
-      </div>
+
+        <!-- Run Details Panel -->
+        <RunDetailPanel
+          v-else-if="rightPanelMode === 'run' && selectedRun"
+          :run="selectedRun"
+          @close="handleCloseRightPanel"
+        />
+      </FloatingRightPanel>
 
       <!-- Quick Search Modal -->
       <QuickSearchModal
@@ -1302,6 +1385,8 @@ onMounted(async () => {
       <SlideOutPanel
         :show="activeSlideOut === 'runs'"
         :title="t('editor.runs')"
+        :bottom-offset="bottomPanelHeight"
+        :no-transition="bottomPanelResizing"
         @close="closeSlideOut"
       >
         <RunHistoryPanel :project-id="project.id" />
@@ -1310,6 +1395,8 @@ onMounted(async () => {
       <SlideOutPanel
         :show="activeSlideOut === 'schedules'"
         :title="t('editor.schedules')"
+        :bottom-offset="bottomPanelHeight"
+        :no-transition="bottomPanelResizing"
         @close="closeSlideOut"
       >
         <SchedulesPanel
@@ -1321,6 +1408,8 @@ onMounted(async () => {
       <SlideOutPanel
         :show="activeSlideOut === 'variables'"
         :title="t('editor.variables')"
+        :bottom-offset="bottomPanelHeight"
+        :no-transition="bottomPanelResizing"
         @close="closeSlideOut"
       >
         <VariablesPanel
@@ -1354,35 +1443,17 @@ onMounted(async () => {
   background: #f8f9fa;
 }
 
-.canvas-container {
+.editor-layout {
   position: absolute;
   inset: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Right Properties Panel */
-.properties-panel-container {
-  position: fixed;
-  top: 68px;
-  right: 12px;
-  bottom: 12px;
-  width: 340px;
-  z-index: 100;
-
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-
-  transform: translateX(calc(100% + 24px));
-  opacity: 0;
-  transition: transform 0.3s ease, opacity 0.3s ease;
-}
-
-.properties-panel-container.visible {
-  transform: translateX(0);
-  opacity: 1;
+.canvas-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Loading overlay */

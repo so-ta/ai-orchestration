@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
+import { useBottomOffset } from '~/composables/useFloatingLayout'
 
 const { t } = useI18n()
 
@@ -7,6 +8,9 @@ const props = defineProps<{
   zoom: number
   panelOpen?: boolean
 }>()
+
+// ボトムパネルを考慮した下端オフセット（リサイズ中はアニメーション無効）
+const { offset: bottomOffset, isResizing } = useBottomOffset(16)
 
 const emit = defineEmits<{
   zoomIn: []
@@ -35,7 +39,7 @@ function selectZoomPreset(preset: number) {
 </script>
 
 <template>
-  <div class="floating-zoom" :class="{ 'panel-open': panelOpen }">
+  <div class="floating-zoom" :class="{ 'panel-open': panelOpen, 'no-transition': isResizing }" :style="{ bottom: bottomOffset + 'px' }">
     <!-- Zoom Controls -->
     <div class="zoom-controls">
       <!-- Zoom Out -->
@@ -91,7 +95,6 @@ function selectZoomPreset(preset: number) {
 <style scoped>
 .floating-zoom {
   position: fixed;
-  bottom: 16px;
   right: 16px;
   z-index: 100;
 
@@ -99,11 +102,15 @@ function selectZoomPreset(preset: number) {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
-  transition: right 0.3s ease;
+  transition: right 0.3s ease, bottom 0.2s ease;
 }
 
 .floating-zoom.panel-open {
-  right: 368px;
+  right: 384px; /* 12px (panel right) + 360px (panel width) + 12px (gap) */
+}
+
+.floating-zoom.no-transition {
+  transition: none;
 }
 
 /* Zoom Controls */

@@ -16,6 +16,8 @@ const props = defineProps<{
   show: boolean
   title: string
   width?: number
+  bottomOffset?: number
+  noTransition?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +25,7 @@ const emit = defineEmits<{
 }>()
 
 const panelWidth = computed(() => props.width || 400)
+const bottomOffsetPx = computed(() => props.bottomOffset || 0)
 
 function handleBackdropClick() {
   emit('close')
@@ -51,9 +54,9 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="slideout">
-      <div v-if="show" class="slideout-container">
+      <div v-if="show" class="slideout-container" :class="{ 'no-transition': noTransition }" :style="{ bottom: bottomOffsetPx + 'px' }">
         <!-- Backdrop -->
-        <div class="slideout-backdrop" @click="handleBackdropClick" />
+        <div class="slideout-backdrop" :style="{ bottom: bottomOffsetPx + 'px' }" @click="handleBackdropClick" />
 
         <!-- Panel -->
         <aside
@@ -177,5 +180,11 @@ onUnmounted(() => {
 .slideout-enter-from .slideout-panel,
 .slideout-leave-to .slideout-panel {
   transform: translateX(100%);
+}
+
+/* No transition during resize */
+.slideout-container.no-transition,
+.slideout-container.no-transition .slideout-backdrop {
+  transition: none !important;
 }
 </style>

@@ -29,7 +29,12 @@
     "success": "成功",
     "all": "すべて",
     "enabled": "有効",
-    "disabled": "無効"
+    "disabled": "無効",
+    "justNow": "たった今",
+    "minutesAgo": "{count}分前",
+    "hoursAgo": "{count}時間前",
+    "copied": "{item}をコピーしました",
+    "copyFailed": "コピーに失敗しました"
   },
   "nav": {
     "projects": "プロジェクト",
@@ -291,6 +296,8 @@
     "addToFavorites": "お気に入りに追加",
     "removeFromFavorites": "お気に入りから削除",
     "autoLayout": "自動整形",
+    "blockDetails": "ブロック詳細",
+    "executionDetails": "実行履歴",
     "groupDeleted": "グループを削除しました",
     "groupDeleteFailed": "グループの削除に失敗しました",
     "stepTypes": {
@@ -473,6 +480,26 @@
     "suggestedFields": "前ステップの出力フィールド",
     "fieldInserted": "「{field}」を入力に追加しました",
     "templatePreview": "テンプレートプレビュー",
+    "runHistory": "実行履歴",
+    "noRuns": "実行履歴がありません",
+    "noSteps": "この実行にはステップがありません",
+    "steps": "ステップ",
+    "showOnDag": "DAGに表示",
+    "showDetails": "詳細を表示",
+    "selectStepRun": "ステップを選択してください",
+    "selectStepRunHint": "ボトムパネルから実行履歴を選択し、ステップをクリックすると詳細が表示されます",
+    "filter": {
+      "all": "すべて",
+      "test": "テスト",
+      "production": "本番"
+    },
+    "trigger": {
+      "manual": "手動",
+      "test": "テスト",
+      "schedule": "スケジュール",
+      "webhook": "Webhook",
+      "internal": "内部"
+    },
     "validation": {
       "required": "「{field}」は必須です",
       "typeMismatch": "「{field}」の型が一致しません（期待: {expected}、実際: {actual}）"

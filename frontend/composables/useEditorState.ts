@@ -1,8 +1,9 @@
-import type { Step, Project } from '~/types/api'
+import type { Step, Project, Run, StepRun } from '~/types/api'
 
 const STORAGE_KEY = 'project-editor-panel-widths'
 const STORAGE_KEY_COLLAPSED = 'project-editor-panel-collapsed'
 const STORAGE_KEY_LAST_PROJECT = 'project-editor-last-project'
+const STORAGE_KEY_BOTTOM_PANEL = 'project-editor-bottom-panel'
 
 // Clipboard data structure
 interface StepClipboard {
@@ -16,6 +17,13 @@ export type SlideOutPanel = 'runs' | 'schedules' | 'variables' | null
 
 // Global state (singleton pattern)
 const selectedStepId = ref<string | null>(null)
+
+// Bottom panel state
+const bottomPanelCollapsed = ref(false)
+const bottomPanelHeight = ref(200)
+const bottomPanelResizing = ref(false)
+const selectedRun = ref<Run | null>(null)
+const selectedStepRun = ref<StepRun | null>(null)
 const clipboardStep = ref<StepClipboard | null>(null)
 const leftPanelWidth = ref(280)
 const rightPanelWidth = ref(360)
@@ -52,6 +60,16 @@ if (typeof window !== 'undefined') {
     const lastProject = localStorage.getItem(STORAGE_KEY_LAST_PROJECT)
     if (lastProject) {
       lastProjectId.value = lastProject
+    }
+
+    // Load bottom panel state
+    const bottomPanelStored = localStorage.getItem(STORAGE_KEY_BOTTOM_PANEL)
+    if (bottomPanelStored) {
+      const { collapsed, height } = JSON.parse(bottomPanelStored)
+      bottomPanelCollapsed.value = !!collapsed
+      if (typeof height === 'number' && height >= 100 && height <= 400) {
+        bottomPanelHeight.value = height
+      }
     }
   } catch (e) {
     console.warn('Failed to load editor state from localStorage:', e)
@@ -97,6 +115,20 @@ watch(currentProjectId, (newId) => {
     }
   }
 })
+
+// Watch and persist bottom panel state
+watch([bottomPanelCollapsed, bottomPanelHeight], () => {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_BOTTOM_PANEL, JSON.stringify({
+        collapsed: bottomPanelCollapsed.value,
+        height: bottomPanelHeight.value
+      }))
+    } catch (e) {
+      console.warn('Failed to save bottom panel state to localStorage:', e)
+    }
+  }
+}, { deep: true })
 
 /**
  * Editor state management composable
@@ -202,6 +234,36 @@ export function useEditorState(project?: Ref<Project | null>) {
     return lastProjectId.value
   }
 
+  // Bottom panel controls
+  function toggleBottomPanel() {
+    bottomPanelCollapsed.value = !bottomPanelCollapsed.value
+  }
+
+  function setBottomPanelCollapsed(collapsed: boolean) {
+    bottomPanelCollapsed.value = collapsed
+  }
+
+  function setBottomPanelHeight(height: number) {
+    bottomPanelHeight.value = Math.max(100, Math.min(400, height))
+  }
+
+  function setBottomPanelResizing(resizing: boolean) {
+    bottomPanelResizing.value = resizing
+  }
+
+  function setSelectedRun(run: Run | null) {
+    selectedRun.value = run
+  }
+
+  function setSelectedStepRun(stepRun: StepRun | null) {
+    selectedStepRun.value = stepRun
+  }
+
+  function clearRunSelection() {
+    selectedRun.value = null
+    selectedStepRun.value = null
+  }
+
   return {
     // State (readonly where appropriate)
     selectedStepId: readonly(selectedStepId),
@@ -212,6 +274,13 @@ export function useEditorState(project?: Ref<Project | null>) {
     rightCollapsed,
     activeSlideOut: readonly(activeSlideOut),
     currentProjectId: readonly(currentProjectId),
+
+    // Bottom panel state
+    bottomPanelCollapsed,
+    bottomPanelHeight,
+    bottomPanelResizing,
+    selectedRun,
+    selectedStepRun,
 
     // Actions
     selectStep,
@@ -232,5 +301,14 @@ export function useEditorState(project?: Ref<Project | null>) {
     toggleSlideOut,
     setCurrentProjectId,
     getLastProjectId,
+
+    // Bottom panel actions
+    toggleBottomPanel,
+    setBottomPanelCollapsed,
+    setBottomPanelHeight,
+    setBottomPanelResizing,
+    setSelectedRun,
+    setSelectedStepRun,
+    clearRunSelection,
   }
 }
