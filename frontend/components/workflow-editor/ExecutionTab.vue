@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import type { Step, Run, BlockDefinition } from '~/types/api'
 import type { ConfigSchema } from './config/types/config-schema'
+import { validateConfig } from './config/composables/useValidation'
+import { useStoredInput } from '~/composables/useStoredInput'
+import { usePolling } from '~/composables/usePolling'
+import { useTemplateVariables } from '~/composables/useTemplateVariables'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 
 const { t } = useI18n()
@@ -35,115 +39,19 @@ const customInputJson = ref('{}')
 const inputError = ref<string | null>(null)
 const schemaValidationErrors = ref<Array<{ field: string; message: string }>>([])
 
-// Schema validation function
-function validateAgainstSchema(data: Record<string, unknown>, schema: Record<string, unknown> | null | undefined): Array<{ field: string; message: string }> {
-  const errors: Array<{ field: string; message: string }> = []
-  if (!schema) return errors
-
-  const properties = schema.properties as Record<string, Record<string, unknown>> | undefined
-  const required = (schema.required as string[]) || []
-
-  if (!properties) return errors
-
-  // Check required fields
-  for (const fieldName of required) {
-    if (data[fieldName] === undefined || data[fieldName] === null || data[fieldName] === '') {
-      errors.push({
-        field: fieldName,
-        message: t('execution.validation.required', { field: fieldName })
-      })
-    }
-  }
-
-  // Check types
-  for (const [fieldName, fieldValue] of Object.entries(data)) {
-    const fieldSchema = properties[fieldName]
-    if (!fieldSchema) continue
-
-    const expectedType = fieldSchema.type as string
-    if (!expectedType || expectedType === 'any') continue
-
-    const actualType = Array.isArray(fieldValue) ? 'array' : typeof fieldValue
-    let valid = false
-
-    switch (expectedType) {
-      case 'string':
-        valid = actualType === 'string'
-        break
-      case 'number':
-      case 'integer':
-        valid = actualType === 'number'
-        break
-      case 'boolean':
-        valid = actualType === 'boolean'
-        break
-      case 'array':
-        valid = actualType === 'array'
-        break
-      case 'object':
-        valid = actualType === 'object' && fieldValue !== null && !Array.isArray(fieldValue)
-        break
-      default:
-        valid = true
-    }
-
-    if (!valid && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
-      errors.push({
-        field: fieldName,
-        message: t('execution.validation.typeMismatch', { field: fieldName, expected: expectedType, actual: actualType })
-      })
-    }
-  }
-
-  return errors
-}
-
 // Input values for DynamicConfigForm
 const workflowInputValues = ref<Record<string, unknown>>({})
 const stepInputValues = ref<Record<string, unknown>>({})
 const workflowFormValid = ref(true)
 const stepFormValid = ref(true)
 
-// Storage key for remembering inputs
-function getStorageKey(stepId: string): string {
-  return `aio:input:${props.workflowId}:${stepId}`
-}
-
-// Save input to localStorage
-function saveInputToStorage(stepId: string, input: Record<string, unknown>) {
-  try {
-    localStorage.setItem(getStorageKey(stepId), JSON.stringify(input))
-  } catch {
-    // Ignore storage errors
-  }
-}
-
-// Load input from localStorage
-function loadInputFromStorage(stepId: string): Record<string, unknown> | null {
-  try {
-    const stored = localStorage.getItem(getStorageKey(stepId))
-    if (stored) {
-      return JSON.parse(stored)
-    }
-  } catch {
-    // Ignore storage errors
-  }
-  return null
-}
-
-// Clear stored input
-function clearStoredInput(stepId: string) {
-  try {
-    localStorage.removeItem(getStorageKey(stepId))
-  } catch {
-    // Ignore storage errors
-  }
-}
+// Stored input composable for persisting step inputs
+const storedInput = useStoredInput({ keyPrefix: `aio:input:${props.workflowId}` })
 
 // Load saved input when step changes
 watch(() => props.step?.id, (newStepId) => {
   if (newStepId) {
-    const saved = loadInputFromStorage(newStepId)
+    const saved = storedInput.load(newStepId)
     if (saved) {
       stepInputValues.value = saved
       customInputJson.value = JSON.stringify(saved, null, 2)
@@ -191,7 +99,7 @@ function clearInput() {
   customInputJson.value = '{}'
   inputError.value = null
   if (props.step?.id) {
-    clearStoredInput(props.step.id)
+    storedInput.clear(props.step.id)
   }
 }
 
@@ -388,8 +296,9 @@ watch(customInputJson, () => {
   if (useJsonMode.value || !hasStepInputFields.value) {
     try {
       const parsed = JSON.parse(customInputJson.value)
-      const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
-      schemaValidationErrors.value = validateAgainstSchema(parsed, schema)
+      const schema = selectedStepBlock.value?.input_schema as ConfigSchema | undefined
+      const result = validateConfig(schema, parsed)
+      schemaValidationErrors.value = result.errors.map(e => ({ field: e.field, message: e.message }))
       inputError.value = null
     } catch {
       schemaValidationErrors.value = []
@@ -484,82 +393,20 @@ function getTypeBadgeClass(type: string): string {
   }
 }
 
-// Template variables detection and preview
-const templateVariables = computed<string[]>(() => {
-  if (!props.step?.config) return []
-  const config = props.step.config as Record<string, unknown>
-  const variables = new Set<string>()
-
-  // Find all double-brace variable patterns in config values
-  const findVariables = (obj: unknown) => {
-    if (typeof obj === 'string') {
-      const matches = obj.match(/\{\{([^}]+)\}\}/g)
-      if (matches) {
-        for (const match of matches) {
-          const varName = match.replace(/\{\{|\}\}/g, '').trim()
-          variables.add(varName)
-        }
-      }
-    } else if (Array.isArray(obj)) {
-      for (const item of obj) findVariables(item)
-    } else if (obj && typeof obj === 'object') {
-      for (const value of Object.values(obj)) findVariables(value)
-    }
-  }
-
-  findVariables(config)
-  return Array.from(variables)
-})
-
-// Resolve template variable value from input
-function resolveTemplateVariable(varPath: string, input: Record<string, unknown>): string {
-  // Handle paths like "message" or "data.content"
-  const parts = varPath.split('.')
-  let value: unknown = input
-  const openBrace = String.fromCharCode(123, 123)
-  const closeBrace = String.fromCharCode(125, 125)
-
-  for (const part of parts) {
-    if (value && typeof value === 'object') {
-      value = (value as Record<string, unknown>)[part]
-    } else {
-      return openBrace + varPath + closeBrace
-    }
-  }
-
-  if (value === undefined || value === null) {
-    return openBrace + varPath + closeBrace
-  }
-
-  if (typeof value === 'object') {
-    return JSON.stringify(value)
-  }
-
-  return String(value)
-}
-
-// Format template variable for display (avoids i18n parsing issues)
-function formatTemplateVar(variable: string): string {
-  const openBrace = String.fromCharCode(123, 123)
-  const closeBrace = String.fromCharCode(125, 125)
-  return openBrace + variable + closeBrace
-}
+// Template variables detection and preview using composable
+const stepConfigRef = computed(() => props.step?.config as Record<string, unknown> | undefined)
+const {
+  variables: templateVariables,
+  formatVariable: formatTemplateVar,
+  createPreview: createTemplatePreview,
+} = useTemplateVariables(stepConfigRef)
 
 // Template preview with resolved values
-const templatePreview = computed<Array<{ variable: string; resolved: string; isResolved: boolean }>>(() => {
+const templatePreview = computed(() => {
   const input = useJsonMode.value || !hasStepInputFields.value
     ? (() => { try { return JSON.parse(customInputJson.value) } catch { return {} } })()
     : stepInputValues.value
-  const unresolvedPrefix = String.fromCharCode(123, 123)
-
-  return templateVariables.value.map(variable => {
-    const resolved = resolveTemplateVariable(variable, input)
-    return {
-      variable,
-      resolved,
-      isResolved: !resolved.startsWith(unresolvedPrefix)
-    }
-  })
+  return createTemplatePreview(input)
 })
 
 // Workflow test runs (shared for both step-selected and no-step modes)
@@ -618,7 +465,7 @@ function getStepInput(): object | null {
 
   // Save input to storage for reuse
   if (input && props.step?.id) {
-    saveInputToStorage(props.step.id, input as Record<string, unknown>)
+    storedInput.save(props.step.id, input as Record<string, unknown>)
   }
 
   return input
@@ -735,27 +582,21 @@ async function executeFromThisStep() {
   }
 }
 
-// Poll for inline test result
-const pollingInterval = ref<ReturnType<typeof setInterval> | null>(null)
-const pollingRunId = ref<string | null>(null)
+// Poll for inline test result using composable
+const { pollingId: pollingRunId, start: startPollingInternal } = usePolling<Run>({
+  interval: 1000,
+  maxAttempts: 60,
+  onTimeout: () => toast.warning(t('execution.pollingTimeout')),
+})
 
 async function startPolling(runId: string, stepId: string) {
-  pollingRunId.value = runId
-  let attempts = 0
-  const maxAttempts = 60 // 60 seconds timeout
-
-  pollingInterval.value = setInterval(async () => {
-    attempts++
-    if (attempts > maxAttempts) {
-      stopPolling()
-      toast.warning(t('execution.pollingTimeout'))
-      return
-    }
-
-    try {
+  startPollingInternal(
+    runId,
+    async () => {
       const response = await runsApi.get(runId)
-      const run = response.data
-
+      return response.data
+    },
+    (run) => {
       // Always emit the updated run to keep Run Detail Panel in sync
       emit('run:created', run)
 
@@ -763,33 +604,19 @@ async function startPolling(runId: string, stepId: string) {
       const stepRun = run.step_runs?.find((sr: { step_id: string }) => sr.step_id === stepId)
       if (stepRun) {
         if (stepRun.status === 'completed') {
-          stopPolling()
           toast.success(t('execution.stepTestCompleted'))
-          await loadTestRuns()
+          loadTestRuns()
+          return true // Stop polling
         } else if (stepRun.status === 'failed') {
-          stopPolling()
           toast.error(t('execution.stepTestFailed'))
-          await loadTestRuns()
+          loadTestRuns()
+          return true // Stop polling
         }
       }
-    } catch (e) {
-      console.error('Polling error:', e)
+      return false // Continue polling
     }
-  }, 1000)
+  )
 }
-
-function stopPolling() {
-  if (pollingInterval.value) {
-    clearInterval(pollingInterval.value)
-    pollingInterval.value = null
-  }
-  pollingRunId.value = null
-}
-
-// Cleanup on unmount
-onUnmounted(() => {
-  stopPolling()
-})
 
 // Load workflow test runs (all test triggered runs)
 async function loadTestRuns() {

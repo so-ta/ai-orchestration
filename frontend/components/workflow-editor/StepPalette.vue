@@ -4,9 +4,8 @@ import {
   categoryConfig,
   subcategoryConfig,
   getBlockColor,
-  groupBlocksBySubcategory,
-  getSubcategoriesForCategory,
 } from '~/composables/useBlocks'
+import { useBlockSearchWithCategory } from '~/composables/useBlockSearch'
 
 const { t } = useI18n()
 const blocksApi = useBlocks()
@@ -19,9 +18,6 @@ const emit = defineEmits<{
   (e: 'drag-start', type: StepType): void
   (e: 'drag-end'): void
 }>()
-
-// Search query
-const searchQuery = ref('')
 
 // Block Group definitions for control flow constructs
 const blockGroupTypes: Array<{
@@ -42,8 +38,15 @@ const blocks = ref<BlockDefinition[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
 
-// Active category tab
-const activeCategory = ref<BlockCategory>('ai')
+// Block search composable
+const {
+  searchQuery,
+  isSearchActive,
+  clearSearch,
+  activeCategory,
+  blocksBySubcategory,
+  activeSubcategories: subcategoriesForActiveCategory,
+} = useBlockSearchWithCategory(blocks)
 
 // Expanded subcategories
 const expandedSubcategories = ref<Set<string>>(new Set())
@@ -70,34 +73,6 @@ onMounted(async () => {
 // Categories for tabs
 const categories: BlockCategory[] = ['ai', 'flow', 'apps', 'custom']
 
-// Get filtered blocks based on search query
-const filteredBlocks = computed(() => {
-  let filtered = blocks.value.filter(b => b.slug !== 'start')
-
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase().trim()
-    filtered = filtered.filter(b =>
-      b.name.toLowerCase().includes(query) ||
-      (b.description?.toLowerCase().includes(query)) ||
-      b.slug.toLowerCase().includes(query)
-    )
-  }
-
-  return filtered
-})
-
-// Check if search is active
-const isSearchActive = computed(() => searchQuery.value.trim().length > 0)
-
-// Get blocks grouped by subcategory for the active category (or all if searching)
-const blocksBySubcategory = computed(() => {
-  if (isSearchActive.value) {
-    // When searching, group all matching blocks by subcategory
-    return groupBlocksBySubcategory(filteredBlocks.value, null)
-  }
-  return groupBlocksBySubcategory(filteredBlocks.value, activeCategory.value)
-})
-
 // Get filtered block group types
 const filteredBlockGroupTypes = computed(() => {
   if (!isSearchActive.value) return blockGroupTypes
@@ -106,21 +81,6 @@ const filteredBlockGroupTypes = computed(() => {
     g.name.toLowerCase().includes(query) ||
     g.description.toLowerCase().includes(query)
   )
-})
-
-// Get sorted subcategories for the active category (or all when searching)
-const subcategoriesForActiveCategory = computed(() => {
-  if (isSearchActive.value) {
-    // Return all subcategories that have matching blocks
-    const subcats = new Set<BlockSubcategory>()
-    for (const block of filteredBlocks.value) {
-      if (block.subcategory) {
-        subcats.add(block.subcategory)
-      }
-    }
-    return Array.from(subcats)
-  }
-  return getSubcategoriesForCategory(activeCategory.value)
 })
 
 // Toggle subcategory expansion
@@ -199,11 +159,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
 })
-
-// Clear search
-function clearSearch() {
-  searchQuery.value = ''
-}
 </script>
 
 <template>
