@@ -2047,9 +2047,10 @@ function getStepIcon(type: string): string {
   return getBlockIcon(type)
 }
 
-// Check if step type is start
+// Check if step type is a trigger block (start, schedule_trigger, webhook_trigger等)
+const triggerBlockTypes = ['start', 'schedule_trigger', 'webhook_trigger']
 function isStartNode(type: string): boolean {
-  return type === 'start'
+  return triggerBlockTypes.includes(type)
 }
 
 // Minimum size for group nodes (Miro-style: fits one 80x70 node with padding)
@@ -2602,8 +2603,9 @@ defineExpose({
 
           <!-- Trigger Badge for Start blocks (positioned top-left of icon box) -->
           <TriggerBadge
-            v-if="data.triggerType"
+            v-if="isStartNode(data.type)"
             :trigger-type="data.triggerType"
+            :step-type="data.type"
             size="sm"
             class="dag-node-trigger-badge-miro"
           />

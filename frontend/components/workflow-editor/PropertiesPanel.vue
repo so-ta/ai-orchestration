@@ -27,8 +27,9 @@ const props = defineProps<{
 // Active tab state
 const activeTab = ref<'config' | 'flow' | 'trigger' | 'copilot' | 'run'>('config')
 
-// Check if step is a start block (for showing trigger tab)
-const isStartBlock = computed(() => props.step?.type === 'start')
+// Check if step is a trigger block (start, schedule_trigger, webhook_trigger等)
+const triggerBlockTypes = ['start', 'schedule_trigger', 'webhook_trigger']
+const isStartBlock = computed(() => triggerBlockTypes.includes(props.step?.type || ''))
 
 // Keep current tab when step changes (no automatic tab switching)
 

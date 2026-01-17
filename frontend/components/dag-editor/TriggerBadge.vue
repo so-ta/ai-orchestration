@@ -8,10 +8,18 @@ type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
 const props = withDefaults(defineProps<{
   triggerType?: StartTriggerType
+  stepType?: string // ブロックタイプ（schedule_trigger, webhook_trigger等）
   size?: 'sm' | 'md'
 }>(), {
   triggerType: 'manual',
   size: 'sm',
+})
+
+// stepTypeからトリガータイプを判定（専用トリガーブロックの場合）
+const effectiveTriggerType = computed((): StartTriggerType => {
+  if (props.stepType === 'schedule_trigger') return 'schedule'
+  if (props.stepType === 'webhook_trigger') return 'webhook'
+  return props.triggerType || 'manual'
 })
 
 // トリガー種別ごとの設定
@@ -26,7 +34,7 @@ const triggerConfigs: Record<StartTriggerType, TriggerConfig> = {
   manual: {
     color: '#64748b',
     bgColor: '#f1f5f9',
-    icon: '▶',
+    icon: '👤',
     label: '手動',
   },
   webhook: {
@@ -55,7 +63,7 @@ const triggerConfigs: Record<StartTriggerType, TriggerConfig> = {
   },
 }
 
-const config = computed(() => triggerConfigs[props.triggerType] || triggerConfigs.manual)
+const config = computed(() => triggerConfigs[effectiveTriggerType.value] || triggerConfigs.manual)
 
 const sizeClasses = computed(() => {
   return props.size === 'sm'

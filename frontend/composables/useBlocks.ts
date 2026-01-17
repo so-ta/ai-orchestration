@@ -156,6 +156,8 @@ export const blockColors: Record<string, string> = {
   subflow: '#ec4899',
   // Control blocks
   start: '#10b981',
+  schedule_trigger: '#22c55e',
+  webhook_trigger: '#3b82f6',
   wait: '#64748b',
   human_in_loop: '#ef4444',
   error: '#dc2626',
