@@ -396,7 +396,7 @@ const timezoneOptions = [
   padding: 0.625rem 0.75rem;
   border-radius: 6px;
   border: 1px solid var(--color-border);
-  background: white;
+  background: var(--color-background, #fff);
   cursor: pointer;
   transition: all 0.15s;
   text-align: left;
@@ -483,7 +483,7 @@ const timezoneOptions = [
   font-size: 0.8125rem;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  background: white;
+  background: var(--color-background, #fff);
   color: var(--color-text);
   transition: border-color 0.15s;
 }
@@ -523,7 +523,7 @@ const timezoneOptions = [
   font-size: 0.6875rem;
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: white;
+  background: var(--color-background, #fff);
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.15s;

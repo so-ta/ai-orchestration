@@ -289,17 +289,17 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
   flex-direction: column;
 }
 
-/* Section - Matching PropertiesPanel form-section style */
+/* Section - Matching PropertiesPanel form-section style with visual separation */
 .flow-section {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .flow-section:last-child {
   margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
 }
 
 .section-title {
