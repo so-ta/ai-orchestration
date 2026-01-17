@@ -27,11 +27,6 @@ const props = defineProps<{
 // Active tab state
 const activeTab = ref<'config' | 'flow' | 'trigger' | 'copilot' | 'run'>('config')
 
-// Check if step is a trigger block (start, schedule_trigger, webhook_trigger等)
-// Used for determining if this block can be the entry point of a workflow
-const triggerBlockTypes = ['start', 'schedule_trigger', 'webhook_trigger']
-const _isTriggerBlock = computed(() => triggerBlockTypes.includes(props.step?.type || ''))
-
 // Check if step is a generic start block (not specialized trigger blocks)
 // Specialized trigger blocks (schedule_trigger, webhook_trigger) configure via Config tab, not Trigger tab
 // Generic start block shows Trigger tab to allow selecting trigger type

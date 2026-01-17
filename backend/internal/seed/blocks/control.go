@@ -294,9 +294,36 @@ func WebhookTriggerBlock() *SystemBlockDefinition {
 		OutputPorts: []domain.OutputPort{
 			{Name: "output", Label: "Output", IsDefault: true, Description: "Webhook payload data"},
 		},
-		Code:       `return input;`,
-		PreProcess: `return input;`,
-		UIConfig:   json.RawMessage(`{"icon": "webhook", "color": "#3b82f6"}`),
+		Code: `return input;`,
+		PreProcess: `
+// IP address validation
+if (config.allowed_ips && config.allowed_ips.length > 0) {
+    const clientIP = input.__webhook_client_ip;
+    if (clientIP && !config.allowed_ips.includes(clientIP)) {
+        throw new Error('[WEBHOOK_002] IP address not in allowlist: ' + clientIP);
+    }
+}
+
+// HMAC signature validation
+if (config.secret) {
+    const signature = input.__webhook_signature;
+    const payload = input.__webhook_raw_body;
+    if (signature && payload) {
+        const expectedSignature = ctx.crypto.hmacSha256(config.secret, payload);
+        if (signature !== expectedSignature && signature !== 'sha256=' + expectedSignature) {
+            throw new Error('[WEBHOOK_001] Invalid webhook signature');
+        }
+    }
+}
+
+// Remove internal webhook metadata before passing to workflow
+const cleanInput = { ...input };
+delete cleanInput.__webhook_client_ip;
+delete cleanInput.__webhook_signature;
+delete cleanInput.__webhook_raw_body;
+return cleanInput;
+`,
+		UIConfig: json.RawMessage(`{"icon": "webhook", "color": "#3b82f6"}`),
 		ErrorCodes: []domain.ErrorCodeDef{
 			{Code: "WEBHOOK_001", Name: "INVALID_SIGNATURE", Description: "署名が無効です", Retryable: false},
 			{Code: "WEBHOOK_002", Name: "IP_NOT_ALLOWED", Description: "IPアドレスが許可されていません", Retryable: false},
@@ -304,7 +331,7 @@ func WebhookTriggerBlock() *SystemBlockDefinition {
 		Enabled: true,
 		TestCases: []BlockTestCase{
 			{
-				Name:           "passthrough webhook payload",
+				Name:           "passthrough webhook payload without validation",
 				Input:          map[string]interface{}{"event": "push", "data": "payload"},
 				Config:         map[string]interface{}{},
 				ExpectedOutput: map[string]interface{}{"event": "push", "data": "payload"},
