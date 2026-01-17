@@ -3,6 +3,10 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { createI18n } from 'vue-i18n'
 
+// Import after mocking
+import RunDialog from '../RunDialog.vue'
+import type { Step, BlockDefinition } from '~/types/api'
+
 // Create i18n instance for tests
 const i18n = createI18n({
   legacy: false,
@@ -62,10 +66,6 @@ const MockDynamicConfigForm = defineComponent({
     return () => h('div', { class: 'dynamic-config-form-mock' })
   }
 })
-
-// Import after mocking
-import RunDialog from '../RunDialog.vue'
-import type { Step, BlockDefinition } from '~/types/api'
 
 describe('RunDialog', () => {
   // Steps with input_schema defined in Start step's config

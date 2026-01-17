@@ -257,13 +257,13 @@ const quickActions = [
         <span class="session-label">{{ t('copilot.session') }}:</span>
         <span class="session-title">{{ currentSession ? formatSessionTitle(currentSession) : t('copilot.loading') }}</span>
         <svg class="session-chevron" :class="{ open: showSessionMenu }" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
+          <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
-      <button class="new-session-btn" :disabled="isLoadingSession" @click="startNewSession" :title="t('copilot.newSession')">
+      <button class="new-session-btn" :disabled="isLoadingSession" :title="t('copilot.newSession')" @click="startNewSession">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
       <!-- Session Dropdown -->
@@ -355,7 +355,7 @@ const quickActions = [
           rows="2"
           @keydown.meta.enter="sendMessage"
           @keydown.ctrl.enter="sendMessage"
-        ></textarea>
+        />
         <button
           class="chat-send-btn"
           :disabled="!chatMessage.trim() || isLoading"
@@ -422,8 +422,8 @@ const quickActions = [
             <h3>{{ t('copilot.generateWorkflowTitle') }}</h3>
             <button class="modal-close" @click="showGenerateModal = false">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
           </div>
@@ -435,10 +435,10 @@ const quickActions = [
               :placeholder="t('copilot.generatePlaceholder')"
               rows="4"
               :disabled="isGenerating"
-            ></textarea>
+            />
           </div>
           <div class="modal-footer">
-            <button class="btn-cancel" @click="showGenerateModal = false" :disabled="isGenerating">
+            <button class="btn-cancel" :disabled="isGenerating" @click="showGenerateModal = false">
               {{ t('common.cancel') }}
             </button>
             <button

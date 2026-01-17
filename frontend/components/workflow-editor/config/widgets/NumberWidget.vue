@@ -77,7 +77,7 @@ function handleBlur() {
       :class="['field-input', { 'has-error': error }]"
       @input="handleInput"
       @blur="handleBlur"
-    />
+    >
 
     <p v-if="property.description && !error" class="field-description">
       {{ property.description }}

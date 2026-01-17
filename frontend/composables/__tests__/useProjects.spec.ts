@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Import after mocking
+import { useProjects } from '../useProjects'
+
 // Mock useApi
 const mockApi = {
   get: vi.fn(),
@@ -11,9 +14,6 @@ const mockApi = {
 vi.mock('../useApi', () => ({
   useApi: () => mockApi,
 }))
-
-// Import after mocking
-import { useProjects } from '../useProjects'
 
 describe('useProjects', () => {
   beforeEach(() => {
@@ -28,7 +28,7 @@ describe('useProjects', () => {
       const { list } = useProjects()
       const result = await list()
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows')
       expect(result).toEqual(mockResponse)
     })
 
@@ -38,7 +38,7 @@ describe('useProjects', () => {
       const { list } = useProjects()
       await list({ status: 'published' })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects?status=published')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows?status=published')
     })
 
     it('should list projects with pagination', async () => {
@@ -47,7 +47,7 @@ describe('useProjects', () => {
       const { list } = useProjects()
       await list({ page: 2, limit: 10 })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects?page=2&limit=10')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows?page=2&limit=10')
     })
   })
 
@@ -59,7 +59,7 @@ describe('useProjects', () => {
       const { get } = useProjects()
       const result = await get('1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/1')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/1')
       expect(result).toEqual(mockResponse)
     })
   })
@@ -72,7 +72,7 @@ describe('useProjects', () => {
       const { create } = useProjects()
       const result = await create({ name: 'New Project', description: 'Test' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows', {
         name: 'New Project',
         description: 'Test',
       })
@@ -88,7 +88,7 @@ describe('useProjects', () => {
       const { update } = useProjects()
       const result = await update('1', { name: 'Updated Project' })
 
-      expect(mockApi.put).toHaveBeenCalledWith('/projects/1', {
+      expect(mockApi.put).toHaveBeenCalledWith('/workflows/1', {
         name: 'Updated Project',
       })
       expect(result).toEqual(mockResponse)
@@ -102,7 +102,7 @@ describe('useProjects', () => {
       const { remove } = useProjects()
       await remove('1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/projects/1')
+      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/1')
     })
   })
 
@@ -120,7 +120,7 @@ describe('useProjects', () => {
       }
       const result = await save('1', saveData)
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/1/save', saveData)
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/1/save', saveData)
       expect(result).toEqual(mockResponse)
     })
   })
@@ -138,7 +138,7 @@ describe('useProjects', () => {
       }
       const result = await saveDraft('1', draftData)
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/1/draft', draftData)
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/1/draft', draftData)
       expect(result).toEqual(mockResponse)
     })
   })
@@ -151,7 +151,7 @@ describe('useProjects', () => {
       const { discardDraft } = useProjects()
       const result = await discardDraft('1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/projects/1/draft')
+      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/1/draft')
       expect(result).toEqual(mockResponse)
     })
   })
@@ -164,7 +164,7 @@ describe('useProjects', () => {
       const { listSteps } = useProjects()
       const result = await listSteps('p1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/steps')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/p1/steps')
       expect(result).toEqual(mockResponse)
     })
 
@@ -175,7 +175,7 @@ describe('useProjects', () => {
       const { createStep } = useProjects()
       const result = await createStep('p1', { name: 'New Step', type: 'tool' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/p1/steps', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/p1/steps', {
         name: 'New Step',
         type: 'tool',
       })
@@ -189,7 +189,7 @@ describe('useProjects', () => {
       const { updateStep } = useProjects()
       const result = await updateStep('p1', 's1', { name: 'Updated Step' })
 
-      expect(mockApi.put).toHaveBeenCalledWith('/projects/p1/steps/s1', {
+      expect(mockApi.put).toHaveBeenCalledWith('/workflows/p1/steps/s1', {
         name: 'Updated Step',
       })
       expect(result).toEqual(mockResponse)
@@ -201,7 +201,7 @@ describe('useProjects', () => {
       const { deleteStep } = useProjects()
       await deleteStep('p1', 's1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/projects/p1/steps/s1')
+      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/p1/steps/s1')
     })
   })
 
@@ -213,7 +213,7 @@ describe('useProjects', () => {
       const { listEdges } = useProjects()
       const result = await listEdges('p1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/edges')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/p1/edges')
       expect(result).toEqual(mockResponse)
     })
 
@@ -227,7 +227,7 @@ describe('useProjects', () => {
         target_step_id: 's2',
       })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/p1/edges', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/p1/edges', {
         source_step_id: 's1',
         target_step_id: 's2',
       })
@@ -240,7 +240,7 @@ describe('useProjects', () => {
       const { deleteEdge } = useProjects()
       await deleteEdge('p1', 'e1')
 
-      expect(mockApi.delete).toHaveBeenCalledWith('/projects/p1/edges/e1')
+      expect(mockApi.delete).toHaveBeenCalledWith('/workflows/p1/edges/e1')
     })
   })
 
@@ -252,7 +252,7 @@ describe('useProjects', () => {
       const { listVersions } = useProjects()
       const result = await listVersions('p1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/versions')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/p1/versions')
       expect(result).toEqual(mockResponse)
     })
 
@@ -263,7 +263,7 @@ describe('useProjects', () => {
       const { getVersion } = useProjects()
       const result = await getVersion('p1', 1)
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/p1/versions/1')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/p1/versions/1')
       expect(result).toEqual(mockResponse)
     })
   })

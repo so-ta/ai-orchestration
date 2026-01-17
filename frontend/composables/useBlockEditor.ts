@@ -23,8 +23,8 @@ export interface BlockFormData {
   post_process?: string
 }
 
-// Block editor state
-interface BlockEditorState {
+// Block editor state (reserved for future use)
+interface _BlockEditorState {
   blocks: Ref<BlockDefinition[]>
   loading: Ref<boolean>
   error: Ref<string | null>

@@ -129,7 +129,7 @@ function isCurrent(index: number): boolean {
           current: isCurrent(index)
         }"
       >
-        <div class="node-connector" v-if="index > 0">
+        <div v-if="index > 0" class="node-connector">
           <svg width="24" height="24" viewBox="0 0 24 24">
             <path d="M12 4 L12 20" stroke="currentColor" stroke-width="2" fill="none" />
             <path d="M6 14 L12 20 L18 14" stroke="currentColor" stroke-width="2" fill="none" />

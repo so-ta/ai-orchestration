@@ -5,8 +5,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:leftWidth', width: number): void
-  (e: 'update:rightWidth', width: number): void
+  (e: 'update:leftWidth' | 'update:rightWidth', width: number): void
 }>()
 
 // Resize state

@@ -158,8 +158,8 @@ const highlightedJson = computed(() => {
           type="button"
           class="action-button"
           :disabled="disabled"
-          @click="generateSample"
           title="サンプルを挿入"
+          @click="generateSample"
         >
           サンプル
         </button>
@@ -167,8 +167,8 @@ const highlightedJson = computed(() => {
           type="button"
           class="action-button"
           :disabled="disabled || !jsonText"
-          @click="formatJson"
           title="JSONを整形"
+          @click="formatJson"
         >
           整形
         </button>
@@ -186,7 +186,7 @@ const highlightedJson = computed(() => {
         </div>
         <div class="code-area">
           <!-- Highlighted code display -->
-          <pre class="code-highlight" v-html="highlightedJson"></pre>
+          <pre class="code-highlight" v-html="highlightedJson"/>
           <!-- Actual textarea for input -->
           <textarea
             :id="name"
@@ -198,7 +198,7 @@ const highlightedJson = computed(() => {
             placeholder='{"type": "object", "properties": {...}}'
             @input="handleInput"
             @blur="handleBlur"
-          ></textarea>
+          />
         </div>
       </div>
       <div class="json-footer">

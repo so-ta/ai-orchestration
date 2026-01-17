@@ -266,8 +266,8 @@ function handleBlur() {
               type="button"
               class="remove-button"
               :disabled="disabled"
-              @click="removeField(index)"
               title="フィールドを削除"
+              @click="removeField(index)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"/>
@@ -287,7 +287,7 @@ function handleBlur() {
                 placeholder="field_name"
                 @input="updateField(index, 'name', ($event.target as HTMLInputElement).value)"
                 @blur="handleBlur"
-              />
+              >
             </div>
             <div class="field-group type-group">
               <label class="field-label">型</label>
@@ -310,8 +310,8 @@ function handleBlur() {
                   :checked="field.required"
                   :disabled="disabled"
                   @change="updateField(index, 'required', ($event.target as HTMLInputElement).checked)"
-                />
-                <span class="checkbox-mark"></span>
+                >
+                <span class="checkbox-mark"/>
               </label>
             </div>
           </div>
@@ -327,7 +327,7 @@ function handleBlur() {
                 placeholder="日本語の表示名"
                 @input="updateField(index, 'title', ($event.target as HTMLInputElement).value)"
                 @blur="handleBlur"
-              />
+              >
             </div>
           </div>
 
@@ -342,7 +342,7 @@ function handleBlur() {
                 placeholder="このフィールドの説明"
                 @input="updateField(index, 'description', ($event.target as HTMLInputElement).value)"
                 @blur="handleBlur"
-              />
+              >
             </div>
           </div>
         </div>
@@ -372,7 +372,7 @@ function handleBlur() {
         spellcheck="false"
         @input="handleJsonInput"
         @blur="handleBlur"
-      ></textarea>
+      />
       <div class="json-footer">
         <span v-if="parseError" class="parse-error">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

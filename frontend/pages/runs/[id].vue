@@ -119,7 +119,7 @@ async function handleRerun() {
   }
 }
 
-function toggleStepExpanded(stepId: string) {
+function _toggleStepExpanded(stepId: string) {
   if (expandedSteps.value.has(stepId)) {
     expandedSteps.value.delete(stepId)
   } else {
@@ -349,7 +349,7 @@ onUnmounted(() => {
   <div>
     <!-- Loading -->
     <div v-if="loading" class="loading-container">
-      <div class="loading-spinner"></div>
+      <div class="loading-spinner"/>
       <p class="text-secondary mt-2">Loading run details...</p>
     </div>
 
@@ -369,17 +369,17 @@ onUnmounted(() => {
       <div class="page-header">
         <div class="page-header-info">
           <div class="breadcrumb">
-            <NuxtLink to="/runs" class="breadcrumb-link">Runs</NuxtLink>
+            <NuxtLink :to="`/?project=${run.project_id}`" class="breadcrumb-link">{{ projectDefinition?.name || 'Project' }}</NuxtLink>
             <span class="breadcrumb-separator">/</span>
-            <span class="breadcrumb-current">{{ run.id.substring(0, 8) }}...</span>
+            <span class="breadcrumb-current">Run #{{ run.run_number }}</span>
           </div>
           <h1 class="page-title">Run Details</h1>
           <div class="run-id-display">
             <code>{{ run.id }}</code>
-            <button class="copy-btn" @click="copyToClipboard(run.id)" title="Copy Run ID">
+            <button class="copy-btn" title="Copy Run ID" @click="copyToClipboard(run.id)">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
             </button>
           </div>
@@ -387,7 +387,7 @@ onUnmounted(() => {
         <div class="page-header-actions">
           <div class="status-display">
             <span :class="['status-badge', `status-${run.status}`]">
-              <span class="status-dot"></span>
+              <span class="status-dot"/>
               {{ run.status }}
             </span>
             <span class="run-number-badge">#{{ run.run_number }}</span>
@@ -400,8 +400,8 @@ onUnmounted(() => {
         <div class="stat-item">
           <div class="stat-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
             </svg>
           </div>
           <div class="stat-info">
@@ -413,8 +413,8 @@ onUnmounted(() => {
         <div class="stat-item">
           <div class="stat-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="9 11 12 14 22 4"></polyline>
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              <polyline points="9 11 12 14 22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
             </svg>
           </div>
           <div class="stat-info">
@@ -426,8 +426,8 @@ onUnmounted(() => {
         <div class="stat-item">
           <div class="stat-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
             </svg>
           </div>
           <div class="stat-info">
@@ -439,7 +439,7 @@ onUnmounted(() => {
         <div class="stat-item">
           <div class="stat-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
           </div>
           <div class="stat-info">
@@ -452,11 +452,11 @@ onUnmounted(() => {
       <!-- Actions Bar -->
       <div class="actions-bar">
         <div class="actions-left">
-          <NuxtLink :to="`/workflows/${run.project_id}`" class="btn btn-outline">
+          <NuxtLink :to="`/?project=${run.project_id}`" class="btn btn-outline">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
             </svg>
-            View Workflow
+            View Project
           </NuxtLink>
           <button
             v-if="!['pending', 'running'].includes(run.status)"
@@ -464,8 +464,8 @@ onUnmounted(() => {
             @click="handleRerun"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
             Rerun
           </button>
@@ -475,16 +475,16 @@ onUnmounted(() => {
             @click="handleCancel"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="15" y1="9" x2="9" y2="15"></line>
-              <line x1="9" y1="9" x2="15" y2="15"></line>
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
             </svg>
             Cancel
           </button>
         </div>
         <div class="actions-right">
           <div v-if="['pending', 'running'].includes(run.status)" class="refresh-indicator">
-            <div class="refresh-dot"></div>
+            <div class="refresh-dot"/>
             Auto-refreshing
           </div>
         </div>
@@ -498,7 +498,7 @@ onUnmounted(() => {
             @click="activeTab = 'execution'"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
             Execution
           </button>
@@ -524,9 +524,9 @@ onUnmounted(() => {
             <div v-if="run.error" class="execution-error-banner">
               <div class="error-icon-wrapper">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
               </div>
               <div class="error-details">
@@ -555,7 +555,7 @@ onUnmounted(() => {
                     :readonly="true"
                     :selected-step-id="selectedStepRun?.step_id || null"
                     :step-runs="run?.step_runs || []"
-                    @step:showDetails="handleStepShowDetails"
+                    @step:show-details="handleStepShowDetails"
                   />
                 </div>
                 <p class="workflow-hint">Click on a step to view its input/output details</p>
@@ -564,13 +564,13 @@ onUnmounted(() => {
                 <div class="empty-state compact">
                   <div class="empty-icon">
                     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
                     </svg>
                   </div>
                   <p class="empty-title">Workflow definition not available</p>
-                  <NuxtLink :to="`/workflows/${run.project_id}`" class="btn btn-outline btn-sm">
-                    View Current Workflow
+                  <NuxtLink :to="`/?project=${run.project_id}`" class="btn btn-outline btn-sm">
+                    View Current Project
                   </NuxtLink>
                 </div>
               </div>
@@ -581,8 +581,8 @@ onUnmounted(() => {
               <div v-if="!run.step_runs?.length" class="empty-state compact">
                 <div class="empty-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                    <polyline points="9 11 12 14 22 4"></polyline>
-                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    <polyline points="9 11 12 14 22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                   </svg>
                 </div>
                 <p class="empty-title">No step executions yet</p>
@@ -693,8 +693,8 @@ onUnmounted(() => {
             </div>
             <button class="step-modal-close" @click="closeStepDetails">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
           </div>
@@ -727,14 +727,14 @@ onUnmounted(() => {
             <div v-if="canReExecute && !showReExecuteForm" class="reexecute-actions">
               <button class="btn btn-outline" @click="openReExecuteForm('single')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                 </svg>
                 {{ t('runs.executeThisStepOnly') }}
               </button>
               <button class="btn btn-outline" @click="openReExecuteForm('resume')">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
                 {{ t('runs.resumeFromHere') }}
               </button>
@@ -757,7 +757,7 @@ onUnmounted(() => {
                   class="reexecute-input"
                   rows="8"
                   :placeholder="t('runs.editInput')"
-                ></textarea>
+                />
               </div>
               <div class="reexecute-form-footer">
                 <button
@@ -765,7 +765,7 @@ onUnmounted(() => {
                   :disabled="reExecuting"
                   @click="reExecuteMode === 'single' ? handleExecuteSingleStep() : handleResumeFromStep()"
                 >
-                  <span v-if="reExecuting" class="loading-spinner-sm"></span>
+                  <span v-if="reExecuting" class="loading-spinner-sm"/>
                   {{ t('runs.execute') }}
                 </button>
               </div>
@@ -775,7 +775,7 @@ onUnmounted(() => {
             <div v-if="canReExecute && stepHistory.length > 1" class="step-history">
               <h4 class="step-history-title">{{ t('runs.executionHistory') }}</h4>
               <div v-if="loadingHistory" class="step-history-loading">
-                <span class="loading-spinner-sm"></span>
+                <span class="loading-spinner-sm"/>
               </div>
               <div v-else class="step-history-list">
                 <div
@@ -797,9 +797,9 @@ onUnmounted(() => {
             <div v-if="selectedStepRun.error" class="step-modal-error">
               <div class="error-header">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
                 Error
               </div>

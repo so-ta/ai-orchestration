@@ -104,7 +104,7 @@ function formatDate(dateStr: string) {
   return date.toLocaleString()
 }
 
-function calculateDuration(run: Run): string {
+function _calculateDuration(run: Run): string {
   if (!run.started_at) return '-'
   const start = new Date(run.started_at).getTime()
   const end = run.completed_at ? new Date(run.completed_at).getTime() : Date.now()
@@ -166,10 +166,10 @@ watch(() => props.workflowId, () => {
     <!-- Header -->
     <div class="history-header">
       <h3 class="history-title">{{ t('workflows.runHistory.title') }}</h3>
-      <button class="btn btn-outline btn-sm" @click="fetchRuns" :disabled="loading">
+      <button class="btn btn-outline btn-sm" :disabled="loading" @click="fetchRuns">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="23 4 23 10 17 10"></polyline>
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
         </svg>
         {{ t('workflows.refresh') }}
       </button>
@@ -177,7 +177,7 @@ watch(() => props.workflowId, () => {
 
     <!-- Loading State -->
     <div v-if="loading" class="loading-container">
-      <div class="loading-spinner"></div>
+      <div class="loading-spinner"/>
       <p class="text-secondary mt-2">{{ t('runs.loading') }}</p>
     </div>
 
@@ -195,7 +195,7 @@ watch(() => props.workflowId, () => {
     <div v-else-if="allStepRuns.length === 0" class="empty-state">
       <div class="empty-icon">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
         </svg>
       </div>
       <h4 class="empty-title">{{ t('workflows.runHistory.noRuns') }}</h4>
@@ -222,7 +222,7 @@ watch(() => props.workflowId, () => {
             </td>
             <td>
               <span :class="['badge', getStatusBadge(stepRun.status)]">
-                <span class="status-dot" :class="getStatusDot(stepRun.status)"></span>
+                <span class="status-dot" :class="getStatusDot(stepRun.status)"/>
                 {{ t(`runs.status.${stepRun.status}`) }}
               </span>
             </td>
@@ -239,8 +239,8 @@ watch(() => props.workflowId, () => {
               <div class="action-buttons">
                 <NuxtLink :to="`/runs/${stepRun.run_id}`" class="btn btn-outline btn-sm">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
                   </svg>
                   {{ t('runs.view') }}
                 </NuxtLink>

@@ -77,7 +77,7 @@ const hasParent = computed(() => !!props.block.parent_block_id)
 
     <div class="card-meta">
       <span class="meta-category">
-        <span class="category-dot" :style="{ background: categoryConfig[block.category]?.color }"></span>
+        <span class="category-dot" :style="{ background: categoryConfig[block.category]?.color }"/>
         {{ getCategoryName(block.category) }}
       </span>
       <span class="meta-updated">

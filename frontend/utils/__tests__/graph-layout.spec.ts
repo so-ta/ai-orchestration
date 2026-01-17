@@ -130,8 +130,8 @@ describe('graph-layout', () => {
       ]
 
       // Mock getOutputPorts that returns ports in order
-      const getOutputPorts = (stepType: StepType): OutputPort[] => {
-        if (stepType === 'condition') {
+      const getOutputPorts = (_stepType: StepType): OutputPort[] => {
+        if (_stepType === 'condition') {
           return [
             { name: 'out', label: 'Output', is_default: false },
             { name: 'out2', label: 'Output 2', is_default: false },
@@ -166,8 +166,8 @@ describe('graph-layout', () => {
         createEdge('source', 'target2', 'error'),  // Explicit error port
       ]
 
-      const getOutputPorts = (stepType: StepType): OutputPort[] => {
-        if (stepType === 'condition') {
+      const getOutputPorts = (_stepType: StepType): OutputPort[] => {
+        if (_stepType === 'condition') {
           return [
             { name: 'out', label: 'Output', is_default: false },
             { name: 'error', label: 'Error', is_default: false },
@@ -226,8 +226,8 @@ describe('graph-layout', () => {
         createEdge('source', 'target3', 'error'),
       ]
 
-      const getOutputPorts = (stepType: StepType): OutputPort[] => {
-        if (stepType === 'condition') {
+      const getOutputPorts = (_stepType: StepType): OutputPort[] => {
+        if (_stepType === 'condition') {
           return [
             { name: 'out', label: 'Output', is_default: false },
             { name: 'error', label: 'Error', is_default: false },
@@ -276,8 +276,8 @@ describe('graph-layout', () => {
         createEdge('source', 'target1', 'out'),
       ]
 
-      const getOutputPorts = (stepType: StepType): OutputPort[] => {
-        if (stepType === 'condition') {
+      const getOutputPorts = (_stepType: StepType): OutputPort[] => {
+        if (_stepType === 'condition') {
           return [
             { name: 'out', label: 'Output', is_default: false },
             { name: 'error', label: 'Error', is_default: false },
@@ -312,7 +312,7 @@ describe('graph-layout', () => {
         createGroupEdge('group1', 'target1', 'out'),    // Should be first (top)
       ]
 
-      const getOutputPorts = (stepType: StepType): OutputPort[] => {
+      const getOutputPorts = (_stepType: StepType): OutputPort[] => {
         return [{ name: 'out', label: 'Output', is_default: false }]
       }
 

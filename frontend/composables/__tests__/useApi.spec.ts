@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+import { useApi } from '../useApi'
+
 // Mock useRuntimeConfig
 const mockConfig = {
   public: {
@@ -26,8 +28,6 @@ vi.mock('../useAuth', () => ({
 // Mock global fetch
 const mockFetch = vi.fn()
 global.fetch = mockFetch
-
-import { useApi } from '../useApi'
 
 describe('useApi', () => {
   beforeEach(() => {

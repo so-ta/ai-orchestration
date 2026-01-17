@@ -133,7 +133,7 @@ onUnmounted(() => {
           class="search-input"
           :placeholder="t('blockEditor.selectParentBlock')"
           @focus="showDropdown = true"
-        />
+        >
       </template>
     </div>
 
@@ -146,7 +146,7 @@ onUnmounted(() => {
           type="text"
           class="search-input"
           :placeholder="t('blockEditor.searchBlocks')"
-        />
+        >
       </div>
 
       <!-- Loading -->

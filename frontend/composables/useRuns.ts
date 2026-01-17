@@ -38,7 +38,7 @@ export function useRuns() {
     if (params?.limit) query.set('limit', params.limit.toString())
 
     const queryString = query.toString()
-    const endpoint = `/projects/${projectId}/runs${queryString ? `?${queryString}` : ''}`
+    const endpoint = `/workflows/${projectId}/runs${queryString ? `?${queryString}` : ''}`
 
     return api.get<PaginatedResponse<Run>>(endpoint)
   }
@@ -52,7 +52,7 @@ export function useRuns() {
   // version: 0 or omitted means latest version
   // triggered_by: trigger type (manual, test, etc.)
   async function create(projectId: string, data: { input?: object; triggered_by?: TriggerType; version?: number }) {
-    return api.post<ApiResponse<Run>>(`/projects/${projectId}/runs`, data)
+    return api.post<ApiResponse<Run>>(`/workflows/${projectId}/runs`, data)
   }
 
   // Cancel run
@@ -81,7 +81,7 @@ export function useRuns() {
   // Test a single step inline (without requiring an existing run)
   // Creates a new test run and executes only the specified step
   async function testStepInline(projectId: string, stepId: string, input?: object) {
-    return api.post<TestStepInlineResponse>(`/projects/${projectId}/steps/${stepId}/test`, { input })
+    return api.post<TestStepInlineResponse>(`/workflows/${projectId}/steps/${stepId}/test`, { input })
   }
 
   return {

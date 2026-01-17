@@ -36,14 +36,14 @@ function handleBlur() {
   <div class="checkbox-widget">
     <label :class="['checkbox-label', { disabled }]">
       <input
-        type="checkbox"
         :id="name"
+        type="checkbox"
         :checked="isChecked"
         :disabled="disabled"
         class="checkbox-input"
         @change="handleChange"
         @blur="handleBlur"
-      />
+      >
       <span class="checkbox-box">
         <svg
           v-if="isChecked"

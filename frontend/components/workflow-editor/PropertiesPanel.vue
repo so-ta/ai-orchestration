@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import type { Step, StepType, BlockDefinition, InputPort, OutputPort, Run } from '~/types/api'
+import type { Step, StepType, BlockDefinition, Run } from '~/types/api'
 import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 import FlowTab from './FlowTab.vue'
+import TriggerConfigPanel from './TriggerConfigPanel.vue'
+
+type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
 const { t } = useI18n()
 const blocks = useBlocks()
@@ -22,7 +25,10 @@ const props = defineProps<{
 }>()
 
 // Active tab state
-const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
+const activeTab = ref<'config' | 'flow' | 'trigger' | 'copilot' | 'run'>('config')
+
+// Check if step is a start block (for showing trigger tab)
+const isStartBlock = computed(() => props.step?.type === 'start')
 
 // Keep current tab when step changes (no automatic tab switching)
 
@@ -33,6 +39,7 @@ const emit = defineEmits<{
   (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
   (e: 'update:name', name: string): void
+  (e: 'update:trigger', data: { trigger_type: StartTriggerType; trigger_config: object }): void
 }>()
 
 // Step config type - dynamic form configuration with common known fields
@@ -109,8 +116,8 @@ watch(formName, (newName) => {
   }
 })
 
-// Step type descriptions (computed for i18n reactivity)
-const stepTypeDescriptions = computed(() => ({
+// Step type descriptions (computed for i18n reactivity, reserved for future use)
+const _stepTypeDescriptions = computed(() => ({
   start: t('editor.stepTypes.startDesc'),
   llm: t('editor.stepTypes.llmDesc'),
   tool: t('editor.stepTypes.toolDesc'),
@@ -166,6 +173,11 @@ const flowConfig = ref<{
 
 function handleFlowConfigUpdate(config: typeof flowConfig.value) {
   flowConfig.value = config
+}
+
+// Handle trigger config update from TriggerConfigPanel
+function handleTriggerUpdate(data: { trigger_type: StartTriggerType; trigger_config: object }) {
+  emit('update:trigger', data)
 }
 
 function handleSave() {
@@ -547,6 +559,18 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         </svg>
         {{ t('editor.tabs.flow') }}
       </button>
+      <!-- Trigger Tab (only for Start blocks) -->
+      <button
+        v-if="isStartBlock"
+        class="tab-button"
+        :class="{ active: activeTab === 'trigger' }"
+        @click="activeTab = 'trigger'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        {{ t('editor.tabs.trigger') }}
+      </button>
       <button
         class="tab-button"
         :class="{ active: activeTab === 'copilot' }"
@@ -565,7 +589,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         @click="activeTab = 'run'"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
         {{ t('editor.tabs.run') }}
       </button>
@@ -665,9 +689,9 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         <div v-if="hasConfigSchema && !['start', 'join', 'note'].includes(formType)" class="form-section">
           <h4 class="section-title">{{ currentBlockDef?.name || formType }} 設定</h4>
           <DynamicConfigForm
+            v-model="formConfig"
             :schema="configSchema"
             :ui-config="uiConfig"
-            v-model="formConfig"
             :disabled="readonlyMode"
           />
         </div>
@@ -716,7 +740,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
           <p class="template-preview-hint">{{ t('editor.templatePreview.hint') }}</p>
           <div class="template-variables-list">
             <div v-for="variable in templateVariables" :key="variable" class="template-variable-item">
-              <code class="variable-name" v-text="formatTemplateVariable(variable)"></code>
+              <code class="variable-name" v-text="formatTemplateVariable(variable)"/>
               <span class="variable-arrow">→</span>
               <span class="variable-placeholder">{{ t('editor.templatePreview.runtimeValue') }}</span>
             </div>
@@ -770,7 +794,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="3"
               :placeholder="t('stepConfig.llm.systemPromptPlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
           </div>
 
           <div class="form-group">
@@ -781,7 +805,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="4"
               :placeholder="t('stepConfig.llm.userPromptPlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
             <p class="form-hint">{{ t('stepConfig.llm.userPromptHint') }}</p>
           </div>
 
@@ -1138,7 +1162,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="8"
               :placeholder="t('stepConfig.function.codePlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
           </div>
 
           <div class="form-group">
@@ -1192,7 +1216,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="3"
               :placeholder="t('stepConfig.router.classificationPromptPlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
           </div>
 
           <div class="form-group">
@@ -1203,7 +1227,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="4"
               :placeholder="t('stepConfig.router.routesPlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
           </div>
         </div>
 
@@ -1219,7 +1243,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="3"
               :placeholder="t('stepConfig.humanInLoop.instructionsPlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
           </div>
 
           <div class="form-group">
@@ -1248,9 +1272,9 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
 
           <div class="info-box">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="16" x2="12" y2="12"></line>
-              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
             </svg>
             <span>{{ t('stepConfig.humanInLoop.testModeNote') }}</span>
           </div>
@@ -1335,7 +1359,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
               rows="3"
               :placeholder="t('stepConfig.log.messagePlaceholder')"
               :disabled="readonlyMode"
-            ></textarea>
+            />
             <p class="form-hint">{{ t('stepConfig.log.messageHint') }}</p>
           </div>
 
@@ -1433,6 +1457,17 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         :block-definitions="blockDefinitions"
         :readonly-mode="readonlyMode"
         @update:flow-config="handleFlowConfigUpdate"
+      />
+    </div>
+
+    <!-- Trigger Tab Content (only for Start blocks) -->
+    <div v-if="activeTab === 'trigger' && isStartBlock" class="properties-body trigger-container">
+      <TriggerConfigPanel
+        :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
+        :trigger-config="step?.trigger_config as object || {}"
+        :step-id="step?.id"
+        :readonly="readonlyMode"
+        @update:trigger="handleTriggerUpdate"
       />
     </div>
 

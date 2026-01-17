@@ -8,7 +8,6 @@ import type {
   CreateBlockGroupRequest,
   UpdateBlockGroupRequest,
   AddStepToGroupRequest,
-  GroupRole
 } from '~/types/api'
 
 export function useBlockGroups() {

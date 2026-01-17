@@ -13,7 +13,6 @@ import type {
   ParsedField,
   ParsedSchema,
   WidgetType,
-  UIGroup,
 } from '../types/config-schema';
 
 /**
@@ -170,7 +169,7 @@ export function evaluateConditionalVisibility(
 
   // Collect conditionally required fields
   const conditionallyRequired = new Set<string>();
-  const conditionallyHidden = new Set<string>();
+  const _conditionallyHidden = new Set<string>(); // Reserved for future use
 
   for (const rule of conditionalRules) {
     if (!rule.if?.properties) continue;

@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { VueFlow, useVueFlow, Handle, Position, MarkerType, type Node, type Edge as FlowEdge } from '@vue-flow/core'
 import { MiniMap } from '@vue-flow/minimap'
-import { Controls } from '@vue-flow/controls'
 import { NodeResizer, type OnResizeStart, type OnResize, type OnResizeEnd } from '@vue-flow/node-resizer'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
-import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/node-resizer/dist/style.css'
 import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
+import TriggerBadge from './TriggerBadge.vue'
+
+type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
 // Constants for group node ID prefix
 const GROUP_NODE_PREFIX = 'group_'
@@ -43,6 +44,7 @@ const props = defineProps<{
   selectedGroupId?: string | null  // Selected block group
   stepRuns?: StepRun[]  // Optional: for showing step execution status
   blockDefinitions?: BlockDefinition[] // Block definitions for output ports
+  showMinimap?: boolean // Show/hide minimap (default: true)
 }>()
 
 // Pushed block info for boundary violations (pushed outside)
@@ -96,8 +98,7 @@ const emit = defineEmits<{
   }): void
 }>()
 
-const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, getNodes, viewport } = useVueFlow()
-const toast = useToast()
+const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, viewport, zoomIn, zoomOut, zoomTo } = useVueFlow()
 
 // Selected edge for deletion
 const selectedEdgeId = ref<string | null>(null)
@@ -251,14 +252,14 @@ function getOutputPorts(stepType: string, step?: Step): OutputPort[] {
   return basePorts
 }
 
-// Check if a step type has multiple inputs
-function hasMultipleInputs(stepType: string): boolean {
+// Check if a step type has multiple inputs (reserved for future use)
+function _hasMultipleInputs(stepType: string): boolean {
   const ports = getInputPorts(stepType)
   return ports.length > 1
 }
 
-// Check if a step type has multiple outputs
-function hasMultipleOutputs(stepType: string): boolean {
+// Check if a step type has multiple outputs (reserved for future use)
+function _hasMultipleOutputs(stepType: string): boolean {
   const ports = getOutputPorts(stepType)
   return ports.length > 1
 }
@@ -444,8 +445,8 @@ function findDropZone(
   return { group: null, zone: 'outside' }
 }
 
-// Legacy function for backward compatibility
-function findGroupAtPosition(x: number, y: number): BlockGroup | null {
+// Legacy function for backward compatibility (reserved for future use)
+function _findGroupAtPosition(x: number, y: number): BlockGroup | null {
   const result = findDropZone(x, y)
   return result.zone === 'inside' ? result.group : null
 }
@@ -519,9 +520,9 @@ function snapToValidPosition(
   }
 }
 
-// Calculate new position for a group to avoid collision with a block
+// Calculate new position for a group to avoid collision with a block (reserved for future use)
 // The group is pushed away from the block in the direction that requires minimum movement
-function pushGroupAwayFromBlock(
+function _pushGroupAwayFromBlock(
   group: BlockGroup,
   blockX: number,
   blockY: number,
@@ -725,8 +726,8 @@ function calculatePushPosition(
   }
 }
 
-// Push a group away from another group
-function pushGroupAwayFromGroup(
+// Push a group away from another group (reserved for future use)
+function _pushGroupAwayFromGroup(
   pushedGroup: BlockGroup,
   pushedGroupPos: { x: number; y: number },
   pusherGroup: { x: number; y: number; width: number; height: number }
@@ -918,6 +919,7 @@ const stepNodes = computed<Node[]>(() => {
         stepRun,  // Include step run data if available
         inputPorts,   // Include input ports for multiple handles
         outputPorts,  // Include output ports for multiple handles
+        triggerType: step.type === 'start' ? (step.trigger_type as StartTriggerType || 'manual') : undefined, // Trigger type for Start blocks
       },
     }
   })
@@ -1074,8 +1076,8 @@ const flowEdges = computed<FlowEdge[]>(() => {
   return result
 })
 
-// Check if a branching block (condition/switch) is inside a Block Group
-function isBranchingBlockInGroup(stepId: string): boolean {
+// Check if a branching block (condition/switch) is inside a Block Group (reserved for future use)
+function _isBranchingBlockInGroup(stepId: string): boolean {
   const step = props.steps.find(s => s.id === stepId)
   if (!step) return false
 
@@ -1570,7 +1572,7 @@ onNodeDragStop((event) => {
         const currentSize = groupSizes.get(group.id) || { width: group.width, height: group.height }
 
         // Create temporary group with current position and size
-        const tempGroup: BlockGroup = {
+        const _tempGroup: BlockGroup = {
           ...group,
           position_x: currentPos.x,
           position_y: currentPos.y,
@@ -1621,7 +1623,7 @@ onNodeDragStop((event) => {
 
           // Check if step collides with the pushed group's boundary
           // Use currentSize for accurate dimensions
-          const pushedGroupTemp: BlockGroup = {
+          const _pushedGroupTemp: BlockGroup = {
             ...group,
             position_x: pushed.x,
             position_y: pushed.y,
@@ -2379,6 +2381,14 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     movedGroups,
   })
 }
+
+// Expose zoom functions and viewport for parent components
+defineExpose({
+  viewport,
+  zoomIn,
+  zoomOut,
+  zoomTo,
+})
 </script>
 
 <template>
@@ -2436,8 +2446,8 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
         >
           <!-- Group Input Handle (left side) -->
           <Handle
-            type="target"
             id="group-input"
+            type="target"
             :position="Position.Left"
             class="dag-group-handle dag-group-handle-input"
             :style="{ top: '50%' }"
@@ -2499,9 +2509,9 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <div class="dag-group-outputs">
             <Handle
               v-for="(port, index) in data.outputPorts"
+              :id="port.name"
               :key="port.name"
               type="source"
-              :id="port.name"
               :position="Position.Right"
               class="dag-group-handle dag-group-handle-output"
               :style="{
@@ -2557,9 +2567,9 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <template v-if="!isStartNode(data.type) && data.inputPorts && data.inputPorts.length > 1">
             <Handle
               v-for="(port, index) in data.inputPorts"
+              :id="port.name"
               :key="port.name"
               type="target"
-              :id="port.name"
               :position="Position.Left"
               :class="['dag-handle', 'dag-handle-target', 'dag-handle-multi']"
               :style="{
@@ -2584,10 +2594,18 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <!-- Single input handle for standard blocks (hidden for Start nodes) -->
           <Handle
             v-else-if="!isStartNode(data.type)"
-            type="target"
             id="input"
+            type="target"
             :position="Position.Left"
             class="dag-handle dag-handle-target"
+          />
+
+          <!-- Trigger Badge for Start blocks -->
+          <TriggerBadge
+            v-if="data.triggerType"
+            :trigger-type="data.triggerType"
+            size="sm"
+            class="dag-node-trigger-badge"
           />
 
           <!-- Minimal Linear: Header with dot indicator -->
@@ -2606,9 +2624,9 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <template v-if="data.outputPorts && data.outputPorts.length > 1">
             <Handle
               v-for="(port, index) in data.outputPorts"
+              :id="port.name"
               :key="port.name"
               type="source"
-              :id="port.name"
               :position="Position.Right"
               :class="['dag-handle', 'dag-handle-source', 'dag-handle-multi', 'dag-handle-colored']"
               :style="{
@@ -2636,19 +2654,17 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
           <!-- Single output handle for non-branching blocks -->
           <Handle
             v-else
-            type="source"
             id="output"
+            type="source"
             :position="Position.Right"
             class="dag-handle dag-handle-source"
           />
         </div>
       </template>
 
-      <!-- Controls Panel -->
-      <Controls position="bottom-right" />
-
       <!-- Mini Map -->
       <MiniMap
+        v-if="props.showMinimap !== false"
         :pannable="true"
         :zoomable="true"
         :node-color="(node: Node) => node.type === 'group' ? node.data.color : getStepColor(node.data.type)"
@@ -2668,12 +2684,12 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     >
       <button
         class="edge-delete-button-floating"
-        @click.stop="handleDeleteSelectedEdge"
         title="エッジを削除 (Delete)"
+        @click.stop="handleDeleteSelectedEdge"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6"></polyline>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
         </svg>
       </button>
     </div>
@@ -2682,8 +2698,8 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
     <div v-if="isDragOver" class="drop-indicator">
       <div class="drop-indicator-content">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
         <span>Drop to add step</span>
       </div>
@@ -2873,6 +2889,15 @@ function onGroupResizeEnd(nodeId: string, event: OnResizeEnd) {
   color: #64748b;
   font-family: 'SF Mono', Monaco, monospace;
   white-space: nowrap;
+}
+
+/* Trigger Badge for Start blocks */
+.dag-node-trigger-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  z-index: 10;
+  pointer-events: auto;
 }
 
 /* Handle Styles - Minimal Linear (subtle, visible on hover) */

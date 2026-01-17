@@ -215,7 +215,7 @@ function getSimpleItemField(): ParsedField | null {
               :disabled="disabled"
               class="item-input full-width"
               @input="(e) => updateItem(index, (e.target as HTMLInputElement).value)"
-            />
+            >
           </template>
         </div>
 
@@ -224,8 +224,8 @@ function getSimpleItemField(): ParsedField | null {
           type="button"
           class="remove-button"
           :disabled="disabled"
-          @click="removeItem(index)"
           title="削除"
+          @click="removeItem(index)"
         >
           ×
         </button>

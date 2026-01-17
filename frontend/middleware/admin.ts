@@ -1,6 +1,6 @@
 // Admin route guard middleware
 // Redirects non-admin users to the dashboard
-export default defineNuxtRouteMiddleware((to) => {
+export default defineNuxtRouteMiddleware(() => {
   const { isAdmin, isLoading } = useAuth()
 
   // Skip check while loading

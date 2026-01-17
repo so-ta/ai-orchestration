@@ -243,11 +243,11 @@ async function handleFormSubmit(formData: BlockFormData) {
     error.value = null
 
     // Parse JSON fields
-    let configSchema, uiConfig, configDefaults
+    let configSchema, uiConfig
     try {
       configSchema = JSON.parse(formData.config_schema || '{}')
       uiConfig = JSON.parse(formData.ui_config || '{}')
-      configDefaults = formData.config_defaults ? JSON.parse(formData.config_defaults) : undefined
+      if (formData.config_defaults) JSON.parse(formData.config_defaults) // Validate JSON syntax
     } catch {
       error.value = t('blockEditor.errors.invalidJson')
       return

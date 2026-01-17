@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
+
+// Import after mocking
+import DagEditor from '../DagEditor.vue'
+import type { Step, Edge, BlockGroup } from '~/types/api'
 
 // Mock Vue Flow completely
 vi.mock('@vue-flow/core', () => ({
@@ -8,7 +12,7 @@ vi.mock('@vue-flow/core', () => ({
     name: 'VueFlow',
     props: ['nodes', 'edges', 'nodesDraggable'],
     emits: ['connect', 'paneClick', 'nodeDragStop'],
-    setup(props, { slots, emit }) {
+    setup(props, { slots }) {
       return () => h('div', { class: 'vue-flow-mock' }, [
         h('div', { class: 'nodes' }, props.nodes?.map((n: { id: string }) =>
           h('div', { class: 'node', 'data-id': n.id }, n.id)
@@ -67,10 +71,6 @@ vi.mock('@vue-flow/node-resizer', () => ({
     setup() { return () => h('div', { class: 'resizer-mock' }) }
   }),
 }))
-
-// Import after mocking
-import DagEditor from '../DagEditor.vue'
-import type { Step, Edge, BlockGroup } from '~/types/api'
 
 describe('DagEditor', () => {
   const mockSteps: Step[] = [

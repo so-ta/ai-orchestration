@@ -310,7 +310,7 @@ return input;`
             class="form-input"
             :placeholder="t('blockEditor.placeholders.name')"
             @blur="autoGenerateSlug"
-          />
+          >
           <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
         </div>
         <div class="form-group">
@@ -322,7 +322,7 @@ return input;`
             placeholder="e.g., my_custom_block"
             pattern="[a-z0-9_-]+"
             :disabled="isEdit"
-          />
+          >
           <span class="form-hint">{{ t('blockEditor.hints.slug') }}</span>
           <span v-if="formErrors.slug" class="form-error">{{ formErrors.slug }}</span>
         </div>
@@ -354,14 +354,14 @@ return input;`
             type="text"
             class="form-input"
             placeholder="e.g., message-circle"
-          />
+          >
         </div>
       </div>
 
       <!-- Inheritance Toggle (only for new blocks) -->
       <div v-if="!isEdit" class="inheritance-toggle">
         <label class="toggle-label">
-          <input v-model="useInheritance" type="checkbox" class="toggle-checkbox" />
+          <input v-model="useInheritance" type="checkbox" class="toggle-checkbox" >
           <span class="toggle-text">{{ t('blockEditor.useInheritance') }}</span>
         </label>
         <p class="toggle-hint">{{ t('blockEditor.useInheritanceHint') }}</p>
@@ -481,7 +481,7 @@ return input;`
           type="text"
           class="form-input"
           :placeholder="t('blockEditor.placeholders.changeSummary')"
-        />
+        >
       </div>
     </section>
 
@@ -493,7 +493,7 @@ return input;`
       <button v-else-if="currentStep > 1" class="btn btn-secondary" @click="prevStep">
         {{ t('common.previous') }}
       </button>
-      <div class="footer-spacer"></div>
+      <div class="footer-spacer"/>
       <button class="btn btn-secondary" @click="emit('cancel')">
         {{ t('common.cancel') }}
       </button>

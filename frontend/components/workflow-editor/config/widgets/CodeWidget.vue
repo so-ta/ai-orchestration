@@ -226,7 +226,7 @@ const highlightedCode = computed(() => {
         </div>
         <div class="code-area">
           <!-- Highlighted code display (read-only visual layer) -->
-          <pre class="code-highlight" v-html="highlightedCode"></pre>
+          <pre class="code-highlight" v-html="highlightedCode"/>
           <!-- Actual textarea for input -->
           <textarea
             :id="name"
@@ -238,7 +238,7 @@ const highlightedCode = computed(() => {
             spellcheck="false"
             @input="handleInput"
             @blur="handleBlur"
-          ></textarea>
+          />
         </div>
       </div>
       <div class="code-footer">

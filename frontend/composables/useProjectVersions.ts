@@ -6,12 +6,12 @@ export function useProjectVersions() {
 
   // List all versions of a project
   async function list(projectId: string) {
-    return api.get<ApiResponse<ProjectVersion[]>>(`/projects/${projectId}/versions`)
+    return api.get<ApiResponse<ProjectVersion[]>>(`/workflows/${projectId}/versions`)
   }
 
   // Get a specific version of a project
   async function get(projectId: string, version: number) {
-    return api.get<ApiResponse<ProjectVersion>>(`/projects/${projectId}/versions/${version}`)
+    return api.get<ApiResponse<ProjectVersion>>(`/workflows/${projectId}/versions/${version}`)
   }
 
   return {

@@ -1,6 +1,8 @@
 import type { Step, Project } from '~/types/api'
 
 const STORAGE_KEY = 'project-editor-panel-widths'
+const STORAGE_KEY_COLLAPSED = 'project-editor-panel-collapsed'
+const STORAGE_KEY_LAST_PROJECT = 'project-editor-last-project'
 
 // Clipboard data structure
 interface StepClipboard {
@@ -9,15 +11,24 @@ interface StepClipboard {
   config: Record<string, unknown>
 }
 
+// SlideOut panel types
+export type SlideOutPanel = 'runs' | 'schedules' | 'variables' | null
+
 // Global state (singleton pattern)
 const selectedStepId = ref<string | null>(null)
 const clipboardStep = ref<StepClipboard | null>(null)
 const leftPanelWidth = ref(280)
 const rightPanelWidth = ref(360)
+const leftCollapsed = ref(false)
+const rightCollapsed = ref(false)
+const activeSlideOut = ref<SlideOutPanel>(null)
+const currentProjectId = ref<string | null>(null)
+const lastProjectId = ref<string | null>(null)
 
 // Initialize from localStorage (client-side only)
 if (typeof window !== 'undefined') {
   try {
+    // Load panel widths
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
       const { left, right } = JSON.parse(stored)
@@ -28,8 +39,22 @@ if (typeof window !== 'undefined') {
         rightPanelWidth.value = right
       }
     }
+
+    // Load collapsed states
+    const collapsedStored = localStorage.getItem(STORAGE_KEY_COLLAPSED)
+    if (collapsedStored) {
+      const { left, right } = JSON.parse(collapsedStored)
+      leftCollapsed.value = !!left
+      rightCollapsed.value = !!right
+    }
+
+    // Load last project ID
+    const lastProject = localStorage.getItem(STORAGE_KEY_LAST_PROJECT)
+    if (lastProject) {
+      lastProjectId.value = lastProject
+    }
   } catch (e) {
-    console.warn('Failed to load panel widths from localStorage:', e)
+    console.warn('Failed to load editor state from localStorage:', e)
   }
 }
 
@@ -46,6 +71,32 @@ watch([leftPanelWidth, rightPanelWidth], () => {
     }
   }
 }, { deep: true })
+
+// Watch and persist collapsed states
+watch([leftCollapsed, rightCollapsed], () => {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_COLLAPSED, JSON.stringify({
+        left: leftCollapsed.value,
+        right: rightCollapsed.value
+      }))
+    } catch (e) {
+      console.warn('Failed to save collapsed states to localStorage:', e)
+    }
+  }
+}, { deep: true })
+
+// Watch and persist last project ID
+watch(currentProjectId, (newId) => {
+  if (typeof window !== 'undefined' && newId) {
+    try {
+      localStorage.setItem(STORAGE_KEY_LAST_PROJECT, newId)
+      lastProjectId.value = newId
+    } catch (e) {
+      console.warn('Failed to save last project to localStorage:', e)
+    }
+  }
+})
 
 /**
  * Editor state management composable
@@ -108,12 +159,59 @@ export function useEditorState(project?: Ref<Project | null>) {
     rightPanelWidth.value = 360
   }
 
+  // Collapse controls
+  function setLeftCollapsed(collapsed: boolean) {
+    leftCollapsed.value = collapsed
+  }
+
+  function setRightCollapsed(collapsed: boolean) {
+    rightCollapsed.value = collapsed
+  }
+
+  function toggleLeftCollapsed() {
+    leftCollapsed.value = !leftCollapsed.value
+  }
+
+  function toggleRightCollapsed() {
+    rightCollapsed.value = !rightCollapsed.value
+  }
+
+  // SlideOut panel controls
+  function openSlideOut(panel: SlideOutPanel) {
+    activeSlideOut.value = panel
+  }
+
+  function closeSlideOut() {
+    activeSlideOut.value = null
+  }
+
+  function toggleSlideOut(panel: Exclude<SlideOutPanel, null>) {
+    if (activeSlideOut.value === panel) {
+      activeSlideOut.value = null
+    } else {
+      activeSlideOut.value = panel
+    }
+  }
+
+  // Project ID controls
+  function setCurrentProjectId(projectId: string | null) {
+    currentProjectId.value = projectId
+  }
+
+  function getLastProjectId(): string | null {
+    return lastProjectId.value
+  }
+
   return {
     // State (readonly where appropriate)
     selectedStepId: readonly(selectedStepId),
     selectedStep,
     leftPanelWidth,
     rightPanelWidth,
+    leftCollapsed,
+    rightCollapsed,
+    activeSlideOut: readonly(activeSlideOut),
+    currentProjectId: readonly(currentProjectId),
 
     // Actions
     selectStep,
@@ -125,5 +223,14 @@ export function useEditorState(project?: Ref<Project | null>) {
     setLeftPanelWidth,
     setRightPanelWidth,
     resetPanelWidths,
+    setLeftCollapsed,
+    setRightCollapsed,
+    toggleLeftCollapsed,
+    toggleRightCollapsed,
+    openSlideOut,
+    closeSlideOut,
+    toggleSlideOut,
+    setCurrentProjectId,
+    getLastProjectId,
   }
 }

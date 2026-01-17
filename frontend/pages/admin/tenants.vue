@@ -19,8 +19,6 @@ const {
   suspendTenant,
   activateTenant,
   getOverviewStats,
-  getStatusColor,
-  getPlanColor,
 } = useTenants()
 
 // Overview stats
@@ -214,7 +212,7 @@ async function confirmDelete() {
     selectedTenant.value = null
     // Refresh overview stats
     overviewStats.value = await getOverviewStats()
-  } catch (err) {
+  } catch {
     showMessage('error', t('admin.tenants.messages.deleteFailed'))
   }
 }
@@ -238,7 +236,7 @@ async function confirmSuspend() {
     suspendReason.value = ''
     // Refresh overview stats
     overviewStats.value = await getOverviewStats()
-  } catch (err) {
+  } catch {
     showMessage('error', t('admin.tenants.messages.suspendFailed'))
   }
 }
@@ -250,7 +248,7 @@ async function handleActivate(tenant: Tenant) {
     showMessage('success', t('admin.tenants.messages.activated'))
     // Refresh overview stats
     overviewStats.value = await getOverviewStats()
-  } catch (err) {
+  } catch {
     showMessage('error', t('admin.tenants.messages.activateFailed'))
   }
 }
@@ -261,8 +259,8 @@ function changePage(page: number) {
   loadTenants()
 }
 
-// Format date
-function formatDate(date: string | undefined): string {
+// Format date (reserved for future use)
+function _formatDate(date: string | undefined): string {
   if (!date) return '-'
   return new Date(date).toLocaleDateString()
 }

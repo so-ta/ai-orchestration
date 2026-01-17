@@ -49,7 +49,6 @@ const {
   touch,
   touchAll,
   getFieldError,
-  hasFieldError,
   validate,
 } = useValidation(schemaRef, valuesRef);
 

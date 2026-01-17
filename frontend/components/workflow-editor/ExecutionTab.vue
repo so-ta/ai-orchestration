@@ -17,7 +17,7 @@ const props = defineProps<{
   blocks: BlockDefinition[]
 }>()
 
-const emit = defineEmits<{
+const _emit = defineEmits<{
   (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
 }>()
@@ -592,7 +592,7 @@ function parseCustomInput(): object | null {
       return null
     }
     return parsed
-  } catch (e) {
+  } catch {
     inputError.value = t('execution.errors.invalidJson')
     return null
   }
@@ -857,8 +857,8 @@ function formatStatus(status: string): string {
   return t(`execution.status.${status}`) || status
 }
 
-// Format duration
-function formatDuration(ms?: number): string {
+// Format duration (reserved for future use)
+function _formatDuration(ms?: number): string {
   if (!ms) return '-'
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(2)}s`
@@ -920,8 +920,8 @@ watch(() => props.step, () => {
                 @click="usePreviousOutput"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="1 4 1 10 7 10"></polyline>
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                  <polyline points="1 4 1 10 7 10"/>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                 </svg>
               </button>
               <!-- Clear Button -->
@@ -931,9 +931,9 @@ watch(() => props.step, () => {
                 @click="clearInput"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18"></path>
-                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                  <path d="M3 6h18"/>
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
                 </svg>
               </button>
               <!-- Toggle Form/JSON Mode -->
@@ -945,8 +945,8 @@ watch(() => props.step, () => {
                 @click="toggleInputMode"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="16 18 22 12 16 6"></polyline>
-                  <polyline points="8 6 2 12 8 18"></polyline>
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
                 </svg>
               </button>
             </div>
@@ -971,8 +971,8 @@ watch(() => props.step, () => {
             <div v-if="stepSchemaFields.length > 0" class="schema-preview">
               <div class="schema-preview-header">
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14 2 14 8 20 8"/>
                 </svg>
                 <span>{{ t('execution.expectedFields') }}</span>
               </div>
@@ -993,7 +993,7 @@ watch(() => props.step, () => {
               class="json-input"
               rows="4"
               :placeholder="stepSchemaFields.length > 0 ? generateExampleJson(stepSchemaFields) : t('execution.inputPlaceholder')"
-            ></textarea>
+            />
 
             <p v-if="stepSchemaFields.length > 0" class="json-hint">
               {{ t('execution.jsonHint') }}
@@ -1004,9 +1004,9 @@ watch(() => props.step, () => {
           <div v-if="schemaValidationErrors.length > 0" class="validation-errors">
             <div v-for="error in schemaValidationErrors" :key="error.field" class="validation-error">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="15" y1="9" x2="9" y2="15"></line>
-                <line x1="9" y1="9" x2="15" y2="15"></line>
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
               <span>{{ error.message }}</span>
             </div>
@@ -1018,7 +1018,7 @@ watch(() => props.step, () => {
           <div v-if="suggestedFields.length > 0 && (useJsonMode || !hasStepInputFields)" class="suggested-fields">
             <div class="suggested-header">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
               </svg>
               <span>{{ t('execution.suggestedFields') }} ({{ previousStep?.name }})</span>
             </div>
@@ -1027,8 +1027,8 @@ watch(() => props.step, () => {
                 v-for="field in suggestedFields"
                 :key="field.name"
                 class="suggested-chip"
-                @click="insertSuggestedField(field.name, field.value)"
                 :title="JSON.stringify(field.value, null, 2)"
+                @click="insertSuggestedField(field.name, field.value)"
               >
                 <code>{{ field.name }}</code>
                 <span :class="['chip-type', `type-${field.type}`]">{{ field.type }}</span>
@@ -1040,16 +1040,16 @@ watch(() => props.step, () => {
           <div v-if="templateVariables.length > 0" class="template-preview">
             <div class="template-preview-header">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <path d="M12 18v-6"></path>
-                <path d="M8 15h8"></path>
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M12 18v-6"/>
+                <path d="M8 15h8"/>
               </svg>
               <span>{{ t('execution.templatePreview') }}</span>
             </div>
             <div class="template-items">
               <div v-for="item in templatePreview" :key="item.variable" class="template-item">
-                <code class="template-variable" v-text="formatTemplateVar(item.variable)"></code>
+                <code class="template-variable" v-text="formatTemplateVar(item.variable)"/>
                 <span class="template-arrow">→</span>
                 <span :class="['template-resolved', { 'not-resolved': !item.isResolved }]">
                   {{ item.resolved }}
@@ -1067,10 +1067,10 @@ watch(() => props.step, () => {
             @click="executeThisStepOnly"
           >
             <svg v-if="!pollingRunId && !executing" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
             <svg v-else class="spinning" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
             {{ pollingRunId ? t('execution.waitingForResult') : (executing ? t('execution.executing') : t('execution.executeThisStepOnly')) }}
           </button>
@@ -1080,7 +1080,7 @@ watch(() => props.step, () => {
             @click="executeFromThisStep"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
             {{ t('execution.executeFromThisStep') }}
           </button>
@@ -1090,17 +1090,17 @@ watch(() => props.step, () => {
         <div class="test-run-history">
           <div class="history-header">
             <h4 class="section-title">{{ t('execution.history') }}</h4>
-            <button class="btn btn-outline btn-sm" @click="loadTestRuns" :disabled="loadingTestRuns">
+            <button class="btn btn-outline btn-sm" :disabled="loadingTestRuns" @click="loadTestRuns">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
             </button>
           </div>
 
           <!-- Loading State -->
           <div v-if="loadingTestRuns" class="loading-state">
-            <div class="loading-spinner"></div>
+            <div class="loading-spinner"/>
             <p>{{ t('runs.loading') }}</p>
           </div>
 
@@ -1108,7 +1108,7 @@ watch(() => props.step, () => {
           <div v-else-if="allTestStepRuns.length === 0" class="empty-state">
             <div class="empty-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
               </svg>
             </div>
             <p class="empty-title">{{ t('execution.noTestRuns') }}</p>
@@ -1129,7 +1129,7 @@ watch(() => props.step, () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" @click="openStepRunModal(stepRun)" class="clickable-row">
+                <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" class="clickable-row" @click="openStepRunModal(stepRun)">
                   <td>
                     <span class="seq-badge">#{{ stepRun.sequence_number }}</span>
                   </td>
@@ -1173,9 +1173,9 @@ watch(() => props.step, () => {
                   @click="clearInput"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 6h18"></path>
-                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path>
+                    <path d="M3 6h18"/>
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
                   </svg>
                 </button>
                 <!-- Toggle Form/JSON Mode -->
@@ -1187,8 +1187,8 @@ watch(() => props.step, () => {
                   @click="toggleWorkflowInputMode"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="16 18 22 12 16 6"></polyline>
-                    <polyline points="8 6 2 12 8 18"></polyline>
+                    <polyline points="16 18 22 12 16 6"/>
+                    <polyline points="8 6 2 12 8 18"/>
                   </svg>
                 </button>
               </div>
@@ -1213,8 +1213,8 @@ watch(() => props.step, () => {
               <div v-if="workflowSchemaFields.length > 0" class="schema-preview">
                 <div class="schema-preview-header">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                    <polyline points="14 2 14 8 20 8"/>
                   </svg>
                   <span>{{ t('execution.expectedFields') }}</span>
                 </div>
@@ -1235,7 +1235,7 @@ watch(() => props.step, () => {
                 class="json-input"
                 rows="4"
                 :placeholder="workflowSchemaFields.length > 0 ? generateExampleJson(workflowSchemaFields) : t('execution.inputPlaceholder')"
-              ></textarea>
+              />
 
               <p v-if="workflowSchemaFields.length > 0" class="json-hint">
                 {{ t('execution.jsonHint') }}
@@ -1252,10 +1252,10 @@ watch(() => props.step, () => {
             @click="executeWorkflow"
           >
             <svg v-if="!executing" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
             <svg v-else class="spinning" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
             </svg>
             {{ executing ? t('execution.executing') : t('execution.executeWorkflow') }}
           </button>
@@ -1265,10 +1265,10 @@ watch(() => props.step, () => {
         <div class="test-run-history">
           <div class="history-header">
             <h4 class="section-title">{{ t('execution.testRunHistory') }}</h4>
-            <button class="btn btn-outline btn-sm" @click="loadTestRuns" :disabled="loadingTestRuns">
+            <button class="btn btn-outline btn-sm" :disabled="loadingTestRuns" @click="loadTestRuns">
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
               </svg>
               {{ t('workflows.refresh') }}
             </button>
@@ -1276,7 +1276,7 @@ watch(() => props.step, () => {
 
           <!-- Loading State -->
           <div v-if="loadingTestRuns" class="loading-state">
-            <div class="loading-spinner"></div>
+            <div class="loading-spinner"/>
             <p>{{ t('runs.loading') }}</p>
           </div>
 
@@ -1284,7 +1284,7 @@ watch(() => props.step, () => {
           <div v-else-if="allTestStepRuns.length === 0" class="empty-state">
             <div class="empty-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
               </svg>
             </div>
             <p class="empty-title">{{ t('execution.noTestRuns') }}</p>
@@ -1305,7 +1305,7 @@ watch(() => props.step, () => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" @click="openStepRunModal(stepRun)" class="clickable-row">
+                <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" class="clickable-row" @click="openStepRunModal(stepRun)">
                   <td>
                     <span class="seq-badge">#{{ stepRun.sequence_number }}</span>
                   </td>

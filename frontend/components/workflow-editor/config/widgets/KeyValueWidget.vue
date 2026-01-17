@@ -40,8 +40,7 @@ function addPair() {
 
 function removePair(keyToRemove: string) {
   const currentObj = props.modelValue || {};
-  const newObj = { ...currentObj };
-  delete newObj[keyToRemove];
+  const { [keyToRemove]: _, ...newObj } = currentObj;
   emit('update:modelValue', newObj);
 }
 
@@ -101,7 +100,7 @@ function updatePairValue(key: string, value: string) {
       <div class="pairs-header">
         <span class="header-key">キー</span>
         <span class="header-value">値</span>
-        <span class="header-action"></span>
+        <span class="header-action"/>
       </div>
 
       <div
@@ -116,7 +115,7 @@ function updatePairValue(key: string, value: string) {
           class="key-input"
           placeholder="キー"
           @blur="(e) => updatePairKey(pair.key, (e.target as HTMLInputElement).value)"
-        />
+        >
 
         <input
           type="text"
@@ -125,14 +124,14 @@ function updatePairValue(key: string, value: string) {
           class="value-input"
           placeholder="値"
           @input="(e) => updatePairValue(pair.key, (e.target as HTMLInputElement).value)"
-        />
+        >
 
         <button
           type="button"
           class="remove-button"
           :disabled="disabled"
-          @click="removePair(pair.key)"
           title="削除"
+          @click="removePair(pair.key)"
         >
           ×
         </button>

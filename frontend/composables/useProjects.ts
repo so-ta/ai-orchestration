@@ -1,10 +1,11 @@
 // Project API composable
+// Note: Backend API still uses /workflows endpoint. This composable maps to it.
 import type { Project, Step, Edge, ProjectVersion, ApiResponse, PaginatedResponse } from '~/types/api'
 
 export function useProjects() {
   const api = useApi()
 
-  // List projects
+  // List projects (maps to /workflows)
   async function list(params?: { status?: string; page?: number; limit?: number }) {
     const query = new URLSearchParams()
     if (params?.status) query.set('status', params.status)
@@ -12,29 +13,34 @@ export function useProjects() {
     if (params?.limit) query.set('limit', params.limit.toString())
 
     const queryString = query.toString()
-    const endpoint = `/projects${queryString ? `?${queryString}` : ''}`
+    const endpoint = `/workflows${queryString ? `?${queryString}` : ''}`
 
     return api.get<PaginatedResponse<Project>>(endpoint)
   }
 
   // Get project by ID
   async function get(id: string) {
-    return api.get<ApiResponse<Project>>(`/projects/${id}`)
+    return api.get<ApiResponse<Project>>(`/workflows/${id}`)
   }
 
   // Create project
   async function create(data: { name: string; description?: string; input_schema?: object }) {
-    return api.post<ApiResponse<Project>>('/projects', data)
+    return api.post<ApiResponse<Project>>('/workflows', data)
   }
 
   // Update project
-  async function update(id: string, data: { name?: string; description?: string; input_schema?: object }) {
-    return api.put<ApiResponse<Project>>(`/projects/${id}`, data)
+  async function update(id: string, data: {
+    name?: string
+    description?: string
+    input_schema?: object
+    variables?: Record<string, unknown>
+  }) {
+    return api.put<ApiResponse<Project>>(`/workflows/${id}`, data)
   }
 
   // Delete project
   async function remove(id: string) {
-    return api.delete(`/projects/${id}`)
+    return api.delete(`/workflows/${id}`)
   }
 
   // Save project (creates a new version)
@@ -61,7 +67,7 @@ export function useProjects() {
       condition?: string
     }>
   }) {
-    return api.post<ApiResponse<Project>>(`/projects/${id}/save`, data)
+    return api.post<ApiResponse<Project>>(`/workflows/${id}/save`, data)
   }
 
   // Save project as draft (no version created)
@@ -88,22 +94,22 @@ export function useProjects() {
       condition?: string
     }>
   }) {
-    return api.post<ApiResponse<Project>>(`/projects/${id}/draft`, data)
+    return api.post<ApiResponse<Project>>(`/workflows/${id}/draft`, data)
   }
 
   // Discard draft
   async function discardDraft(id: string) {
-    return api.delete<ApiResponse<Project>>(`/projects/${id}/draft`)
+    return api.delete<ApiResponse<Project>>(`/workflows/${id}/draft`)
   }
 
   // Restore version
   async function restoreVersion(id: string, version: number) {
-    return api.post<ApiResponse<Project>>(`/projects/${id}/restore`, { version })
+    return api.post<ApiResponse<Project>>(`/workflows/${id}/restore`, { version })
   }
 
   // Steps
   async function listSteps(projectId: string) {
-    return api.get<ApiResponse<Step[]>>(`/projects/${projectId}/steps`)
+    return api.get<ApiResponse<Step[]>>(`/workflows/${projectId}/steps`)
   }
 
   async function createStep(projectId: string, data: {
@@ -112,7 +118,7 @@ export function useProjects() {
     config?: object
     position?: { x: number; y: number }
   }) {
-    return api.post<ApiResponse<Step>>(`/projects/${projectId}/steps`, data)
+    return api.post<ApiResponse<Step>>(`/workflows/${projectId}/steps`, data)
   }
 
   async function updateStep(projectId: string, stepId: string, data: {
@@ -120,17 +126,19 @@ export function useProjects() {
     type?: string
     config?: object
     position?: { x: number; y: number }
+    trigger_type?: 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
+    trigger_config?: object
   }) {
-    return api.put<ApiResponse<Step>>(`/projects/${projectId}/steps/${stepId}`, data)
+    return api.put<ApiResponse<Step>>(`/workflows/${projectId}/steps/${stepId}`, data)
   }
 
   async function deleteStep(projectId: string, stepId: string) {
-    return api.delete(`/projects/${projectId}/steps/${stepId}`)
+    return api.delete(`/workflows/${projectId}/steps/${stepId}`)
   }
 
   // Edges
   async function listEdges(projectId: string) {
-    return api.get<ApiResponse<Edge[]>>(`/projects/${projectId}/edges`)
+    return api.get<ApiResponse<Edge[]>>(`/workflows/${projectId}/edges`)
   }
 
   async function createEdge(projectId: string, data: {
@@ -142,20 +150,20 @@ export function useProjects() {
     target_port?: string
     condition?: string
   }) {
-    return api.post<ApiResponse<Edge>>(`/projects/${projectId}/edges`, data)
+    return api.post<ApiResponse<Edge>>(`/workflows/${projectId}/edges`, data)
   }
 
   async function deleteEdge(projectId: string, edgeId: string) {
-    return api.delete(`/projects/${projectId}/edges/${edgeId}`)
+    return api.delete(`/workflows/${projectId}/edges/${edgeId}`)
   }
 
   // Versions
   async function listVersions(projectId: string) {
-    return api.get<ApiResponse<ProjectVersion[]>>(`/projects/${projectId}/versions`)
+    return api.get<ApiResponse<ProjectVersion[]>>(`/workflows/${projectId}/versions`)
   }
 
   async function getVersion(projectId: string, version: number) {
-    return api.get<ApiResponse<ProjectVersion>>(`/projects/${projectId}/versions/${version}`)
+    return api.get<ApiResponse<ProjectVersion>>(`/workflows/${projectId}/versions/${version}`)
   }
 
   return {

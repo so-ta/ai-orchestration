@@ -5,6 +5,7 @@
     "cancel": "キャンセル",
     "edit": "編集",
     "create": "作成",
+    "creating": "作成中...",
     "close": "閉じる",
     "copy": "コピー",
     "loading": "読み込み中...",
@@ -31,6 +32,7 @@
     "disabled": "無効"
   },
   "nav": {
+    "projects": "プロジェクト",
     "dashboard": "ダッシュボード",
     "workflows": "ワークフロー",
     "runs": "実行履歴",
@@ -75,6 +77,51 @@
       "webhook": "Webhook",
       "schedule": "スケジュール"
     }
+  },
+  "projects": {
+    "title": "プロジェクト",
+    "subtitle": "ワークフロープロジェクトの作成と管理",
+    "newProject": "新規プロジェクト",
+    "createProject": "プロジェクトを作成",
+    "editProject": "プロジェクトを編集",
+    "deleteProject": "プロジェクトを削除",
+    "noProjects": "プロジェクトがありません",
+    "noProjectsYet": "プロジェクトがありません",
+    "createFirst": "最初のプロジェクトを作成しましょう",
+    "createFirstDesc": "自動化を始めるために最初のプロジェクトを作成してください",
+    "noMatchingProjects": "一致するプロジェクトがありません",
+    "noMatchingDesc": "検索条件やフィルターを調整してください",
+    "clearFilters": "フィルターをクリア",
+    "createFailed": "プロジェクトの作成に失敗しました",
+    "status": {
+      "draft": "下書き",
+      "published": "公開済み"
+    },
+    "confirmDelete": "このプロジェクトを削除しますか？この操作は取り消せません。",
+    "form": {
+      "name": "プロジェクト名",
+      "namePlaceholder": "プロジェクト名を入力",
+      "nameRequired": "プロジェクト名は必須です",
+      "description": "説明",
+      "descriptionPlaceholder": "プロジェクトの説明を入力（任意）"
+    },
+    "table": {
+      "name": "名前",
+      "status": "ステータス",
+      "version": "バージョン",
+      "lastUpdated": "最終更新",
+      "actions": "アクション"
+    },
+    "stats": {
+      "total": "合計",
+      "published": "公開済み",
+      "draft": "下書き"
+    },
+    "loading": "プロジェクトを読み込み中...",
+    "loadFailed": "プロジェクトの読み込みに失敗しました",
+    "searchPlaceholder": "プロジェクトを検索...",
+    "run": "実行",
+    "refresh": "更新"
   },
   "workflows": {
     "title": "ワークフロー",
@@ -141,7 +188,12 @@
     "refresh": "更新",
     "tabs": {
       "editor": "エディタ",
-      "history": "実行履歴"
+      "history": "実行履歴",
+      "canvas": "キャンバス",
+      "runs": "実行履歴",
+      "schedules": "スケジュール",
+      "variables": "変数",
+      "start": "スタートブロック"
     },
     "runHistory": {
       "title": "実行履歴",
@@ -163,7 +215,35 @@
     }
   },
   "editor": {
+    "untitledProject": "無題のプロジェクト",
+    "projectCreated": "プロジェクトを作成しました",
+    "noProjectSelected": "プロジェクトが選択されていません",
+    "expandPalette": "パレットを展開",
+    "collapsePalette": "パレットを折りたたむ",
+    "expandProperties": "プロパティを展開",
+    "collapseProperties": "プロパティを折りたたむ",
+    "loadProject": "プロジェクトを読み込む",
+    "createProject": "プロジェクトを作成",
+    "searchProjects": "プロジェクトを検索...",
+    "recentProjects": "最近のプロジェクト",
+    "noRecentProjects": "最近のプロジェクトはありません",
+    "loadingProjects": "プロジェクトを読み込み中...",
+    "newProject": "新規プロジェクト",
+    "save": "保存",
+    "saveDraft": "下書き保存",
+    "discardDraft": "下書きを破棄",
+    "run": "実行",
+    "runs": "実行履歴",
+    "schedules": "スケジュール",
+    "variables": "変数",
+    "projectLoadFailed": "プロジェクトの読み込みに失敗しました",
+    "projectNotFound": "プロジェクトが見つかりません",
     "blocks": "ブロック",
+    "noBlocks": "このカテゴリにはブロックがありません",
+    "parallelDesc": "ステップを並列実行",
+    "foreachDesc": "アイテムをループ処理",
+    "tryCatchDesc": "エラーハンドリングブロック",
+    "whileDesc": "条件に応じて繰り返し",
     "dragToCanvas": "キャンバスにドラッグ",
     "dropHint": "ブロックをここにドラッグ、またはクリックで追加",
     "propertiesPanel": "プロパティ",
@@ -265,6 +345,7 @@
     "tabs": {
       "config": "設定",
       "flow": "フロー",
+      "trigger": "トリガー",
       "copilot": "Copilot",
       "run": "実行"
     },
@@ -273,7 +354,56 @@
       "hint": "設定内で検出されたテンプレート変数の一覧です",
       "runtimeValue": "（実行時に解決）",
       "executionNote": "これらの変数は、ワークフロー実行時に前のステップの出力や入力データから値が代入されます"
-    }
+    },
+    "searchBlocksPlaceholder": "ブロックを検索...",
+    "recentBlocks": "最近使用したブロック",
+    "controlFlowGroups": "制御フローグループ",
+    "searchResults": "検索結果",
+    "moreResults": "+{count}件",
+    "draft": "下書き",
+    "saveAndPublish": "保存して公開",
+    "running": "実行中...",
+    "settings": "設定",
+    "minimap": "ミニマップ",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "fitView": "全体を表示",
+    "stepName": "ステップ名",
+    "noConfigOptions": "このブロックには設定項目がありません",
+    "advancedSettings": "詳細設定",
+    "stepSaved": "ステップを保存しました",
+    "stepDeleted": "ステップを削除しました",
+    "layoutApplied": "自動レイアウトを適用しました",
+    "edgeDeleteFailed": "エッジの削除に失敗しました",
+    "addBlock": "ブロックを追加",
+    "saving": "保存中...",
+    "saved": "保存済み",
+    "unsavedChanges": "未保存の変更",
+    "saveError": "保存エラー",
+    "history": "実行履歴",
+    "openOtherProject": "他のプロジェクトを開く",
+    "createRelease": "リリースとして保存",
+    "createReleaseTitle": "リリースを作成",
+    "createReleaseDescription": "現在の状態をリリースとして保存します。外部連携時にこのバージョンを指定して実行できます。",
+    "releaseName": "リリース名",
+    "releaseNamePlaceholder": "例: v1.0, production, 2024-01-release",
+    "releaseDescription": "メモ（任意）",
+    "releaseDescriptionPlaceholder": "このリリースの説明を入力...",
+    "createReleaseButton": "リリースを作成",
+    "releaseCreated": "リリースを作成しました",
+    "releaseCreateFailed": "リリースの作成に失敗しました"
+  },
+  "projectPicker": {
+    "title": "プロジェクトを選択",
+    "searchPlaceholder": "検索...",
+    "noResults": "検索結果がありません",
+    "noProjects": "プロジェクトがありません",
+    "stepCount": "{count}ステップ",
+    "createNew": "新規プロジェクトを作成",
+    "justNow": "たった今",
+    "minutesAgo": "{count}分前",
+    "hoursAgo": "{count}時間前",
+    "daysAgo": "{count}日前"
   },
   "execution": {
     "customInput": "入力データ",
@@ -1330,6 +1460,95 @@
       "invalidInput": "入力データの形式が無効です",
       "invalidConfig": "設定の形式が無効です"
     }
+  },
+  "trigger": {
+    "title": "トリガー設定",
+    "type": {
+      "label": "トリガータイプ",
+      "manual": "手動",
+      "manualDesc": "手動で実行を開始します。Runページまたはテスト実行から起動できます。",
+      "webhook": "Webhook",
+      "webhookDesc": "外部システムからHTTPリクエストで実行を開始します。",
+      "schedule": "スケジュール",
+      "scheduleDesc": "Cron式に基づいて定期的に実行を開始します。",
+      "slack": "Slack",
+      "slackDesc": "Slackイベント（メッセージ、リアクション等）で実行を開始します。",
+      "email": "メール",
+      "emailDesc": "メール受信で実行を開始します。"
+    },
+    "config": {
+      "webhook": {
+        "secret": "Webhookシークレット",
+        "secretPlaceholder": "自動生成されるか、カスタム値を入力",
+        "inputMapping": "入力マッピング",
+        "inputMappingPlaceholder": "$.body.data",
+        "inputMappingHint": "リクエストボディからワークフロー入力へのJSONパス",
+        "allowedIps": "許可IPアドレス",
+        "allowedIpsPlaceholder": "192.168.1.0/24, 10.0.0.1",
+        "allowedIpsHint": "カンマ区切りのIPアドレスまたはCIDR（空=すべて許可）"
+      },
+      "schedule": {
+        "cronExpression": "Cron式",
+        "cronExpressionPlaceholder": "0 9 * * *",
+        "cronHint": "分 時 日 月 曜日",
+        "timezone": "タイムゾーン",
+        "inputData": "入力データ",
+        "inputDataPlaceholder": "（空のオブジェクト）"
+      },
+      "slack": {
+        "eventType": "イベントタイプ",
+        "eventTypes": {
+          "message": "メッセージ",
+          "reaction": "リアクション",
+          "mention": "メンション"
+        },
+        "channelFilter": "チャンネルフィルター",
+        "channelFilterPlaceholder": "#general, #support",
+        "channelFilterHint": "カンマ区切りのチャンネル名（空=すべて）"
+      },
+      "email": {
+        "triggerCondition": "トリガー条件",
+        "conditions": {
+          "any": "すべてのメール",
+          "subject": "件名に含む",
+          "from": "送信者"
+        },
+        "conditionValue": "条件値",
+        "conditionValuePlaceholder": "検索キーワード",
+        "inputMapping": "入力マッピング",
+        "inputMappingHint": "メールデータからワークフロー入力へのマッピング"
+      }
+    }
+  },
+  "variables": {
+    "title": "プロジェクト変数",
+    "subtitle": "プロジェクト全体で共有する変数を定義",
+    "noVariables": "変数が定義されていません",
+    "noVariablesDesc": "ワークフロー全体で使用できる共有変数を追加してください",
+    "addVariable": "変数を追加",
+    "formMode": "フォーム",
+    "jsonMode": "JSON",
+    "key": "キー",
+    "keyPlaceholder": "variable_name",
+    "value": "値",
+    "valuePlaceholder": "値を入力",
+    "type": "型",
+    "types": {
+      "string": "文字列",
+      "number": "数値",
+      "boolean": "真偽値",
+      "json": "JSON"
+    },
+    "actions": {
+      "delete": "削除"
+    },
+    "messages": {
+      "saved": "変数を保存しました",
+      "saveFailed": "変数の保存に失敗しました",
+      "invalidJson": "無効なJSON形式です",
+      "duplicateKey": "キー「{key}」が重複しています"
+    },
+    "usageHint": "変数はステップの設定内で {'{{'}variables.変数名{'}}'}  として参照できます"
   },
   "credentials": {
     "title": "クレデンシャル",

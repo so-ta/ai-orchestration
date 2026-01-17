@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import type { ChartConfig } from '~/types/rich-view'
 
+// Import component after mock setup
+import ChartBlock from '../ChartBlock.vue'
+
 // Use vi.hoisted to create mock that can be referenced in vi.mock factory
 const { mockDestroyFn, MockChart } = vi.hoisted(() => {
   const mockDestroyFn = vi.fn()
@@ -10,12 +13,12 @@ const { mockDestroyFn, MockChart } = vi.hoisted(() => {
     destroy: mockDestroyFn,
   }
 
-  class MockChart {
-    static register = vi.fn()
-    constructor() {
+  const MockChart = Object.assign(
+    function MockChart() {
       return mockChartInstance
-    }
-  }
+    },
+    { register: vi.fn() }
+  )
 
   return { mockDestroyFn, MockChart }
 })
@@ -38,9 +41,6 @@ vi.mock('chart.js', () => {
     Legend: {},
   }
 })
-
-// Import component after mock setup
-import ChartBlock from '../ChartBlock.vue'
 
 describe('ChartBlock', () => {
   // Store original getContext to restore after tests

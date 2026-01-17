@@ -167,10 +167,9 @@ async function handleFormSubmit(formData: BlockFormData) {
     }
 
     // Parse optional JSON fields
-    let configDefaults
     if (formData.config_defaults) {
       try {
-        configDefaults = JSON.parse(formData.config_defaults)
+        JSON.parse(formData.config_defaults)
       } catch {
         showMessageToast('error', t('blockEditor.errors.invalidJson'))
         return
@@ -513,7 +512,7 @@ onMounted(() => {
             type="text"
             class="search-input"
             :placeholder="$t('blockEditor.searchPlaceholder')"
-          />
+          >
         </div>
         <select v-model="selectedCategory" class="filter-select">
           <option value="">{{ $t('common.all') }}</option>
@@ -525,15 +524,15 @@ onMounted(() => {
       <div class="view-toggle">
         <button
           :class="['view-btn', { active: viewMode === 'grid' }]"
-          @click="viewMode = 'grid'"
           :title="$t('blockEditor.viewGrid')"
+          @click="viewMode = 'grid'"
         >
           <span class="view-icon">&#9638;</span>
         </button>
         <button
           :class="['view-btn', { active: viewMode === 'table' }]"
-          @click="viewMode = 'table'"
           :title="$t('blockEditor.viewTable')"
+          @click="viewMode = 'table'"
         >
           <span class="view-icon">&#9776;</span>
         </button>

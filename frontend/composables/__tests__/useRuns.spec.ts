@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Import after mocking
+import { useRuns } from '../useRuns'
+
 // Mock useApi
 const mockApi = {
   get: vi.fn(),
@@ -11,9 +14,6 @@ const mockApi = {
 vi.mock('../useApi', () => ({
   useApi: () => mockApi,
 }))
-
-// Import after mocking
-import { useRuns } from '../useRuns'
 
 describe('useRuns', () => {
   beforeEach(() => {
@@ -28,7 +28,7 @@ describe('useRuns', () => {
       const { list } = useRuns()
       const result = await list('project-1')
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/project-1/runs')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/project-1/runs')
       expect(result).toEqual(mockResponse)
     })
 
@@ -38,7 +38,7 @@ describe('useRuns', () => {
       const { list } = useRuns()
       await list('project-1', { page: 2, limit: 10 })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/project-1/runs?page=2&limit=10')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/project-1/runs?page=2&limit=10')
     })
 
     it('should list runs with only page param', async () => {
@@ -47,7 +47,7 @@ describe('useRuns', () => {
       const { list } = useRuns()
       await list('project-1', { page: 3 })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/project-1/runs?page=3')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/project-1/runs?page=3')
     })
 
     it('should list runs with only limit param', async () => {
@@ -56,7 +56,7 @@ describe('useRuns', () => {
       const { list } = useRuns()
       await list('project-1', { limit: 25 })
 
-      expect(mockApi.get).toHaveBeenCalledWith('/projects/project-1/runs?limit=25')
+      expect(mockApi.get).toHaveBeenCalledWith('/workflows/project-1/runs?limit=25')
     })
   })
 
@@ -89,7 +89,7 @@ describe('useRuns', () => {
       const { create } = useRuns()
       const result = await create('project-1', {})
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/project-1/runs', {})
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {})
       expect(result).toEqual(mockResponse)
     })
 
@@ -99,7 +99,7 @@ describe('useRuns', () => {
       const { create } = useRuns()
       await create('project-1', { input: { key: 'value' } })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/project-1/runs', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         input: { key: 'value' },
       })
     })
@@ -110,7 +110,7 @@ describe('useRuns', () => {
       const { create } = useRuns()
       await create('project-1', { triggered_by: 'test' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/project-1/runs', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         triggered_by: 'test',
       })
     })
@@ -121,7 +121,7 @@ describe('useRuns', () => {
       const { create } = useRuns()
       await create('project-1', { triggered_by: 'manual' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/project-1/runs', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         triggered_by: 'manual',
       })
     })
@@ -132,7 +132,7 @@ describe('useRuns', () => {
       const { create } = useRuns()
       await create('project-1', { version: 2 })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/project-1/runs', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         version: 2,
       })
     })
@@ -147,7 +147,7 @@ describe('useRuns', () => {
         version: 3,
       })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/projects/project-1/runs', {
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         input: { data: 'test' },
         triggered_by: 'manual',
         version: 3,

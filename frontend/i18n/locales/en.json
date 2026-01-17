@@ -5,6 +5,7 @@
     "cancel": "Cancel",
     "edit": "Edit",
     "create": "Create",
+    "creating": "Creating...",
     "close": "Close",
     "copy": "Copy",
     "loading": "Loading...",
@@ -31,6 +32,7 @@
     "disabled": "Disabled"
   },
   "nav": {
+    "projects": "Projects",
     "dashboard": "Dashboard",
     "workflows": "Workflows",
     "runs": "Runs",
@@ -75,6 +77,51 @@
       "webhook": "Webhook",
       "schedule": "Schedule"
     }
+  },
+  "projects": {
+    "title": "Projects",
+    "subtitle": "Create and manage your workflow projects",
+    "newProject": "New Project",
+    "createProject": "Create Project",
+    "editProject": "Edit Project",
+    "deleteProject": "Delete Project",
+    "noProjects": "No projects",
+    "noProjectsYet": "No projects yet",
+    "createFirst": "Create your first project",
+    "createFirstDesc": "Create your first project to get started with automation",
+    "noMatchingProjects": "No matching projects",
+    "noMatchingDesc": "Try adjusting your search or filter criteria",
+    "clearFilters": "Clear Filters",
+    "createFailed": "Failed to create project",
+    "status": {
+      "draft": "Draft",
+      "published": "Published"
+    },
+    "confirmDelete": "Are you sure you want to delete this project? This action cannot be undone.",
+    "form": {
+      "name": "Project Name",
+      "namePlaceholder": "Enter project name",
+      "nameRequired": "Project name is required",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter project description (optional)"
+    },
+    "table": {
+      "name": "Name",
+      "status": "Status",
+      "version": "Version",
+      "lastUpdated": "Last Updated",
+      "actions": "Actions"
+    },
+    "stats": {
+      "total": "Total",
+      "published": "Published",
+      "draft": "Draft"
+    },
+    "loading": "Loading projects...",
+    "loadFailed": "Failed to load projects",
+    "searchPlaceholder": "Search projects...",
+    "run": "Run",
+    "refresh": "Refresh"
   },
   "workflows": {
     "title": "Workflows",
@@ -141,7 +188,12 @@
     "refresh": "Refresh",
     "tabs": {
       "editor": "Editor",
-      "history": "Run History"
+      "history": "Run History",
+      "canvas": "Canvas",
+      "runs": "Runs",
+      "schedules": "Schedules",
+      "variables": "Variables",
+      "start": "Start Block"
     },
     "runHistory": {
       "title": "Run History",
@@ -163,7 +215,35 @@
     }
   },
   "editor": {
+    "untitledProject": "Untitled Project",
+    "projectCreated": "Project created",
+    "noProjectSelected": "No project selected",
+    "expandPalette": "Expand palette",
+    "collapsePalette": "Collapse palette",
+    "expandProperties": "Expand properties",
+    "collapseProperties": "Collapse properties",
+    "loadProject": "Load project",
+    "createProject": "Create project",
+    "searchProjects": "Search projects...",
+    "recentProjects": "Recent Projects",
+    "noRecentProjects": "No recent projects",
+    "loadingProjects": "Loading projects...",
+    "newProject": "New Project",
+    "save": "Save",
+    "saveDraft": "Save Draft",
+    "discardDraft": "Discard Draft",
+    "run": "Run",
+    "runs": "Runs",
+    "schedules": "Schedules",
+    "variables": "Variables",
+    "projectLoadFailed": "Failed to load project",
+    "projectNotFound": "Project not found",
     "blocks": "Blocks",
+    "noBlocks": "No blocks in this category",
+    "parallelDesc": "Execute steps in parallel",
+    "foreachDesc": "Loop over items",
+    "tryCatchDesc": "Error handling block",
+    "whileDesc": "Repeat while condition",
     "dragToCanvas": "Drag to canvas",
     "dropHint": "Drag blocks here or click to add",
     "propertiesPanel": "Properties",
@@ -265,6 +345,7 @@
     "tabs": {
       "config": "Config",
       "flow": "Flow",
+      "trigger": "Trigger",
       "copilot": "Copilot",
       "run": "Run"
     },
@@ -273,7 +354,56 @@
       "hint": "Template variables detected in the configuration",
       "runtimeValue": "(resolved at runtime)",
       "executionNote": "These variables will be populated from previous step outputs or input data during workflow execution"
-    }
+    },
+    "searchBlocksPlaceholder": "Search blocks...",
+    "recentBlocks": "Recent Blocks",
+    "controlFlowGroups": "Control Flow Groups",
+    "searchResults": "Search Results",
+    "moreResults": "+{count} more results",
+    "draft": "Draft",
+    "saveAndPublish": "Save & Publish",
+    "running": "Running...",
+    "settings": "Settings",
+    "minimap": "Minimap",
+    "zoomIn": "Zoom In",
+    "zoomOut": "Zoom Out",
+    "fitView": "Fit to View",
+    "stepName": "Step Name",
+    "noConfigOptions": "No configuration options for this block",
+    "advancedSettings": "Advanced Settings",
+    "stepSaved": "Step saved",
+    "stepDeleted": "Step deleted",
+    "layoutApplied": "Auto layout applied",
+    "edgeDeleteFailed": "Failed to delete edge",
+    "addBlock": "Add Block",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "unsavedChanges": "Unsaved changes",
+    "saveError": "Save error",
+    "history": "Run History",
+    "openOtherProject": "Open Other Project",
+    "createRelease": "Save as Release",
+    "createReleaseTitle": "Create Release",
+    "createReleaseDescription": "Save the current state as a release. You can specify this version when executing from external integrations.",
+    "releaseName": "Release Name",
+    "releaseNamePlaceholder": "e.g. v1.0, production, 2024-01-release",
+    "releaseDescription": "Notes (optional)",
+    "releaseDescriptionPlaceholder": "Enter a description for this release...",
+    "createReleaseButton": "Create Release",
+    "releaseCreated": "Release created",
+    "releaseCreateFailed": "Failed to create release"
+  },
+  "projectPicker": {
+    "title": "Select Project",
+    "searchPlaceholder": "Search...",
+    "noResults": "No results found",
+    "noProjects": "No projects yet",
+    "stepCount": "{count} steps",
+    "createNew": "Create new project",
+    "justNow": "Just now",
+    "minutesAgo": "{count}m ago",
+    "hoursAgo": "{count}h ago",
+    "daysAgo": "{count}d ago"
   },
   "execution": {
     "customInput": "Input Data",
@@ -1352,6 +1482,95 @@
       "saveFailed": "Failed to save block",
       "deleteFailed": "Failed to delete block"
     }
+  },
+  "trigger": {
+    "title": "Trigger Configuration",
+    "type": {
+      "label": "Trigger Type",
+      "manual": "Manual",
+      "manualDesc": "Start execution manually. Can be triggered from the Run page or test execution.",
+      "webhook": "Webhook",
+      "webhookDesc": "Start execution via HTTP request from external systems.",
+      "schedule": "Schedule",
+      "scheduleDesc": "Start execution periodically based on a cron expression.",
+      "slack": "Slack",
+      "slackDesc": "Start execution on Slack events (messages, reactions, etc.).",
+      "email": "Email",
+      "emailDesc": "Start execution on email receipt."
+    },
+    "config": {
+      "webhook": {
+        "secret": "Webhook Secret",
+        "secretPlaceholder": "Auto-generated or enter custom value",
+        "inputMapping": "Input Mapping",
+        "inputMappingPlaceholder": "$.body.data",
+        "inputMappingHint": "JSON path from request body to workflow input",
+        "allowedIps": "Allowed IP Addresses",
+        "allowedIpsPlaceholder": "192.168.1.0/24, 10.0.0.1",
+        "allowedIpsHint": "Comma-separated IP addresses or CIDRs (empty = allow all)"
+      },
+      "schedule": {
+        "cronExpression": "Cron Expression",
+        "cronExpressionPlaceholder": "0 9 * * *",
+        "cronHint": "Min Hour Day Month Weekday",
+        "timezone": "Timezone",
+        "inputData": "Input Data",
+        "inputDataPlaceholder": "(empty object)"
+      },
+      "slack": {
+        "eventType": "Event Type",
+        "eventTypes": {
+          "message": "Message",
+          "reaction": "Reaction",
+          "mention": "Mention"
+        },
+        "channelFilter": "Channel Filter",
+        "channelFilterPlaceholder": "#general, #support",
+        "channelFilterHint": "Comma-separated channel names (empty = all)"
+      },
+      "email": {
+        "triggerCondition": "Trigger Condition",
+        "conditions": {
+          "any": "All emails",
+          "subject": "Subject contains",
+          "from": "From sender"
+        },
+        "conditionValue": "Condition Value",
+        "conditionValuePlaceholder": "Search keyword",
+        "inputMapping": "Input Mapping",
+        "inputMappingHint": "Mapping from email data to workflow input"
+      }
+    }
+  },
+  "variables": {
+    "title": "Project Variables",
+    "subtitle": "Define variables shared across the project",
+    "noVariables": "No variables defined",
+    "noVariablesDesc": "Add shared variables that can be used throughout the workflow",
+    "addVariable": "Add Variable",
+    "formMode": "Form",
+    "jsonMode": "JSON",
+    "key": "Key",
+    "keyPlaceholder": "variable_name",
+    "value": "Value",
+    "valuePlaceholder": "Enter value",
+    "type": "Type",
+    "types": {
+      "string": "String",
+      "number": "Number",
+      "boolean": "Boolean",
+      "json": "JSON"
+    },
+    "actions": {
+      "delete": "Delete"
+    },
+    "messages": {
+      "saved": "Variables saved successfully",
+      "saveFailed": "Failed to save variables",
+      "invalidJson": "Invalid JSON format",
+      "duplicateKey": "Duplicate key \"{key}\""
+    },
+    "usageHint": "Variables can be referenced in step settings as {'{{'}variables.variable_name{'}}'}"
   },
   "credentials": {
     "title": "Credentials",

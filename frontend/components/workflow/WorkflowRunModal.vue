@@ -130,7 +130,7 @@ function handleClose() {
       <!-- Workflow info -->
       <div class="workflow-info">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
         <span class="workflow-name">{{ workflowName }}</span>
       </div>
@@ -144,9 +144,9 @@ function handleClose() {
       <!-- Error state -->
       <div v-else-if="dataError" class="error-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="15" y1="9" x2="9" y2="15"></line>
-          <line x1="9" y1="9" x2="15" y2="15"></line>
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="15" y1="9" x2="9" y2="15"/>
+          <line x1="9" y1="9" x2="15" y2="15"/>
         </svg>
         <span>{{ dataError }}</span>
       </div>
@@ -186,7 +186,7 @@ function handleClose() {
       >
         <span v-if="loading" class="spinner spinner-sm" />
         <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
         {{ t('workflows.runDialog.run') }}
       </button>
