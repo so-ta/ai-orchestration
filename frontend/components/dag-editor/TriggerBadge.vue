@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'md'
 }>(), {
   triggerType: 'manual',
+  stepType: '',
   size: 'sm',
 })
 

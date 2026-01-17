@@ -66,7 +66,7 @@ watch(() => props.triggerConfig, (newVal) => {
 
 // Trigger type options
 const triggerTypeOptions = [
-  { value: 'manual', label: t('trigger.type.manual'), icon: '▶', description: t('trigger.description.manual') },
+  { value: 'manual', label: t('trigger.type.manual'), icon: '👤', description: t('trigger.description.manual') },
   { value: 'webhook', label: t('trigger.type.webhook'), icon: '↗', description: t('trigger.description.webhook') },
   { value: 'schedule', label: t('trigger.type.schedule'), icon: '⏰', description: t('trigger.description.schedule') },
   { value: 'slack', label: t('trigger.type.slack'), icon: '#', description: t('trigger.description.slack') },
