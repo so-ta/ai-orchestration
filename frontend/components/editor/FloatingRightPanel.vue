@@ -14,6 +14,10 @@ defineProps<{
   show: boolean
   /** パネルタイトル */
   title?: string
+  /** 左にシフトする量（px） */
+  shiftLeft?: number
+  /** パネルレベル（1=プライマリ, 2=ネスト） */
+  level?: 1 | 2
 }>()
 
 const emit = defineEmits<{
@@ -34,8 +38,15 @@ function handleClose() {
 <template>
   <div
     class="floating-right-panel"
-    :class="{ visible: show, 'no-transition': isResizing }"
-    :style="{ bottom: bottomOffset + 'px' }"
+    :class="{
+      visible: show,
+      'no-transition': isResizing,
+      'level-2': level === 2
+    }"
+    :style="{
+      bottom: bottomOffset + 'px',
+      right: `${12 + (shiftLeft || 0)}px`
+    }"
   >
     <!-- Header -->
     <div v-if="title" class="panel-header">
@@ -83,7 +94,11 @@ function handleClose() {
 
   transform: translateX(calc(100% + 24px));
   opacity: 0;
-  transition: transform 0.3s ease, opacity 0.3s ease, bottom 0.2s ease;
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.3s ease,
+    right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    bottom 0.2s ease;
 }
 
 .floating-right-panel.visible {
@@ -93,6 +108,11 @@ function handleClose() {
 
 .floating-right-panel.no-transition {
   transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.floating-right-panel.level-2 {
+  z-index: 101;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.12);
 }
 
 /* Header */

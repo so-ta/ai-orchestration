@@ -263,6 +263,12 @@ func processJob(
 			"step_id", job.TargetStepID,
 		)
 
+		// Start run (set started_at)
+		run.Start()
+		if err := runRepo.Update(ctx, run); err != nil {
+			return err
+		}
+
 		// Get max attempt for the entire run (Run-level unique)
 		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, run.TenantID, job.RunID)
 		if err != nil {
@@ -298,7 +304,22 @@ func processJob(
 			}
 		}
 
-		// Don't update run status for single step execution
+		// Update run status for single step execution
+		if execErr != nil {
+			run.Fail(execErr.Error())
+		} else {
+			// Use step output as run output for single step execution
+			var output json.RawMessage
+			if stepRun != nil && stepRun.Output != nil {
+				output = stepRun.Output
+			}
+			run.Complete(output)
+		}
+
+		if err := runRepo.Update(ctx, run); err != nil {
+			logger.Error("Failed to update run status", "run_id", run.ID, "error", err)
+		}
+
 		return execErr
 
 	case engine.ExecutionModeResume:
@@ -311,6 +332,12 @@ func processJob(
 			"run_id", job.RunID,
 			"from_step_id", job.TargetStepID,
 		)
+
+		// Start run (set started_at)
+		run.Start()
+		if err := runRepo.Update(ctx, run); err != nil {
+			return err
+		}
 
 		// Get max attempt for the entire run (Run-level unique)
 		maxAttempt, err := stepRunRepo.GetMaxAttemptForRun(ctx, run.TenantID, job.RunID)
@@ -344,7 +371,43 @@ func processJob(
 			}
 		}
 
-		// Don't update run status for resume execution
+		// Update run status for resume execution
+		if execErr != nil {
+			run.Fail(execErr.Error())
+		} else {
+			// Collect output from terminal steps
+			var output json.RawMessage
+			if len(execCtx.StepData) > 0 {
+				terminalSteps := findTerminalSteps(def.Steps, def.Edges)
+				if len(terminalSteps) > 0 {
+					outputs := make(map[string]interface{})
+					for _, stepID := range terminalSteps {
+						if data, ok := execCtx.StepData[stepID]; ok {
+							var stepOutput interface{}
+							json.Unmarshal(data, &stepOutput)
+							outputs[stepID.String()] = stepOutput
+						}
+					}
+					if len(outputs) == 1 {
+						for _, v := range outputs {
+							output, _ = json.Marshal(v)
+						}
+					} else {
+						output, _ = json.Marshal(outputs)
+					}
+				} else {
+					for _, data := range execCtx.StepData {
+						output = data
+					}
+				}
+			}
+			run.Complete(output)
+		}
+
+		if err := runRepo.Update(ctx, run); err != nil {
+			logger.Error("Failed to update run status", "run_id", run.ID, "error", err)
+		}
+
 		return execErr
 
 	default:

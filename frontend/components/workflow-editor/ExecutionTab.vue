@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Step, Run, StepRun, BlockDefinition } from '~/types/api'
+import type { Step, Run, BlockDefinition } from '~/types/api'
 import type { ConfigSchema } from './config/types/config-schema'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 
@@ -17,9 +17,10 @@ const props = defineProps<{
   blocks: BlockDefinition[]
 }>()
 
-const _emit = defineEmits<{
+const emit = defineEmits<{
   (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
+  (e: 'run:created', run: Run): void
 }>()
 
 // Execution state
@@ -565,22 +566,6 @@ const templatePreview = computed<Array<{ variable: string; resolved: string; isR
 const testRuns = ref<Run[]>([])
 const loadingTestRuns = ref(false)
 
-// Modal state for viewing step run details
-const selectedStepRun = ref<StepRun | null>(null)
-const showStepRunModal = ref(false)
-
-// Open modal with step run details
-function openStepRunModal(stepRun: StepRun) {
-  selectedStepRun.value = stepRun
-  showStepRunModal.value = true
-}
-
-// Close modal
-function closeStepRunModal() {
-  showStepRunModal.value = false
-  selectedStepRun.value = null
-}
-
 // Parse and validate custom input
 function parseCustomInput(): object | null {
   inputError.value = null
@@ -647,12 +632,17 @@ async function executeWorkflow() {
   executing.value = true
 
   try {
-    await runsApi.create(props.workflowId, {
+    const response = await runsApi.create(props.workflowId, {
       triggered_by: 'test',
       input: Object.keys(input).length > 0 ? input : {},
     })
 
     toast.success(t('execution.workflowStarted'))
+
+    // Fetch full run details and emit event
+    const detailedRun = await runsApi.get(response.data.id)
+    emit('run:created', detailedRun.data)
+
     // Reload test runs after execution
     await loadTestRuns()
   } catch (e) {
@@ -675,6 +665,8 @@ async function executeThisStepOnly() {
   executing.value = true
 
   try {
+    let runId: string
+
     if (props.latestRun) {
       // Use existing run for re-execution
       await runsApi.executeSingleStep(
@@ -682,9 +674,8 @@ async function executeThisStepOnly() {
         props.step.id,
         Object.keys(input).length > 0 ? input : undefined
       )
-
+      runId = props.latestRun.id
       toast.success(t('execution.stepExecuted'))
-      await loadTestRuns()
     } else {
       // Use inline test API (creates new test run)
       const response = await runsApi.testStepInline(
@@ -692,12 +683,18 @@ async function executeThisStepOnly() {
         props.step.id,
         Object.keys(input).length > 0 ? input : undefined
       )
-
+      runId = response.data.run_id
       toast.success(t('execution.stepQueued'))
 
       // Start polling for result
       startPolling(response.data.run_id, props.step.id)
     }
+
+    // Fetch full run details and emit event to transition to Run detail panel
+    const detailedRun = await runsApi.get(runId)
+    emit('run:created', detailedRun.data)
+
+    await loadTestRuns()
   } catch (e) {
     toast.error(t('execution.errors.executionFailed'), e instanceof Error ? e.message : undefined)
   } finally {
@@ -718,12 +715,17 @@ async function executeFromThisStep() {
   executing.value = true
 
   try {
-    await runsApi.create(props.workflowId, {
+    const response = await runsApi.create(props.workflowId, {
       triggered_by: 'test',
       input: Object.keys(input).length > 0 ? input : {},
     })
 
     toast.success(t('execution.workflowStarted'))
+
+    // Fetch full run details and emit event
+    const detailedRun = await runsApi.get(response.data.id)
+    emit('run:created', detailedRun.data)
+
     // Reload test runs after execution
     await loadTestRuns()
   } catch (e) {
@@ -753,6 +755,9 @@ async function startPolling(runId: string, stepId: string) {
     try {
       const response = await runsApi.get(runId)
       const run = response.data
+
+      // Always emit the updated run to keep Run Detail Panel in sync
+      emit('run:created', run)
 
       // Check if step has completed
       const stepRun = run.step_runs?.find((sr: { step_id: string }) => sr.step_id === stepId)
@@ -815,77 +820,6 @@ async function loadTestRuns() {
   } finally {
     loadingTestRuns.value = false
   }
-}
-
-// Flattened step runs from all test runs
-interface StepRunWithRunInfo extends StepRun {
-  run_id: string
-  project_version: number
-  run_number: number
-  run_status: string
-}
-
-const allTestStepRuns = computed<StepRunWithRunInfo[]>(() => {
-  const stepRuns: StepRunWithRunInfo[] = []
-  for (const run of testRuns.value) {
-    if (run.step_runs) {
-      for (const stepRun of run.step_runs) {
-        stepRuns.push({
-          ...stepRun,
-          run_id: run.id,
-          project_version: run.project_version,
-          run_number: run.run_number,
-          run_status: run.status,
-        })
-      }
-    }
-  }
-  // Sort by attempt descending, then by sequence_number descending
-  return stepRuns.sort((a, b) => {
-    // First sort by attempt descending
-    if (a.attempt !== b.attempt) {
-      return b.attempt - a.attempt
-    }
-    // Then by sequence_number descending
-    return b.sequence_number - a.sequence_number
-  })
-})
-
-
-// Format step status
-function formatStatus(status: string): string {
-  return t(`execution.status.${status}`) || status
-}
-
-// Format duration (reserved for future use)
-function _formatDuration(ms?: number): string {
-  if (!ms) return '-'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(2)}s`
-}
-
-// Format date
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-
-  if (diff < 60000) return t('execution.justNow')
-  if (diff < 3600000) return t('execution.minutesAgo', { n: Math.floor(diff / 60000) })
-  if (diff < 86400000) return t('execution.hoursAgo', { n: Math.floor(diff / 3600000) })
-  return date.toLocaleString()
-}
-
-// Calculate step duration
-function calculateStepDuration(stepRun: StepRunWithRunInfo): string {
-  if (!stepRun.started_at) return '-'
-  const start = new Date(stepRun.started_at).getTime()
-  const end = stepRun.completed_at ? new Date(stepRun.completed_at).getTime() : Date.now()
-  const ms = end - start
-
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${(ms / 60000).toFixed(1)}m`
 }
 
 // Load test runs when tab becomes active or step changes while active
@@ -1086,75 +1020,6 @@ watch(() => props.step, () => {
           </button>
         </div>
 
-        <!-- Step Execution History (from all test runs) -->
-        <div class="test-run-history">
-          <div class="history-header">
-            <h4 class="section-title">{{ t('execution.history') }}</h4>
-            <button class="btn btn-outline btn-sm" :disabled="loadingTestRuns" @click="loadTestRuns">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-              </svg>
-            </button>
-          </div>
-
-          <!-- Loading State -->
-          <div v-if="loadingTestRuns" class="loading-state">
-            <div class="loading-spinner"/>
-            <p>{{ t('runs.loading') }}</p>
-          </div>
-
-          <!-- Empty State -->
-          <div v-else-if="allTestStepRuns.length === 0" class="empty-state">
-            <div class="empty-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-              </svg>
-            </div>
-            <p class="empty-title">{{ t('execution.noTestRuns') }}</p>
-            <p class="empty-desc">{{ t('execution.noTestRunsDesc') }}</p>
-          </div>
-
-          <!-- Step Runs Table -->
-          <div v-else class="table-container">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Seq</th>
-                  <th>Attempt</th>
-                  <th>{{ t('runs.table.status') }}</th>
-                  <th>{{ t('runs.table.step') }}</th>
-                  <th>{{ t('runs.table.duration') }}</th>
-                  <th>{{ t('runs.table.created') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" class="clickable-row" @click="openStepRunModal(stepRun)">
-                  <td>
-                    <span class="seq-badge">#{{ stepRun.sequence_number }}</span>
-                  </td>
-                  <td>
-                    <span class="attempt-badge">#{{ stepRun.attempt }}</span>
-                  </td>
-                  <td>
-                    <span :class="['status-badge', stepRun.status]">
-                      {{ formatStatus(stepRun.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    <span class="step-name">{{ stepRun.step_name }}</span>
-                  </td>
-                  <td>
-                    <span class="duration">{{ calculateStepDuration(stepRun) }}</span>
-                  </td>
-                  <td class="text-secondary text-sm">
-                    {{ formatDate(stepRun.created_at) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
       </template>
 
       <!-- No Step Selected OR Start Step: Show workflow execution controls and history -->
@@ -1260,86 +1125,8 @@ watch(() => props.step, () => {
             {{ executing ? t('execution.executing') : t('execution.executeWorkflow') }}
           </button>
         </div>
-
-        <!-- Test Run History -->
-        <div class="test-run-history">
-          <div class="history-header">
-            <h4 class="section-title">{{ t('execution.testRunHistory') }}</h4>
-            <button class="btn btn-outline btn-sm" :disabled="loadingTestRuns" @click="loadTestRuns">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-              </svg>
-              {{ t('workflows.refresh') }}
-            </button>
-          </div>
-
-          <!-- Loading State -->
-          <div v-if="loadingTestRuns" class="loading-state">
-            <div class="loading-spinner"/>
-            <p>{{ t('runs.loading') }}</p>
-          </div>
-
-          <!-- Empty State -->
-          <div v-else-if="allTestStepRuns.length === 0" class="empty-state">
-            <div class="empty-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-              </svg>
-            </div>
-            <p class="empty-title">{{ t('execution.noTestRuns') }}</p>
-            <p class="empty-desc">{{ t('execution.noTestRunsDesc') }}</p>
-          </div>
-
-          <!-- Test Runs Table -->
-          <div v-else class="table-container">
-            <table class="history-table">
-              <thead>
-                <tr>
-                  <th>Seq</th>
-                  <th>Attempt</th>
-                  <th>{{ t('runs.table.status') }}</th>
-                  <th>{{ t('runs.table.step') }}</th>
-                  <th>{{ t('runs.table.duration') }}</th>
-                  <th>{{ t('runs.table.created') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="stepRun in allTestStepRuns" :key="stepRun.id" class="clickable-row" @click="openStepRunModal(stepRun)">
-                  <td>
-                    <span class="seq-badge">#{{ stepRun.sequence_number }}</span>
-                  </td>
-                  <td>
-                    <span class="attempt-badge">#{{ stepRun.attempt }}</span>
-                  </td>
-                  <td>
-                    <span :class="['status-badge', stepRun.status]">
-                      {{ formatStatus(stepRun.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    <span class="step-name">{{ stepRun.step_name }}</span>
-                  </td>
-                  <td>
-                    <span class="duration">{{ calculateStepDuration(stepRun) }}</span>
-                  </td>
-                  <td class="text-secondary text-sm">
-                    {{ formatDate(stepRun.created_at) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
       </template>
     </div>
-
-    <!-- Step Run Modal -->
-    <StepRunModal
-      :step-run="selectedStepRun"
-      :show="showStepRunModal"
-      @close="closeStepRunModal"
-    />
   </div>
 </template>
 
@@ -1873,180 +1660,6 @@ watch(() => props.step, () => {
 .status-badge.pending {
   background: #f3f4f6;
   color: #6b7280;
-}
-
-/* Seq Badge */
-.seq-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.25rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  background: #f3f4f6;
-  color: #6b7280;
-  border-radius: 4px;
-}
-
-/* Attempt Badge */
-.attempt-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.25rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  background: #e0e7ff;
-  color: #4f46e5;
-  border-radius: 4px;
-}
-
-.history-duration {
-  color: var(--color-text-secondary);
-}
-
-.history-attempt {
-  color: var(--color-text-secondary);
-  margin-left: auto;
-}
-
-.history-arrow {
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
-
-/* Test Run History */
-.test-run-history {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.history-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.history-header .section-title {
-  margin: 0;
-}
-
-.history-header .btn {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-
-/* Loading State */
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2rem 1rem;
-  color: var(--color-text-secondary);
-}
-
-.loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 0.5rem;
-}
-
-/* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2rem 1rem;
-  text-align: center;
-}
-
-.empty-icon {
-  color: var(--color-text-secondary);
-  opacity: 0.4;
-  margin-bottom: 0.75rem;
-}
-
-.empty-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.empty-desc {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  margin-top: 0.375rem;
-}
-
-/* Table */
-.table-container {
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: auto;
-}
-
-.history-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.75rem;
-}
-
-.history-table th {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-  position: sticky;
-  top: 0;
-}
-
-.history-table td {
-  padding: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-  vertical-align: middle;
-}
-
-.clickable-row {
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.clickable-row:hover {
-  background: var(--color-surface);
-}
-
-.step-name {
-  font-weight: 500;
-  color: var(--color-text);
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
-}
-
-.duration {
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 0.6875rem;
-  color: var(--color-text);
 }
 
 /* Action Buttons */

@@ -40,6 +40,7 @@ const emit = defineEmits<{
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
   (e: 'update:name', name: string): void
   (e: 'update:trigger', data: { trigger_type: StartTriggerType; trigger_config: object }): void
+  (e: 'run:created', run: Run): void
 }>()
 
 // Step config type - dynamic form configuration with common known fields
@@ -1494,6 +1495,7 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         :blocks="blockDefinitions || []"
         @execute="(data) => emit('execute', data)"
         @execute-workflow="(mode, input) => emit('execute-workflow', mode, input)"
+        @run:created="(run) => emit('run:created', run)"
       />
     </div>
 
