@@ -3,58 +3,61 @@ package workflows
 import "encoding/json"
 
 func (r *Registry) registerRAGWorkflows() {
-	r.register(RAGDocumentIndexingWorkflow())
-	r.register(RAGQuestionAnsweringWorkflow())
-	r.register(RAGKnowledgeBaseChatWorkflow())
+	r.register(RAGWorkflow())
 }
 
-// RAGDocumentIndexingWorkflow indexes documents into vector database for RAG queries
-func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
+// RAGWorkflow is a unified RAG workflow with 3 entry points:
+// - indexing: Index documents into vector database
+// - qa: Simple question answering
+// - chat: Interactive chat with knowledge base
+func RAGWorkflow() *SystemWorkflowDefinition {
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000101",
-		SystemSlug:  "rag-document-indexing",
-		Name:        "RAG: Document Indexing Pipeline",
-		Description: "Index documents into vector database for RAG queries. Split documents into chunks, generate embeddings, and store in vector DB.",
+		SystemSlug:  "rag",
+		Name:        "RAG Workflows",
+		Description: "Retrieval-Augmented Generation workflows: document indexing, question answering, and knowledge base chat",
 		Version:     1,
 		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["documents", "collection"],
-			"properties": {
-				"documents": {
-					"type": "array",
-					"items": {
+		Steps: []SystemStepDefinition{
+			// ============================
+			// Document Indexing Entry Point
+			// ============================
+			{
+				TempID:      "start_indexing",
+				Name:        "Start: Document Indexing",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "indexing",
+					"description": "Index documents into vector database"
+				}`),
+				PositionX: 100,
+				PositionY: 50,
+				Config: json.RawMessage(`{
+					"input_schema": {
 						"type": "object",
+						"required": ["documents", "collection"],
 						"properties": {
-							"content": {"type": "string"},
-							"metadata": {"type": "object"}
+							"documents": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"content": {"type": "string"},
+										"metadata": {"type": "object"}
+									}
+								}
+							},
+							"collection": {"type": "string"}
 						}
 					}
-				},
-				"collection": {"type": "string"}
-			}
-		}`),
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"indexed_count": {"type": "integer"},
-				"chunk_count": {"type": "integer"}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
-			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
-				PositionY: 50,
-				Config:    json.RawMessage(`{}`),
+				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "indexing_split",
 				Name:      "Split Documents",
 				Type:      "text-splitter",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 200,
 				BlockSlug: "text-splitter",
 				Config: json.RawMessage(`{
@@ -63,10 +66,10 @@ func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_3",
+				TempID:    "indexing_embed",
 				Name:      "Generate Embeddings",
 				Type:      "embedding",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 350,
 				BlockSlug: "embedding",
 				Config: json.RawMessage(`{
@@ -75,10 +78,10 @@ func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_4",
+				TempID:    "indexing_store",
 				Name:      "Store in Vector DB",
 				Type:      "vector-upsert",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 500,
 				BlockSlug: "vector-upsert",
 				Config: json.RawMessage(`{
@@ -86,61 +89,44 @@ func RAGDocumentIndexingWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_5",
+				TempID:    "indexing_result",
 				Name:      "Return Result",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 650,
 				Config: json.RawMessage(`{
 					"code": "return { indexed_count: input.upserted_count, chunk_count: input.upserted_count, collection: input.collection, ids: input.ids };",
 					"language": "javascript"
 				}`),
 			},
-		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-			{SourceTempID: "step_2", TargetTempID: "step_3", SourcePort: "output"},
-			{SourceTempID: "step_3", TargetTempID: "step_4", SourcePort: "output"},
-			{SourceTempID: "step_4", TargetTempID: "step_5", SourcePort: "output"},
-		},
-	}
-}
 
-// RAGQuestionAnsweringWorkflow answers questions using RAG
-func RAGQuestionAnsweringWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000102",
-		SystemSlug:  "rag-question-answering",
-		Name:        "RAG: Question Answering",
-		Description: "Answer questions using RAG. Searches vector database for relevant documents and generates answer using LLM.",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["query", "collection"],
-			"properties": {
-				"query": {"type": "string"},
-				"collection": {"type": "string"}
-			}
-		}`),
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"answer": {"type": "string"},
-				"sources": {"type": "array"}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
+			// ============================
+			// Question Answering Entry Point
+			// ============================
 			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
+				TempID:      "start_qa",
+				Name:        "Start: Question Answering",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "qa",
+					"description": "Answer questions using RAG"
+				}`),
 				PositionX: 400,
 				PositionY: 50,
-				Config:    json.RawMessage(`{}`),
+				Config: json.RawMessage(`{
+					"input_schema": {
+						"type": "object",
+						"required": ["query", "collection"],
+						"properties": {
+							"query": {"type": "string"},
+							"collection": {"type": "string"}
+						}
+					}
+				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "qa_query",
 				Name:      "RAG Query",
 				Type:      "rag-query",
 				PositionX: 400,
@@ -154,62 +140,47 @@ func RAGQuestionAnsweringWorkflow() *SystemWorkflowDefinition {
 					"system_prompt": "You are a helpful assistant. Answer questions based on the provided context. If the context does not contain enough information, say so clearly."
 				}`),
 			},
-		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-		},
-	}
-}
 
-// RAGKnowledgeBaseChatWorkflow provides interactive chat with knowledge base
-func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000103",
-		SystemSlug:  "rag-knowledge-base-chat",
-		Name:        "RAG: Knowledge Base Chat",
-		Description: "Interactive chat with knowledge base. Maintains conversation context and retrieves relevant documents for each query.",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["query", "collection"],
-			"properties": {
-				"query": {"type": "string"},
-				"collection": {"type": "string"},
-				"chat_history": {
-					"type": "array",
-					"items": {
+			// ============================
+			// Knowledge Base Chat Entry Point
+			// ============================
+			{
+				TempID:      "start_chat",
+				Name:        "Start: Knowledge Base Chat",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "chat",
+					"description": "Interactive chat with knowledge base"
+				}`),
+				PositionX: 700,
+				PositionY: 50,
+				Config: json.RawMessage(`{
+					"input_schema": {
 						"type": "object",
+						"required": ["query", "collection"],
 						"properties": {
-							"role": {"type": "string"},
-							"content": {"type": "string"}
+							"query": {"type": "string"},
+							"collection": {"type": "string"},
+							"chat_history": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"role": {"type": "string"},
+										"content": {"type": "string"}
+									}
+								}
+							}
 						}
 					}
-				}
-			}
-		}`),
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"answer": {"type": "string"},
-				"sources": {"type": "array"},
-				"chat_history": {"type": "array"}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
-			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
-				PositionY: 50,
-				Config:    json.RawMessage(`{}`),
+				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "chat_search",
 				Name:      "Search Documents",
 				Type:      "vector-search",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 200,
 				BlockSlug: "vector-search",
 				Config: json.RawMessage(`{
@@ -219,10 +190,10 @@ func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_3",
+				TempID:    "chat_context",
 				Name:      "Build Context",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 350,
 				Config: json.RawMessage(`{
 					"code": "const context = (input.matches || []).map((m, i) => ` + "`" + `[${i+1}] ${m.content}` + "`" + `).join('\\n\\n---\\n\\n'); const history = (input.chat_history || []).map(h => ` + "`" + `${h.role}: ${h.content}` + "`" + `).join('\\n'); return { context, history, query: input.query, matches: input.matches };",
@@ -230,10 +201,10 @@ func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_4",
+				TempID:    "chat_llm",
 				Name:      "Generate Answer",
 				Type:      "llm",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 500,
 				Config: json.RawMessage(`{
 					"provider": "openai",
@@ -245,10 +216,10 @@ func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_5",
+				TempID:    "chat_format",
 				Name:      "Format Response",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 650,
 				Config: json.RawMessage(`{
 					"code": "const newHistory = [...(input.chat_history || []), {role: 'user', content: input.query}, {role: 'assistant', content: input.content}]; return { answer: input.content, sources: (input.matches || []).map(m => ({id: m.id, score: m.score, excerpt: (m.content || '').substring(0, 150) + '...'})), chat_history: newHistory };",
@@ -257,10 +228,20 @@ func RAGKnowledgeBaseChatWorkflow() *SystemWorkflowDefinition {
 			},
 		},
 		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-			{SourceTempID: "step_2", TargetTempID: "step_3", SourcePort: "output"},
-			{SourceTempID: "step_3", TargetTempID: "step_4", SourcePort: "output"},
-			{SourceTempID: "step_4", TargetTempID: "step_5", SourcePort: "output"},
+			// Indexing flow
+			{SourceTempID: "start_indexing", TargetTempID: "indexing_split", SourcePort: "output"},
+			{SourceTempID: "indexing_split", TargetTempID: "indexing_embed", SourcePort: "output"},
+			{SourceTempID: "indexing_embed", TargetTempID: "indexing_store", SourcePort: "output"},
+			{SourceTempID: "indexing_store", TargetTempID: "indexing_result", SourcePort: "output"},
+
+			// QA flow
+			{SourceTempID: "start_qa", TargetTempID: "qa_query", SourcePort: "output"},
+
+			// Chat flow
+			{SourceTempID: "start_chat", TargetTempID: "chat_search", SourcePort: "output"},
+			{SourceTempID: "chat_search", TargetTempID: "chat_context", SourcePort: "output"},
+			{SourceTempID: "chat_context", TargetTempID: "chat_llm", SourcePort: "output"},
+			{SourceTempID: "chat_llm", TargetTempID: "chat_format", SourcePort: "output"},
 		},
 	}
 }

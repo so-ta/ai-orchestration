@@ -28,14 +28,16 @@ type SystemWorkflowDefinition struct {
 
 // SystemStepDefinition represents a step within a system workflow
 type SystemStepDefinition struct {
-	TempID           string          `json:"temp_id"`                    // Temporary ID for edge references (e.g., "step_1")
-	Name             string          `json:"name"`                       // Step name
-	Type             string          `json:"type"`                       // Block type (e.g., "start", "llm", "function")
-	Config           json.RawMessage `json:"config,omitempty"`           // Step configuration
-	PositionX        int             `json:"position_x"`                 // Canvas X position
-	PositionY        int             `json:"position_y"`                 // Canvas Y position
-	BlockDefID       *string         `json:"block_definition_id"`        // Optional block definition ID reference (deprecated, use BlockSlug)
-	BlockSlug        string          `json:"block_slug,omitempty"`       // Block slug reference (resolved to ID at migration time)
+	TempID           string          `json:"temp_id"`                       // Temporary ID for edge references (e.g., "step_1")
+	Name             string          `json:"name"`                          // Step name
+	Type             string          `json:"type"`                          // Block type (e.g., "start", "llm", "function")
+	Config           json.RawMessage `json:"config,omitempty"`              // Step configuration
+	TriggerType      string          `json:"trigger_type,omitempty"`        // For Start blocks: manual, webhook, schedule, internal
+	TriggerConfig    json.RawMessage `json:"trigger_config,omitempty"`      // For Start blocks: trigger-specific config (includes entry_point)
+	PositionX        int             `json:"position_x"`                    // Canvas X position
+	PositionY        int             `json:"position_y"`                    // Canvas Y position
+	BlockDefID       *string         `json:"block_definition_id"`           // Optional block definition ID reference (deprecated, use BlockSlug)
+	BlockSlug        string          `json:"block_slug,omitempty"`          // Block slug reference (resolved to ID at migration time)
 	BlockGroupTempID string          `json:"block_group_temp_id,omitempty"` // Parent block group temp_id (for steps inside a group)
 }
 

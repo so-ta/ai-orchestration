@@ -77,16 +77,16 @@ func CleanupTestData() error {
 	}
 
 	// Delete in order respecting foreign key constraints
+	// Note: Tables renamed from workflow_* to project_*
 	tables := []string{
 		"step_runs",
 		"runs",
 		"edges",
 		"steps",
 		"block_groups",
-		"webhooks",
 		"schedules",
-		"workflow_versions",
-		"workflows",
+		"project_versions",
+		"projects",
 		"secrets",
 		"credentials",
 		"audit_logs",

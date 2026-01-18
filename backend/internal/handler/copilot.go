@@ -575,7 +575,8 @@ func (h *CopilotHandler) AsyncGenerateProject(w http.ResponseWriter, r *http.Req
 
 	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "copilot-generate",
+		SystemSlug:    "copilot",
+		EntryPoint:    "generate",
 		Input:         inputData,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
@@ -633,7 +634,8 @@ func (h *CopilotHandler) AsyncSuggest(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "copilot-suggest",
+		SystemSlug:    "copilot",
+		EntryPoint:    "suggest",
 		Input:         inputData,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
@@ -689,7 +691,8 @@ func (h *CopilotHandler) AsyncDiagnose(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "copilot-diagnose",
+		SystemSlug:    "copilot",
+		EntryPoint:    "diagnose",
 		Input:         inputData,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
@@ -745,7 +748,8 @@ func (h *CopilotHandler) AsyncOptimize(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "copilot-optimize",
+		SystemSlug:    "copilot",
+		EntryPoint:    "optimize",
 		Input:         inputData,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
