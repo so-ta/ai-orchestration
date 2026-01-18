@@ -94,12 +94,19 @@ function handleValidationChange(valid: boolean) {
 }
 
 async function handleRun() {
+  const startStep = project.value?.steps?.find(s => s.type === 'start')
+  if (!startStep) {
+    toast.error(t('execution.errors.noStartStep'))
+    return
+  }
+
   loading.value = true
 
   try {
     const response = await runsApi.create(props.workflowId, {
       input: inputValues.value,
       triggered_by: 'manual',
+      start_step_id: startStep.id,
     })
 
     toast.success(t('workflows.runDialog.started'))

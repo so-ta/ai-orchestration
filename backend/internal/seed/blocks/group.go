@@ -150,16 +150,6 @@ func foreachBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"items": {
-					"type": "array",
-					"description": "Array of items to iterate"
-				}
-			},
-			"required": ["items"]
-		}`),
 		InputPorts: DefaultInputPorts(),
 		OutputPorts: []domain.OutputPort{
 			{Name: "out", Label: "Complete", IsDefault: true},

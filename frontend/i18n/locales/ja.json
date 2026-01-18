@@ -508,6 +508,7 @@
     "errors": {
       "noRunAvailable": "実行可能なRunがありません。先にワークフローを実行してください。",
       "noStepSelected": "ステップが選択されていません",
+      "noStartStep": "ワークフローにスタートステップがありません",
       "executionFailed": "実行に失敗しました",
       "invalidJson": "無効なJSON形式です",
       "invalidJsonObject": "JSONオブジェクトを入力してください",

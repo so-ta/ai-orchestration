@@ -289,17 +289,17 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
   flex-direction: column;
 }
 
-/* Section - Matching PropertiesPanel form-section style with visual separation */
+/* Section - Matching PropertiesPanel form-section style */
 .flow-section {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .flow-section:last-child {
   margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .section-title {
@@ -322,14 +322,20 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
 .ports-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
 .port-item {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.05));
+}
+
+.port-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.port-item:first-child {
+  padding-top: 0;
 }
 
 .port-header {
@@ -356,7 +362,6 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
   padding: 0.125rem 0.375rem;
   border-radius: 4px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  border: 1px solid var(--color-border);
 }
 
 .port-required {
@@ -385,10 +390,6 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
   font-size: 0.75rem;
   color: var(--color-text-tertiary);
   font-style: italic;
-  padding: 0.75rem;
-  text-align: center;
-  background: var(--color-surface);
-  border-radius: 6px;
 }
 
 /* Scripts Container */

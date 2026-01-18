@@ -29,13 +29,6 @@ func SplitBlock() *SystemBlockDefinition {
 				"input_path": {"type": "string"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"items": {"type": "array", "description": "分割対象の配列"}
-			},
-			"description": "Split処理の入力データ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: true, Description: "Data to split into branches"},
 		},
@@ -98,14 +91,6 @@ func FilterBlock() *SystemBlockDefinition {
 				"expression": {"type": "string"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["items"],
-			"properties": {
-				"items": {"type": "array", "description": "フィルター対象の配列"}
-			},
-			"description": "Filter処理の入力データ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "items", Label: "Items", Schema: json.RawMessage(`{"type": "array", "items": {"type": "any"}}`), Required: true, Description: "Array of items to filter"},
 		},
@@ -147,14 +132,6 @@ func MapBlock() *SystemBlockDefinition {
 				"input_path": {"type": "string"},
 				"max_workers": {"type": "integer"}
 			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["items"],
-			"properties": {
-				"items": {"type": "array", "description": "処理対象の配列"}
-			},
-			"description": "Map処理の入力データ"
 		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "items", Label: "Items", Schema: json.RawMessage(`{"type": "array", "items": {"type": "any"}}`), Required: true, Description: "Array of items to process"},
@@ -215,13 +192,6 @@ func AggregateBlock() *SystemBlockDefinition {
 					}
 				}
 			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"items": {"type": "array", "description": "集計対象の配列"}
-			},
-			"description": "Aggregate処理の入力データ"
 		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input_1", Label: "Input 1", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "First data source"},

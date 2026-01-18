@@ -38,7 +38,6 @@ export function useBlocks() {
     category: BlockCategory
     icon?: string
     config_schema?: object
-    input_schema?: object
     output_schema?: object
     code?: string
     ui_config?: object
@@ -52,7 +51,6 @@ export function useBlocks() {
     description?: string
     icon?: string
     config_schema?: object
-    input_schema?: object
     output_schema?: object
     code?: string
     ui_config?: object
@@ -265,7 +263,6 @@ export interface BlockVersion {
   version: number
   code: string
   config_schema: object
-  input_schema?: object
   output_schema?: object
   ui_config: object
   change_summary?: string
@@ -303,7 +300,6 @@ export function useAdminBlocks() {
     description?: string
     code?: string
     config_schema?: object
-    input_schema?: object
     output_schema?: object
     ui_config?: object
     change_summary?: string

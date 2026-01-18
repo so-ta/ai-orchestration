@@ -273,8 +273,9 @@ func TestE2E_BlockGroupWorkflow_Execution(t *testing.T) {
 
 	// Execute workflow
 	runReq := map[string]interface{}{
-		"input":        map[string]int{"value": 5},
-		"triggered_by": "test",
+		"input":         map[string]int{"value": 5},
+		"triggered_by":  "test",
+		"start_step_id": startStepID,
 	}
 	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "Run create response: %s", string(body))
@@ -421,8 +422,9 @@ func TestE2E_BlockGroupWorkflow_MultipleGroups(t *testing.T) {
 
 	// Execute
 	runReq := map[string]interface{}{
-		"input":        map[string]string{"test": "multiple_groups"},
-		"triggered_by": "test",
+		"input":         map[string]string{"test": "multiple_groups"},
+		"triggered_by":  "test",
+		"start_step_id": startStepID,
 	}
 	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)

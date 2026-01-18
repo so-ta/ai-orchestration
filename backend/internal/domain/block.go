@@ -159,8 +159,9 @@ type BlockDefinition struct {
 	Icon        string           `json:"icon,omitempty"`
 
 	// Schemas (JSON Schema format)
+	// ConfigSchema: Unified schema for all block inputs (both static config and dynamic inputs)
+	// Users can set fixed values or use {{field}} syntax to reference input from previous steps
 	ConfigSchema json.RawMessage `json:"config_schema"`
-	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 
 	// Input ports (for blocks with multiple inputs like join, aggregate)
@@ -381,7 +382,6 @@ type BlockVersion struct {
 	// Snapshot of block at this version
 	Code         string          `json:"code"`
 	ConfigSchema json.RawMessage `json:"config_schema"`
-	InputSchema  json.RawMessage `json:"input_schema,omitempty"`
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
 	UIConfig     json.RawMessage `json:"ui_config"`
 
@@ -400,7 +400,6 @@ func NewBlockVersion(block *BlockDefinition, changeSummary string, changedBy *uu
 		Version:       block.Version,
 		Code:          block.Code,
 		ConfigSchema:  block.ConfigSchema,
-		InputSchema:   block.InputSchema,
 		OutputSchema:  block.OutputSchema,
 		UIConfig:      block.UIConfig,
 		ChangeSummary: changeSummary,

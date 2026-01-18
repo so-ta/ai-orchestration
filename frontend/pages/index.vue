@@ -997,12 +997,12 @@ function _handleRun() {
 }
 
 // Execute project from dialog
-async function handleRunFromDialog(input: Record<string, unknown>) {
+async function handleRunFromDialog(input: Record<string, unknown>, startStepId: string) {
   if (!project.value) return
 
   try {
     running.value = true
-    const response = await runs.create(project.value.id, { triggered_by: 'manual', input })
+    const response = await runs.create(project.value.id, { triggered_by: 'manual', input, start_step_id: startStepId })
     showRunDialog.value = false
     toast.success(t('projects.runStarted'))
     window.open(`/runs/${response.data.id}`, '_blank')
@@ -1518,6 +1518,7 @@ onMounted(async () => {
         :steps="project.steps || []"
         :edges="project.edges || []"
         :blocks="blockDefinitions"
+        :selected-start-step-id="editorState.selectedStep.value?.type === 'start' ? editorState.selectedStep.value.id : null"
         @close="showRunDialog = false"
         @run="handleRunFromDialog"
       />

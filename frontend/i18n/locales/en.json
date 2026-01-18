@@ -508,6 +508,7 @@
     "errors": {
       "noRunAvailable": "No run available. Execute the workflow first.",
       "noStepSelected": "No step selected",
+      "noStartStep": "No start step found in workflow",
       "executionFailed": "Execution failed",
       "invalidJson": "Invalid JSON format",
       "invalidJsonObject": "Please enter a JSON object",

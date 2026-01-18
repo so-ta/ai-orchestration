@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -126,16 +125,9 @@ func (a *OpenAIAdapter) Execute(ctx context.Context, req *Request) (*Response, e
 		temperature = *config.Temperature
 	}
 
-	// Parse input and substitute variables in prompt
-	var inputData map[string]interface{}
-	if req.Input != nil {
-		if err := json.Unmarshal(req.Input, &inputData); err != nil {
-			// If input is not a map, wrap it
-			inputData = map[string]interface{}{"input": json.RawMessage(req.Input)}
-		}
-	}
-
-	prompt := substituteVariables(config.Prompt, inputData)
+	// Config templates are now expanded by Executor before reaching the adapter
+	// Prompt can be used directly from config
+	prompt := config.Prompt
 
 	// Build messages
 	messages := []openAIMessage{}
@@ -264,26 +256,6 @@ func (a *OpenAIAdapter) OutputSchema() json.RawMessage {
 		},
 		"required": ["content"]
 	}`)
-}
-
-// substituteVariables replaces {{variable}} placeholders with values from data
-func substituteVariables(template string, data map[string]interface{}) string {
-	result := template
-	for key, value := range data {
-		placeholder := "{{" + key + "}}"
-		var valueStr string
-		switch v := value.(type) {
-		case string:
-			valueStr = v
-		case json.RawMessage:
-			valueStr = string(v)
-		default:
-			jsonBytes, _ := json.Marshal(v)
-			valueStr = string(jsonBytes)
-		}
-		result = strings.ReplaceAll(result, placeholder, valueStr)
-	}
-	return result
 }
 
 // getEnvOrDefault returns environment variable value or default

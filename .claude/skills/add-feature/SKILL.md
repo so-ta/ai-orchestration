@@ -1,3 +1,10 @@
+---
+name: add-feature
+description: |
+  Add new feature workflow. Use when implementing new functionality,
+  adding new API endpoints, or creating new components.
+---
+
 # Add Feature Workflow
 
 新機能追加時のワークフロー。
@@ -64,21 +71,8 @@ docker compose restart api worker
 | Backend構造 | BACKEND.md |
 | Frontend構造 | FRONTEND.md |
 
-## チェックリスト
-
-```
-[ ] 関連ドキュメントを読んだ
-[ ] 影響範囲を特定した
-[ ] 既存パターンに従って実装した
-[ ] テストを書いた
-[ ] テストが通ることを確認した
-[ ] サービスを再起動した
-[ ] 動作確認した
-[ ] ドキュメントを更新した
-```
-
 ## 参考
 
-- [docs/rules/WORKFLOW_RULES.md](docs/rules/WORKFLOW_RULES.md)
+- [docs/BACKEND.md](docs/BACKEND.md)
+- [docs/FRONTEND.md](docs/FRONTEND.md)
 - [docs/TESTING.md](docs/TESTING.md)
-- [docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)

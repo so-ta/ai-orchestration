@@ -55,14 +55,15 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionX: 160,
 				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "const blocks = context.blocks.list(); return { blocks: blocks.map(b => ({ slug: b.slug, name: b.name, description: b.description, category: b.category })) };",
+					"code": "const blocks = ctx.blocks.list(); return { prompt: input.prompt, blocks: blocks.map(b => ({ slug: b.slug, name: b.name, description: b.description, category: b.category })) };",
 					"language": "javascript",
 					"output_schema": {
 						"type": "object",
 						"properties": {
+							"prompt": {"type": "string", "title": "プロンプト"},
 							"blocks": {"type": "array", "title": "ブロック一覧", "description": "利用可能なブロックの配列"}
 						},
-						"required": ["blocks"]
+						"required": ["prompt", "blocks"]
 					}
 				}`),
 			},
@@ -153,7 +154,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionX: 160,
 				PositionY: 160,
 				Config: json.RawMessage(`{
-					"code": "const workflow = context.workflows.get(input.workflow_id); const blocks = context.blocks.list(); return { workflow: workflow, blocks: blocks };",
+					"code": "const workflow = ctx.workflows.get(input.workflow_id); const blocks = ctx.blocks.list(); return { workflow: workflow, blocks: blocks, context: input.context };",
 					"language": "javascript"
 				}`),
 			},
@@ -226,7 +227,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionX: 160,
 				PositionY: 280,
 				Config: json.RawMessage(`{
-					"code": "const run = context.runs.get(input.run_id); const stepRuns = context.runs.getStepRuns(input.run_id); const failedSteps = stepRuns.filter(sr => sr.status === \"failed\"); return { run: run, stepRuns: stepRuns, failedSteps: failedSteps };",
+					"code": "const run = ctx.runs.get(input.run_id); const stepRuns = ctx.runs.getStepRuns(input.run_id); const failedSteps = stepRuns.filter(sr => sr.status === \"failed\"); return { run: run, stepRuns: stepRuns, failedSteps: failedSteps };",
 					"language": "javascript"
 				}`),
 			},
@@ -299,7 +300,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionX: 160,
 				PositionY: 400,
 				Config: json.RawMessage(`{
-					"code": "const workflow = context.workflows.get(input.workflow_id); return { workflow: workflow };",
+					"code": "const workflow = ctx.workflows.get(input.workflow_id); return { workflow: workflow };",
 					"language": "javascript"
 				}`),
 			},

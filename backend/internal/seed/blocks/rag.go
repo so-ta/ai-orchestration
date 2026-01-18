@@ -30,14 +30,6 @@ func DocLoaderBlock() *SystemBlockDefinition {
 				"strip_html": {"type": "boolean", "default": true, "title": "Strip HTML Tags"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"url": {"type": "string"},
-				"content": {"type": "string"},
-				"text": {"type": "string"}
-			}
-		}`),
 		OutputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -120,14 +112,6 @@ func TextSplitterBlock() *SystemBlockDefinition {
 				"separator": {"type": "string", "default": "\\n\\n", "title": "Separator"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"documents": {"type": "array"},
-				"content": {"type": "string"},
-				"text": {"type": "string"}
-			}
-		}`),
 		OutputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -191,9 +175,8 @@ func RAGQueryBlock() *SystemBlockDefinition {
 		Icon:        "message-square",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
-			"required": ["collection"],
 			"properties": {
-				"collection": {"type": "string", "title": "Collection Name"},
+				"collection": {"type": "string", "title": "Collection Name", "description": "Collection name (can also be provided via input.collection)"},
 				"top_k": {"type": "integer", "default": 5, "title": "Search Results"},
 				"embedding_provider": {"type": "string", "default": "openai"},
 				"embedding_model": {"type": "string", "default": "text-embedding-3-small"},
@@ -202,14 +185,6 @@ func RAGQueryBlock() *SystemBlockDefinition {
 				"system_prompt": {"type": "string", "title": "System Prompt"},
 				"temperature": {"type": "number", "default": 0.3, "minimum": 0, "maximum": 2},
 				"max_tokens": {"type": "integer", "default": 2000}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["query"],
-			"properties": {
-				"query": {"type": "string"},
-				"question": {"type": "string"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{

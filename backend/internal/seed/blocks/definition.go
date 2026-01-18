@@ -31,7 +31,6 @@ type SystemBlockDefinition struct {
 
 	// Schema definitions
 	ConfigSchema json.RawMessage     `json:"config_schema"`
-	InputSchema  json.RawMessage     `json:"input_schema,omitempty"`
 	OutputSchema json.RawMessage     `json:"output_schema,omitempty"`
 	InputPorts   []domain.InputPort  `json:"input_ports"`
 	OutputPorts  []domain.OutputPort `json:"output_ports"`

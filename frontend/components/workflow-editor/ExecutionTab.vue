@@ -199,7 +199,13 @@ function insertSuggestedField(fieldName: string, value: unknown) {
 }
 
 // Find the start step
-const startStep = computed(() => props.steps.find(s => s.type === 'start'))
+// If a Start step is selected, use that one; otherwise fall back to the first Start step
+const startStep = computed(() => {
+  if (props.step?.type === 'start') {
+    return props.step
+  }
+  return props.steps.find(s => s.type === 'start')
+})
 
 // Find the first executable step (after start)
 const firstExecutableStep = computed(() => {
@@ -257,14 +263,14 @@ const workflowInputSchema = computed<ConfigSchema | null>(() => {
   } as ConfigSchema
 })
 
-// Convert input_schema to ConfigSchema format for step execution
+// Convert config_schema to ConfigSchema format for step execution
 // For Start step, use the workflow input schema (from Start step's config.input_schema)
 const stepInputSchema = computed<ConfigSchema | null>(() => {
   // For Start step, use workflowInputSchema (which comes from Start step's config.input_schema)
   if (isStartStep.value) {
     return workflowInputSchema.value
   }
-  const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  const schema = selectedStepBlock.value?.config_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
   const properties = schema.properties as Record<string, unknown> | undefined
   if (!properties || Object.keys(properties).length === 0) return null
@@ -296,7 +302,7 @@ watch(customInputJson, () => {
   if (useJsonMode.value || !hasStepInputFields.value) {
     try {
       const parsed = JSON.parse(customInputJson.value)
-      const schema = selectedStepBlock.value?.input_schema as ConfigSchema | undefined
+      const schema = selectedStepBlock.value?.config_schema as ConfigSchema | undefined
       const result = validateConfig(schema, parsed)
       schemaValidationErrors.value = result.errors.map(e => ({ field: e.field, message: e.message }))
       inputError.value = null
@@ -346,7 +352,7 @@ const workflowSchemaFields = computed(() => {
 
 // Get step schema fields for preview
 const stepSchemaFields = computed(() => {
-  const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  const schema = selectedStepBlock.value?.config_schema as Record<string, unknown> | undefined
   return getSchemaFields(schema)
 })
 
@@ -476,12 +482,18 @@ async function executeWorkflow() {
   const input = getWorkflowInput()
   if (input === null) return
 
+  if (!startStep.value) {
+    toast.error(t('execution.errors.noStartStep'))
+    return
+  }
+
   executing.value = true
 
   try {
     const response = await runsApi.create(props.workflowId, {
       triggered_by: 'test',
       input: Object.keys(input).length > 0 ? input : {},
+      start_step_id: startStep.value.id,
     })
 
     toast.success(t('execution.workflowStarted'))
@@ -565,6 +577,7 @@ async function executeFromThisStep() {
     const response = await runsApi.create(props.workflowId, {
       triggered_by: 'test',
       input: Object.keys(input).length > 0 ? input : {},
+      start_step_id: props.step.id,
     })
 
     toast.success(t('execution.workflowStarted'))

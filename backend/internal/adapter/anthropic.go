@@ -127,16 +127,9 @@ func (a *AnthropicAdapter) Execute(ctx context.Context, req *Request) (*Response
 		temperature = *config.Temperature
 	}
 
-	// Parse input and substitute variables in prompt
-	var inputData map[string]interface{}
-	if req.Input != nil {
-		if err := json.Unmarshal(req.Input, &inputData); err != nil {
-			// If input is not a map, wrap it
-			inputData = map[string]interface{}{"input": json.RawMessage(req.Input)}
-		}
-	}
-
-	prompt := substituteVariables(config.Prompt, inputData)
+	// Config templates are now expanded by Executor before reaching the adapter
+	// Prompt can be used directly from config
+	prompt := config.Prompt
 
 	// Build request
 	apiReq := anthropicRequest{

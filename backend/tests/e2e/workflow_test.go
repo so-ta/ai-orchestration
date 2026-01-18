@@ -217,7 +217,8 @@ func TestWorkflowExecutionFlow(t *testing.T) {
 		"input": map[string]string{
 			"message": "Hello from E2E test",
 		},
-		"triggered_by": "test",
+		"triggered_by":  "test",
+		"start_step_id": startStep.ID,
 	}
 	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "Run create response: %s", string(body))
@@ -309,8 +310,9 @@ func TestConditionBranching(t *testing.T) {
 
 	// Execute with value > 10
 	runReq := map[string]interface{}{
-		"input": map[string]int{"value": 20},
-		"triggered_by": "test",
+		"input":         map[string]int{"value": 20},
+		"triggered_by":  "test",
+		"start_step_id": startStep.ID,
 	}
 	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)

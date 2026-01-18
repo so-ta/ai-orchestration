@@ -51,7 +51,8 @@ export function useRuns() {
   // Create run (execute project)
   // version: 0 or omitted means latest version
   // triggered_by: trigger type (manual, test, etc.)
-  async function create(projectId: string, data: { input?: object; triggered_by?: TriggerType; version?: number }) {
+  // start_step_id: which Start block to execute from (required)
+  async function create(projectId: string, data: { input?: object; triggered_by?: TriggerType; version?: number; start_step_id: string }) {
     return api.post<ApiResponse<Run>>(`/workflows/${projectId}/runs`, data)
   }
 

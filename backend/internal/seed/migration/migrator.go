@@ -207,7 +207,6 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 		Subcategory:         seedBlock.Subcategory,
 		Icon:                seedBlock.Icon,
 		ConfigSchema:        seedBlock.ConfigSchema,
-		InputSchema:         seedBlock.InputSchema,
 		OutputSchema:        seedBlock.OutputSchema,
 		InputPorts:          seedBlock.InputPorts,
 		OutputPorts:         seedBlock.OutputPorts,
@@ -277,7 +276,6 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 	existing.Subcategory = seedBlock.Subcategory
 	existing.Icon = seedBlock.Icon
 	existing.ConfigSchema = seedBlock.ConfigSchema
-	existing.InputSchema = seedBlock.InputSchema
 	existing.OutputSchema = seedBlock.OutputSchema
 	existing.InputPorts = seedBlock.InputPorts
 	existing.OutputPorts = seedBlock.OutputPorts
@@ -356,9 +354,6 @@ func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.Sys
 
 	// Compare JSON fields
 	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema) {
-		return true
-	}
-	if !jsonEqual(existing.InputSchema, seed.InputSchema) {
 		return true
 	}
 	if !jsonEqual(existing.OutputSchema, seed.OutputSchema) {
@@ -540,9 +535,6 @@ func (m *Migrator) describeChanges(existing *domain.BlockDefinition, seed *block
 	}
 	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema) {
 		changes = append(changes, "config_schema")
-	}
-	if !jsonEqual(existing.InputSchema, seed.InputSchema) {
-		changes = append(changes, "input_schema")
 	}
 	if !jsonEqual(existing.OutputSchema, seed.OutputSchema) {
 		changes = append(changes, "output_schema")

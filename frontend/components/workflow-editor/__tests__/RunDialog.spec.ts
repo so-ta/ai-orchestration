@@ -158,8 +158,7 @@ describe('RunDialog', () => {
       category: 'ai',
       description: 'LLM block',
       is_system: true,
-      config_schema: {},
-      input_schema: {
+      config_schema: {
         type: 'object',
         properties: {
           prompt: { type: 'string', title: 'Prompt' },
@@ -253,7 +252,8 @@ describe('RunDialog', () => {
       const runButton = wrapper.find('.btn-primary')
       await runButton.trigger('click')
       expect(wrapper.emitted('run')).toBeTruthy()
-      expect(wrapper.emitted('run')![0]).toEqual([{}])
+      // run event now includes startStepId as second argument
+      expect(wrapper.emitted('run')![0]).toEqual([{}, 'step-start'])
     })
   })
 

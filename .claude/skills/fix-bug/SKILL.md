@@ -1,3 +1,10 @@
+---
+name: fix-bug
+description: |
+  Bug fix workflow. Use when fixing bugs, errors, or unexpected behavior.
+  Includes reproduction test creation, fix implementation, and verification.
+---
+
 # Bug Fix Workflow
 
 バグ修正時のワークフロー。
@@ -61,19 +68,6 @@ docker compose restart api worker
 
 ブラウザまたはcurlで実際に動作確認。
 
-## チェックリスト
-
-```
-[ ] 再現テストを書いた
-[ ] テストが失敗することを確認した
-[ ] コードを修正した
-[ ] テストが成功することを確認した
-[ ] エッジケースのテストを追加した
-[ ] サービスを再起動した
-[ ] 動作確認した
-[ ] 関連ドキュメントを更新した（必要な場合）
-```
-
 ## よくあるバグパターン
 
 | パターン | 確認ポイント |
@@ -87,4 +81,4 @@ docker compose restart api worker
 ## 参考
 
 - [docs/TESTING.md](docs/TESTING.md)
-- [docs/rules/WORKFLOW_RULES.md](docs/rules/WORKFLOW_RULES.md)
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)

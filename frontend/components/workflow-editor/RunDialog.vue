@@ -17,11 +17,12 @@ const props = defineProps<{
   steps: Step[]
   edges: Array<{ source_step_id?: string | null; target_step_id?: string | null }>
   blocks: BlockDefinition[]
+  selectedStartStepId?: string | null
 }>()
 
 const emit = defineEmits<{
   close: []
-  run: [input: Record<string, unknown>]
+  run: [input: Record<string, unknown>, startStepId: string]
 }>()
 
 const { t } = useI18n()
@@ -30,7 +31,14 @@ const isValid = ref(true)
 const loading = ref(false)
 
 // Find the start step
-const startStep = computed(() => props.steps.find(s => s.type === 'start'))
+// If a Start step is selected, use that one; otherwise fall back to the first Start step
+const startStep = computed(() => {
+  if (props.selectedStartStepId) {
+    const selected = props.steps.find(s => s.id === props.selectedStartStepId && s.type === 'start')
+    if (selected) return selected
+  }
+  return props.steps.find(s => s.type === 'start')
+})
 
 // Get the workflow input schema from Start step's config.input_schema
 // This is the user-defined schema for workflow inputs, not the block's default input_schema
@@ -70,8 +78,9 @@ function handleValidationChange(valid: boolean) {
 }
 
 async function handleRun() {
+  if (!startStep.value) return
   loading.value = true
-  emit('run', inputValues.value)
+  emit('run', inputValues.value, startStep.value.id)
 }
 
 function handleClose() {
