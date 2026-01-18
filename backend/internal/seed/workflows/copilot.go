@@ -21,7 +21,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
-			// Generate Entry Point
+			// Generate Entry Point (横並び: Y=40固定, X増加)
 			// ============================
 			{
 				TempID:      "start_generate",
@@ -32,8 +32,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "generate",
 					"description": "Generate workflow from natural language"
 				}`),
-				PositionX: 100,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -52,8 +52,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "generate_get_blocks",
 				Name:      "Get Available Blocks",
 				Type:      "function",
-				PositionX: 100,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "const blocks = context.blocks.list(); return { blocks: blocks.map(b => ({ slug: b.slug, name: b.name, description: b.description, category: b.category })) };",
 					"language": "javascript",
@@ -70,8 +70,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "generate_build_prompt",
 				Name:      "Build Prompt",
 				Type:      "function",
-				PositionX: 100,
-				PositionY: 350,
+				PositionX: 280,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "const blocksInfo = input.blocks.map(b => ` + "`" + `- ${b.slug}: ${b.name} (${b.category}) - ${b.description || \"\"}` + "`" + `).join(\"\\n\");\nconst prompt = ` + "`" + `You are an AI workflow generator. Generate a workflow based on the user description.\n\n## Available Blocks\n${blocksInfo}\n\n## Available Step Types\n- start: Entry point (required)\n- llm: AI/LLM call\n- tool: External adapter\n- condition: Binary branch (true/false)\n- switch: Multi-way branch\n- map: Parallel array processing\n- loop: Iteration\n- wait: Delay\n- function: Custom JavaScript\n- log: Debug logging\n\n## User Request\n${input.prompt}\n\n## Output Format (JSON)\n{\n  \"response\": \"Explanation\",\n  \"steps\": [{\"temp_id\": \"step_1\", \"name\": \"Step Name\", \"type\": \"start\", \"description\": \"\", \"config\": {}, \"position_x\": 400, \"position_y\": 50}],\n  \"edges\": [{\"source_temp_id\": \"step_1\", \"target_temp_id\": \"step_2\", \"source_port\": \"default\"}],\n  \"start_step_id\": \"step_1\"\n}\n\nGenerate a valid workflow JSON. Always include a start step.` + "`" + `;\nreturn { prompt: prompt };",
 					"language": "javascript",
@@ -88,8 +88,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "generate_llm",
 				Name:      "Generate with LLM",
 				Type:      "llm",
-				PositionX: 100,
-				PositionY: 500,
+				PositionX: 400,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
 					"provider": "openai",
@@ -103,8 +103,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "generate_parse",
 				Name:      "Parse & Validate",
 				Type:      "function",
-				PositionX: 100,
-				PositionY: 650,
+				PositionX: 520,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```json" + `\")) content = content.slice(7); if (content.startsWith(\"` + "```" + `\")) content = content.slice(3); if (content.endsWith(\"` + "```" + `\")) content = content.slice(0, -3); content = content.trim(); const result = JSON.parse(content); if (!result.steps || !Array.isArray(result.steps)) { return { error: \"Invalid workflow: missing steps array\" }; } const validTypes = [\"start\", \"llm\", \"tool\", \"condition\", \"switch\", \"map\", \"join\", \"subflow\", \"loop\", \"wait\", \"function\", \"router\", \"human_in_loop\", \"filter\", \"split\", \"aggregate\", \"error\", \"note\", \"log\"]; result.steps = result.steps.filter(s => validTypes.includes(s.type)); return result; } catch (e) { return { error: \"Failed to parse LLM response: \" + e.message }; }",
 					"language": "javascript",
@@ -122,7 +122,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 			},
 
 			// ============================
-			// Suggest Entry Point
+			// Suggest Entry Point (横並び: Y=160固定, X増加)
 			// ============================
 			{
 				TempID:      "start_suggest",
@@ -133,8 +133,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "suggest",
 					"description": "Suggest next steps for a workflow"
 				}`),
-				PositionX: 400,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 160,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -150,8 +150,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "suggest_get_context",
 				Name:      "Get Workflow Context",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 160,
 				Config: json.RawMessage(`{
 					"code": "const workflow = context.workflows.get(input.workflow_id); const blocks = context.blocks.list(); return { workflow: workflow, blocks: blocks };",
 					"language": "javascript"
@@ -161,8 +161,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "suggest_build_prompt",
 				Name:      "Build Suggest Prompt",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 350,
+				PositionX: 280,
+				PositionY: 160,
 				Config: json.RawMessage(`{
 					"code": "const wf = input.workflow; const blocksInfo = input.blocks.slice(0, 20).map(b => ` + "`" + `- ${b.slug}: ${b.name}` + "`" + `).join(\"\\n\"); const stepsInfo = (wf.steps || []).map(s => ` + "`" + `- ${s.name} (${s.type})` + "`" + `).join(\"\\n\"); const prompt = ` + "`" + `Suggest 2-3 next steps for this workflow.\n\n## Current Steps\n${stepsInfo || \"(empty)\"}\n\n## Available Blocks\n${blocksInfo}\n\n## Context\n${input.context || \"\"}\n\nReturn JSON array: [{\"type\": \"...\", \"name\": \"...\", \"description\": \"...\", \"config\": {}, \"reason\": \"...\"}]` + "`" + `; return { prompt: prompt };",
 					"language": "javascript"
@@ -173,7 +173,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				Name:      "Suggest with LLM",
 				Type:      "llm",
 				PositionX: 400,
-				PositionY: 500,
+				PositionY: 160,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
 					"provider": "openai",
@@ -187,8 +187,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "suggest_parse",
 				Name:      "Parse Suggestions",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 650,
+				PositionX: 520,
+				PositionY: 160,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } const suggestions = JSON.parse(content); return { suggestions: Array.isArray(suggestions) ? suggestions : [] }; } catch (e) { return { suggestions: [] }; }",
 					"language": "javascript"
@@ -196,7 +196,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 			},
 
 			// ============================
-			// Diagnose Entry Point
+			// Diagnose Entry Point (横並び: Y=280固定, X増加)
 			// ============================
 			{
 				TempID:      "start_diagnose",
@@ -207,8 +207,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "diagnose",
 					"description": "Diagnose workflow execution errors"
 				}`),
-				PositionX: 700,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -223,8 +223,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "diagnose_get_run",
 				Name:      "Get Run Details",
 				Type:      "function",
-				PositionX: 700,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"code": "const run = context.runs.get(input.run_id); const stepRuns = context.runs.getStepRuns(input.run_id); const failedSteps = stepRuns.filter(sr => sr.status === \"failed\"); return { run: run, stepRuns: stepRuns, failedSteps: failedSteps };",
 					"language": "javascript"
@@ -234,8 +234,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "diagnose_build_prompt",
 				Name:      "Build Diagnose Prompt",
 				Type:      "function",
-				PositionX: 700,
-				PositionY: 350,
+				PositionX: 280,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"code": "const failedInfo = input.failedSteps.map(sr => ` + "`" + `Step: ${sr.step_name}\nError: ${sr.error || \"Unknown\"}\nInput: ${JSON.stringify(sr.input || {})}` + "`" + `).join(\"\\n\\n\"); const prompt = ` + "`" + `Diagnose this workflow error.\n\n## Run Status: ${input.run.status}\n\n## Failed Steps\n${failedInfo || \"No failures found\"}\n\nReturn JSON: {\"diagnosis\": {\"root_cause\": \"...\", \"category\": \"config_error|input_error|api_error|logic_error|timeout|unknown\", \"severity\": \"high|medium|low\"}, \"fixes\": [{\"description\": \"...\", \"steps\": [\"...\"]}], \"preventions\": [\"...\"]}` + "`" + `; return { prompt: prompt };",
 					"language": "javascript"
@@ -245,8 +245,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "diagnose_llm",
 				Name:      "Diagnose with LLM",
 				Type:      "llm",
-				PositionX: 700,
-				PositionY: 500,
+				PositionX: 400,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
 					"provider": "openai",
@@ -260,8 +260,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "diagnose_parse",
 				Name:      "Parse Diagnosis",
 				Type:      "function",
-				PositionX: 700,
-				PositionY: 650,
+				PositionX: 520,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } return JSON.parse(content); } catch (e) { return { diagnosis: { root_cause: \"Parse error\", category: \"unknown\", severity: \"low\" }, fixes: [], preventions: [] }; }",
 					"language": "javascript"
@@ -269,7 +269,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 			},
 
 			// ============================
-			// Optimize Entry Point
+			// Optimize Entry Point (横並び: Y=400固定, X増加)
 			// ============================
 			{
 				TempID:      "start_optimize",
@@ -280,8 +280,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "optimize",
 					"description": "Suggest optimizations for workflow performance"
 				}`),
-				PositionX: 1000,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 400,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -296,8 +296,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "optimize_get_workflow",
 				Name:      "Get Workflow Details",
 				Type:      "function",
-				PositionX: 1000,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 400,
 				Config: json.RawMessage(`{
 					"code": "const workflow = context.workflows.get(input.workflow_id); return { workflow: workflow };",
 					"language": "javascript"
@@ -307,8 +307,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "optimize_build_prompt",
 				Name:      "Build Optimize Prompt",
 				Type:      "function",
-				PositionX: 1000,
-				PositionY: 350,
+				PositionX: 280,
+				PositionY: 400,
 				Config: json.RawMessage(`{
 					"code": "const wf = input.workflow; const stepsInfo = (wf.steps || []).map(s => ` + "`" + `- ${s.name} (${s.type}): ${JSON.stringify(s.config || {})}` + "`" + `).join(\"\\n\"); const prompt = ` + "`" + `Suggest optimizations for this workflow.\n\n## Workflow: ${wf.name}\n## Steps (${(wf.steps || []).length})\n${stepsInfo}\n\nReturn JSON: {\"optimizations\": [{\"category\": \"performance|cost|reliability|maintainability\", \"title\": \"...\", \"description\": \"...\", \"impact\": \"high|medium|low\", \"effort\": \"high|medium|low\"}], \"summary\": \"...\"}` + "`" + `; return { prompt: prompt };",
 					"language": "javascript"
@@ -318,8 +318,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "optimize_llm",
 				Name:      "Optimize with LLM",
 				Type:      "llm",
-				PositionX: 1000,
-				PositionY: 500,
+				PositionX: 400,
+				PositionY: 400,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
 					"provider": "openai",
@@ -333,8 +333,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:    "optimize_parse",
 				Name:      "Parse Optimizations",
 				Type:      "function",
-				PositionX: 1000,
-				PositionY: 650,
+				PositionX: 520,
+				PositionY: 400,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } return JSON.parse(content); } catch (e) { return { optimizations: [], summary: \"Parse error\" }; }",
 					"language": "javascript"

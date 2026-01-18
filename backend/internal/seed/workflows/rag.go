@@ -20,7 +20,7 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
-			// Document Indexing Entry Point
+			// Document Indexing Entry Point (横並び: Y=40固定, X増加)
 			// ============================
 			{
 				TempID:      "start_indexing",
@@ -31,8 +31,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "indexing",
 					"description": "Index documents into vector database"
 				}`),
-				PositionX: 100,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -57,8 +57,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "indexing_split",
 				Name:      "Split Documents",
 				Type:      "text-splitter",
-				PositionX: 100,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 40,
 				BlockSlug: "text-splitter",
 				Config: json.RawMessage(`{
 					"chunk_size": 1000,
@@ -69,8 +69,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "indexing_embed",
 				Name:      "Generate Embeddings",
 				Type:      "embedding",
-				PositionX: 100,
-				PositionY: 350,
+				PositionX: 280,
+				PositionY: 40,
 				BlockSlug: "embedding",
 				Config: json.RawMessage(`{
 					"provider": "openai",
@@ -81,8 +81,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "indexing_store",
 				Name:      "Store in Vector DB",
 				Type:      "vector-upsert",
-				PositionX: 100,
-				PositionY: 500,
+				PositionX: 400,
+				PositionY: 40,
 				BlockSlug: "vector-upsert",
 				Config: json.RawMessage(`{
 					"collection": "{{$.collection}}"
@@ -92,8 +92,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "indexing_result",
 				Name:      "Return Result",
 				Type:      "function",
-				PositionX: 100,
-				PositionY: 650,
+				PositionX: 520,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "return { indexed_count: input.upserted_count, chunk_count: input.upserted_count, collection: input.collection, ids: input.ids };",
 					"language": "javascript"
@@ -101,7 +101,7 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 			},
 
 			// ============================
-			// Question Answering Entry Point
+			// Question Answering Entry Point (横並び: Y=160固定, X増加)
 			// ============================
 			{
 				TempID:      "start_qa",
@@ -112,8 +112,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "qa",
 					"description": "Answer questions using RAG"
 				}`),
-				PositionX: 400,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 160,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -129,8 +129,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "qa_query",
 				Name:      "RAG Query",
 				Type:      "rag-query",
-				PositionX: 400,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 160,
 				BlockSlug: "rag-query",
 				Config: json.RawMessage(`{
 					"collection": "{{$.collection}}",
@@ -142,7 +142,7 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 			},
 
 			// ============================
-			// Knowledge Base Chat Entry Point
+			// Knowledge Base Chat Entry Point (横並び: Y=280固定, X増加)
 			// ============================
 			{
 				TempID:      "start_chat",
@@ -153,8 +153,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 					"entry_point": "chat",
 					"description": "Interactive chat with knowledge base"
 				}`),
-				PositionX: 700,
-				PositionY: 50,
+				PositionX: 40,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -180,8 +180,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "chat_search",
 				Name:      "Search Documents",
 				Type:      "vector-search",
-				PositionX: 700,
-				PositionY: 200,
+				PositionX: 160,
+				PositionY: 280,
 				BlockSlug: "vector-search",
 				Config: json.RawMessage(`{
 					"collection": "{{$.collection}}",
@@ -193,8 +193,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "chat_context",
 				Name:      "Build Context",
 				Type:      "function",
-				PositionX: 700,
-				PositionY: 350,
+				PositionX: 280,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"code": "const context = (input.matches || []).map((m, i) => ` + "`" + `[${i+1}] ${m.content}` + "`" + `).join('\\n\\n---\\n\\n'); const history = (input.chat_history || []).map(h => ` + "`" + `${h.role}: ${h.content}` + "`" + `).join('\\n'); return { context, history, query: input.query, matches: input.matches };",
 					"language": "javascript"
@@ -204,8 +204,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "chat_llm",
 				Name:      "Generate Answer",
 				Type:      "llm",
-				PositionX: 700,
-				PositionY: 500,
+				PositionX: 400,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"provider": "openai",
 					"model": "gpt-4o-mini",
@@ -219,8 +219,8 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				TempID:    "chat_format",
 				Name:      "Format Response",
 				Type:      "function",
-				PositionX: 700,
-				PositionY: 650,
+				PositionX: 520,
+				PositionY: 280,
 				Config: json.RawMessage(`{
 					"code": "const newHistory = [...(input.chat_history || []), {role: 'user', content: input.query}, {role: 'assistant', content: input.content}]; return { answer: input.content, sources: (input.matches || []).map(m => ({id: m.id, score: m.score, excerpt: (m.content || '').substring(0, 150) + '...'})), chat_history: newHistory };",
 					"language": "javascript"
