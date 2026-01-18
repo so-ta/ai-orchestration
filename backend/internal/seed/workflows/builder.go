@@ -16,7 +16,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "ai-builder",
 		Name:        "AI Workflow Builder",
 		Description: "AI-assisted workflow building with interactive hearing, automatic construction, and refinement capabilities",
-		Version:     2,
+		Version:     7,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -74,7 +74,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 280,
 				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "const session = input.session; const phase = session?.hearing_phase || 'purpose'; const spec = session?.spec || {}; const messages = session?.messages || []; const historyText = messages.map(m => (m.role === 'user' ? 'ユーザー: ' : 'AI: ') + m.content).join('\\n'); const phasePrompts = { 'purpose': '【Phase: 目的・ゴール確認】\\nユーザーが作りたいワークフローの目的とゴールを確認してください。\\n- 何を達成したいのか\\n- 成功条件は何か\\n- 業務カテゴリ(sales/development/hr/finance/marketing/support/operations/personal/other)', 'conditions': '【Phase: 開始・終了条件】\\n開始トリガーと終了条件を確認してください。\\n- いつ開始するか(手動/定期実行/Webhook/イベント)\\n- スケジュール(cronや\"毎週月曜9時\"など)\\n- 何をもって完了とするか\\n- 成果物は何か', 'actors': '【Phase: 関与者・承認】\\n関与する人物と承認フローを確認してください。\\n- 誰が作業を実行するか\\n- 承認やレビューは必要か\\n- 承認者は誰か\\n- 差し戻し時の扱い', 'frequency': '【Phase: 実行頻度・期限】\\n実行頻度と期限を確認してください。\\n- どのくらいの頻度で実行するか\\n- 期限やSLAはあるか\\n- 緊急時の対応は必要か', 'integrations': '【Phase: ツール・システム連携】\\n使用するツールやシステムを確認してください。\\n- 利用するサービス(Slack/GitHub/Google Sheets等)\\n- 認証情報は設定済みか\\n- データの入力元・出力先', 'pain_points': '【Phase: 課題・困りごと】\\n現在の課題や困りごとを確認してください。\\n- 現在の手作業で困っていること\\n- エラーが起きやすい箇所\\n- 改善したいポイント', 'confirmation': '【Phase: 仮定条件の確認】\\nこれまでの会話から推測した仮定条件を確認してください。\\n- 不明点があれば仮定を提示\\n- ユーザーに確認を求める\\n- 全て確認できたらcompleted' }; const phaseGuide = phasePrompts[phase] || phasePrompts['purpose']; const blocksInfo = input.blocks.slice(0, 30).map(b => '- ' + b.slug + ': ' + b.name + ' (' + b.category + ')').join('\\n'); const prompt = 'あなたはワークフロービルダーAIです。ユーザーとの対話を通じてワークフロー要件をヒアリングします。\\n\\n' + phaseGuide + '\\n\\n## 現在のワークフロー仕様\\n' + JSON.stringify(spec, null, 2) + '\\n\\n## 会話履歴\\n' + (historyText || '(初回)') + '\\n\\n## ユーザーの最新メッセージ\\n' + input.message + '\\n\\n## 利用可能なブロック(参考)\\n' + blocksInfo + '\\n\\n## 出力形式(JSON)\\n{\\n  \"response\": \"ユーザーへの返答メッセージ\",\\n  \"extractedData\": { 「抽出した情報をWorkflowSpec形式で」 },\\n  \"suggestedQuestions\": [\"次に聞くべき質問1\", \"質問2\"],\\n  \"nextPhase\": \"purpose|conditions|actors|frequency|integrations|pain_points|confirmation|completed\",\\n  \"progress\": 0-100の進捗率\\n}\\n\\n重要:\\n- responseは親しみやすく丁寧な日本語で\\n- 一度に聞くのは1-2項目まで\\n- 情報が十分集まったら次のフェーズへ進む\\n- 全フェーズ完了でnextPhase=\"completed\"'; return { prompt: prompt, session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_phase: phase, current_spec: spec };",
+					"code": "const session = input.session; const phase = session?.hearing_phase || 'purpose'; const spec = session?.spec || {}; const messages = session?.messages || []; const historyText = messages.map(m => (m.role === 'user' ? 'ユーザー: ' : 'AI: ') + m.content).join('\\n'); const phasePrompts = { 'purpose': '【Phase: 目的・ゴール確認】\\nユーザーが作りたいワークフローの目的とゴールを確認してください。\\n- 何を達成したいのか\\n- 成功条件は何か\\n- 業務カテゴリ(sales/development/hr/finance/marketing/support/operations/personal/other)', 'conditions': '【Phase: 開始・終了条件】\\n開始トリガーと終了条件を確認してください。\\n- いつ開始するか(手動/定期実行/Webhook/イベント)\\n- スケジュール(cronや\"毎週月曜9時\"など)\\n- 何をもって完了とするか\\n- 成果物は何か', 'actors': '【Phase: 関与者・承認】\\n関与する人物と承認フローを確認してください。\\n- 誰が作業を実行するか\\n- 承認やレビューは必要か\\n- 承認者は誰か\\n- 差し戻し時の扱い', 'frequency': '【Phase: 実行頻度・期限】\\n実行頻度と期限を確認してください。\\n- どのくらいの頻度で実行するか\\n- 期限やSLAはあるか\\n- 緊急時の対応は必要か', 'integrations': '【Phase: ツール・システム連携】\\n使用するツールやシステムを確認してください。\\n- 利用するサービス(Slack/GitHub/Google Sheets等)\\n- 認証情報は設定済みか\\n- データの入力元・出力先', 'pain_points': '【Phase: 課題・困りごと】\\n現在の課題や困りごとを確認してください。\\n- 現在の手作業で困っていること\\n- エラーが起きやすい箇所\\n- 改善したいポイント', 'confirmation': '【Phase: 仮定条件の確認】\\nこれまでの会話から推測した仮定条件を確認してください。\\n- 不明点があれば仮定を提示\\n- ユーザーに確認を求める\\n- 全て確認できたらcompleted' }; const phaseGuide = phasePrompts[phase] || phasePrompts['purpose']; const blocksInfo = input.blocks.slice(0, 30).map(b => '- ' + b.slug + ': ' + b.name + ' (' + b.category + ')').join('\\n'); const prompt = 'あなたはワークフロービルダーAIです。ユーザーとの対話を通じてワークフロー要件をヒアリングします。\\n\\n' + phaseGuide + '\\n\\n## 現在のワークフロー仕様\\n' + JSON.stringify(spec, null, 2) + '\\n\\n## 会話履歴\\n' + (historyText || '(初回)') + '\\n\\n## ユーザーの最新メッセージ\\n' + input.message + '\\n\\n## 利用可能なブロック(参考)\\n' + blocksInfo + '\\n\\n## 出力形式(JSON)\\n{\\n  \"response\": \"ユーザーへの返答メッセージ\",\\n  \"extractedData\": { 「抽出した情報をWorkflowSpec形式で」 },\\n  \"suggestedQuestions\": [\"次に聞くべき質問1\", \"質問2\"],\\n  \"nextPhase\": \"purpose|conditions|actors|frequency|integrations|pain_points|confirmation|completed\",\\n  \"progress\": 0-100の進捗率\\n}\\n\\n重要:\\n- responseは親しみやすく丁寧な日本語で\\n- 一度に聞くのは1-2項目まで\\n- 情報が十分集まったら次のフェーズへ進む\\n- 全フェーズ完了でnextPhase=\"completed\"'; return { prompt: prompt, session_id: session?.id || input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_phase: phase, current_spec: spec };",
 					"language": "javascript",
 					"output_schema": {
 						"type": "object",
@@ -101,7 +101,8 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 					"max_tokens": 2000,
 					"temperature": 0.5,
 					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "あなたは親切で専門的なワークフロービルダーAIです。ユーザーの要望を丁寧にヒアリングし、最適なワークフローを設計するための情報を収集します。常に有効なJSONで応答してください。"
+					"system_prompt": "あなたは親切で専門的なワークフロービルダーAIです。ユーザーの要望を丁寧にヒアリングし、最適なワークフローを設計するための情報を収集します。常に有効なJSONで応答してください。",
+					"passthrough_fields": ["session_id", "tenant_id", "user_id", "current_phase", "current_spec"]
 				}`),
 			},
 			{
@@ -111,7 +112,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 520,
 				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "try { let content = input.content || ''; if (content.startsWith('` + "```json" + `')) content = content.slice(7); if (content.startsWith('` + "```" + `')) content = content.slice(3); if (content.endsWith('` + "```" + `')) content = content.slice(0, -3); content = content.trim(); const result = JSON.parse(content); return { success: true, response: result.response || '', extractedData: result.extractedData || {}, suggestedQuestions: result.suggestedQuestions || [], nextPhase: result.nextPhase || 'purpose', progress: result.progress || 0 }; } catch (e) { return { success: false, error: 'Failed to parse LLM response: ' + e.message, response: input.content || '' }; }",
+					"code": "try { let content = input.content || ''; if (content.startsWith('` + "```json" + `')) content = content.slice(7); if (content.startsWith('` + "```" + `')) content = content.slice(3); if (content.endsWith('` + "```" + `')) content = content.slice(0, -3); content = content.trim(); const result = JSON.parse(content); return { success: true, response: result.response || '', extractedData: result.extractedData || {}, suggestedQuestions: result.suggestedQuestions || [], nextPhase: result.nextPhase || 'purpose', progress: result.progress || 0, session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_spec: input.current_spec }; } catch (e) { return { success: false, error: 'Failed to parse LLM response: ' + e.message, response: input.content || '', session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_spec: input.current_spec }; }",
 					"language": "javascript",
 					"output_schema": {
 						"type": "object",
@@ -122,7 +123,11 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 							"suggestedQuestions": {"type": "array"},
 							"nextPhase": {"type": "string"},
 							"progress": {"type": "number"},
-							"error": {"type": "string"}
+							"error": {"type": "string"},
+							"session_id": {"type": "string"},
+							"tenant_id": {"type": "string"},
+							"user_id": {"type": "string"},
+							"current_spec": {"type": "object"}
 						}
 					}
 				}`),
@@ -134,7 +139,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 640,
 				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "const sessionId = input.session_id; const tenantId = input.tenant_id; const parsed = input.parsed; const currentSpec = input.current_spec || {}; const mergedSpec = { ...currentSpec, ...parsed.extractedData }; ctx.builderSessions.update(sessionId, { hearing_phase: parsed.nextPhase, hearing_progress: parsed.progress, spec: mergedSpec }); ctx.builderSessions.addMessage(sessionId, { role: 'assistant', content: parsed.response, phase: parsed.nextPhase, suggested_questions: parsed.suggestedQuestions, extracted_data: parsed.extractedData }); return { session_id: sessionId, message: { content: parsed.response, suggested_questions: parsed.suggestedQuestions }, phase: parsed.nextPhase, progress: parsed.progress, complete: parsed.nextPhase === 'completed' };",
+					"code": "const sessionId = input.session_id; const currentSpec = input.current_spec || {}; const mergedSpec = { ...currentSpec, ...(input.extractedData || {}) }; ctx.builderSessions.update(sessionId, { hearing_phase: input.nextPhase, hearing_progress: input.progress, spec: mergedSpec }); ctx.builderSessions.addMessage(sessionId, { role: 'assistant', content: input.response, phase: input.nextPhase, suggested_questions: input.suggestedQuestions, extracted_data: input.extractedData }); return { session_id: sessionId, message: { content: input.response, suggested_questions: input.suggestedQuestions }, phase: input.nextPhase, progress: input.progress, complete: input.nextPhase === 'completed' };",
 					"language": "javascript",
 					"output_schema": {
 						"type": "object",

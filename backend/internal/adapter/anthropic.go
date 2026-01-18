@@ -22,14 +22,16 @@ type AnthropicAdapter struct {
 
 // AnthropicConfig holds the configuration for Anthropic adapter
 type AnthropicConfig struct {
-	Model       string   `json:"model"`        // claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307
-	Prompt      string   `json:"prompt"`       // User prompt template with {{variable}} placeholders
-	System      string   `json:"system"`       // System message
-	MaxTokens   int      `json:"max_tokens"`   // Maximum tokens to generate (required by Anthropic)
-	Temperature *float64 `json:"temperature"`  // 0.0 - 1.0 (nil = use default 0.7)
-	TopP        float64  `json:"top_p"`        // Nucleus sampling
-	TopK        int      `json:"top_k"`        // Top-k sampling
-	Stop        []string `json:"stop"`         // Stop sequences
+	Model        string   `json:"model"`         // claude-3-opus-20240229, claude-3-sonnet-20240229, claude-3-haiku-20240307
+	Prompt       string   `json:"prompt"`        // User prompt template with {{variable}} placeholders
+	UserPrompt   string   `json:"user_prompt"`   // Alternative field name for user prompt (for LLM block compatibility)
+	System       string   `json:"system"`        // System message
+	SystemPrompt string   `json:"system_prompt"` // Alternative field name for system prompt (for LLM block compatibility)
+	MaxTokens    int      `json:"max_tokens"`    // Maximum tokens to generate (required by Anthropic)
+	Temperature  *float64 `json:"temperature"`   // 0.0 - 1.0 (nil = use default 0.7)
+	TopP         float64  `json:"top_p"`         // Nucleus sampling
+	TopK         int      `json:"top_k"`         // Top-k sampling
+	Stop         []string `json:"stop"`          // Stop sequences
 }
 
 // Anthropic API request/response types
@@ -128,8 +130,17 @@ func (a *AnthropicAdapter) Execute(ctx context.Context, req *Request) (*Response
 	}
 
 	// Config templates are now expanded by Executor before reaching the adapter
-	// Prompt can be used directly from config
+	// Support both "prompt" and "user_prompt" field names for compatibility
 	prompt := config.Prompt
+	if prompt == "" {
+		prompt = config.UserPrompt
+	}
+
+	// Support both "system" and "system_prompt" field names
+	system := config.System
+	if system == "" {
+		system = config.SystemPrompt
+	}
 
 	// Build request
 	apiReq := anthropicRequest{
@@ -143,8 +154,8 @@ func (a *AnthropicAdapter) Execute(ctx context.Context, req *Request) (*Response
 		},
 	}
 
-	if config.System != "" {
-		apiReq.System = config.System
+	if system != "" {
+		apiReq.System = system
 	}
 	// Always set temperature (use the computed value which is either user-specified or default)
 	apiReq.Temperature = temperature
