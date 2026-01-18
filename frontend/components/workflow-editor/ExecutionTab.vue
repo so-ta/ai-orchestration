@@ -476,12 +476,18 @@ async function executeWorkflow() {
   const input = getWorkflowInput()
   if (input === null) return
 
+  if (!startStep.value) {
+    toast.error(t('execution.errors.noStartStep'))
+    return
+  }
+
   executing.value = true
 
   try {
     const response = await runsApi.create(props.workflowId, {
       triggered_by: 'test',
       input: Object.keys(input).length > 0 ? input : {},
+      start_step_id: startStep.value.id,
     })
 
     toast.success(t('execution.workflowStarted'))
@@ -565,6 +571,7 @@ async function executeFromThisStep() {
     const response = await runsApi.create(props.workflowId, {
       triggered_by: 'test',
       input: Object.keys(input).length > 0 ? input : {},
+      start_step_id: props.step.id,
     })
 
     toast.success(t('execution.workflowStarted'))

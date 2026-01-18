@@ -25,11 +25,10 @@ const props = defineProps<{
 }>()
 
 // Active tab state
-const activeTab = ref<'config' | 'flow' | 'trigger' | 'copilot' | 'run'>('config')
+const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
 
 // Check if step is a generic start block (not specialized trigger blocks)
-// Specialized trigger blocks (schedule_trigger, webhook_trigger) configure via Config tab, not Trigger tab
-// Generic start block shows Trigger tab to allow selecting trigger type
+// Trigger configuration is shown in Config tab for generic start blocks
 const isGenericStartBlock = computed(() => props.step?.type === 'start')
 
 // Keep current tab when step changes (no automatic tab switching)
@@ -563,18 +562,6 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
           <polyline points="8 14 12 18 16 14"/>
         </svg>
         {{ t('editor.tabs.flow') }}
-      </button>
-      <!-- Trigger Tab (only for generic Start block, not specialized trigger blocks) -->
-      <button
-        v-if="isGenericStartBlock"
-        class="tab-button"
-        :class="{ active: activeTab === 'trigger' }"
-        @click="activeTab = 'trigger'"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-        </svg>
-        {{ t('editor.tabs.trigger') }}
       </button>
       <button
         class="tab-button"
@@ -1481,17 +1468,6 @@ const hasAvailableVariables = computed(() => availableInputVariables.value.lengt
         :block-definitions="blockDefinitions"
         :readonly-mode="readonlyMode"
         @update:flow-config="handleFlowConfigUpdate"
-      />
-    </div>
-
-    <!-- Trigger Tab Content (only for generic Start block) -->
-    <div v-if="activeTab === 'trigger' && isGenericStartBlock" class="properties-body trigger-container">
-      <TriggerConfigPanel
-        :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
-        :trigger-config="step?.trigger_config as object || {}"
-        :step-id="step?.id"
-        :readonly="readonlyMode"
-        @update:trigger="handleTriggerUpdate"
       />
     </div>
 

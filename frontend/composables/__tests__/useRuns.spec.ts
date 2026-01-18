@@ -87,9 +87,9 @@ describe('useRuns', () => {
       mockApi.post.mockResolvedValue(mockResponse)
 
       const { create } = useRuns()
-      const result = await create('project-1', {})
+      const result = await create('project-1', { start_step_id: 'start-1' })
 
-      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {})
+      expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', { start_step_id: 'start-1' })
       expect(result).toEqual(mockResponse)
     })
 
@@ -97,10 +97,11 @@ describe('useRuns', () => {
       mockApi.post.mockResolvedValue({ data: { id: 'run-1' } })
 
       const { create } = useRuns()
-      await create('project-1', { input: { key: 'value' } })
+      await create('project-1', { input: { key: 'value' }, start_step_id: 'start-1' })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         input: { key: 'value' },
+        start_step_id: 'start-1',
       })
     })
 
@@ -108,10 +109,11 @@ describe('useRuns', () => {
       mockApi.post.mockResolvedValue({ data: { id: 'run-1' } })
 
       const { create } = useRuns()
-      await create('project-1', { triggered_by: 'test' })
+      await create('project-1', { triggered_by: 'test', start_step_id: 'start-1' })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         triggered_by: 'test',
+        start_step_id: 'start-1',
       })
     })
 
@@ -119,10 +121,11 @@ describe('useRuns', () => {
       mockApi.post.mockResolvedValue({ data: { id: 'run-1' } })
 
       const { create } = useRuns()
-      await create('project-1', { triggered_by: 'manual' })
+      await create('project-1', { triggered_by: 'manual', start_step_id: 'start-1' })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         triggered_by: 'manual',
+        start_step_id: 'start-1',
       })
     })
 
@@ -130,10 +133,11 @@ describe('useRuns', () => {
       mockApi.post.mockResolvedValue({ data: { id: 'run-1' } })
 
       const { create } = useRuns()
-      await create('project-1', { version: 2 })
+      await create('project-1', { version: 2, start_step_id: 'start-1' })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         version: 2,
+        start_step_id: 'start-1',
       })
     })
 
@@ -145,12 +149,14 @@ describe('useRuns', () => {
         input: { data: 'test' },
         triggered_by: 'manual',
         version: 3,
+        start_step_id: 'start-1',
       })
 
       expect(mockApi.post).toHaveBeenCalledWith('/workflows/project-1/runs', {
         input: { data: 'test' },
         triggered_by: 'manual',
         version: 3,
+        start_step_id: 'start-1',
       })
     })
   })

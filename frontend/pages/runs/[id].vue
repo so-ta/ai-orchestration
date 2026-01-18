@@ -108,10 +108,16 @@ async function handleCancel() {
 async function handleRerun() {
   if (!run.value) return
 
+  if (!run.value.start_step_id) {
+    toast.error('Cannot rerun: no start step ID found')
+    return
+  }
+
   try {
     const response = await runsApi.create(run.value.project_id, {
       triggered_by: run.value.triggered_by,
       input: run.value.input || {},
+      start_step_id: run.value.start_step_id,
     })
     navigateTo(`/runs/${response.data.id}`)
   } catch (e) {

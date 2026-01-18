@@ -1000,9 +1000,15 @@ function _handleRun() {
 async function handleRunFromDialog(input: Record<string, unknown>) {
   if (!project.value) return
 
+  const startStep = project.value.steps?.find(s => s.type === 'start')
+  if (!startStep) {
+    toast.error(t('execution.errors.noStartStep'))
+    return
+  }
+
   try {
     running.value = true
-    const response = await runs.create(project.value.id, { triggered_by: 'manual', input })
+    const response = await runs.create(project.value.id, { triggered_by: 'manual', input, start_step_id: startStep.id })
     showRunDialog.value = false
     toast.success(t('projects.runStarted'))
     window.open(`/runs/${response.data.id}`, '_blank')
