@@ -59,9 +59,6 @@ func (v *BlockValidator) ValidateBlock(block *blocks.SystemBlockDefinition) []Va
 	if err := v.schemaValidator.ValidateSchema(block.ConfigSchema); err != nil {
 		errors = append(errors, ValidationError{block.Slug, "config_schema", err.Error()})
 	}
-	if err := v.schemaValidator.ValidateSchema(block.InputSchema); err != nil {
-		errors = append(errors, ValidationError{block.Slug, "input_schema", err.Error()})
-	}
 	if err := v.schemaValidator.ValidateSchema(block.OutputSchema); err != nil {
 		errors = append(errors, ValidationError{block.Slug, "output_schema", err.Error()})
 	}

@@ -41,7 +41,6 @@ type CreateBlockRequest struct {
 	Category     string          `json:"category"`
 	Icon         string          `json:"icon"`
 	ConfigSchema json.RawMessage `json:"config_schema"`
-	InputSchema  json.RawMessage `json:"input_schema"`
 	OutputSchema json.RawMessage `json:"output_schema"`
 	Code         string          `json:"code"`
 	UIConfig     json.RawMessage `json:"ui_config"`
@@ -151,9 +150,6 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.ConfigSchema != nil {
 		block.ConfigSchema = req.ConfigSchema
 	}
-	if req.InputSchema != nil {
-		block.InputSchema = req.InputSchema
-	}
 	if req.OutputSchema != nil {
 		block.OutputSchema = req.OutputSchema
 	}
@@ -245,7 +241,6 @@ type UpdateBlockRequest struct {
 	Description  string          `json:"description"`
 	Icon         string          `json:"icon"`
 	ConfigSchema json.RawMessage `json:"config_schema"`
-	InputSchema  json.RawMessage `json:"input_schema"`
 	OutputSchema json.RawMessage `json:"output_schema"`
 	Code         *string         `json:"code"`
 	UIConfig     json.RawMessage `json:"ui_config"`
@@ -299,9 +294,6 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ConfigSchema != nil {
 		block.ConfigSchema = req.ConfigSchema
-	}
-	if req.InputSchema != nil {
-		block.InputSchema = req.InputSchema
 	}
 	if req.OutputSchema != nil {
 		block.OutputSchema = req.OutputSchema
@@ -458,7 +450,6 @@ type UpdateSystemBlockRequest struct {
 	Description   *string         `json:"description"`
 	Code          *string         `json:"code"`
 	ConfigSchema  json.RawMessage `json:"config_schema"`
-	InputSchema   json.RawMessage `json:"input_schema"`
 	OutputSchema  json.RawMessage `json:"output_schema"`
 	UIConfig      json.RawMessage `json:"ui_config"`
 	ChangeSummary string          `json:"change_summary"`
@@ -491,7 +482,6 @@ func (h *BlockHandler) UpdateSystemBlock(w http.ResponseWriter, r *http.Request)
 		Description:   req.Description,
 		Code:          req.Code,
 		ConfigSchema:  req.ConfigSchema,
-		InputSchema:   req.InputSchema,
 		OutputSchema:  req.OutputSchema,
 		UIConfig:      req.UIConfig,
 		ChangeSummary: req.ChangeSummary,

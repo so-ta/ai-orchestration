@@ -74,13 +74,6 @@ func WaitBlock() *SystemBlockDefinition {
 				"duration_ms": {"type": "integer", "minimum": 0}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"data": {"type": "object", "description": "待機後にパススルーするデータ"}
-			},
-			"description": "待機後にそのまま出力されるデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Data to pass through after wait"},
 		},
@@ -116,13 +109,6 @@ func ErrorBlock() *SystemBlockDefinition {
 				"error_message": {"type": "string"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"error_context": {"type": "object", "description": "エラーに関する追加情報"}
-			},
-			"description": "エラー処理に渡されるデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "error", Label: "Error", Schema: json.RawMessage(`{"type": "object", "properties": {"code": {"type": "string"}, "message": {"type": "string"}}}`), Required: true, Description: "Error information to handle"},
 		},
@@ -152,14 +138,6 @@ func HumanInLoopBlock() *SystemBlockDefinition {
 				"instructions": {"type": "string"},
 				"timeout_hours": {"type": "integer"}
 			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"context": {"type": "object", "description": "承認者に表示するコンテキスト"},
-				"summary": {"type": "string", "description": "承認リクエストの概要"}
-			},
-			"description": "承認者に表示されるコンテキストデータ"
 		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: true, Description: "Context data for human review"},

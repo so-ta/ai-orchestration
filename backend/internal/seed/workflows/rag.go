@@ -84,9 +84,7 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				PositionX: 400,
 				PositionY: 40,
 				BlockSlug: "vector-upsert",
-				Config: json.RawMessage(`{
-					"collection": "{{$.collection}}"
-				}`),
+				Config: json.RawMessage(`{}`),
 			},
 			{
 				TempID:    "indexing_result",
@@ -133,7 +131,6 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				PositionY: 160,
 				BlockSlug: "rag-query",
 				Config: json.RawMessage(`{
-					"collection": "{{$.collection}}",
 					"top_k": 5,
 					"llm_provider": "openai",
 					"llm_model": "gpt-4o-mini",
@@ -184,7 +181,6 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				PositionY: 280,
 				BlockSlug: "vector-search",
 				Config: json.RawMessage(`{
-					"collection": "{{$.collection}}",
 					"top_k": 5,
 					"include_content": true
 				}`),
@@ -196,7 +192,7 @@ func RAGWorkflow() *SystemWorkflowDefinition {
 				PositionX: 280,
 				PositionY: 280,
 				Config: json.RawMessage(`{
-					"code": "const context = (input.matches || []).map((m, i) => ` + "`" + `[${i+1}] ${m.content}` + "`" + `).join('\\n\\n---\\n\\n'); const history = (input.chat_history || []).map(h => ` + "`" + `${h.role}: ${h.content}` + "`" + `).join('\\n'); return { context, history, query: input.query, matches: input.matches };",
+					"code": "const context = (input.matches || []).map((m, i) => ` + "`" + `[${i+1}] ${m.content}` + "`" + `).join('\\n\\n---\\n\\n'); const history = (input.chat_history || []).map(h => ` + "`" + `${h.role}: ${h.content}` + "`" + `).join('\\n'); return { context, history, query: input.query, matches: input.matches, chat_history: input.chat_history };",
 					"language": "javascript"
 				}`),
 			},

@@ -77,13 +77,6 @@ func CodeBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"data": {"type": "object", "description": "コード内で参照可能なデータ"}
-			},
-			"description": "コード内で自由に参照可能なデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for code execution"},
 		},
@@ -144,13 +137,6 @@ func FunctionBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"data": {"type": "object", "description": "コード内で参照可能なデータ"}
-			},
-			"description": "コード内で自由に参照可能なデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for function"},
 		},
@@ -199,14 +185,6 @@ func LogBlock() *SystemBlockDefinition {
 					"description": "Log message (supports {{$.field}} template variables)"
 				}
 			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"data": {"type": "object", "description": "ログに含める追加データ"},
-				"message": {"type": "string", "description": "ログメッセージ"}
-			},
-			"description": "ログ出力に使用するデータ"
 		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Description: "Data to log"},

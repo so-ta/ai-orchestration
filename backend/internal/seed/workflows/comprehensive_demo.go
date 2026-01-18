@@ -80,7 +80,7 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					"message": "Processing started with {{$.items.length}} items"
 				}`),
 			},
-			// === Utility: Function (data preparation) ===
+			// === Utility: Function (data preparation with message preservation) ===
 			{
 				TempID:    "prepare_data",
 				Name:      "Prepare Data",
@@ -88,69 +88,64 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 				PositionX: 400,
 				PositionY: 250,
 				Config: json.RawMessage(`{
-					"code": "const items = input.items || []; const enhanced = items.map((item, idx) => ({...item, index: idx, processed_at: new Date().toISOString()})); return { ...input, enhanced_items: enhanced, item_count: enhanced.length };",
+					"code": "const items = input.items || []; const enhanced = items.map((item, idx) => ({...item, index: idx, processed_at: new Date().toISOString()})); return { message: input.message, items: enhanced, item_count: enhanced.length };",
 					"language": "javascript",
 					"output_schema": {
 						"type": "object",
 						"properties": {
-							"enhanced_items": {"type": "array"},
+							"message": {"type": "string"},
+							"items": {"type": "array"},
 							"item_count": {"type": "integer"}
 						}
 					}
 				}`),
 			},
-			// === Data: Filter (filter items based on criteria) ===
+			// === Data: Filter (filter items based on criteria, preserve message) ===
 			{
 				TempID:    "filter_items",
 				Name:      "Filter Items",
-				Type:      "filter",
+				Type:      "function",
 				PositionX: 400,
 				PositionY: 350,
-				BlockSlug: "filter",
 				Config: json.RawMessage(`{
-					"expression": "$.index < 10"
+					"code": "const filtered = (input.items || []).filter(item => (item.index || 0) < 10); return { message: input.message, items: filtered, filtered_count: filtered.length };",
+					"language": "javascript"
 				}`),
 			},
-			// === Data: Map processing ===
+			// === Data: Transform items (preserve message) ===
 			{
 				TempID:    "map_items",
-				Name:      "Map Items",
-				Type:      "map",
+				Name:      "Transform Items",
+				Type:      "function",
 				PositionX: 400,
 				PositionY: 450,
-				BlockSlug: "map",
 				Config: json.RawMessage(`{
-					"input_path": "items",
-					"parallel": false,
-					"max_workers": 5
+					"code": "const transformed = (input.items || []).map(item => ({...item, transformed: true})); return { message: input.message, items: transformed };",
+					"language": "javascript"
 				}`),
 			},
-			// === Data: Split into batches ===
+			// === Data: Split into batches (preserve message) ===
 			{
 				TempID:    "split_batches",
 				Name:      "Split Batches",
-				Type:      "split",
+				Type:      "function",
 				PositionX: 400,
 				PositionY: 550,
-				BlockSlug: "split",
 				Config: json.RawMessage(`{
-					"input_path": "items",
-					"batch_size": 3
+					"code": "const items = input.items || []; const batchSize = 3; const batches = []; for (let i = 0; i < items.length; i += batchSize) { batches.push(items.slice(i, i + batchSize)); } return { message: input.message, items: items, batches: batches, batch_count: batches.length };",
+					"language": "javascript"
 				}`),
 			},
-			// === Aggregate results ===
+			// === Aggregate results (add function to preserve message) ===
 			{
 				TempID:    "aggregate_results",
 				Name:      "Aggregate Results",
-				Type:      "aggregate",
+				Type:      "function",
 				PositionX: 400,
 				PositionY: 650,
-				BlockSlug: "aggregate",
 				Config: json.RawMessage(`{
-					"operations": [
-						{"field": "index", "operation": "count", "output_field": "total_count"},
-						{"field": "index", "operation": "max", "output_field": "max_index"}
-					]
+					"code": "const items = input.items || input.batches || []; const total_count = items.length; const max_index = items.reduce((max, item) => Math.max(max, item.index || 0), 0); return { message: input.message, items: items, total_count: total_count, max_index: max_index };",
+					"language": "javascript"
 				}`),
 			},
 			// === AI: LLM for processing ===
@@ -236,10 +231,10 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 			{SourceTempID: "log_input", TargetTempID: "prepare_data", SourcePort: "output"},
 			// Prepare -> Filter
 			{SourceTempID: "prepare_data", TargetTempID: "filter_items", SourcePort: "output"},
-			// Filter -> Map
-			{SourceTempID: "filter_items", TargetTempID: "map_items", SourcePort: "matched"},
-			// Map -> Split
-			{SourceTempID: "map_items", TargetTempID: "split_batches", SourcePort: "complete"},
+			// Filter -> Map (now function, uses output port)
+			{SourceTempID: "filter_items", TargetTempID: "map_items", SourcePort: "output"},
+			// Map -> Split (now function, uses output port)
+			{SourceTempID: "map_items", TargetTempID: "split_batches", SourcePort: "output"},
 			// Split -> Aggregate
 			{SourceTempID: "split_batches", TargetTempID: "aggregate_results", SourcePort: "output"},
 			// Aggregate -> LLM

@@ -34,7 +34,6 @@ type UpdateSystemBlockInput struct {
 	Description   *string
 	Code          *string
 	ConfigSchema  json.RawMessage
-	InputSchema   json.RawMessage
 	OutputSchema  json.RawMessage
 	UIConfig      json.RawMessage
 	ChangeSummary string
@@ -75,9 +74,6 @@ func (u *BlockUsecase) UpdateSystemBlock(ctx context.Context, input UpdateSystem
 	}
 	if input.ConfigSchema != nil {
 		block.ConfigSchema = input.ConfigSchema
-	}
-	if input.InputSchema != nil {
-		block.InputSchema = input.InputSchema
 	}
 	if input.OutputSchema != nil {
 		block.OutputSchema = input.OutputSchema
@@ -138,7 +134,6 @@ func (u *BlockUsecase) RollbackSystemBlock(ctx context.Context, input RollbackSy
 	// Apply the rollback
 	block.Code = targetVersion.Code
 	block.ConfigSchema = targetVersion.ConfigSchema
-	block.InputSchema = targetVersion.InputSchema
 	block.OutputSchema = targetVersion.OutputSchema
 	block.UIConfig = targetVersion.UIConfig
 	block.Version++

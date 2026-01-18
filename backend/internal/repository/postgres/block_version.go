@@ -25,9 +25,9 @@ func (r *BlockVersionRepository) Create(ctx context.Context, version *domain.Blo
 	query := `
 		INSERT INTO block_versions (
 			id, block_id, version,
-			code, config_schema, input_schema, output_schema, ui_config,
+			code, config_schema, output_schema, ui_config,
 			change_summary, changed_by, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err := r.pool.Exec(ctx, query,
@@ -36,7 +36,6 @@ func (r *BlockVersionRepository) Create(ctx context.Context, version *domain.Blo
 		version.Version,
 		version.Code,
 		version.ConfigSchema,
-		version.InputSchema,
 		version.OutputSchema,
 		version.UIConfig,
 		version.ChangeSummary,
@@ -53,7 +52,7 @@ func (r *BlockVersionRepository) Create(ctx context.Context, version *domain.Blo
 func (r *BlockVersionRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.BlockVersion, error) {
 	query := `
 		SELECT id, block_id, version,
-			   code, config_schema, input_schema, output_schema, ui_config,
+			   code, config_schema, output_schema, ui_config,
 			   change_summary, changed_by, created_at
 		FROM block_versions
 		WHERE id = $1
@@ -66,7 +65,6 @@ func (r *BlockVersionRepository) GetByID(ctx context.Context, id uuid.UUID) (*do
 		&version.Version,
 		&version.Code,
 		&version.ConfigSchema,
-		&version.InputSchema,
 		&version.OutputSchema,
 		&version.UIConfig,
 		&version.ChangeSummary,
@@ -86,7 +84,7 @@ func (r *BlockVersionRepository) GetByID(ctx context.Context, id uuid.UUID) (*do
 func (r *BlockVersionRepository) GetByBlockAndVersion(ctx context.Context, blockID uuid.UUID, versionNum int) (*domain.BlockVersion, error) {
 	query := `
 		SELECT id, block_id, version,
-			   code, config_schema, input_schema, output_schema, ui_config,
+			   code, config_schema, output_schema, ui_config,
 			   change_summary, changed_by, created_at
 		FROM block_versions
 		WHERE block_id = $1 AND version = $2
@@ -99,7 +97,6 @@ func (r *BlockVersionRepository) GetByBlockAndVersion(ctx context.Context, block
 		&version.Version,
 		&version.Code,
 		&version.ConfigSchema,
-		&version.InputSchema,
 		&version.OutputSchema,
 		&version.UIConfig,
 		&version.ChangeSummary,
@@ -119,7 +116,7 @@ func (r *BlockVersionRepository) GetByBlockAndVersion(ctx context.Context, block
 func (r *BlockVersionRepository) ListByBlock(ctx context.Context, blockID uuid.UUID) ([]*domain.BlockVersion, error) {
 	query := `
 		SELECT id, block_id, version,
-			   code, config_schema, input_schema, output_schema, ui_config,
+			   code, config_schema, output_schema, ui_config,
 			   change_summary, changed_by, created_at
 		FROM block_versions
 		WHERE block_id = $1
@@ -141,7 +138,6 @@ func (r *BlockVersionRepository) ListByBlock(ctx context.Context, blockID uuid.U
 			&version.Version,
 			&version.Code,
 			&version.ConfigSchema,
-			&version.InputSchema,
 			&version.OutputSchema,
 			&version.UIConfig,
 			&version.ChangeSummary,
@@ -164,7 +160,7 @@ func (r *BlockVersionRepository) ListByBlock(ctx context.Context, blockID uuid.U
 func (r *BlockVersionRepository) GetLatestByBlock(ctx context.Context, blockID uuid.UUID) (*domain.BlockVersion, error) {
 	query := `
 		SELECT id, block_id, version,
-			   code, config_schema, input_schema, output_schema, ui_config,
+			   code, config_schema, output_schema, ui_config,
 			   change_summary, changed_by, created_at
 		FROM block_versions
 		WHERE block_id = $1
@@ -179,7 +175,6 @@ func (r *BlockVersionRepository) GetLatestByBlock(ctx context.Context, blockID u
 		&version.Version,
 		&version.Code,
 		&version.ConfigSchema,
-		&version.InputSchema,
 		&version.OutputSchema,
 		&version.UIConfig,
 		&version.ChangeSummary,

@@ -219,7 +219,6 @@ export interface BlockDefinition {
   subcategory?: BlockSubcategory
   icon?: string
   config_schema: object
-  input_schema?: object
   output_schema?: object
   input_ports: InputPort[]   // Multiple input ports for merging (e.g., join, aggregate)
   output_ports: OutputPort[] // Multiple output ports for branching (e.g., condition, switch)

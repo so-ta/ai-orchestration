@@ -1342,10 +1342,16 @@ func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContex
 		return nil, fmt.Errorf("adapter not found: %s", config.AdapterID)
 	}
 
+	// Expand template variables in config
+	expandedConfig, err := ExpandConfigTemplates(step.Config, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand config templates: %w", err)
+	}
+
 	// Execute adapter
 	resp, err := adp.Execute(ctx, &adapter.Request{
 		Input:  input,
-		Config: step.Config,
+		Config: expandedConfig,
 	})
 
 	// Record usage if this is an LLM adapter (has token metadata)
@@ -1409,10 +1415,16 @@ func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext
 		)
 	}
 
+	// Expand template variables in config
+	expandedConfig, err := ExpandConfigTemplates(step.Config, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand config templates: %w", err)
+	}
+
 	// Execute adapter
 	resp, err := adp.Execute(ctx, &adapter.Request{
 		Input:  input,
-		Config: step.Config,
+		Config: expandedConfig,
 	})
 
 	// Record usage regardless of success/failure
@@ -1571,9 +1583,16 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 					errors[idx] = err
 					return
 				}
+				// Expand template variables in config for each item
+				expandedConfig, err := ExpandConfigTemplates(step.Config, itemJSON)
+				if err != nil {
+					e.logger.Warn("Failed to expand config templates", "index", idx, "error", err)
+					errors[idx] = err
+					return
+				}
 				resp, err := adp.Execute(ctx, &adapter.Request{
 					Input:  itemJSON,
-					Config: step.Config,
+					Config: expandedConfig,
 				})
 				if err != nil {
 					errors[idx] = err
@@ -1598,9 +1617,16 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 				errors[i] = err
 				continue
 			}
+			// Expand template variables in config for each item
+			expandedConfig, err := ExpandConfigTemplates(step.Config, itemJSON)
+			if err != nil {
+				e.logger.Warn("Failed to expand config templates", "index", i, "error", err)
+				errors[i] = err
+				continue
+			}
 			resp, err := adp.Execute(ctx, &adapter.Request{
 				Input:  itemJSON,
-				Config: step.Config,
+				Config: expandedConfig,
 			})
 			if err != nil {
 				errors[i] = err

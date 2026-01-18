@@ -80,23 +80,15 @@ func (a *HTTPAdapter) Execute(ctx context.Context, req *Request) (*Response, err
 		config.TimeoutSec = 30
 	}
 
-	// Parse input for variable substitution
-	var inputData map[string]interface{}
-	if req.Input != nil {
-		if err := json.Unmarshal(req.Input, &inputData); err != nil {
-			inputData = map[string]interface{}{"input": string(req.Input)}
-		}
-	}
+	// Config templates are now expanded by Executor before reaching the adapter
+	// All config values can be used directly
 
-	// Substitute variables in URL
-	url := substituteVariables(config.URL, inputData)
-
-	// Add query parameters
+	// Build URL with query parameters
+	url := config.URL
 	if len(config.QueryParams) > 0 {
 		params := make([]string, 0, len(config.QueryParams))
 		for key, value := range config.QueryParams {
-			substitutedValue := substituteVariables(value, inputData)
-			params = append(params, fmt.Sprintf("%s=%s", key, substitutedValue))
+			params = append(params, fmt.Sprintf("%s=%s", key, value))
 		}
 		if strings.Contains(url, "?") {
 			url += "&" + strings.Join(params, "&")
@@ -108,8 +100,7 @@ func (a *HTTPAdapter) Execute(ctx context.Context, req *Request) (*Response, err
 	// Build request body
 	var bodyReader io.Reader
 	if config.Body != "" && (config.Method == "POST" || config.Method == "PUT" || config.Method == "PATCH") {
-		body := substituteVariables(config.Body, inputData)
-		bodyReader = bytes.NewBufferString(body)
+		bodyReader = bytes.NewBufferString(config.Body)
 	}
 
 	// Create HTTP request
@@ -120,8 +111,7 @@ func (a *HTTPAdapter) Execute(ctx context.Context, req *Request) (*Response, err
 
 	// Set headers
 	for key, value := range config.Headers {
-		substitutedValue := substituteVariables(value, inputData)
-		httpReq.Header.Set(key, substitutedValue)
+		httpReq.Header.Set(key, value)
 	}
 
 	// Set content type if body is present
