@@ -218,6 +218,24 @@ func (c *CredentialData) GetSecretValue() string {
 		return c.AccessToken
 	case string(CredentialTypeBasic):
 		return c.Username + ":" + c.Password
+	case string(CredentialTypeQueryAuth):
+		if len(c.QueryParams) == 0 {
+			return ""
+		}
+		data, _ := json.Marshal(c.QueryParams)
+		return string(data)
+	case string(CredentialTypeHeaderAuth):
+		if len(c.Headers) == 0 {
+			return ""
+		}
+		data, _ := json.Marshal(c.Headers)
+		return string(data)
+	case string(CredentialTypeCustom):
+		if len(c.Custom) == 0 {
+			return ""
+		}
+		data, _ := json.Marshal(c.Custom)
+		return string(data)
 	default:
 		return ""
 	}

@@ -130,12 +130,12 @@ func (s *CredentialShare) Validate() error {
 	hasProject := s.SharedWithProjectID != nil
 
 	if hasUser == hasProject {
-		// Both set or neither set
-		return ErrCredentialShareNotFound
+		// Both set or neither set - invalid target configuration
+		return ErrCredentialShareInvalid
 	}
 
 	if !s.Permission.IsValid() {
-		return ErrCredentialShareNotFound
+		return ErrCredentialShareInvalid
 	}
 
 	return nil

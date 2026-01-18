@@ -73,6 +73,7 @@ var (
 	// Credential Share errors
 	ErrCredentialShareNotFound  = errors.New("credential share not found")
 	ErrCredentialShareDuplicate = errors.New("credential share already exists")
+	ErrCredentialShareInvalid   = errors.New("credential share is invalid")
 
 	// System Credential errors
 	ErrSystemCredentialNotFound = errors.New("system credential not found")

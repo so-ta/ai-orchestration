@@ -157,7 +157,8 @@ func HandleError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrScheduleInvalidCron),
 		errors.Is(err, domain.ErrBlockGroupInvalidType),
 		errors.Is(err, domain.ErrStepCannotBeInGroup),
-		errors.Is(err, domain.ErrBlockGroupInvalidRole):
+		errors.Is(err, domain.ErrBlockGroupInvalidRole),
+		errors.Is(err, domain.ErrCredentialShareInvalid):
 		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), nil)
 
 	case errors.Is(err, domain.ErrUnauthorized):
