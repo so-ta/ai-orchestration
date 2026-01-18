@@ -251,8 +251,8 @@ func (h *OAuth2Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		// Redirect to frontend with error
-		http.Redirect(w, r, "/oauth/callback?error="+err.Error(), http.StatusFound)
+		// Redirect to frontend with generic error (don't expose internal error details)
+		http.Redirect(w, r, "/oauth/callback?error=authorization_failed", http.StatusFound)
 		return
 	}
 
