@@ -15,7 +15,7 @@ func DemoWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "demo",
 		Name:        "Demo Workflows",
 		Description: "Demonstrates multiple workflow patterns: block demo, data pipeline, and block groups with multiple entry points",
-		Version:     1,
+		Version:     4,
 		IsSystem:    true,
 		// Note: InputSchema/OutputSchema are defined per entry point in each Start step's config
 		// Top-level schemas are optional for multi-entry-point workflows
