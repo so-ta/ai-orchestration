@@ -51,11 +51,16 @@ type CreateRunInput struct {
 	Input       json.RawMessage
 	TriggeredBy domain.TriggerType // e.g., TriggerTypeManual, TriggerTypeTest
 	UserID      *uuid.UUID
-	StartStepID *uuid.UUID // Optional: specific start step for webhook triggers
+	StartStepID *uuid.UUID // Required: which Start block to execute from
 }
 
 // Create creates and enqueues a new run
 func (u *RunUsecase) Create(ctx context.Context, input CreateRunInput) (*domain.Run, error) {
+	// Validate start_step_id is required
+	if input.StartStepID == nil {
+		return nil, domain.NewValidationError("start_step_id", "start_step_id is required")
+	}
+
 	// Get project
 	project, err := u.projectRepo.GetByID(ctx, input.TenantID, input.ProjectID)
 	if err != nil {
@@ -91,6 +96,7 @@ func (u *RunUsecase) Create(ctx context.Context, input CreateRunInput) (*domain.
 		input.TriggeredBy,
 	)
 	run.TriggeredByUser = input.UserID
+	run.StartStepID = input.StartStepID
 
 	if err := u.runRepo.Create(ctx, run); err != nil {
 		return nil, err
@@ -453,7 +459,8 @@ func (u *RunUsecase) GetStepHistory(ctx context.Context, tenantID, runID, stepID
 // ExecuteSystemProjectInput represents input for executing a system project
 type ExecuteSystemProjectInput struct {
 	TenantID        uuid.UUID              // Tenant context for the run
-	SystemSlug      string                 // System project slug (e.g., "copilot-generate")
+	SystemSlug      string                 // System project slug (e.g., "copilot")
+	EntryPoint      string                 // Entry point identifier (e.g., "generate", "suggest")
 	Input           json.RawMessage        // Project input
 	TriggerSource   string                 // Internal caller identifier (e.g., "copilot")
 	TriggerMetadata map[string]interface{} // Additional metadata (feature, user_id, session_id, etc.)
@@ -467,7 +474,7 @@ type ExecuteSystemProjectOutput struct {
 	Version   int       `json:"version"`
 }
 
-// ExecuteSystemProject executes a system project by its slug
+// ExecuteSystemProject executes a system project by its slug and entry point
 // This is used for internal system calls (e.g., Copilot meta-project)
 // Returns immediately after creating the run - execution happens asynchronously
 func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSystemProjectInput) (*ExecuteSystemProjectOutput, error) {
@@ -482,7 +489,20 @@ func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSyst
 		return nil, domain.ErrProjectNotPublished
 	}
 
-	// 3. Create run with internal trigger type
+	// 3. Find the Start block by entry_point
+	var startStepID *uuid.UUID
+	if input.EntryPoint != "" {
+		steps, err := u.stepRepo.ListByProject(ctx, input.TenantID, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		startStepID, err = findStartStepByEntryPoint(steps, input.EntryPoint)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 4. Create run with internal trigger type
 	run := domain.NewRun(
 		input.TenantID,
 		project.ID,
@@ -491,24 +511,26 @@ func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSyst
 		domain.TriggerTypeInternal,
 	)
 	run.TriggeredByUser = input.UserID
+	run.StartStepID = startStepID
 
-	// 4. Set internal trigger metadata
+	// 5. Set internal trigger metadata
 	if err := run.SetInternalTrigger(input.TriggerSource, input.TriggerMetadata); err != nil {
 		return nil, err
 	}
 
-	// 5. Save run to database
+	// 6. Save run to database
 	if err := u.runRepo.Create(ctx, run); err != nil {
 		return nil, err
 	}
 
-	// 6. Enqueue job for async execution
+	// 7. Enqueue job for async execution
 	job := &engine.Job{
 		TenantID:       input.TenantID,
 		ProjectID:      project.ID,
 		ProjectVersion: project.Version,
 		RunID:          run.ID,
 		Input:          input.Input,
+		TargetStepID:   startStepID,
 	}
 	if err := u.queue.Enqueue(ctx, job); err != nil {
 		return nil, err
@@ -519,6 +541,26 @@ func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSyst
 		ProjectID: project.ID,
 		Version:   project.Version,
 	}, nil
+}
+
+// findStartStepByEntryPoint finds a Start block by its entry_point in trigger_config
+func findStartStepByEntryPoint(steps []*domain.Step, entryPoint string) (*uuid.UUID, error) {
+	for _, step := range steps {
+		if step.Type != domain.StepTypeStart {
+			continue
+		}
+		// Parse trigger_config to find entry_point
+		if step.TriggerConfig != nil {
+			var config map[string]interface{}
+			if err := json.Unmarshal(step.TriggerConfig, &config); err != nil {
+				continue
+			}
+			if ep, ok := config["entry_point"].(string); ok && ep == entryPoint {
+				return &step.ID, nil
+			}
+		}
+	}
+	return nil, domain.NewValidationError("entry_point", "start step with entry_point '"+entryPoint+"' not found")
 }
 
 // TestStepInlineInput represents input for inline step testing

@@ -11,8 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWorkflowInfo holds workflow ID and start step ID for tests
+type TestWorkflowInfo struct {
+	WorkflowID  string
+	StartStepID string
+}
+
 // Helper to create a workflow for run tests
-func createTestWorkflowForRuns(t *testing.T) string {
+// Returns both workflow ID and start step ID (required for run creation)
+func createTestWorkflowForRuns(t *testing.T) TestWorkflowInfo {
 	createReq := map[string]string{
 		"name":        "Run Test Workflow " + time.Now().Format("20060102150405"),
 		"description": "Created for run tests",
@@ -62,7 +69,10 @@ func createTestWorkflowForRuns(t *testing.T) string {
 	resp, _ = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/publish", workflowID), nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	return workflowID
+	return TestWorkflowInfo{
+		WorkflowID:  workflowID,
+		StartStepID: startStep.ID,
+	}
 }
 
 // Helper to wait for run completion
@@ -94,21 +104,22 @@ func waitForRunStatus(t *testing.T, runID string, expectedStatuses []string, tim
 }
 
 func TestRunListPagination(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// Create multiple runs
 	for i := 0; i < 5; i++ {
 		runReq := map[string]interface{}{
-			"input": map[string]int{"index": i},
-			"triggered_by": "test",
+			"input":         map[string]int{"index": i},
+			"triggered_by":  "test",
+			"start_step_id": wfInfo.StartStepID,
 		}
-		resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+		resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 		require.Equal(t, http.StatusCreated, resp.StatusCode, "Run %d create response: %s", i, string(body))
 	}
 
 	// List all runs
-	resp, body := makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), nil)
+	resp, body := makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var listResp struct {
@@ -124,7 +135,7 @@ func TestRunListPagination(t *testing.T) {
 	assert.GreaterOrEqual(t, len(listResp.Data), 5)
 
 	// Test pagination
-	resp, body = makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/runs?page=1&limit=2", workflowID), nil)
+	resp, body = makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/runs?page=1&limit=2", wfInfo.WorkflowID), nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	err = json.Unmarshal(body, &listResp)
@@ -135,15 +146,16 @@ func TestRunListPagination(t *testing.T) {
 }
 
 func TestRunGetByID(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// Create a run
 	runReq := map[string]interface{}{
-		"input": map[string]string{"test": "value"},
-		"triggered_by": "test",
+		"input":         map[string]string{"test": "value"},
+		"triggered_by":  "test",
+		"start_step_id": wfInfo.StartStepID,
 	}
-	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var createResp struct {
@@ -163,7 +175,7 @@ func TestRunGetByID(t *testing.T) {
 	err = json.Unmarshal(body, &getResp)
 	require.NoError(t, err)
 	assert.Equal(t, runID, getResp.Data.ID)
-	assert.Equal(t, workflowID, getResp.Data.WorkflowID)
+	assert.Equal(t, wfInfo.WorkflowID, getResp.Data.ProjectID)
 }
 
 func TestRunGetNotFound(t *testing.T) {
@@ -173,15 +185,16 @@ func TestRunGetNotFound(t *testing.T) {
 }
 
 func TestRunCancel(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// Create a run
 	runReq := map[string]interface{}{
-		"input": map[string]string{"test": "cancel"},
-		"triggered_by": "test",
+		"input":         map[string]string{"test": "cancel"},
+		"triggered_by":  "test",
+		"start_step_id": wfInfo.StartStepID,
 	}
-	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var createResp struct {
@@ -199,18 +212,19 @@ func TestRunCancel(t *testing.T) {
 }
 
 func TestRunWithTriggeredBy(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	triggeredByTypes := []string{"test", "manual"}
 
 	for _, triggeredBy := range triggeredByTypes {
 		t.Run(fmt.Sprintf("triggered_by_%s", triggeredBy), func(t *testing.T) {
 			runReq := map[string]interface{}{
-				"input":        map[string]string{"trigger_test": triggeredBy},
-				"triggered_by": triggeredBy,
+				"input":         map[string]string{"trigger_test": triggeredBy},
+				"triggered_by":  triggeredBy,
+				"start_step_id": wfInfo.StartStepID,
 			}
-			resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+			resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 			require.Equal(t, http.StatusCreated, resp.StatusCode, "Create response: %s", string(body))
 
 			var createResp struct {
@@ -224,40 +238,42 @@ func TestRunWithTriggeredBy(t *testing.T) {
 }
 
 func TestRunWithVersion(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// Execute with specific version (version 1 after publish)
 	runReq := map[string]interface{}{
-		"input":   map[string]string{"version_test": "v1"},
-		"triggered_by": "test",
-		"version": 1,
+		"input":         map[string]string{"version_test": "v1"},
+		"triggered_by":  "test",
+		"start_step_id": wfInfo.StartStepID,
+		"version":       1,
 	}
-	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "Create response: %s", string(body))
 
 	var createResp struct {
 		Data struct {
-			ID              string `json:"id"`
-			WorkflowVersion int    `json:"workflow_version"`
+			ID             string `json:"id"`
+			ProjectVersion int    `json:"project_version"`
 		} `json:"data"`
 	}
 	err := json.Unmarshal(body, &createResp)
 	require.NoError(t, err)
-	assert.Equal(t, 1, createResp.Data.WorkflowVersion)
+	assert.Equal(t, 1, createResp.Data.ProjectVersion)
 }
 
 func TestRunWithInvalidVersion(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// Execute with non-existent version
 	runReq := map[string]interface{}{
-		"input":   map[string]string{"version_test": "v999"},
-		"triggered_by": "test",
-		"version": 999,
+		"input":         map[string]string{"version_test": "v999"},
+		"triggered_by":  "test",
+		"start_step_id": wfInfo.StartStepID,
+		"version":       999,
 	}
-	resp, _ := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+	resp, _ := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
@@ -410,11 +426,11 @@ func TestEdgeOperations(t *testing.T) {
 }
 
 func TestVersionOperations(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// List versions
-	resp, body := makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/versions", workflowID), nil)
+	resp, body := makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/versions", wfInfo.WorkflowID), nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var listResp struct {
@@ -428,7 +444,7 @@ func TestVersionOperations(t *testing.T) {
 	assert.GreaterOrEqual(t, len(listResp.Data), 1, "Should have at least one version")
 
 	// Get specific version
-	resp, body = makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/versions/1", workflowID), nil)
+	resp, body = makeRequest(t, "GET", fmt.Sprintf("/api/v1/workflows/%s/versions/1", wfInfo.WorkflowID), nil)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var versionResp struct {
@@ -444,15 +460,16 @@ func TestVersionOperations(t *testing.T) {
 }
 
 func TestRunCompletionWithStepRuns(t *testing.T) {
-	workflowID := createTestWorkflowForRuns(t)
-	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
+	wfInfo := createTestWorkflowForRuns(t)
+	defer makeRequest(t, "DELETE", "/api/v1/workflows/"+wfInfo.WorkflowID, nil)
 
 	// Create and execute a run
 	runReq := map[string]interface{}{
-		"input": map[string]string{"test": "step_runs"},
-		"triggered_by": "test",
+		"input":         map[string]string{"test": "step_runs"},
+		"triggered_by":  "test",
+		"start_step_id": wfInfo.StartStepID,
 	}
-	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", workflowID), runReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/runs", wfInfo.WorkflowID), runReq)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var createResp struct {

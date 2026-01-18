@@ -3,38 +3,36 @@ package workflows
 import "encoding/json"
 
 func (r *Registry) registerCopilotWorkflows() {
-	r.register(CopilotGenerateWorkflow())
-	r.register(CopilotSuggestWorkflow())
-	r.register(CopilotDiagnoseWorkflow())
-	r.register(CopilotOptimizeWorkflow())
+	r.register(CopilotWorkflow())
 }
 
-// CopilotGenerateWorkflow generates workflow structures from natural language descriptions
-func CopilotGenerateWorkflow() *SystemWorkflowDefinition {
+// CopilotWorkflow is a unified Copilot workflow with 4 entry points:
+// - generate: Generates workflow structures from natural language
+// - suggest: Suggests next steps for a workflow
+// - diagnose: Diagnoses workflow execution errors
+// - optimize: Suggests optimizations for workflow performance
+func CopilotWorkflow() *SystemWorkflowDefinition {
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000001",
-		SystemSlug:  "copilot-generate",
-		Name:        "Copilot: Generate Workflow",
-		Description: "Generates workflow structures from natural language descriptions using AI",
+		SystemSlug:  "copilot",
+		Name:        "Copilot Workflows",
+		Description: "AI-assisted workflow building with multiple entry points: generate, suggest, diagnose, optimize",
 		Version:     1,
 		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["prompt"],
-			"properties": {
-				"prompt": {
-					"type": "string",
-					"title": "説明",
-					"description": "生成したいワークフローの説明を入力してください"
-				}
-			}
-		}`),
 		Steps: []SystemStepDefinition{
+			// ============================
+			// Generate Entry Point
+			// ============================
 			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
+				TempID:      "start_generate",
+				Name:        "Start: Generate",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "generate",
+					"description": "Generate workflow from natural language"
+				}`),
+				PositionX: 100,
 				PositionY: 50,
 				Config: json.RawMessage(`{
 					"input_schema": {
@@ -51,10 +49,10 @@ func CopilotGenerateWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "generate_get_blocks",
 				Name:      "Get Available Blocks",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 200,
 				Config: json.RawMessage(`{
 					"code": "const blocks = context.blocks.list(); return { blocks: blocks.map(b => ({ slug: b.slug, name: b.name, description: b.description, category: b.category })) };",
@@ -69,10 +67,10 @@ func CopilotGenerateWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_3",
+				TempID:    "generate_build_prompt",
 				Name:      "Build Prompt",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 350,
 				Config: json.RawMessage(`{
 					"code": "const blocksInfo = input.blocks.map(b => ` + "`" + `- ${b.slug}: ${b.name} (${b.category}) - ${b.description || \"\"}` + "`" + `).join(\"\\n\");\nconst prompt = ` + "`" + `You are an AI workflow generator. Generate a workflow based on the user description.\n\n## Available Blocks\n${blocksInfo}\n\n## Available Step Types\n- start: Entry point (required)\n- llm: AI/LLM call\n- tool: External adapter\n- condition: Binary branch (true/false)\n- switch: Multi-way branch\n- map: Parallel array processing\n- loop: Iteration\n- wait: Delay\n- function: Custom JavaScript\n- log: Debug logging\n\n## User Request\n${input.prompt}\n\n## Output Format (JSON)\n{\n  \"response\": \"Explanation\",\n  \"steps\": [{\"temp_id\": \"step_1\", \"name\": \"Step Name\", \"type\": \"start\", \"description\": \"\", \"config\": {}, \"position_x\": 400, \"position_y\": 50}],\n  \"edges\": [{\"source_temp_id\": \"step_1\", \"target_temp_id\": \"step_2\", \"source_port\": \"default\"}],\n  \"start_step_id\": \"step_1\"\n}\n\nGenerate a valid workflow JSON. Always include a start step.` + "`" + `;\nreturn { prompt: prompt };",
@@ -87,10 +85,10 @@ func CopilotGenerateWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_4",
+				TempID:    "generate_llm",
 				Name:      "Generate with LLM",
 				Type:      "llm",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 500,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
@@ -102,10 +100,10 @@ func CopilotGenerateWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_5",
+				TempID:    "generate_parse",
 				Name:      "Parse & Validate",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 100,
 				PositionY: 650,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```json" + `\")) content = content.slice(7); if (content.startsWith(\"` + "```" + `\")) content = content.slice(3); if (content.endsWith(\"` + "```" + `\")) content = content.slice(0, -3); content = content.trim(); const result = JSON.parse(content); if (!result.steps || !Array.isArray(result.steps)) { return { error: \"Invalid workflow: missing steps array\" }; } const validTypes = [\"start\", \"llm\", \"tool\", \"condition\", \"switch\", \"map\", \"join\", \"subflow\", \"loop\", \"wait\", \"function\", \"router\", \"human_in_loop\", \"filter\", \"split\", \"aggregate\", \"error\", \"note\", \"log\"]; result.steps = result.steps.filter(s => validTypes.includes(s.type)); return result; } catch (e) { return { error: \"Failed to parse LLM response: \" + e.message }; }",
@@ -122,48 +120,21 @@ func CopilotGenerateWorkflow() *SystemWorkflowDefinition {
 					}
 				}`),
 			},
-		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-			{SourceTempID: "step_2", TargetTempID: "step_3", SourcePort: "output"},
-			{SourceTempID: "step_3", TargetTempID: "step_4", SourcePort: "output"},
-			{SourceTempID: "step_4", TargetTempID: "step_5", SourcePort: "output"},
-		},
-	}
-}
 
-// CopilotSuggestWorkflow suggests next steps for a workflow
-func CopilotSuggestWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000002",
-		SystemSlug:  "copilot-suggest",
-		Name:        "Copilot: Suggest Steps",
-		Description: "Suggests next steps for a workflow based on current structure",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["workflow_id"],
-			"properties": {
-				"workflow_id": {
-					"type": "string",
-					"title": "ワークフローID",
-					"description": "ステップを提案するワークフローのID"
-				},
-				"context": {
-					"type": "string",
-					"title": "コンテキスト",
-					"description": "追加のコンテキスト情報（オプション）"
-				}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
+			// ============================
+			// Suggest Entry Point
+			// ============================
 			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 180,
-				PositionY: 180,
+				TempID:      "start_suggest",
+				Name:        "Start: Suggest",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "suggest",
+					"description": "Suggest next steps for a workflow"
+				}`),
+				PositionX: 400,
+				PositionY: 50,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
@@ -176,7 +147,7 @@ func CopilotSuggestWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "suggest_get_context",
 				Name:      "Get Workflow Context",
 				Type:      "function",
 				PositionX: 400,
@@ -187,7 +158,7 @@ func CopilotSuggestWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_3",
+				TempID:    "suggest_build_prompt",
 				Name:      "Build Suggest Prompt",
 				Type:      "function",
 				PositionX: 400,
@@ -198,7 +169,7 @@ func CopilotSuggestWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_4",
+				TempID:    "suggest_llm",
 				Name:      "Suggest with LLM",
 				Type:      "llm",
 				PositionX: 400,
@@ -213,7 +184,7 @@ func CopilotSuggestWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_5",
+				TempID:    "suggest_parse",
 				Name:      "Parse Suggestions",
 				Type:      "function",
 				PositionX: 400,
@@ -223,42 +194,20 @@ func CopilotSuggestWorkflow() *SystemWorkflowDefinition {
 					"language": "javascript"
 				}`),
 			},
-		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-			{SourceTempID: "step_2", TargetTempID: "step_3", SourcePort: "output"},
-			{SourceTempID: "step_3", TargetTempID: "step_4", SourcePort: "output"},
-			{SourceTempID: "step_4", TargetTempID: "step_5", SourcePort: "output"},
-		},
-	}
-}
 
-// CopilotDiagnoseWorkflow diagnoses workflow execution errors
-func CopilotDiagnoseWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000003",
-		SystemSlug:  "copilot-diagnose",
-		Name:        "Copilot: Diagnose Error",
-		Description: "Diagnoses workflow execution errors and suggests fixes",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["run_id"],
-			"properties": {
-				"run_id": {
-					"type": "string",
-					"title": "実行ID",
-					"description": "診断する実行のID"
-				}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
+			// ============================
+			// Diagnose Entry Point
+			// ============================
 			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
+				TempID:      "start_diagnose",
+				Name:        "Start: Diagnose",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "diagnose",
+					"description": "Diagnose workflow execution errors"
+				}`),
+				PositionX: 700,
 				PositionY: 50,
 				Config: json.RawMessage(`{
 					"input_schema": {
@@ -271,10 +220,10 @@ func CopilotDiagnoseWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "diagnose_get_run",
 				Name:      "Get Run Details",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 200,
 				Config: json.RawMessage(`{
 					"code": "const run = context.runs.get(input.run_id); const stepRuns = context.runs.getStepRuns(input.run_id); const failedSteps = stepRuns.filter(sr => sr.status === \"failed\"); return { run: run, stepRuns: stepRuns, failedSteps: failedSteps };",
@@ -282,10 +231,10 @@ func CopilotDiagnoseWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_3",
+				TempID:    "diagnose_build_prompt",
 				Name:      "Build Diagnose Prompt",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 350,
 				Config: json.RawMessage(`{
 					"code": "const failedInfo = input.failedSteps.map(sr => ` + "`" + `Step: ${sr.step_name}\nError: ${sr.error || \"Unknown\"}\nInput: ${JSON.stringify(sr.input || {})}` + "`" + `).join(\"\\n\\n\"); const prompt = ` + "`" + `Diagnose this workflow error.\n\n## Run Status: ${input.run.status}\n\n## Failed Steps\n${failedInfo || \"No failures found\"}\n\nReturn JSON: {\"diagnosis\": {\"root_cause\": \"...\", \"category\": \"config_error|input_error|api_error|logic_error|timeout|unknown\", \"severity\": \"high|medium|low\"}, \"fixes\": [{\"description\": \"...\", \"steps\": [\"...\"]}], \"preventions\": [\"...\"]}` + "`" + `; return { prompt: prompt };",
@@ -293,10 +242,10 @@ func CopilotDiagnoseWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_4",
+				TempID:    "diagnose_llm",
 				Name:      "Diagnose with LLM",
 				Type:      "llm",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 500,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
@@ -308,52 +257,30 @@ func CopilotDiagnoseWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_5",
+				TempID:    "diagnose_parse",
 				Name:      "Parse Diagnosis",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 700,
 				PositionY: 650,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } return JSON.parse(content); } catch (e) { return { diagnosis: { root_cause: \"Parse error\", category: \"unknown\", severity: \"low\" }, fixes: [], preventions: [] }; }",
 					"language": "javascript"
 				}`),
 			},
-		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-			{SourceTempID: "step_2", TargetTempID: "step_3", SourcePort: "output"},
-			{SourceTempID: "step_3", TargetTempID: "step_4", SourcePort: "output"},
-			{SourceTempID: "step_4", TargetTempID: "step_5", SourcePort: "output"},
-		},
-	}
-}
 
-// CopilotOptimizeWorkflow suggests optimizations for workflow performance
-func CopilotOptimizeWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000004",
-		SystemSlug:  "copilot-optimize",
-		Name:        "Copilot: Optimize Workflow",
-		Description: "Suggests optimizations for workflow performance, cost, and reliability",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["workflow_id"],
-			"properties": {
-				"workflow_id": {
-					"type": "string",
-					"title": "ワークフローID",
-					"description": "最適化するワークフローのID"
-				}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
+			// ============================
+			// Optimize Entry Point
+			// ============================
 			{
-				TempID:    "step_1",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
+				TempID:      "start_optimize",
+				Name:        "Start: Optimize",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "optimize",
+					"description": "Suggest optimizations for workflow performance"
+				}`),
+				PositionX: 1000,
 				PositionY: 50,
 				Config: json.RawMessage(`{
 					"input_schema": {
@@ -366,10 +293,10 @@ func CopilotOptimizeWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_2",
+				TempID:    "optimize_get_workflow",
 				Name:      "Get Workflow Details",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 1000,
 				PositionY: 200,
 				Config: json.RawMessage(`{
 					"code": "const workflow = context.workflows.get(input.workflow_id); return { workflow: workflow };",
@@ -377,10 +304,10 @@ func CopilotOptimizeWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_3",
+				TempID:    "optimize_build_prompt",
 				Name:      "Build Optimize Prompt",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 1000,
 				PositionY: 350,
 				Config: json.RawMessage(`{
 					"code": "const wf = input.workflow; const stepsInfo = (wf.steps || []).map(s => ` + "`" + `- ${s.name} (${s.type}): ${JSON.stringify(s.config || {})}` + "`" + `).join(\"\\n\"); const prompt = ` + "`" + `Suggest optimizations for this workflow.\n\n## Workflow: ${wf.name}\n## Steps (${(wf.steps || []).length})\n${stepsInfo}\n\nReturn JSON: {\"optimizations\": [{\"category\": \"performance|cost|reliability|maintainability\", \"title\": \"...\", \"description\": \"...\", \"impact\": \"high|medium|low\", \"effort\": \"high|medium|low\"}], \"summary\": \"...\"}` + "`" + `; return { prompt: prompt };",
@@ -388,10 +315,10 @@ func CopilotOptimizeWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_4",
+				TempID:    "optimize_llm",
 				Name:      "Optimize with LLM",
 				Type:      "llm",
-				PositionX: 400,
+				PositionX: 1000,
 				PositionY: 500,
 				Config: json.RawMessage(`{
 					"model": "gpt-4o-mini",
@@ -403,10 +330,10 @@ func CopilotOptimizeWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 			{
-				TempID:    "step_5",
+				TempID:    "optimize_parse",
 				Name:      "Parse Optimizations",
 				Type:      "function",
-				PositionX: 400,
+				PositionX: 1000,
 				PositionY: 650,
 				Config: json.RawMessage(`{
 					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } return JSON.parse(content); } catch (e) { return { optimizations: [], summary: \"Parse error\" }; }",
@@ -415,10 +342,29 @@ func CopilotOptimizeWorkflow() *SystemWorkflowDefinition {
 			},
 		},
 		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "step_1", TargetTempID: "step_2", SourcePort: "output"},
-			{SourceTempID: "step_2", TargetTempID: "step_3", SourcePort: "output"},
-			{SourceTempID: "step_3", TargetTempID: "step_4", SourcePort: "output"},
-			{SourceTempID: "step_4", TargetTempID: "step_5", SourcePort: "output"},
+			// Generate flow
+			{SourceTempID: "start_generate", TargetTempID: "generate_get_blocks", SourcePort: "output"},
+			{SourceTempID: "generate_get_blocks", TargetTempID: "generate_build_prompt", SourcePort: "output"},
+			{SourceTempID: "generate_build_prompt", TargetTempID: "generate_llm", SourcePort: "output"},
+			{SourceTempID: "generate_llm", TargetTempID: "generate_parse", SourcePort: "output"},
+
+			// Suggest flow
+			{SourceTempID: "start_suggest", TargetTempID: "suggest_get_context", SourcePort: "output"},
+			{SourceTempID: "suggest_get_context", TargetTempID: "suggest_build_prompt", SourcePort: "output"},
+			{SourceTempID: "suggest_build_prompt", TargetTempID: "suggest_llm", SourcePort: "output"},
+			{SourceTempID: "suggest_llm", TargetTempID: "suggest_parse", SourcePort: "output"},
+
+			// Diagnose flow
+			{SourceTempID: "start_diagnose", TargetTempID: "diagnose_get_run", SourcePort: "output"},
+			{SourceTempID: "diagnose_get_run", TargetTempID: "diagnose_build_prompt", SourcePort: "output"},
+			{SourceTempID: "diagnose_build_prompt", TargetTempID: "diagnose_llm", SourcePort: "output"},
+			{SourceTempID: "diagnose_llm", TargetTempID: "diagnose_parse", SourcePort: "output"},
+
+			// Optimize flow
+			{SourceTempID: "start_optimize", TargetTempID: "optimize_get_workflow", SourcePort: "output"},
+			{SourceTempID: "optimize_get_workflow", TargetTempID: "optimize_build_prompt", SourcePort: "output"},
+			{SourceTempID: "optimize_build_prompt", TargetTempID: "optimize_llm", SourcePort: "output"},
+			{SourceTempID: "optimize_llm", TargetTempID: "optimize_parse", SourcePort: "output"},
 		},
 	}
 }

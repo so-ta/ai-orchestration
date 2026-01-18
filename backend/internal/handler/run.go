@@ -31,7 +31,7 @@ type CreateRunRequest struct {
 	TriggeredBy string          `json:"triggered_by,omitempty"` // manual, webhook, schedule, test, internal
 	Mode        string          `json:"mode,omitempty"`         // Deprecated: use triggered_by instead (backward compat: "test" maps to triggered_by="test")
 	Version     int             `json:"version,omitempty"`      // 0 or omitted means latest
-	StartStepID *string         `json:"start_step_id,omitempty"` // Optional: start execution from a specific step
+	StartStepID *string         `json:"start_step_id"`          // Required: which Start block to execute from
 }
 
 // RunWithDefinitionResponse represents a run response with project definition
@@ -79,14 +79,14 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		userIDPtr = &userID
 	}
 
-	// Parse start_step_id if provided
-	var startStepID *uuid.UUID
-	if req.StartStepID != nil && *req.StartStepID != "" {
-		id, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
-		if !ok {
-			return
-		}
-		startStepID = &id
+	// Parse start_step_id (required)
+	if req.StartStepID == nil || *req.StartStepID == "" {
+		HandleError(w, domain.NewValidationError("start_step_id", "start_step_id is required"))
+		return
+	}
+	startStepID, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
+	if !ok {
+		return
 	}
 
 	run, err := h.runUsecase.Create(r.Context(), usecase.CreateRunInput{
@@ -96,7 +96,7 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Input:       req.Input,
 		TriggeredBy: triggeredBy,
 		UserID:      userIDPtr,
-		StartStepID: startStepID,
+		StartStepID: &startStepID,
 	})
 	if err != nil {
 		HandleError(w, err)
