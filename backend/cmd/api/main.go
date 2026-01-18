@@ -134,6 +134,7 @@ func main() {
 	copilotHandler := handler.NewCopilotHandler(copilotUsecase, runUsecase)
 	usageHandler := handler.NewUsageHandler(usageUsecase)
 	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
+	variablesHandler := handler.NewVariablesHandler(pool)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -377,6 +378,18 @@ func main() {
 		// Run usage (nested under runs)
 		r.Get("/runs/{run_id}/usage", usageHandler.GetByRun)
 
+		// Tenant variables (organization-level)
+		r.Route("/tenant/variables", func(r chi.Router) {
+			r.Get("/", variablesHandler.GetTenantVariables)
+			r.Put("/", variablesHandler.UpdateTenantVariables)
+		})
+
+		// User variables (personal)
+		r.Route("/user/variables", func(r chi.Router) {
+			r.Get("/", variablesHandler.GetUserVariables)
+			r.Put("/", variablesHandler.UpdateUserVariables)
+		})
+
 		// Admin routes for system block management
 		r.Route("/admin/blocks", func(r chi.Router) {
 			r.Use(authmw.RequireAdmin)
@@ -408,7 +421,7 @@ func main() {
 	})
 
 	// Server
-	port := getEnv("PORT", "8080")
+	port := getEnv("PORT", "8090")
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      r,

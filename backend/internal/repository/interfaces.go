@@ -328,3 +328,13 @@ type TenantFilter struct {
 	Limit          int
 	IncludeDeleted bool
 }
+
+// UserRepository defines the interface for user persistence
+type UserRepository interface {
+	// GetByID retrieves a user by ID
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.User, error)
+	// GetVariables retrieves only the variables for a user
+	GetVariables(ctx context.Context, tenantID, id uuid.UUID) (map[string]interface{}, error)
+	// UpdateVariables updates only the variables for a user
+	UpdateVariables(ctx context.Context, tenantID, id uuid.UUID, variables map[string]interface{}) error
+}

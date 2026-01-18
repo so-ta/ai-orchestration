@@ -182,7 +182,7 @@ cd frontend && npm run check
 
 | サービス | URL |
 |---------|-----|
-| API | http://localhost:8080 |
+| API | http://localhost:8090 |
 | フロントエンド | http://localhost:3000 |
 | Keycloak管理画面 | http://localhost:8180/admin |
 | Jaeger UI | http://localhost:16686 |

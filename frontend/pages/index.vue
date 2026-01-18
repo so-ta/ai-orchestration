@@ -75,6 +75,9 @@ const showQuickSearch = ref(false)
 // Release modal state
 const showReleaseModal = ref(false)
 
+// Environment variables modal state
+const showVariablesModal = ref(false)
+
 // Auto-save status
 const saveStatus = ref<'saved' | 'saving' | 'unsaved' | 'error'>('saved')
 
@@ -1387,6 +1390,7 @@ onMounted(async () => {
         @save="handleSave"
         @create-release="handleOpenReleaseModal"
         @open-history="handleToggleSlideOut('runs')"
+        @open-variables="showVariablesModal = true"
         @select-project="handleSelectProject"
         @create-project="handleCreateProject"
       />
@@ -1495,20 +1499,15 @@ onMounted(async () => {
         />
       </SlideOutPanel>
 
-      <SlideOutPanel
-        :show="activeSlideOut === 'variables'"
-        :title="t('editor.variables')"
-        :bottom-offset="bottomPanelHeight"
-        :no-transition="bottomPanelResizing"
-        @close="closeSlideOut"
-      >
-        <VariablesPanel
-          :project-id="project.id"
-          :variables="(project.variables as Record<string, unknown>) || {}"
-          :readonly="isReadonly"
-          @update:variables="handleUpdateVariables"
-        />
-      </SlideOutPanel>
+      <!-- Environment Variables Modal -->
+      <EnvironmentVariablesModal
+        :show="showVariablesModal"
+        :project-id="project.id"
+        :project-variables="(project.variables as Record<string, unknown>) || {}"
+        :readonly="isReadonly"
+        @close="showVariablesModal = false"
+        @update:project-variables="handleUpdateVariables"
+      />
 
       <!-- Run Dialog -->
       <RunDialog

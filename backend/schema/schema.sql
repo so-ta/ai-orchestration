@@ -64,7 +64,8 @@ CREATE TABLE public.tenants (
     feature_flags jsonb DEFAULT '{}'::jsonb,
     limits jsonb DEFAULT '{}'::jsonb,
     suspended_at timestamp with time zone,
-    suspended_reason text
+    suspended_reason text,
+    variables jsonb DEFAULT '{}'::jsonb
 );
 
 COMMENT ON COLUMN public.tenants.status IS 'Tenant status: active, suspended, pending, inactive';
@@ -77,6 +78,7 @@ COMMENT ON COLUMN public.tenants.feature_flags IS 'Feature flags: copilot_enable
 COMMENT ON COLUMN public.tenants.limits IS 'Resource limits: max_projects, max_runs_per_day, max_users, max_credentials, max_storage_mb, retention_days';
 COMMENT ON COLUMN public.tenants.suspended_at IS 'Timestamp when tenant was suspended';
 COMMENT ON COLUMN public.tenants.suspended_reason IS 'Reason for tenant suspension';
+COMMENT ON COLUMN public.tenants.variables IS 'Organization variables accessible by {{$org.xxx}} in templates';
 
 --
 -- Name: users; Type: TABLE; Schema: public; Owner: -
@@ -90,8 +92,11 @@ CREATE TABLE public.users (
     role character varying(50) DEFAULT 'viewer'::character varying NOT NULL,
     last_login_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    variables jsonb DEFAULT '{}'::jsonb
 );
+
+COMMENT ON COLUMN public.users.variables IS 'Personal variables accessible by {{$personal.xxx}} in templates';
 
 -- ============================================================================
 -- Projects (formerly Workflows) - Multi-Start Model

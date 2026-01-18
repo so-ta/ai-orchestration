@@ -165,7 +165,7 @@ Content-Type: application/json
 
 ```bash
 # API経由
-curl -X POST http://localhost:8080/api/v1/credentials \
+curl -X POST http://localhost:8090/api/v1/credentials \
   -H "X-Tenant-ID: {tenant_id}" \
   -H "Content-Type: application/json" \
   -d '{"name": "SLACK_WEBHOOK_URL", "value": "https://hooks.slack.com/services/..."}'

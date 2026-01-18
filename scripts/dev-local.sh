@@ -103,7 +103,7 @@ run_api() {
     # Set environment variables
     export DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable"
     export REDIS_URL="redis://localhost:6379"
-    export PORT=8080
+    export PORT=8090
     export AUTH_ENABLED=false
     export TELEMETRY_ENABLED=false
 
@@ -164,7 +164,7 @@ show_help() {
     echo ""
     echo "URLs:"
     echo "  Frontend:  http://localhost:3000"
-    echo "  API:       http://localhost:8080"
+    echo "  API:       http://localhost:8090"
     echo "  Keycloak:  http://localhost:8180"
     echo "  Jaeger:    http://localhost:16686"
 }

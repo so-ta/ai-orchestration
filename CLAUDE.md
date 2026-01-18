@@ -32,7 +32,7 @@ cd frontend && npm run check
 
 | Service | URL |
 |---------|-----|
-| API | http://localhost:8080 |
+| API | http://localhost:8090 |
 | Frontend | http://localhost:3000 |
 | Keycloak | http://localhost:8180 |
 

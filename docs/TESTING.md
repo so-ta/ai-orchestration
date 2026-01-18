@@ -200,7 +200,7 @@ func TestWorkflowE2E_CRUD(t *testing.T) {
     defer cleanupTestDB(t, db)
 
     client := &http.Client{}
-    baseURL := "http://localhost:8080"
+    baseURL := "http://localhost:8090"
 
     // 作成
     body := `{"name": "E2E Test Workflow"}`
@@ -477,7 +477,7 @@ assert.Equal(t, "abc123", result.ID)  // UUID は固定値ではない → NG
 
 // 3. 外部依存
 func TestAPI(t *testing.T) {
-    resp, _ := http.Get("http://localhost:8080/api/...")  // 外部サービス依存 → NG
+    resp, _ := http.Get("http://localhost:8090/api/...")  // 外部サービス依存 → NG
 }
 
 // 4. テスト間の依存

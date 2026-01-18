@@ -9,7 +9,7 @@ Docker、Kubernetes、および開発・本番環境の設定。
 | 開発環境 | Docker Compose |
 | 本番環境 | ECS（別途構築） |
 | コンテナレジストリ | ローカルビルド / カスタム |
-| API ポート | 8080 |
+| API ポート | 8090 |
 | フロントエンドポート | 3000 |
 | Keycloak ポート | 8180 |
 | Jaeger ポート | 16686 |
@@ -24,7 +24,7 @@ Docker、Kubernetes、および開発・本番環境の設定。
 | postgres | postgres:16-alpine | 5432 | PostgreSQL データベース |
 | redis | redis:7-alpine | 6379 | キャッシュ & ジョブキュー |
 | keycloak | keycloak:24.0 | 8180 | OIDC 認証 |
-| api | ./backend | 8080 | Go API サーバー |
+| api | ./backend | 8090 | Go API サーバー |
 | worker | ./backend | - | ジョブプロセッサー |
 | frontend | ./frontend | 3000 | Nuxt Web UI |
 | jaeger | jaegertracing/all-in-one | 16686 | 分散トレーシング |
@@ -73,7 +73,7 @@ TELEMETRY_ENABLED=true
 
 | サービス | URL |
 |---------|-----|
-| API | http://localhost:8080 |
+| API | http://localhost:8090 |
 | フロントエンド | http://localhost:3000 |
 | Keycloak 管理画面 | http://localhost:8180/admin (admin/admin) |
 | Jaeger UI | http://localhost:16686 |
@@ -112,7 +112,7 @@ RUN adduser -D -g '' appuser
 WORKDIR /app
 COPY --from=builder /api /worker ./
 USER appuser
-EXPOSE 8080
+EXPOSE 8090
 CMD ["./api"]
 ```
 

@@ -52,7 +52,7 @@ help:
 	@echo ""
 	@echo "URLs:"
 	@echo "  Frontend:  http://localhost:3000"
-	@echo "  API:       http://localhost:8080"
+	@echo "  API:       http://localhost:8090"
 	@echo "  Keycloak:  http://localhost:8180"
 	@echo "  Jaeger:    http://localhost:16686"
 
@@ -72,7 +72,7 @@ dev-api:
 	cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
-	PORT=8080 \
+	PORT=8090 \
 	AUTH_ENABLED=false \
 	TELEMETRY_ENABLED=false \
 	$(AIR) -c .air.toml
@@ -137,13 +137,13 @@ restart-api:
 	@cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
-	PORT=8080 \
+	PORT=8090 \
 	AUTH_ENABLED=false \
 	TELEMETRY_ENABLED=false \
 	nohup $(AIR) -c .air.toml > tmp/api.log 2>&1 &
 	@sleep 2
 	@echo "API restarted. Logs: backend/tmp/api.log"
-	@echo "Check: curl -s http://localhost:8080/health"
+	@echo "Check: curl -s http://localhost:8090/health"
 
 # Restart Worker (kill and restart in background)
 restart-worker:
@@ -182,7 +182,7 @@ restart:
 	@$(MAKE) restart-frontend
 	@echo ""
 	@echo "All services restarted!"
-	@echo "  API:      http://localhost:8080"
+	@echo "  API:      http://localhost:8090"
 	@echo "  Frontend: http://localhost:3000"
 
 # ============================================================================
