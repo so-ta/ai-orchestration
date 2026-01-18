@@ -1176,7 +1176,7 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}, nil
 }
 
-// Update updates a step
+// Update updates a step (with tenant_id filter for security)
 func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{}) error {
 	sID, err := uuid.Parse(stepID)
 	if err != nil {
@@ -1200,12 +1200,13 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 		argIndex++
 	}
 
-	args = append(args, sID)
+	args = append(args, sID, s.tenantID)
 
 	query := fmt.Sprintf(
-		"UPDATE steps SET %s WHERE id = $%d",
+		"UPDATE steps SET %s WHERE id = $%d AND tenant_id = $%d",
 		strings.Join(setClauses, ", "),
 		argIndex,
+		argIndex+1,
 	)
 
 	_, err = s.pool.Exec(s.ctx, query, args...)
@@ -1216,16 +1217,16 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 	return nil
 }
 
-// Delete hard-deletes a step (steps table has no deleted_at column)
+// Delete hard-deletes a step (with tenant_id filter for security)
 func (s *StepsServiceImpl) Delete(stepID string) error {
 	sID, err := uuid.Parse(stepID)
 	if err != nil {
 		return fmt.Errorf("invalid step ID: %w", err)
 	}
 
-	query := `DELETE FROM steps WHERE id = $1`
+	query := `DELETE FROM steps WHERE id = $1 AND tenant_id = $2`
 
-	_, err = s.pool.Exec(s.ctx, query, sID)
+	_, err = s.pool.Exec(s.ctx, query, sID, s.tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to delete step: %w", err)
 	}
@@ -1362,16 +1363,16 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}, nil
 }
 
-// Delete hard-deletes an edge (edges table has no deleted_at column)
+// Delete hard-deletes an edge (with tenant_id filter for security)
 func (s *EdgesServiceImpl) Delete(edgeID string) error {
 	eID, err := uuid.Parse(edgeID)
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %w", err)
 	}
 
-	query := `DELETE FROM edges WHERE id = $1`
+	query := `DELETE FROM edges WHERE id = $1 AND tenant_id = $2`
 
-	_, err = s.pool.Exec(s.ctx, query, eID)
+	_, err = s.pool.Exec(s.ctx, query, eID, s.tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to delete edge: %w", err)
 	}
