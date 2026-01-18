@@ -199,7 +199,13 @@ function insertSuggestedField(fieldName: string, value: unknown) {
 }
 
 // Find the start step
-const startStep = computed(() => props.steps.find(s => s.type === 'start'))
+// If a Start step is selected, use that one; otherwise fall back to the first Start step
+const startStep = computed(() => {
+  if (props.step?.type === 'start') {
+    return props.step
+  }
+  return props.steps.find(s => s.type === 'start')
+})
 
 // Find the first executable step (after start)
 const firstExecutableStep = computed(() => {
