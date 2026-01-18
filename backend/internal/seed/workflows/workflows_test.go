@@ -17,15 +17,14 @@ func TestRegistry_AllWorkflowsValid(t *testing.T) {
 func TestRegistry_WorkflowCount(t *testing.T) {
 	registry := NewRegistry()
 
-	// Expect at least 5 workflows (1 copilot + 1 RAG + 2 demo + 1 block-group-demo)
-	// Note: Copilot workflows are unified into a single workflow with 4 entry points
-	// Note: RAG workflows are unified into a single workflow with 3 entry points
-	// Note: ai-routing-block-demo and control-flow-block-demo were removed
-	// because they used join blocks which are no longer supported
-	minExpected := 5
+	// Expect exactly 3 workflows:
+	// 1. copilot - Unified Copilot workflow with 4 entry points
+	// 2. rag - Unified RAG workflow with 3 entry points
+	// 3. demo - Unified demo workflow with 3 entry points (block_demo, data_pipeline, block_group)
+	expected := 3
 	actual := registry.Count()
-	if actual < minExpected {
-		t.Errorf("Expected at least %d workflows, got %d", minExpected, actual)
+	if actual != expected {
+		t.Errorf("Expected %d workflows, got %d", expected, actual)
 	}
 }
 
@@ -33,16 +32,11 @@ func TestRegistry_GetBySlug(t *testing.T) {
 	registry := NewRegistry()
 
 	// Test known workflows exist
-	// Note: Copilot workflows are unified into a single "copilot" workflow
-	// Note: RAG workflows are unified into a single "rag" workflow
-	// Note: ai-routing-block-demo and control-flow-block-demo were removed
-	// because they used join blocks which are no longer supported
+	// All workflows are now unified into multi-entry-point workflows
 	knownSlugs := []string{
 		"copilot", // Unified Copilot workflow with 4 entry points
 		"rag",     // Unified RAG workflow with 3 entry points
-		"comprehensive-block-demo",
-		"data-pipeline-block-demo",
-		"block-group-demo",
+		"demo",    // Unified demo workflow with 3 entry points
 	}
 
 	for _, slug := range knownSlugs {
@@ -221,15 +215,15 @@ func TestWorkflow_Validate(t *testing.T) {
 	}
 }
 
-func TestBlockGroupDemoWorkflow(t *testing.T) {
+func TestDemoWorkflowBlockGroups(t *testing.T) {
 	registry := NewRegistry()
 
-	wf, ok := registry.GetBySlug("block-group-demo")
+	wf, ok := registry.GetBySlug("demo")
 	if !ok {
-		t.Fatal("block-group-demo workflow not found")
+		t.Fatal("demo workflow not found")
 	}
 
-	// Check block groups exist
+	// Check block groups exist (from block_group entry point)
 	if len(wf.BlockGroups) == 0 {
 		t.Error("BlockGroups should not be empty")
 	}
@@ -286,9 +280,9 @@ func TestBlockGroupDemoWorkflow(t *testing.T) {
 func TestBlockGroupDefinitionFields(t *testing.T) {
 	registry := NewRegistry()
 
-	wf, ok := registry.GetBySlug("block-group-demo")
+	wf, ok := registry.GetBySlug("demo")
 	if !ok {
-		t.Fatal("block-group-demo workflow not found")
+		t.Fatal("demo workflow not found")
 	}
 
 	for _, bg := range wf.BlockGroups {
