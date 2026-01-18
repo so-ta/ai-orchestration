@@ -1462,7 +1462,8 @@ func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContex
 func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, stepRun *domain.StepRun, input json.RawMessage) (json.RawMessage, error) {
 	// Parse step config to determine which LLM provider to use
 	var config struct {
-		Provider string `json:"provider"` // openai, anthropic, etc.
+		Provider          string   `json:"provider"`           // openai, anthropic, etc.
+		PassthroughFields []string `json:"passthrough_fields"` // Fields from input to include in output
 	}
 	if err := json.Unmarshal(step.Config, &config); err != nil {
 		return nil, fmt.Errorf("invalid LLM step config: %w", err)
@@ -1524,6 +1525,24 @@ func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext
 
 	if err != nil {
 		return nil, err
+	}
+
+	// If passthrough_fields are specified, merge them from input to output
+	if len(config.PassthroughFields) > 0 {
+		var inputData map[string]interface{}
+		if err := json.Unmarshal(input, &inputData); err == nil {
+			var outputData map[string]interface{}
+			if err := json.Unmarshal(resp.Output, &outputData); err == nil {
+				for _, field := range config.PassthroughFields {
+					if val, exists := inputData[field]; exists {
+						outputData[field] = val
+					}
+				}
+				if merged, err := json.Marshal(outputData); err == nil {
+					return merged, nil
+				}
+			}
+		}
 	}
 
 	return resp.Output, nil
@@ -2977,7 +2996,9 @@ function renderTemplate(template, data) {
 	return template.replace(/\{\{([^}]+)\}\}/g, function(match, path) {
 		var value = data;
 		var parts = path.trim().split('.');
-		for (var i = 0; i < parts.length; i++) {
+		// Skip '$' prefix - it represents root data
+		var startIndex = (parts[0] === '$') ? 1 : 0;
+		for (var i = startIndex; i < parts.length; i++) {
 			if (value == null) return '';
 			value = value[parts[i]];
 		}

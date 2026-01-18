@@ -144,7 +144,8 @@ func (m *AuthMiddleware) setDevContext(ctx context.Context, r *http.Request) con
 	}
 
 	// Check X-User-ID header for user-specific testing
-	userID := uuid.Nil
+	// Default to a well-known development user ID if not specified
+	userID := uuid.MustParse("4c560a4e-ac47-4bcc-9e5e-4981fe6e98f7")
 	if headerUserID := r.Header.Get("X-User-ID"); headerUserID != "" {
 		if id, err := uuid.Parse(headerUserID); err == nil {
 			userID = id

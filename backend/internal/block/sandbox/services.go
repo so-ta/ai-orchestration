@@ -981,15 +981,8 @@ func (s *ProjectsServiceImpl) Update(projectID string, updates map[string]interf
 	args := []interface{}{}
 	argIndex := 1
 
-	if startStepID, ok := updates["start_step_id"].(string); ok {
-		ssID, err := uuid.Parse(startStepID)
-		if err != nil {
-			return fmt.Errorf("invalid start_step_id: %w", err)
-		}
-		setClauses = append(setClauses, fmt.Sprintf("start_step_id = $%d", argIndex))
-		args = append(args, ssID)
-		argIndex++
-	}
+	// Note: start_step_id is not a column in projects table
+	// Start steps are identified by step type = "start"
 
 	if name, ok := updates["name"].(string); ok {
 		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argIndex))
@@ -1071,7 +1064,7 @@ func (s *StepsServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 		SELECT s.id, s.name, s.type, s.config, s.position_x, s.position_y, s.created_at
 		FROM steps s
 		JOIN projects p ON s.project_id = p.id
-		WHERE s.project_id = $1 AND p.tenant_id = $2 AND s.deleted_at IS NULL
+		WHERE s.project_id = $1 AND p.tenant_id = $2
 		ORDER BY s.created_at
 	`
 
@@ -1157,8 +1150,8 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}
 
 	query := `
-		INSERT INTO steps (project_id, name, type, config, position_x, position_y, block_definition_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO steps (tenant_id, project_id, name, type, config, position_x, position_y, block_definition_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
 	`
 
@@ -1167,7 +1160,7 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 		createdAt time.Time
 	)
 
-	err = s.pool.QueryRow(s.ctx, query, pID, name, stepType, configJSON, positionX, positionY, blockDefID).Scan(&id, &createdAt)
+	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, name, stepType, configJSON, positionX, positionY, blockDefID).Scan(&id, &createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create step: %w", err)
 	}
@@ -1183,7 +1176,7 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}, nil
 }
 
-// Update updates a step
+// Update updates a step (with tenant_id filter for security)
 func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{}) error {
 	sID, err := uuid.Parse(stepID)
 	if err != nil {
@@ -1207,12 +1200,13 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 		argIndex++
 	}
 
-	args = append(args, sID)
+	args = append(args, sID, s.tenantID)
 
 	query := fmt.Sprintf(
-		"UPDATE steps SET %s WHERE id = $%d AND deleted_at IS NULL",
+		"UPDATE steps SET %s WHERE id = $%d AND tenant_id = $%d",
 		strings.Join(setClauses, ", "),
 		argIndex,
+		argIndex+1,
 	)
 
 	_, err = s.pool.Exec(s.ctx, query, args...)
@@ -1223,16 +1217,16 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 	return nil
 }
 
-// Delete soft-deletes a step
+// Delete hard-deletes a step (with tenant_id filter for security)
 func (s *StepsServiceImpl) Delete(stepID string) error {
 	sID, err := uuid.Parse(stepID)
 	if err != nil {
 		return fmt.Errorf("invalid step ID: %w", err)
 	}
 
-	query := `UPDATE steps SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+	query := `DELETE FROM steps WHERE id = $1 AND tenant_id = $2`
 
-	_, err = s.pool.Exec(s.ctx, query, sID)
+	_, err = s.pool.Exec(s.ctx, query, sID, s.tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to delete step: %w", err)
 	}
@@ -1271,7 +1265,7 @@ func (s *EdgesServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 		SELECT e.id, e.source_step_id, e.target_step_id, e.source_port, e.target_port, e.condition
 		FROM edges e
 		JOIN projects p ON e.project_id = p.id
-		WHERE e.project_id = $1 AND p.tenant_id = $2 AND e.deleted_at IS NULL
+		WHERE e.project_id = $1 AND p.tenant_id = $2
 	`
 
 	rows, err := s.pool.Query(s.ctx, query, pID, s.tenantID)
@@ -1348,13 +1342,13 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}
 
 	query := `
-		INSERT INTO edges (project_id, source_step_id, target_step_id, source_port, target_port)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO edges (tenant_id, project_id, source_step_id, target_step_id, source_port, target_port)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`
 
 	var id uuid.UUID
-	err = s.pool.QueryRow(s.ctx, query, pID, ssID, tsID, sourcePort, targetPort).Scan(&id)
+	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, ssID, tsID, sourcePort, targetPort).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create edge: %w", err)
 	}
@@ -1369,16 +1363,16 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}, nil
 }
 
-// Delete soft-deletes an edge
+// Delete hard-deletes an edge (with tenant_id filter for security)
 func (s *EdgesServiceImpl) Delete(edgeID string) error {
 	eID, err := uuid.Parse(edgeID)
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %w", err)
 	}
 
-	query := `UPDATE edges SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+	query := `DELETE FROM edges WHERE id = $1 AND tenant_id = $2`
 
-	_, err = s.pool.Exec(s.ctx, query, eID)
+	_, err = s.pool.Exec(s.ctx, query, eID, s.tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to delete edge: %w", err)
 	}

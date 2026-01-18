@@ -24,6 +24,8 @@
 | 差分に含まれていないファイルへの指摘 | レビュー範囲外 |
 | **「この関数のテストがない」** | **テストファイルの差分外に既存テストが存在する** |
 | **「エラーパスのテストがない」** | **テストファイルは数千行あり、差分に含まれない部分にテストがある** |
+| **「`deleted_at IS NULL`条件がない」** | **そのテーブルに`deleted_at`カラムが存在しない（steps, edgesなど）** |
+| **「`start_step_id`の更新処理がない」** | **projectsテーブルに`start_step_id`カラムは存在しない** |
 
 ### 見当違いを防ぐためのルール
 
@@ -43,6 +45,17 @@
    - `*_test.go` ファイルは数千行に及ぶことがあり、差分に含まれない既存テストが多数存在する
    - **「この関数のテストがない」「エラーパスのテストがない」等の指摘は絶対にしないこと**
    - テストの追加を求める場合は、差分内に明らかにテストが書かれるべき**新規ファイル**が作成されている場合のみ
+
+5. **🚨 `deleted_at`カラムの存在確認**
+   - **「`deleted_at IS NULL`条件がない」という指摘をする前に、そのテーブルに`deleted_at`カラムが存在するか確認すること**
+   - プロジェクトの全テーブルに`deleted_at`があるわけではない
+   - `backend/schema/schema.sql`を参照して、対象テーブルのスキーマを確認
+   - 現状`deleted_at`カラムを持つテーブル: `tenants`, `projects`, `runs`のみ
+   - `steps`, `edges`テーブルには`deleted_at`カラムが**存在しない**ため、ソフトデリート条件は不要
+
+6. **🚨 `start_step_id`カラムの存在確認**
+   - `projects`テーブルには`start_step_id`カラムが**存在しない**
+   - 開始ステップは`steps`テーブルの`type = 'start'`で識別される
 
 ### 厳しくレビューすべき項目（遠慮なく指摘）
 
@@ -113,7 +126,7 @@
 1. **Clean Architecture**: Handler → Usecase → Domain → Repository
 2. **Multi-tenancy**: 全クエリに `tenant_id` フィルタ必須
 3. **Unified Block Model**: 新規ブロックはMigrationで追加（`block_definitions`テーブル）
-4. **Soft Delete**: `deleted_at` カラムによる論理削除
+4. **Soft Delete**: `deleted_at` カラムによる論理削除（**注意: 一部テーブルのみ。tenants, projects, runsが対象。steps, edgesには存在しない**）
 
 ### Key Patterns
 - **Repository Interface**: 全Repositoryはinterface経由でDI
@@ -131,7 +144,7 @@
 |-------------|--------|------|
 | エラーを `_` で無視していないか | **Critical** | 全エラーを明示的にハンドリング |
 | 全DBクエリに `tenant_id` フィルタがあるか | **Critical** | テナント分離違反はセキュリティ問題 |
-| `deleted_at IS NULL` 条件があるか | **High** | Soft Delete対応漏れ |
+| `deleted_at IS NULL` 条件があるか | **High** | Soft Delete対応漏れ（**注意: 全テーブルにdeleted_atがあるわけではない。tenants, projects, runsのみ**） |
 | エラーに `%w` でコンテキストを付与しているか | **Medium** | `fmt.Errorf("failed to X: %w", err)` |
 | Interface経由でDI可能な設計か | **Medium** | テスト容易性 |
 | `log/slog` を使用しているか | **Medium** | 標準ログライブラリ |

@@ -272,6 +272,13 @@ func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflow
 			}
 		}
 
+		// Set trigger type for start steps
+		var triggerType *domain.StepTriggerType
+		if seedStep.TriggerType != "" {
+			tt := domain.StepTriggerType(seedStep.TriggerType)
+			triggerType = &tt
+		}
+
 		step := &domain.Step{
 			ID:                 stepID,
 			TenantID:           tenantID,
@@ -279,6 +286,8 @@ func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflow
 			Name:               seedStep.Name,
 			Type:               domain.StepType(seedStep.Type),
 			Config:             seedStep.Config,
+			TriggerType:        triggerType,
+			TriggerConfig:      seedStep.TriggerConfig,
 			PositionX:          seedStep.PositionX,
 			PositionY:          seedStep.PositionY,
 			BlockDefinitionID:  blockDefID,
