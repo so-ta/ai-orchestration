@@ -1836,6 +1836,11 @@ func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionCo
 		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Runs = sandbox.NewRunsService(ctx, e.pool, execCtx.Run.TenantID)
+		// Add builder services (for AI workflow builder)
+		sandboxCtx.BuilderSessions = sandbox.NewBuilderSessionsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Projects = sandbox.NewProjectsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Steps = sandbox.NewStepsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Edges = sandbox.NewEdgesService(ctx, e.pool, execCtx.Run.TenantID)
 	}
 
 	// Execute the code in sandbox
@@ -2808,6 +2813,11 @@ func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionC
 		sandboxCtx.Runs = sandbox.NewRunsService(ctx, e.pool, execCtx.Run.TenantID)
 		// Initialize Vector service with tenant isolation (needed for RAG blocks)
 		sandboxCtx.Vector = sandbox.NewVectorService(ctx, execCtx.Run.TenantID, e.pool, embeddingService)
+		// Add builder services (for AI workflow builder)
+		sandboxCtx.BuilderSessions = sandbox.NewBuilderSessionsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Projects = sandbox.NewProjectsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Steps = sandbox.NewStepsService(ctx, e.pool, execCtx.Run.TenantID)
+		sandboxCtx.Edges = sandbox.NewEdgesService(ctx, e.pool, execCtx.Run.TenantID)
 	}
 
 	return sandboxCtx

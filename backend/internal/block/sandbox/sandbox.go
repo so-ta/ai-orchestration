@@ -126,6 +126,50 @@ type RunsService interface {
 	GetStepRuns(runID string) ([]map[string]interface{}, error)
 }
 
+// BuilderSessionsService provides builder session access to scripts
+type BuilderSessionsService interface {
+	// Get retrieves a builder session by ID
+	Get(sessionID string) (map[string]interface{}, error)
+	// Update updates a builder session
+	Update(sessionID string, updates map[string]interface{}) error
+	// AddMessage adds a message to a builder session
+	AddMessage(sessionID string, message map[string]interface{}) error
+}
+
+// ProjectsService provides project management for builder workflows
+type ProjectsService interface {
+	// Get retrieves a project by ID
+	Get(projectID string) (map[string]interface{}, error)
+	// Create creates a new project
+	Create(data map[string]interface{}) (map[string]interface{}, error)
+	// Update updates a project
+	Update(projectID string, updates map[string]interface{}) error
+	// IncrementVersion increments the project version
+	IncrementVersion(projectID string) error
+}
+
+// StepsService provides step management for builder workflows
+type StepsService interface {
+	// ListByProject retrieves all steps for a project
+	ListByProject(projectID string) ([]map[string]interface{}, error)
+	// Create creates a new step
+	Create(data map[string]interface{}) (map[string]interface{}, error)
+	// Update updates a step
+	Update(stepID string, updates map[string]interface{}) error
+	// Delete soft-deletes a step
+	Delete(stepID string) error
+}
+
+// EdgesService provides edge management for builder workflows
+type EdgesService interface {
+	// ListByProject retrieves all edges for a project
+	ListByProject(projectID string) ([]map[string]interface{}, error)
+	// Create creates a new edge
+	Create(data map[string]interface{}) (map[string]interface{}, error)
+	// Delete soft-deletes an edge
+	Delete(edgeID string) error
+}
+
 // ExecutionContext provides runtime context to scripts
 type ExecutionContext struct {
 	HTTP *HTTPClient
@@ -141,6 +185,11 @@ type ExecutionContext struct {
 	Blocks    BlocksService
 	Workflows WorkflowsService
 	Runs      RunsService
+	// Builder services (for AI workflow builder)
+	BuilderSessions BuilderSessionsService
+	Projects        ProjectsService
+	Steps           StepsService
+	Edges           EdgesService
 	// Credentials is a map of credential name to credential data
 	// Accessible in scripts as context.credentials.name.field
 	// e.g., context.credentials.api_key.access_token
@@ -438,6 +487,108 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 			return err
 		}
 		if err := contextObj.Set("runs", runsObj); err != nil {
+			return err
+		}
+	}
+
+	// Add BuilderSessions service if available (for AI workflow builder)
+	if execCtx != nil && execCtx.BuilderSessions != nil {
+		builderSessionsObj := vm.NewObject()
+		if err := builderSessionsObj.Set("get", func(call goja.FunctionCall) goja.Value {
+			return s.builderSessionsGet(vm, execCtx.BuilderSessions, call)
+		}); err != nil {
+			return err
+		}
+		if err := builderSessionsObj.Set("update", func(call goja.FunctionCall) goja.Value {
+			return s.builderSessionsUpdate(vm, execCtx.BuilderSessions, call)
+		}); err != nil {
+			return err
+		}
+		if err := builderSessionsObj.Set("addMessage", func(call goja.FunctionCall) goja.Value {
+			return s.builderSessionsAddMessage(vm, execCtx.BuilderSessions, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("builderSessions", builderSessionsObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Projects service if available (for AI workflow builder)
+	if execCtx != nil && execCtx.Projects != nil {
+		projectsObj := vm.NewObject()
+		if err := projectsObj.Set("get", func(call goja.FunctionCall) goja.Value {
+			return s.projectsGet(vm, execCtx.Projects, call)
+		}); err != nil {
+			return err
+		}
+		if err := projectsObj.Set("create", func(call goja.FunctionCall) goja.Value {
+			return s.projectsCreate(vm, execCtx.Projects, call)
+		}); err != nil {
+			return err
+		}
+		if err := projectsObj.Set("update", func(call goja.FunctionCall) goja.Value {
+			return s.projectsUpdate(vm, execCtx.Projects, call)
+		}); err != nil {
+			return err
+		}
+		if err := projectsObj.Set("incrementVersion", func(call goja.FunctionCall) goja.Value {
+			return s.projectsIncrementVersion(vm, execCtx.Projects, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("projects", projectsObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Steps service if available (for AI workflow builder)
+	if execCtx != nil && execCtx.Steps != nil {
+		stepsObj := vm.NewObject()
+		if err := stepsObj.Set("listByProject", func(call goja.FunctionCall) goja.Value {
+			return s.stepsListByProject(vm, execCtx.Steps, call)
+		}); err != nil {
+			return err
+		}
+		if err := stepsObj.Set("create", func(call goja.FunctionCall) goja.Value {
+			return s.stepsCreate(vm, execCtx.Steps, call)
+		}); err != nil {
+			return err
+		}
+		if err := stepsObj.Set("update", func(call goja.FunctionCall) goja.Value {
+			return s.stepsUpdate(vm, execCtx.Steps, call)
+		}); err != nil {
+			return err
+		}
+		if err := stepsObj.Set("delete", func(call goja.FunctionCall) goja.Value {
+			return s.stepsDelete(vm, execCtx.Steps, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("steps", stepsObj); err != nil {
+			return err
+		}
+	}
+
+	// Add Edges service if available (for AI workflow builder)
+	if execCtx != nil && execCtx.Edges != nil {
+		edgesObj := vm.NewObject()
+		if err := edgesObj.Set("listByProject", func(call goja.FunctionCall) goja.Value {
+			return s.edgesListByProject(vm, execCtx.Edges, call)
+		}); err != nil {
+			return err
+		}
+		if err := edgesObj.Set("create", func(call goja.FunctionCall) goja.Value {
+			return s.edgesCreate(vm, execCtx.Edges, call)
+		}); err != nil {
+			return err
+		}
+		if err := edgesObj.Set("delete", func(call goja.FunctionCall) goja.Value {
+			return s.edgesDelete(vm, execCtx.Edges, call)
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("edges", edgesObj); err != nil {
 			return err
 		}
 	}
@@ -1103,4 +1254,268 @@ func (s *Sandbox) vectorListCollections(vm *goja.Runtime, service VectorService,
 	}
 
 	return vm.ToValue(collections)
+}
+
+// ============================================================================
+// Builder Service Methods (for AI workflow builder)
+// ============================================================================
+
+// builderSessionsGet handles ctx.builderSessions.get(sessionID) calls
+func (s *Sandbox) builderSessionsGet(vm *goja.Runtime, service BuilderSessionsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.builderSessions.get requires sessionID argument"))
+	}
+
+	sessionID := call.Arguments[0].String()
+
+	result, err := service.Get(sessionID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("BuilderSessions get failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// builderSessionsUpdate handles ctx.builderSessions.update(sessionID, updates) calls
+func (s *Sandbox) builderSessionsUpdate(vm *goja.Runtime, service BuilderSessionsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.builderSessions.update requires sessionID and updates arguments"))
+	}
+
+	sessionID := call.Arguments[0].String()
+
+	updatesArg := call.Arguments[1].Export()
+	updates, ok := updatesArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.builderSessions.update updates must be an object"))
+	}
+
+	err := service.Update(sessionID, updates)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("BuilderSessions update failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// builderSessionsAddMessage handles ctx.builderSessions.addMessage(sessionID, message) calls
+func (s *Sandbox) builderSessionsAddMessage(vm *goja.Runtime, service BuilderSessionsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.builderSessions.addMessage requires sessionID and message arguments"))
+	}
+
+	sessionID := call.Arguments[0].String()
+
+	messageArg := call.Arguments[1].Export()
+	message, ok := messageArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.builderSessions.addMessage message must be an object"))
+	}
+
+	err := service.AddMessage(sessionID, message)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("BuilderSessions addMessage failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// projectsGet handles ctx.projects.get(projectID) calls
+func (s *Sandbox) projectsGet(vm *goja.Runtime, service ProjectsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.projects.get requires projectID argument"))
+	}
+
+	projectID := call.Arguments[0].String()
+
+	result, err := service.Get(projectID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Projects get failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// projectsCreate handles ctx.projects.create(data) calls
+func (s *Sandbox) projectsCreate(vm *goja.Runtime, service ProjectsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.projects.create requires data argument"))
+	}
+
+	dataArg := call.Arguments[0].Export()
+	data, ok := dataArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.projects.create data must be an object"))
+	}
+
+	result, err := service.Create(data)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Projects create failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// projectsUpdate handles ctx.projects.update(projectID, updates) calls
+func (s *Sandbox) projectsUpdate(vm *goja.Runtime, service ProjectsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.projects.update requires projectID and updates arguments"))
+	}
+
+	projectID := call.Arguments[0].String()
+
+	updatesArg := call.Arguments[1].Export()
+	updates, ok := updatesArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.projects.update updates must be an object"))
+	}
+
+	err := service.Update(projectID, updates)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Projects update failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// projectsIncrementVersion handles ctx.projects.incrementVersion(projectID) calls
+func (s *Sandbox) projectsIncrementVersion(vm *goja.Runtime, service ProjectsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.projects.incrementVersion requires projectID argument"))
+	}
+
+	projectID := call.Arguments[0].String()
+
+	err := service.IncrementVersion(projectID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Projects incrementVersion failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// stepsListByProject handles ctx.steps.listByProject(projectID) calls
+func (s *Sandbox) stepsListByProject(vm *goja.Runtime, service StepsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.steps.listByProject requires projectID argument"))
+	}
+
+	projectID := call.Arguments[0].String()
+
+	result, err := service.ListByProject(projectID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Steps listByProject failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// stepsCreate handles ctx.steps.create(data) calls
+func (s *Sandbox) stepsCreate(vm *goja.Runtime, service StepsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.steps.create requires data argument"))
+	}
+
+	dataArg := call.Arguments[0].Export()
+	data, ok := dataArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.steps.create data must be an object"))
+	}
+
+	result, err := service.Create(data)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Steps create failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// stepsUpdate handles ctx.steps.update(stepID, updates) calls
+func (s *Sandbox) stepsUpdate(vm *goja.Runtime, service StepsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.steps.update requires stepID and updates arguments"))
+	}
+
+	stepID := call.Arguments[0].String()
+
+	updatesArg := call.Arguments[1].Export()
+	updates, ok := updatesArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.steps.update updates must be an object"))
+	}
+
+	err := service.Update(stepID, updates)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Steps update failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// stepsDelete handles ctx.steps.delete(stepID) calls
+func (s *Sandbox) stepsDelete(vm *goja.Runtime, service StepsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.steps.delete requires stepID argument"))
+	}
+
+	stepID := call.Arguments[0].String()
+
+	err := service.Delete(stepID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Steps delete failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// edgesListByProject handles ctx.edges.listByProject(projectID) calls
+func (s *Sandbox) edgesListByProject(vm *goja.Runtime, service EdgesService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.edges.listByProject requires projectID argument"))
+	}
+
+	projectID := call.Arguments[0].String()
+
+	result, err := service.ListByProject(projectID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Edges listByProject failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// edgesCreate handles ctx.edges.create(data) calls
+func (s *Sandbox) edgesCreate(vm *goja.Runtime, service EdgesService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.edges.create requires data argument"))
+	}
+
+	dataArg := call.Arguments[0].Export()
+	data, ok := dataArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.edges.create data must be an object"))
+	}
+
+	result, err := service.Create(data)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Edges create failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// edgesDelete handles ctx.edges.delete(edgeID) calls
+func (s *Sandbox) edgesDelete(vm *goja.Runtime, service EdgesService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.edges.delete requires edgeID argument"))
+	}
+
+	edgeID := call.Arguments[0].String()
+
+	err := service.Delete(edgeID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Edges delete failed: %v", err)))
+	}
+
+	return vm.ToValue(map[string]interface{}{"success": true})
 }

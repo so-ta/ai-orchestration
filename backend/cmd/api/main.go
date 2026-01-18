@@ -101,6 +101,7 @@ func main() {
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 	credentialRepo := postgres.NewCredentialRepository(pool)
 	copilotSessionRepo := postgres.NewCopilotSessionRepository(pool)
+	builderSessionRepo := postgres.NewBuilderSessionRepository(pool)
 	usageRepo := postgres.NewUsageRepository(pool)
 	budgetRepo := postgres.NewBudgetRepository(pool)
 	tenantRepo := postgres.NewTenantRepository(pool)
@@ -119,6 +120,7 @@ func main() {
 	blockUsecase := usecase.NewBlockUsecase(blockRepo, blockVersionRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
 	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
+	builderUsecase := usecase.NewBuilderUsecase(builderSessionRepo, projectRepo, blockRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
 	// Initialize handlers
@@ -132,6 +134,7 @@ func main() {
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase, auditService)
 	copilotHandler := handler.NewCopilotHandler(copilotUsecase, runUsecase)
+	builderHandler := handler.NewBuilderHandler(builderUsecase, runUsecase)
 	usageHandler := handler.NewUsageHandler(usageUsecase)
 	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
 	variablesHandler := handler.NewVariablesHandler(pool)
@@ -356,6 +359,22 @@ func main() {
 
 			// Polling endpoint for async results
 			r.Get("/runs/{id}", copilotHandler.GetCopilotRun)
+		})
+
+		// AI Workflow Builder (interactive workflow creation)
+		r.Route("/builder", func(r chi.Router) {
+			r.Route("/sessions", func(r chi.Router) {
+				r.Get("/", builderHandler.ListSessions)
+				r.Post("/", builderHandler.StartSession)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", builderHandler.GetSession)
+					r.Delete("/", builderHandler.DeleteSession)
+					r.Post("/messages", builderHandler.SendMessage)
+					r.Post("/construct", builderHandler.Construct)
+					r.Post("/refine", builderHandler.Refine)
+					r.Post("/finalize", builderHandler.Finalize)
+				})
+			})
 		})
 
 		// Usage tracking and cost management
