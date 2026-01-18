@@ -16,7 +16,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "ai-builder",
 		Name:        "AI Workflow Builder",
 		Description: "AI-assisted workflow building with interactive hearing, automatic construction, and refinement capabilities",
-		Version:     1,
+		Version:     2,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -96,7 +96,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 400,
 				PositionY: 40,
 				Config: json.RawMessage(`{
-					"model": "claude-sonnet-4-20250514",
+					"model": "claude-3-haiku-20240307",
 					"provider": "anthropic",
 					"max_tokens": 2000,
 					"temperature": 0.5,
@@ -223,7 +223,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 400,
 				PositionY: 160,
 				Config: json.RawMessage(`{
-					"model": "claude-sonnet-4-20250514",
+					"model": "claude-3-haiku-20240307",
 					"provider": "anthropic",
 					"max_tokens": 4000,
 					"temperature": 0.3,
@@ -353,7 +353,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 400,
 				PositionY: 280,
 				Config: json.RawMessage(`{
-					"model": "claude-sonnet-4-20250514",
+					"model": "claude-3-haiku-20240307",
 					"provider": "anthropic",
 					"max_tokens": 2000,
 					"temperature": 0.3,
