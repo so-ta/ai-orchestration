@@ -257,14 +257,14 @@ const workflowInputSchema = computed<ConfigSchema | null>(() => {
   } as ConfigSchema
 })
 
-// Convert input_schema to ConfigSchema format for step execution
+// Convert config_schema to ConfigSchema format for step execution
 // For Start step, use the workflow input schema (from Start step's config.input_schema)
 const stepInputSchema = computed<ConfigSchema | null>(() => {
   // For Start step, use workflowInputSchema (which comes from Start step's config.input_schema)
   if (isStartStep.value) {
     return workflowInputSchema.value
   }
-  const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  const schema = selectedStepBlock.value?.config_schema as Record<string, unknown> | undefined
   if (!schema || schema.type !== 'object') return null
   const properties = schema.properties as Record<string, unknown> | undefined
   if (!properties || Object.keys(properties).length === 0) return null
@@ -296,7 +296,7 @@ watch(customInputJson, () => {
   if (useJsonMode.value || !hasStepInputFields.value) {
     try {
       const parsed = JSON.parse(customInputJson.value)
-      const schema = selectedStepBlock.value?.input_schema as ConfigSchema | undefined
+      const schema = selectedStepBlock.value?.config_schema as ConfigSchema | undefined
       const result = validateConfig(schema, parsed)
       schemaValidationErrors.value = result.errors.map(e => ({ field: e.field, message: e.message }))
       inputError.value = null
@@ -346,7 +346,7 @@ const workflowSchemaFields = computed(() => {
 
 // Get step schema fields for preview
 const stepSchemaFields = computed(() => {
-  const schema = selectedStepBlock.value?.input_schema as Record<string, unknown> | undefined
+  const schema = selectedStepBlock.value?.config_schema as Record<string, unknown> | undefined
   return getSchemaFields(schema)
 })
 

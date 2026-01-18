@@ -158,8 +158,7 @@ describe('RunDialog', () => {
       category: 'ai',
       description: 'LLM block',
       is_system: true,
-      config_schema: {},
-      input_schema: {
+      config_schema: {
         type: 'object',
         properties: {
           prompt: { type: 'string', title: 'Prompt' },

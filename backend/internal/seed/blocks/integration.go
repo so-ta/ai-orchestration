@@ -77,16 +77,6 @@ func HTTPBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"url": {"type": "string", "description": "リクエストURL（継承ブロック用）"},
-				"body": {"type": "object", "description": "リクエストボディ"},
-				"method": {"type": "string", "description": "HTTPメソッド（継承ブロック用）"},
-				"headers": {"type": "object", "description": "追加ヘッダー"}
-			},
-			"description": "URL/ボディのテンプレートで参照可能なデータ。継承ブロックはPreProcessでurl/body/method/headersを設定可能"
-		}`),
 		InputPorts:  []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{},
 		Code: `
@@ -127,13 +117,6 @@ func SubflowBlock() *SystemBlockDefinition {
 				"workflow_version": {"type": "integer"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"input": {"type": "object", "description": "サブフローに渡す入力データ"}
-			},
-			"description": "サブフローに渡すデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for subflow"},
 		},
@@ -171,13 +154,6 @@ func ToolBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"params": {"type": "object", "description": "ツールに渡すパラメータ"}
-			},
-			"description": "ツールに渡すデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for the tool"},
 		},
@@ -214,12 +190,6 @@ func WebhookBlock() *SystemBlockDefinition {
 			"properties": {
 				"webhook_url": {"type": "string", "title": "Webhook URL"},
 				"secret_key": {"type": "string", "title": "シークレットキー名", "description": "ctx.secretsから取得するキー名"}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"payload": {"type": "object", "description": "送信するペイロード"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{
@@ -278,15 +248,6 @@ func RestAPIBlock() *SystemBlockDefinition {
 				"auth_key": {"type": "string", "title": "認証キー（直接指定）"},
 				"secret_key": {"type": "string", "title": "シークレットキー名"},
 				"header_name": {"type": "string", "title": "ヘッダー名", "default": "X-API-Key", "description": "api_key_header使用時のヘッダー名"}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"url": {"type": "string", "description": "リクエストURL（base_urlからの相対パス可）"},
-				"method": {"type": "string", "description": "HTTPメソッド"},
-				"headers": {"type": "object", "description": "追加ヘッダー"},
-				"body": {"type": "object", "description": "リクエストボディ"}
 			}
 		}`),
 		InputPorts:  []domain.InputPort{},
@@ -359,13 +320,6 @@ func GraphQLBlock() *SystemBlockDefinition {
 				"endpoint": {"type": "string", "title": "GraphQLエンドポイント"},
 				"query": {"type": "string", "title": "GraphQLクエリ", "x-ui-widget": "textarea"},
 				"variables": {"type": "object", "title": "変数"}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"query": {"type": "string", "description": "GraphQLクエリ（configより優先）"},
-				"variables": {"type": "object", "description": "変数（configとマージ）"}
 			}
 		}`),
 		InputPorts:  []domain.InputPort{},
@@ -1528,14 +1482,6 @@ func VectorUpsertBlock() *SystemBlockDefinition {
 				"embedding_model": {"type": "string", "default": "text-embedding-3-small", "title": "Embedding Model"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["documents"],
-			"properties": {
-				"documents": {"type": "array", "description": "Documents to store (each with content and optional metadata)"},
-				"collection": {"type": "string", "description": "Collection name (used if not set in config)"}
-			}
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: true, Description: "Documents and optional collection name"},
 		},
@@ -1577,14 +1523,6 @@ func VectorSearchBlock() *SystemBlockDefinition {
 				"include_content": {"type": "boolean", "default": true, "title": "Include Content"},
 				"embedding_provider": {"type": "string", "default": "openai"},
 				"embedding_model": {"type": "string", "default": "text-embedding-3-small"}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"query": {"type": "string", "description": "Query text to search for"},
-				"vector": {"type": "array", "description": "Pre-computed vector to search with"},
-				"collection": {"type": "string", "description": "Collection name (used if not set in config)"}
 			}
 		}`),
 		InputPorts: []domain.InputPort{

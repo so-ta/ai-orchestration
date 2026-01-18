@@ -43,14 +43,6 @@ func LLMBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"message": {"type": "string"},
-				"context": {"type": "string"}
-			},
-			"description": "LLMプロンプトの入力データ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false},
 		},
@@ -141,13 +133,6 @@ func RouterBlock() *SystemBlockDefinition {
 				},
 				"provider": {"type": "string"}
 			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"message": {"type": "string", "description": "ルーティング判定対象のメッセージ"}
-			},
-			"description": "ルーティング判定に使用するデータ"
 		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "string"}`), Required: true, Description: "Message to analyze for routing"},

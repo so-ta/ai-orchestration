@@ -26,13 +26,6 @@ func ConditionBlock() *SystemBlockDefinition {
 				"expression": {"type": "string", "description": "JSONPath expression"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"value": {"type": "any", "description": "条件式で評価する値"}
-			},
-			"description": "条件式で評価されるデータ"
-		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: true, Description: "Data to evaluate condition against"},
 		},
@@ -81,13 +74,6 @@ func SwitchBlock() *SystemBlockDefinition {
 					}
 				}
 			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"value": {"type": "any", "description": "分岐条件で評価する値"}
-			},
-			"description": "分岐条件で評価されるデータ"
 		}`),
 		InputPorts: []domain.InputPort{
 			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: true, Description: "Value to switch on"},

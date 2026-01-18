@@ -30,14 +30,6 @@ func DocLoaderBlock() *SystemBlockDefinition {
 				"strip_html": {"type": "boolean", "default": true, "title": "Strip HTML Tags"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"url": {"type": "string"},
-				"content": {"type": "string"},
-				"text": {"type": "string"}
-			}
-		}`),
 		OutputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -120,14 +112,6 @@ func TextSplitterBlock() *SystemBlockDefinition {
 				"separator": {"type": "string", "default": "\\n\\n", "title": "Separator"}
 			}
 		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"documents": {"type": "array"},
-				"content": {"type": "string"},
-				"text": {"type": "string"}
-			}
-		}`),
 		OutputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
@@ -201,15 +185,6 @@ func RAGQueryBlock() *SystemBlockDefinition {
 				"system_prompt": {"type": "string", "title": "System Prompt"},
 				"temperature": {"type": "number", "default": 0.3, "minimum": 0, "maximum": 2},
 				"max_tokens": {"type": "integer", "default": 2000}
-			}
-		}`),
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["query"],
-			"properties": {
-				"query": {"type": "string", "description": "Question to answer"},
-				"question": {"type": "string", "description": "Alias for query"},
-				"collection": {"type": "string", "description": "Collection name (used if not set in config)"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{
