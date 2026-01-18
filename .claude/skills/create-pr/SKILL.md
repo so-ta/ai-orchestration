@@ -2,7 +2,7 @@
 name: create-pr
 description: |
   Create a pull request after code changes are complete and reviewed.
-  Use after self-review passes and documentation is updated.
+  Use proactively after self-review passes and documentation is updated.
 ---
 
 # Create Pull Request

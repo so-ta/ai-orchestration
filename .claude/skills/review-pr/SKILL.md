@@ -1,8 +1,8 @@
 ---
 name: review-pr
 description: |
-  PR review workflow after push. Use after creating a pull request to check
-  CI status and Codex review results, and handle any required changes.
+  PR review workflow after push. Use proactively immediately after creating
+  a pull request to check CI status and Codex review results.
 ---
 
 # PR Review Workflow
