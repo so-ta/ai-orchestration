@@ -355,8 +355,20 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 	// Build execution graph
 	graph := e.buildGraph(execCtx.Definition)
 
-	// Find start nodes (nodes with no incoming edges)
-	startNodes := e.findStartNodes(graph)
+	// Determine start nodes: use Run.StartStepID if specified, otherwise find all start nodes
+	var startNodes []uuid.UUID
+	if execCtx.Run.StartStepID != nil {
+		// Use the specified start step only
+		startNodes = []uuid.UUID{*execCtx.Run.StartStepID}
+		e.logger.Info("Using specified start step",
+			"run_id", execCtx.Run.ID,
+			"start_step_id", *execCtx.Run.StartStepID,
+		)
+	} else {
+		// Find all start nodes (nodes of type "start")
+		startNodes = e.findStartNodes(graph)
+	}
+
 	if len(startNodes) == 0 {
 		err := fmt.Errorf("no start nodes found in project")
 		span.RecordError(err)
