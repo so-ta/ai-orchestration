@@ -1,3 +1,10 @@
+---
+name: add-block
+description: |
+  Add new block (Discord, Slack, Notion integrations etc.) workflow.
+  Use when adding new integration blocks or system blocks to the workflow engine.
+---
+
 # Add New Block Workflow
 
 新規ブロック（Discord, Slack, Notion等の外部連携）を追加する際のワークフロー。
@@ -66,13 +73,7 @@ Go Adapter追加が必要な場合:
 4. Add test `{name}_test.go`
 5. Update `docs/BACKEND.md`
 
-## チェックリスト
+## 参考
 
-```
-[ ] UNIFIED_BLOCK_MODEL.md を読んだ
-[ ] 既存ブロックのパターンを確認した
-[ ] Migrationファイルを作成した
-[ ] make db-reset でテスト
-[ ] BLOCK_REGISTRY.md を更新した
-[ ] テストを追加した
-```
+- [docs/designs/UNIFIED_BLOCK_MODEL.md](docs/designs/UNIFIED_BLOCK_MODEL.md)
+- [docs/BLOCK_REGISTRY.md](docs/BLOCK_REGISTRY.md)
