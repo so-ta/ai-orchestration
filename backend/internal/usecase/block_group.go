@@ -67,6 +67,9 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 	if input.ParentGroupID != nil {
 		_, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.ParentGroupID)
 		if err != nil {
+			if err == domain.ErrBlockGroupNotFound {
+				return nil, domain.NewValidationError("parent_group_id", "parent group not found in this project")
+			}
 			return nil, err
 		}
 	}
