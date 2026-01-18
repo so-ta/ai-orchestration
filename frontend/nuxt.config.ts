@@ -29,7 +29,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      apiBase: process.env.API_BASE_URL || 'http://localhost:8080/api/v1',
+      apiBase: process.env.API_BASE_URL || 'http://localhost:8090/api/v1',
       keycloakUrl: process.env.KEYCLOAK_URL || 'http://localhost:8180',
       keycloakRealm: process.env.KEYCLOAK_REALM || 'ai-orchestration',
       keycloakClientId: process.env.KEYCLOAK_CLIENT_ID || 'frontend'

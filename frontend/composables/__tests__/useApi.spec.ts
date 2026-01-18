@@ -5,7 +5,7 @@ import { useApi } from '../useApi'
 // Mock useRuntimeConfig
 const mockConfig = {
   public: {
-    apiBase: 'http://localhost:8080/api/v1',
+    apiBase: 'http://localhost:8090/api/v1',
   },
 }
 
@@ -55,7 +55,7 @@ describe('useApi', () => {
       const result = await api.get('/workflows')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/v1/workflows',
+        'http://localhost:8090/api/v1/workflows',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -150,7 +150,7 @@ describe('useApi', () => {
       const result = await api.post('/workflows', payload)
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/v1/workflows',
+        'http://localhost:8090/api/v1/workflows',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(payload),
@@ -171,7 +171,7 @@ describe('useApi', () => {
       await api.post('/workflows/123/publish')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/v1/workflows/123/publish',
+        'http://localhost:8090/api/v1/workflows/123/publish',
         expect.objectContaining({
           method: 'POST',
           body: undefined,
@@ -194,7 +194,7 @@ describe('useApi', () => {
       await api.put('/workflows/123', payload)
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/v1/workflows/123',
+        'http://localhost:8090/api/v1/workflows/123',
         expect.objectContaining({
           method: 'PUT',
           body: JSON.stringify(payload),
@@ -216,7 +216,7 @@ describe('useApi', () => {
       const result = await api.delete('/workflows/123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/api/v1/workflows/123',
+        'http://localhost:8090/api/v1/workflows/123',
         expect.objectContaining({
           method: 'DELETE',
         })

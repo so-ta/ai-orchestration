@@ -178,11 +178,24 @@ type Tenant struct {
 	Metadata        json.RawMessage `json:"metadata"`
 	FeatureFlags    json.RawMessage `json:"feature_flags"`
 	Limits          json.RawMessage `json:"limits"`
+	Variables       json.RawMessage `json:"variables"`
 	SuspendedAt     *time.Time      `json:"suspended_at,omitempty"`
 	SuspendedReason string          `json:"suspended_reason,omitempty"`
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
 	DeletedAt       *time.Time      `json:"deleted_at,omitempty"`
+}
+
+// GetVariables parses and returns variables as a map
+func (t *Tenant) GetVariables() (map[string]interface{}, error) {
+	var vars map[string]interface{}
+	if t.Variables == nil || len(t.Variables) == 0 {
+		return make(map[string]interface{}), nil
+	}
+	if err := json.Unmarshal(t.Variables, &vars); err != nil {
+		return nil, err
+	}
+	return vars, nil
 }
 
 // NewTenant creates a new tenant with defaults
@@ -214,6 +227,7 @@ func NewTenant(name, slug string, plan TenantPlan) (*Tenant, error) {
 		Metadata:     json.RawMessage("{}"),
 		FeatureFlags: flagsJSON,
 		Limits:       limitsJSON,
+		Variables:    json.RawMessage("{}"),
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}, nil

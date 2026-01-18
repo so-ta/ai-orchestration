@@ -247,20 +247,17 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
 .flow-tab {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow-y: auto;
-  padding: 1rem;
 }
 
 /* Empty State */
 .flow-empty {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 2rem;
   text-align: center;
-  height: 100%;
 }
 
 .empty-icon {

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,9 +30,9 @@ func (r *TenantRepository) Create(ctx context.Context, tenant *domain.Tenant) er
 		INSERT INTO tenants (
 			id, name, slug, status, plan,
 			owner_email, owner_name, billing_email,
-			settings, metadata, feature_flags, limits,
+			settings, metadata, feature_flags, limits, variables,
 			created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 
 	_, err := r.pool.Exec(ctx, query,
@@ -47,6 +48,7 @@ func (r *TenantRepository) Create(ctx context.Context, tenant *domain.Tenant) er
 		tenant.Metadata,
 		tenant.FeatureFlags,
 		tenant.Limits,
+		tenant.Variables,
 		tenant.CreatedAt,
 		tenant.UpdatedAt,
 	)
@@ -58,7 +60,7 @@ func (r *TenantRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.T
 	query := `
 		SELECT id, name, slug, status, plan,
 			   COALESCE(owner_email, ''), COALESCE(owner_name, ''), COALESCE(billing_email, ''),
-			   settings, metadata, feature_flags, limits,
+			   settings, metadata, feature_flags, limits, COALESCE(variables, '{}'::jsonb),
 			   suspended_at, COALESCE(suspended_reason, ''),
 			   created_at, updated_at, deleted_at
 		FROM tenants
@@ -79,6 +81,7 @@ func (r *TenantRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.T
 		&tenant.Metadata,
 		&tenant.FeatureFlags,
 		&tenant.Limits,
+		&tenant.Variables,
 		&tenant.SuspendedAt,
 		&tenant.SuspendedReason,
 		&tenant.CreatedAt,
@@ -100,7 +103,7 @@ func (r *TenantRepository) GetBySlug(ctx context.Context, slug string) (*domain.
 	query := `
 		SELECT id, name, slug, status, plan,
 			   COALESCE(owner_email, ''), COALESCE(owner_name, ''), COALESCE(billing_email, ''),
-			   settings, metadata, feature_flags, limits,
+			   settings, metadata, feature_flags, limits, COALESCE(variables, '{}'::jsonb),
 			   suspended_at, COALESCE(suspended_reason, ''),
 			   created_at, updated_at, deleted_at
 		FROM tenants
@@ -121,6 +124,7 @@ func (r *TenantRepository) GetBySlug(ctx context.Context, slug string) (*domain.
 		&tenant.Metadata,
 		&tenant.FeatureFlags,
 		&tenant.Limits,
+		&tenant.Variables,
 		&tenant.SuspendedAt,
 		&tenant.SuspendedReason,
 		&tenant.CreatedAt,
@@ -195,7 +199,7 @@ func (r *TenantRepository) List(ctx context.Context, filter repository.TenantFil
 	query := fmt.Sprintf(`
 		SELECT id, name, slug, status, plan,
 			   COALESCE(owner_email, ''), COALESCE(owner_name, ''), COALESCE(billing_email, ''),
-			   settings, metadata, feature_flags, limits,
+			   settings, metadata, feature_flags, limits, COALESCE(variables, '{}'::jsonb),
 			   suspended_at, COALESCE(suspended_reason, ''),
 			   created_at, updated_at, deleted_at
 		FROM tenants
@@ -228,6 +232,7 @@ func (r *TenantRepository) List(ctx context.Context, filter repository.TenantFil
 			&t.Metadata,
 			&t.FeatureFlags,
 			&t.Limits,
+			&t.Variables,
 			&t.SuspendedAt,
 			&t.SuspendedReason,
 			&t.CreatedAt,
@@ -257,9 +262,10 @@ func (r *TenantRepository) Update(ctx context.Context, tenant *domain.Tenant) er
 			metadata = $10,
 			feature_flags = $11,
 			limits = $12,
-			suspended_at = $13,
-			suspended_reason = $14,
-			updated_at = $15
+			variables = $13,
+			suspended_at = $14,
+			suspended_reason = $15,
+			updated_at = $16
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -278,6 +284,7 @@ func (r *TenantRepository) Update(ctx context.Context, tenant *domain.Tenant) er
 		tenant.Metadata,
 		tenant.FeatureFlags,
 		tenant.Limits,
+		tenant.Variables,
 		tenant.SuspendedAt,
 		tenant.SuspendedReason,
 		tenant.UpdatedAt,
@@ -285,6 +292,50 @@ func (r *TenantRepository) Update(ctx context.Context, tenant *domain.Tenant) er
 
 	if err != nil {
 		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return domain.ErrTenantNotFound
+	}
+
+	return nil
+}
+
+// GetVariables retrieves only the variables for a tenant
+// Returns empty map if tenant not found (for graceful degradation)
+func (r *TenantRepository) GetVariables(ctx context.Context, id uuid.UUID) (map[string]interface{}, error) {
+	query := `SELECT COALESCE(variables, '{}'::jsonb) FROM tenants WHERE id = $1 AND deleted_at IS NULL`
+
+	var variables []byte
+	err := r.pool.QueryRow(ctx, query, id).Scan(&variables)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Return empty map instead of error for graceful degradation
+		return make(map[string]interface{}), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get tenant variables: %w", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(variables, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal tenant variables: %w", err)
+	}
+
+	return result, nil
+}
+
+// UpdateVariables updates only the variables for a tenant
+func (r *TenantRepository) UpdateVariables(ctx context.Context, id uuid.UUID, variables map[string]interface{}) error {
+	query := `UPDATE tenants SET variables = $2, updated_at = $3 WHERE id = $1 AND deleted_at IS NULL`
+
+	varsJSON, err := json.Marshal(variables)
+	if err != nil {
+		return fmt.Errorf("marshal tenant variables: %w", err)
+	}
+
+	result, err := r.pool.Exec(ctx, query, id, varsJSON, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("update tenant variables: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {

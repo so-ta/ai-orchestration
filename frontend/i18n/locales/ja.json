@@ -296,6 +296,7 @@
     "addToFavorites": "お気に入りに追加",
     "removeFromFavorites": "お気に入りから削除",
     "autoLayout": "自動整形",
+    "tools": "ツール",
     "blockDetails": "ブロック詳細",
     "executionDetails": "実行履歴",
     "groupDeleted": "グループを削除しました",
@@ -1551,6 +1552,7 @@
   },
   "variables": {
     "title": "プロジェクト変数",
+    "modalTitle": "環境変数",
     "subtitle": "プロジェクト全体で共有する変数を定義",
     "noVariables": "変数が定義されていません",
     "noVariablesDesc": "ワークフロー全体で使用できる共有変数を追加してください",
@@ -1561,12 +1563,18 @@
     "keyPlaceholder": "variable_name",
     "value": "値",
     "valuePlaceholder": "値を入力",
+    "jsonPlaceholder": "JSONを入力",
     "type": "型",
     "types": {
       "string": "文字列",
       "number": "数値",
       "boolean": "真偽値",
       "json": "JSON"
+    },
+    "tabs": {
+      "organization": "組織",
+      "project": "プロジェクト",
+      "personal": "個人"
     },
     "actions": {
       "delete": "削除"
@@ -1577,7 +1585,13 @@
       "invalidJson": "無効なJSON形式です",
       "duplicateKey": "キー「{key}」が重複しています"
     },
-    "usageHint": "変数はステップの設定内で {'{{'}variables.変数名{'}}'}  として参照できます"
+    "usageHint": "変数はステップの設定内で {'{{'}variables.変数名{'}}'}  として参照できます",
+    "referenceTitle": "参照方法",
+    "exampleKey": "変数名",
+    "loadError": "変数の読み込みに失敗しました",
+    "saveSuccess": "変数を保存しました",
+    "saveError": "変数の保存に失敗しました",
+    "invalidJson": "無効なJSON形式です"
   },
   "credentials": {
     "title": "クレデンシャル",

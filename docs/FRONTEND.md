@@ -64,7 +64,7 @@ frontend/
 export default defineNuxtConfig({
   runtimeConfig: {
     public: {
-      apiBase: 'http://localhost:8080',
+      apiBase: 'http://localhost:8090',
       keycloak: {
         url: 'http://localhost:8180',
         realm: 'ai-orchestration',

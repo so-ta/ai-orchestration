@@ -4,8 +4,8 @@
  * フローティングヘッダー（エディタ上部）
  *
  * 機能:
- * - プロジェクト名表示（クリックでメニュー表示）
- * - メニュー: リリースとして保存 / 実行履歴 / 他のプロジェクトを開く
+ * - プロジェクト名表示（クリックで他プロジェクトを開くモーダル表示）
+ * - 設定メニュー: リリースとして保存 / 実行履歴 / 環境変数
  * - 保存ステータス表示（灰色テキスト）
  */
 
@@ -24,13 +24,14 @@ const emit = defineEmits<{
   save: []
   createRelease: []
   openHistory: []
+  openVariables: []
   selectProject: [id: string]
   createProject: []
 }>()
 
-// Project menu state
-const showProjectMenu = ref(false)
-const projectMenuRef = ref<HTMLElement | null>(null)
+// Tools menu state
+const showToolsMenu = ref(false)
+const toolsMenuRef = ref<HTMLElement | null>(null)
 
 // Project picker modal state
 const showProjectPicker = ref(false)
@@ -39,24 +40,9 @@ const showProjectPicker = ref(false)
 const showRunHistory = ref(false)
 
 // Close menu when clicking outside
-onClickOutside(projectMenuRef, () => {
-  showProjectMenu.value = false
+onClickOutside(toolsMenuRef, () => {
+  showToolsMenu.value = false
 })
-
-function handleCreateRelease() {
-  emit('createRelease')
-  showProjectMenu.value = false
-}
-
-function handleOpenHistory() {
-  showRunHistory.value = true
-  showProjectMenu.value = false
-}
-
-function handleOpenProjectPicker() {
-  showProjectPicker.value = true
-  showProjectMenu.value = false
-}
 
 function handleSelectProject(projectId: string) {
   emit('selectProject', projectId)
@@ -64,6 +50,22 @@ function handleSelectProject(projectId: string) {
 
 function handleCreateProject() {
   emit('createProject')
+}
+
+// Tools menu handlers
+function handleCreateRelease() {
+  emit('createRelease')
+  showToolsMenu.value = false
+}
+
+function handleOpenHistory() {
+  showRunHistory.value = true
+  showToolsMenu.value = false
+}
+
+function handleOpenVariables() {
+  emit('openVariables')
+  showToolsMenu.value = false
 }
 
 // Save status display
@@ -79,21 +81,36 @@ const saveStatusText = computed(() => {
 
 <template>
   <header class="floating-header">
-    <!-- Project Menu Trigger -->
-    <div ref="projectMenuRef" class="project-menu-container">
+    <!-- Project Name (click to open project picker) -->
+    <button
+      class="project-trigger"
+      @click="showProjectPicker = true"
+    >
+      <span class="project-name">{{ project?.name || t('editor.noProjectSelected') }}</span>
+      <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m6 9 6 6 6-6" />
+      </svg>
+    </button>
+
+    <!-- Tools Menu -->
+    <div ref="toolsMenuRef" class="tools-menu-container">
       <button
-        class="project-trigger"
-        @click="showProjectMenu = !showProjectMenu"
+        class="tools-trigger"
+        :title="t('editor.tools')"
+        @click="showToolsMenu = !showToolsMenu"
       >
-        <span class="project-name">{{ project?.name || t('editor.noProjectSelected') }}</span>
-        <svg class="chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
 
-      <!-- Project Menu Dropdown -->
+      <!-- Tools Menu Dropdown -->
       <Transition name="dropdown">
-        <div v-if="showProjectMenu" class="project-menu">
+        <div v-if="showToolsMenu" class="tools-menu">
           <button class="menu-item" @click="handleCreateRelease">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
@@ -107,12 +124,12 @@ const saveStatusText = computed(() => {
             </svg>
             {{ t('editor.history') }}
           </button>
-          <div class="menu-divider" />
-          <button class="menu-item" @click="handleOpenProjectPicker">
+          <button class="menu-item" @click="handleOpenVariables">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
             </svg>
-            {{ t('editor.openOtherProject') }}
+            {{ t('editor.variables') }}
           </button>
         </div>
       </Transition>
@@ -158,11 +175,6 @@ const saveStatusText = computed(() => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-/* Project Menu Container */
-.project-menu-container {
-  position: relative;
-}
-
 /* Project Trigger */
 .project-trigger {
   display: flex;
@@ -199,21 +211,6 @@ const saveStatusText = computed(() => {
   color: #374151;
 }
 
-/* Project Menu */
-.project-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 10;
-
-  min-width: 220px;
-  padding: 4px;
-  background: white;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
 .menu-item {
   display: flex;
   align-items: center;
@@ -247,6 +244,49 @@ const saveStatusText = computed(() => {
 .save-status {
   font-size: 12px;
   color: #9ca3af;
+}
+
+/* Tools Menu Container */
+.tools-menu-container {
+  position: relative;
+}
+
+/* Tools Trigger */
+.tools-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tools-trigger:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #374151;
+}
+
+.tools-trigger .chevron {
+  transition: transform 0.15s;
+}
+
+/* Tools Menu */
+.tools-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+
+  min-width: 200px;
+  padding: 4px;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
 /* Dropdown Transition */

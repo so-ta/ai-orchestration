@@ -309,7 +309,7 @@ npm install
 **対処**:
 ```bash
 # 使用中のプロセスを確認
-lsof -i :8080
+lsof -i :8090
 
 # 停止
 docker compose down

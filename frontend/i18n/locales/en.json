@@ -296,6 +296,7 @@
     "addToFavorites": "Add to favorites",
     "removeFromFavorites": "Remove from favorites",
     "autoLayout": "Auto Layout",
+    "tools": "Tools",
     "blockDetails": "Block Details",
     "executionDetails": "Execution",
     "groupDeleted": "Group deleted",
@@ -1573,7 +1574,13 @@
   },
   "variables": {
     "title": "Project Variables",
+    "modalTitle": "Environment Variables",
     "subtitle": "Define variables shared across the project",
+    "tabs": {
+      "organization": "Organization",
+      "project": "Project",
+      "personal": "Personal"
+    },
     "noVariables": "No variables defined",
     "noVariablesDesc": "Add shared variables that can be used throughout the workflow",
     "addVariable": "Add Variable",
@@ -1597,9 +1604,15 @@
       "saved": "Variables saved successfully",
       "saveFailed": "Failed to save variables",
       "invalidJson": "Invalid JSON format",
-      "duplicateKey": "Duplicate key \"{key}\""
+      "duplicateKey": "Duplicate key \"{key}\"",
+      "loadError": "Failed to load variables",
+      "saveSuccess": "Variables saved",
+      "saveError": "Failed to save"
     },
-    "usageHint": "Variables can be referenced in step settings as {'{{'}variables.variable_name{'}}'}"
+    "usageHint": "Variables can be referenced in step settings as {'{{'}variables.variable_name{'}}'}",
+    "jsonPlaceholder": "Enter JSON",
+    "referenceTitle": "Reference",
+    "exampleKey": "variable_name"
   },
   "credentials": {
     "title": "Credentials",

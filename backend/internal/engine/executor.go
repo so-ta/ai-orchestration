@@ -77,6 +77,59 @@ func NewExecutor(registry *adapter.Registry, logger *slog.Logger, opts ...Execut
 	return e
 }
 
+// loadScopedVariables loads organization, project, and personal variables
+func (e *Executor) loadScopedVariables(ctx context.Context, tenantID, projectID, userID uuid.UUID, projectVariables json.RawMessage) *ScopedVariables {
+	scopes := &ScopedVariables{
+		Org:      make(map[string]interface{}),
+		Project:  make(map[string]interface{}),
+		Personal: make(map[string]interface{}),
+	}
+
+	if e.pool == nil {
+		e.logger.Warn("Database pool not available, skipping scoped variables")
+		return scopes
+	}
+
+	// Load organization (tenant) variables
+	var tenantVarsJSON []byte
+	err := e.pool.QueryRow(ctx,
+		`SELECT COALESCE(variables, '{}'::jsonb) FROM tenants WHERE id = $1 AND deleted_at IS NULL`,
+		tenantID,
+	).Scan(&tenantVarsJSON)
+	if err == nil {
+		if err := json.Unmarshal(tenantVarsJSON, &scopes.Org); err != nil {
+			e.logger.Warn("Failed to unmarshal tenant variables", "error", err)
+		}
+	} else {
+		e.logger.Debug("Failed to load tenant variables", "error", err)
+	}
+
+	// Load project variables from the passed parameter
+	if len(projectVariables) > 0 {
+		if err := json.Unmarshal(projectVariables, &scopes.Project); err != nil {
+			e.logger.Warn("Failed to unmarshal project variables", "error", err)
+		}
+	}
+
+	// Load personal (user) variables
+	if userID != uuid.Nil {
+		var userVarsJSON []byte
+		err := e.pool.QueryRow(ctx,
+			`SELECT COALESCE(variables, '{}'::jsonb) FROM users WHERE id = $1 AND tenant_id = $2`,
+			userID, tenantID,
+		).Scan(&userVarsJSON)
+		if err == nil {
+			if err := json.Unmarshal(userVarsJSON, &scopes.Personal); err != nil {
+				e.logger.Warn("Failed to unmarshal user variables", "error", err)
+			}
+		} else {
+			e.logger.Debug("Failed to load user variables", "error", err)
+		}
+	}
+
+	return scopes
+}
+
 // ExecutionContext holds the context for a project execution
 type ExecutionContext struct {
 	Run             *domain.Run
@@ -86,6 +139,7 @@ type ExecutionContext struct {
 	StepOutputPorts map[uuid.UUID]string          // output port used by each step (for port-based routing)
 	GroupData       map[uuid.UUID]json.RawMessage // block group outputs
 	InjectedOutputs map[string]json.RawMessage    // pre-injected outputs for partial execution
+	ScopedVars      *ScopedVariables              // scoped variables (org, project, personal)
 	sequenceCounter int                           // counter for step execution order within an attempt
 	mu              sync.RWMutex
 }
@@ -279,7 +333,7 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	case domain.StepTypeCondition:
 		return e.executeConditionStep(ctx, execCtx, step, input)
 	case domain.StepTypeMap:
-		return e.executeMapStep(ctx, step, input)
+		return e.executeMapStep(ctx, execCtx, step, input)
 	case domain.StepTypeWait:
 		return e.executeWaitStep(ctx, step, input)
 	case domain.StepTypeFunction:
@@ -301,7 +355,7 @@ func (e *Executor) dispatchStepExecution(ctx context.Context, execCtx *Execution
 	case domain.StepTypeNote:
 		return e.executeNoteStep(ctx, step, input)
 	case domain.StepTypeLog:
-		return e.executeLogStep(ctx, step, input)
+		return e.executeLogStep(ctx, execCtx, step, input)
 	case domain.StepTypeSubflow:
 		// Subflow not yet implemented - return error to ensure project fails explicitly.
 		// BREAKING CHANGE: Previously passed through input silently. Now returns error
@@ -351,6 +405,13 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 		"run_id", execCtx.Run.ID,
 		"project_id", execCtx.Run.ProjectID,
 	)
+
+	// Load scoped variables (org, project, personal)
+	userID := uuid.Nil
+	if execCtx.Run.TriggeredByUser != nil {
+		userID = *execCtx.Run.TriggeredByUser
+	}
+	execCtx.ScopedVars = e.loadScopedVariables(ctx, execCtx.Run.TenantID, execCtx.Run.ProjectID, userID, execCtx.Definition.Variables)
 
 	// Build execution graph
 	graph := e.buildGraph(execCtx.Definition)
@@ -1355,7 +1416,7 @@ func (e *Executor) executeToolStep(ctx context.Context, execCtx *ExecutionContex
 	}
 
 	// Expand template variables in config
-	expandedConfig, err := ExpandConfigTemplates(step.Config, input)
+	expandedConfig, err := ExpandConfigTemplatesWithScopes(step.Config, input, execCtx.ScopedVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand config templates: %w", err)
 	}
@@ -1428,7 +1489,7 @@ func (e *Executor) executeLLMStep(ctx context.Context, execCtx *ExecutionContext
 	}
 
 	// Expand template variables in config
-	expandedConfig, err := ExpandConfigTemplates(step.Config, input)
+	expandedConfig, err := ExpandConfigTemplatesWithScopes(step.Config, input, execCtx.ScopedVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand config templates: %w", err)
 	}
@@ -1508,7 +1569,7 @@ func (e *Executor) executeConditionStep(ctx context.Context, execCtx *ExecutionC
 	return json.Marshal(result)
 }
 
-func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeMapStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
 	// Parse map config
 	var config struct {
 		InputPath  string `json:"input_path"`  // JSON path to array (e.g., "$.items")
@@ -1596,7 +1657,7 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 					return
 				}
 				// Expand template variables in config for each item
-				expandedConfig, err := ExpandConfigTemplates(step.Config, itemJSON)
+				expandedConfig, err := ExpandConfigTemplatesWithScopes(step.Config, itemJSON, execCtx.ScopedVars)
 				if err != nil {
 					e.logger.Warn("Failed to expand config templates", "index", idx, "error", err)
 					errors[idx] = err
@@ -1630,7 +1691,7 @@ func (e *Executor) executeMapStep(ctx context.Context, step domain.Step, input j
 				continue
 			}
 			// Expand template variables in config for each item
-			expandedConfig, err := ExpandConfigTemplates(step.Config, itemJSON)
+			expandedConfig, err := ExpandConfigTemplatesWithScopes(step.Config, itemJSON, execCtx.ScopedVars)
 			if err != nil {
 				e.logger.Warn("Failed to expand config templates", "index", i, "error", err)
 				errors[i] = err
@@ -2386,7 +2447,7 @@ func (e *Executor) executeNoteStep(ctx context.Context, step domain.Step, input 
 }
 
 // executeLogStep outputs a log message for debugging purposes
-func (e *Executor) executeLogStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
+func (e *Executor) executeLogStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
 	var config domain.LogStepConfig
 	if err := json.Unmarshal(step.Config, &config); err != nil {
 		return nil, err
@@ -2398,10 +2459,18 @@ func (e *Executor) executeLogStep(ctx context.Context, step domain.Step, input j
 		level = "info"
 	}
 
-	// Process message template (replace {{$.field}} with actual values)
+	// Process message template with scoped variables support
 	message := config.Message
-	if input != nil {
-		message = substituteLogTemplateVariables(message, input)
+	if message != "" {
+		// Use the unified template expansion with scopes
+		msgJSON, _ := json.Marshal(map[string]string{"msg": message})
+		expanded, err := ExpandConfigTemplatesWithScopes(msgJSON, input, execCtx.ScopedVars)
+		if err == nil {
+			var expandedMap map[string]string
+			if json.Unmarshal(expanded, &expandedMap) == nil {
+				message = expandedMap["msg"]
+			}
+		}
 	}
 
 	// Build log output

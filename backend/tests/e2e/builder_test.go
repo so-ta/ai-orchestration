@@ -168,7 +168,7 @@ func TestBuilderSendMessage(t *testing.T) {
 	msgReq := map[string]string{
 		"content": "新規顧客登録時にウェルカムメールを送りたいです",
 	}
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/messages", sessionID), msgReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/messages", sessionID), msgReq)
 	require.Equal(t, http.StatusAccepted, resp.StatusCode, "Send message response: %s", string(body))
 
 	var msgResp struct {

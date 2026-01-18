@@ -1554,7 +1554,7 @@ GET /ready
 
 ### プロジェクト作成
 ```bash
-curl -X POST http://localhost:8080/api/v1/projects \
+curl -X POST http://localhost:8090/api/v1/projects \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
   -d '{"name": "テストプロジェクト"}'
@@ -1562,7 +1562,7 @@ curl -X POST http://localhost:8080/api/v1/projects \
 
 ### ステップ追加
 ```bash
-curl -X POST "http://localhost:8080/api/v1/projects/{id}/steps" \
+curl -X POST "http://localhost:8090/api/v1/projects/{id}/steps" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
   -d '{
@@ -1574,7 +1574,7 @@ curl -X POST "http://localhost:8080/api/v1/projects/{id}/steps" \
 
 ### プロジェクト実行
 ```bash
-curl -X POST "http://localhost:8080/api/v1/projects/{id}/runs" \
+curl -X POST "http://localhost:8090/api/v1/projects/{id}/runs" \
   -H "Content-Type: application/json" \
   -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
   -d '{"input": {"message": "こんにちは"}, "start_step_id": "{start_step_uuid}", "triggered_by": "test"}'
@@ -1589,7 +1589,7 @@ TOKEN=$(curl -s -X POST http://localhost:8180/realms/ai-orchestration/protocol/o
   | jq -r .access_token)
 
 # トークンを使用
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/projects
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8090/api/v1/projects
 ```
 
 ## 関連ドキュメント

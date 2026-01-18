@@ -524,21 +524,19 @@ const showIOPorts = computed(() => {
   opacity: 1;
 }
 
-.flow-container {
-  padding: 0;
-}
-
-.copilot-container {
-  padding: 0.75rem 1rem;
-}
-
-.execution-container {
-  padding: 0.75rem 1rem;
-}
-
 .properties-body {
   flex: 1;
   overflow-y: auto;
+  padding: 1rem;
+}
+
+.properties-body.copilot-container,
+.properties-body.execution-container {
+  padding: 0.75rem 1rem;
+  overflow: hidden;
+}
+
+.properties-body.flow-container {
   padding: 1rem;
 }
 
