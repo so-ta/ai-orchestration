@@ -62,21 +62,40 @@ const (
 	AuditActionCredentialDelete   AuditAction = "credential.delete"
 	AuditActionCredentialRevoke   AuditAction = "credential.revoke"
 	AuditActionCredentialActivate AuditAction = "credential.activate"
+
+	// OAuth2 App actions
+	AuditActionOAuth2AppCreate AuditAction = "oauth2_app.create"
+	AuditActionOAuth2AppUpdate AuditAction = "oauth2_app.update"
+	AuditActionOAuth2AppDelete AuditAction = "oauth2_app.delete"
+
+	// OAuth2 Connection actions
+	AuditActionOAuth2Start    AuditAction = "oauth2.start"
+	AuditActionOAuth2Callback AuditAction = "oauth2.callback"
+	AuditActionOAuth2Refresh  AuditAction = "oauth2.refresh"
+	AuditActionOAuth2Revoke   AuditAction = "oauth2.revoke"
+	AuditActionOAuth2Delete   AuditAction = "oauth2.delete"
+
+	// Credential Share actions
+	AuditActionCredentialShareCreate AuditAction = "credential_share.create"
+	AuditActionCredentialShareUpdate AuditAction = "credential_share.update"
+	AuditActionCredentialShareDelete AuditAction = "credential_share.delete"
 )
 
 // AuditResourceType represents the type of resource being audited
 type AuditResourceType string
 
 const (
-	AuditResourceProject    AuditResourceType = "project"
-	AuditResourceStep       AuditResourceType = "step"
-	AuditResourceEdge       AuditResourceType = "edge"
-	AuditResourceRun        AuditResourceType = "run"
-	AuditResourceSchedule   AuditResourceType = "schedule"
-	AuditResourceWebhook    AuditResourceType = "webhook"
-	AuditResourceUser       AuditResourceType = "user"
-	AuditResourceSecret     AuditResourceType = "secret"
-	AuditResourceCredential AuditResourceType = "credential"
+	AuditResourceProject         AuditResourceType = "project"
+	AuditResourceStep            AuditResourceType = "step"
+	AuditResourceEdge            AuditResourceType = "edge"
+	AuditResourceRun             AuditResourceType = "run"
+	AuditResourceSchedule        AuditResourceType = "schedule"
+	AuditResourceWebhook         AuditResourceType = "webhook"
+	AuditResourceUser            AuditResourceType = "user"
+	AuditResourceSecret          AuditResourceType = "secret"
+	AuditResourceCredential      AuditResourceType = "credential"
+	AuditResourceOAuth2App       AuditResourceType = "oauth2_app"
+	AuditResourceCredentialShare AuditResourceType = "credential_share"
 )
 
 // AuditLog represents an audit log entry
