@@ -37,14 +37,14 @@ func (r *BlockGroupRepository) Create(ctx context.Context, g *domain.BlockGroup)
 }
 
 // GetByID retrieves a block group by ID
-func (r *BlockGroupRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroup, error) {
+func (r *BlockGroupRepository) GetByID(ctx context.Context, tenantID, projectID, id uuid.UUID) (*domain.BlockGroup, error) {
 	query := `
 		SELECT id, tenant_id, project_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
-		WHERE id = $1 AND tenant_id = $2
+		WHERE id = $1 AND project_id = $2 AND tenant_id = $3
 	`
 	var g domain.BlockGroup
-	err := r.pool.QueryRow(ctx, query, id, tenantID).Scan(
+	err := r.pool.QueryRow(ctx, query, id, projectID, tenantID).Scan(
 		&g.ID, &g.TenantID, &g.ProjectID, &g.Name, &g.Type, &g.Config,
 		&g.ParentGroupID, &g.PreProcess, &g.PostProcess,
 		&g.PositionX, &g.PositionY, &g.Width, &g.Height,
@@ -91,14 +91,14 @@ func (r *BlockGroupRepository) ListByProject(ctx context.Context, tenantID, proj
 }
 
 // ListByParent retrieves all child block groups of a parent group
-func (r *BlockGroupRepository) ListByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*domain.BlockGroup, error) {
+func (r *BlockGroupRepository) ListByParent(ctx context.Context, tenantID, projectID, parentID uuid.UUID) ([]*domain.BlockGroup, error) {
 	query := `
 		SELECT id, tenant_id, project_id, name, type, config, parent_group_id, pre_process, post_process, position_x, position_y, width, height, created_at, updated_at
 		FROM block_groups
-		WHERE parent_group_id = $1 AND tenant_id = $2
+		WHERE parent_group_id = $1 AND project_id = $2 AND tenant_id = $3
 		ORDER BY created_at
 	`
-	rows, err := r.pool.Query(ctx, query, parentID, tenantID)
+	rows, err := r.pool.Query(ctx, query, parentID, projectID, tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -144,9 +144,9 @@ func (r *BlockGroupRepository) Update(ctx context.Context, g *domain.BlockGroup)
 }
 
 // Delete deletes a block group
-func (r *BlockGroupRepository) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
-	query := `DELETE FROM block_groups WHERE id = $1 AND tenant_id = $2`
-	result, err := r.pool.Exec(ctx, query, id, tenantID)
+func (r *BlockGroupRepository) Delete(ctx context.Context, tenantID, projectID, id uuid.UUID) error {
+	query := `DELETE FROM block_groups WHERE id = $1 AND project_id = $2 AND tenant_id = $3`
+	result, err := r.pool.Exec(ctx, query, id, projectID, tenantID)
 	if err != nil {
 		return err
 	}

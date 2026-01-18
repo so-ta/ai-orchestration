@@ -532,7 +532,7 @@ func (m *ProjectMigrator) updateProject(ctx context.Context, existing *domain.Pr
 			return "", fmt.Errorf("failed to list existing block groups: %w", err)
 		}
 		for _, group := range existingGroups {
-			if err := m.blockGroupRepo.Delete(ctx, tenantID, group.ID); err != nil {
+			if err := m.blockGroupRepo.Delete(ctx, tenantID, existing.ID, group.ID); err != nil {
 				return "", fmt.Errorf("failed to delete block group: %w", err)
 			}
 		}

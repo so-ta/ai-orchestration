@@ -185,11 +185,11 @@ type BlockVersionRepository interface {
 // BlockGroupRepository defines the interface for block group persistence
 type BlockGroupRepository interface {
 	Create(ctx context.Context, group *domain.BlockGroup) error
-	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.BlockGroup, error)
+	GetByID(ctx context.Context, tenantID, projectID, id uuid.UUID) (*domain.BlockGroup, error)
 	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.BlockGroup, error)
-	ListByParent(ctx context.Context, tenantID, parentID uuid.UUID) ([]*domain.BlockGroup, error)
+	ListByParent(ctx context.Context, tenantID, projectID, parentID uuid.UUID) ([]*domain.BlockGroup, error)
 	Update(ctx context.Context, group *domain.BlockGroup) error
-	Delete(ctx context.Context, tenantID, id uuid.UUID) error
+	Delete(ctx context.Context, tenantID, projectID, id uuid.UUID) error
 }
 
 // CredentialRepository defines the interface for credential persistence

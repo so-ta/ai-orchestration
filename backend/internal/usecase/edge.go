@@ -86,7 +86,7 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 		}
 		sourceStep = step
 	} else if input.SourceBlockGroupID != nil && u.blockGroupRepo != nil {
-		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.SourceBlockGroupID)
+		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.SourceBlockGroupID)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +103,7 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 		}
 		targetStep = step
 	} else if input.TargetBlockGroupID != nil && u.blockGroupRepo != nil {
-		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.TargetBlockGroupID)
+		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.TargetBlockGroupID)
 		if err != nil {
 			return nil, err
 		}

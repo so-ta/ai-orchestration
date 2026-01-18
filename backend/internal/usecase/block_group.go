@@ -65,12 +65,9 @@ func (u *BlockGroupUsecase) Create(ctx context.Context, input CreateBlockGroupIn
 
 	// Verify parent group if specified
 	if input.ParentGroupID != nil {
-		parent, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, *input.ParentGroupID)
+		_, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.ParentGroupID)
 		if err != nil {
 			return nil, err
-		}
-		if parent.ProjectID != input.ProjectID {
-			return nil, domain.NewValidationError("parent_group_id", "parent group must be in the same project")
 		}
 	}
 
@@ -103,17 +100,7 @@ func (u *BlockGroupUsecase) GetByID(ctx context.Context, tenantID, projectID, gr
 		return nil, err
 	}
 
-	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Verify group belongs to project
-	if group.ProjectID != projectID {
-		return nil, domain.ErrBlockGroupNotFound
-	}
-
-	return group, nil
+	return u.blockGroupRepo.GetByID(ctx, tenantID, projectID, groupID)
 }
 
 // List lists block groups for a project
@@ -148,14 +135,9 @@ func (u *BlockGroupUsecase) Update(ctx context.Context, input UpdateBlockGroupIn
 		return nil, err
 	}
 
-	group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.GroupID)
+	group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, input.GroupID)
 	if err != nil {
 		return nil, err
-	}
-
-	// Verify group belongs to project
-	if group.ProjectID != input.ProjectID {
-		return nil, domain.ErrBlockGroupNotFound
 	}
 
 	if input.Name != "" {
@@ -204,17 +186,12 @@ func (u *BlockGroupUsecase) Delete(ctx context.Context, tenantID, projectID, gro
 		return err
 	}
 
-	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
-	if err != nil {
+	// Verify group exists
+	if _, err := u.blockGroupRepo.GetByID(ctx, tenantID, projectID, groupID); err != nil {
 		return err
 	}
 
-	// Verify group belongs to project
-	if group.ProjectID != projectID {
-		return domain.ErrBlockGroupNotFound
-	}
-
-	return u.blockGroupRepo.Delete(ctx, tenantID, groupID)
+	return u.blockGroupRepo.Delete(ctx, tenantID, projectID, groupID)
 }
 
 // AddStepToGroupInput represents input for adding a step to a block group
@@ -234,12 +211,8 @@ func (u *BlockGroupUsecase) AddStepToGroup(ctx context.Context, input AddStepToG
 	}
 
 	// Verify group exists
-	group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.GroupID)
-	if err != nil {
+	if _, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, input.GroupID); err != nil {
 		return nil, err
-	}
-	if group.ProjectID != input.ProjectID {
-		return nil, domain.ErrBlockGroupNotFound
 	}
 
 	// Get step
@@ -301,12 +274,8 @@ func (u *BlockGroupUsecase) GetStepsByGroup(ctx context.Context, tenantID, proje
 	}
 
 	// Verify group exists
-	group, err := u.blockGroupRepo.GetByID(ctx, tenantID, groupID)
-	if err != nil {
+	if _, err := u.blockGroupRepo.GetByID(ctx, tenantID, projectID, groupID); err != nil {
 		return nil, err
-	}
-	if group.ProjectID != projectID {
-		return nil, domain.ErrBlockGroupNotFound
 	}
 
 	// Get steps in group
