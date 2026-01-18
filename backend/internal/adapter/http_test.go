@@ -22,6 +22,7 @@ func TestNewHTTPAdapter(t *testing.T) {
 
 func TestHTTPAdapter_Execute_GET(t *testing.T) {
 	// Create mock server
+	// Note: Template variable substitution is now handled by Executor, not the adapter.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
 		assert.Equal(t, "/api/users", r.URL.Path)
@@ -38,11 +39,12 @@ func TestHTTPAdapter_Execute_GET(t *testing.T) {
 
 	adapter := NewHTTPAdapter()
 
+	// Use pre-expanded values (as Executor would provide)
 	config := HTTPConfig{
 		URL:    server.URL + "/api/users",
 		Method: "GET",
 		QueryParams: map[string]string{
-			"id": "{{user_id}}",
+			"id": "123",
 		},
 	}
 	configJSON, _ := json.Marshal(config)
@@ -68,6 +70,7 @@ func TestHTTPAdapter_Execute_GET(t *testing.T) {
 
 func TestHTTPAdapter_Execute_POST(t *testing.T) {
 	// Create mock server
+	// Note: Template variable substitution is now handled by Executor, not the adapter.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -88,19 +91,20 @@ func TestHTTPAdapter_Execute_POST(t *testing.T) {
 
 	adapter := NewHTTPAdapter()
 
+	// Use pre-expanded values (as Executor would provide)
 	config := HTTPConfig{
 		URL:    server.URL + "/api/messages",
 		Method: "POST",
 		Headers: map[string]string{
-			"Authorization": "Bearer {{token}}",
+			"Authorization": "Bearer test-token",
 		},
-		Body:     `{"message": "{{content}}"}`,
+		Body:     `{"message": "Test Message"}`,
 		BodyType: "json",
 	}
 	configJSON, _ := json.Marshal(config)
 
 	req := &Request{
-		Input:  json.RawMessage(`{"token": "test-token", "content": "Test Message"}`),
+		Input:  json.RawMessage(`{}`),
 		Config: configJSON,
 	}
 
@@ -249,6 +253,8 @@ func TestHTTPAdapter_Execute_MissingURL(t *testing.T) {
 
 func TestHTTPAdapter_Execute_VariableSubstitution(t *testing.T) {
 	// Create mock server
+	// Note: Template variable substitution is now handled by Executor, not the adapter.
+	// This test verifies that pre-expanded values work correctly.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/api/users/user-123", r.URL.Path)
 		assert.Equal(t, "custom-agent", r.Header.Get("User-Agent"))
@@ -260,17 +266,18 @@ func TestHTTPAdapter_Execute_VariableSubstitution(t *testing.T) {
 
 	adapter := NewHTTPAdapter()
 
+	// Use pre-expanded values (as Executor would provide)
 	config := HTTPConfig{
-		URL:    server.URL + "/api/users/{{user_id}}",
+		URL:    server.URL + "/api/users/user-123",
 		Method: "GET",
 		Headers: map[string]string{
-			"User-Agent": "{{agent}}",
+			"User-Agent": "custom-agent",
 		},
 	}
 	configJSON, _ := json.Marshal(config)
 
 	req := &Request{
-		Input:  json.RawMessage(`{"user_id": "user-123", "agent": "custom-agent"}`),
+		Input:  json.RawMessage(`{}`),
 		Config: configJSON,
 	}
 
@@ -340,6 +347,8 @@ func TestHTTPAdapter_OutputSchema(t *testing.T) {
 
 func TestHTTPAdapter_Execute_PUT(t *testing.T) {
 	// Create mock server
+	// Note: Template variable substitution is now handled by Executor, not the adapter.
+	// This test uses pre-expanded values.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "PUT", r.Method)
 		assert.Equal(t, "/api/users/123", r.URL.Path)
@@ -359,15 +368,16 @@ func TestHTTPAdapter_Execute_PUT(t *testing.T) {
 
 	adapter := NewHTTPAdapter()
 
+	// Use pre-expanded values (as Executor would provide)
 	config := HTTPConfig{
-		URL:    server.URL + "/api/users/{{id}}",
+		URL:    server.URL + "/api/users/123",
 		Method: "PUT",
-		Body:   `{"name": "{{name}}"}`,
+		Body:   `{"name": "Updated Name"}`,
 	}
 	configJSON, _ := json.Marshal(config)
 
 	req := &Request{
-		Input:  json.RawMessage(`{"id": "123", "name": "Updated Name"}`),
+		Input:  json.RawMessage(`{}`),
 		Config: configJSON,
 	}
 

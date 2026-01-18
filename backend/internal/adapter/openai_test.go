@@ -154,52 +154,8 @@ func TestOpenAIAdapter_Execute_APIError(t *testing.T) {
 	assert.Contains(t, err.Error(), "Invalid API key")
 }
 
-func TestSubstituteVariables(t *testing.T) {
-	tests := []struct {
-		name     string
-		template string
-		data     map[string]interface{}
-		expected string
-	}{
-		{
-			name:     "simple string substitution",
-			template: "Hello {{name}}!",
-			data:     map[string]interface{}{"name": "World"},
-			expected: "Hello World!",
-		},
-		{
-			name:     "multiple substitutions",
-			template: "Hello {{name}}, you have {{count}} messages.",
-			data:     map[string]interface{}{"name": "Alice", "count": 5},
-			expected: "Hello Alice, you have 5 messages.",
-		},
-		{
-			name:     "no substitution needed",
-			template: "Hello World!",
-			data:     map[string]interface{}{},
-			expected: "Hello World!",
-		},
-		{
-			name:     "missing variable",
-			template: "Hello {{name}}!",
-			data:     map[string]interface{}{},
-			expected: "Hello {{name}}!",
-		},
-		{
-			name:     "object value",
-			template: "Data: {{data}}",
-			data:     map[string]interface{}{"data": map[string]string{"key": "value"}},
-			expected: `Data: {"key":"value"}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := substituteVariables(tt.template, tt.data)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
+// Note: TestSubstituteVariables was removed as the substituteVariables function
+// was moved to the engine package (executor.go) where template expansion is now handled.
 
 func TestOpenAIAdapter_Metadata(t *testing.T) {
 	adapter := NewOpenAIAdapter()
