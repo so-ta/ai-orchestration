@@ -214,6 +214,9 @@ type CredentialRepository interface {
 type CredentialFilter struct {
 	CredentialType *domain.CredentialType
 	Status         *domain.CredentialStatus
+	Scope          *domain.OwnerScope // Filter by ownership scope
+	ProjectID      *uuid.UUID         // Filter by project (for scope=project)
+	OwnerUserID    *uuid.UUID         // Filter by owner user (for scope=personal)
 	Page           int
 	Limit          int
 }
@@ -337,4 +340,99 @@ type UserRepository interface {
 	GetVariables(ctx context.Context, tenantID, id uuid.UUID) (map[string]interface{}, error)
 	// UpdateVariables updates only the variables for a user
 	UpdateVariables(ctx context.Context, tenantID, id uuid.UUID, variables map[string]interface{}) error
+}
+
+// ============================================================================
+// OAuth2 Repositories
+// ============================================================================
+
+// OAuth2ProviderRepository defines the interface for OAuth2 provider persistence
+type OAuth2ProviderRepository interface {
+	// GetByID retrieves an OAuth2 provider by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.OAuth2Provider, error)
+	// GetBySlug retrieves an OAuth2 provider by slug
+	GetBySlug(ctx context.Context, slug string) (*domain.OAuth2Provider, error)
+	// List retrieves all OAuth2 providers
+	List(ctx context.Context) ([]*domain.OAuth2Provider, error)
+	// ListPresets retrieves all preset OAuth2 providers
+	ListPresets(ctx context.Context) ([]*domain.OAuth2Provider, error)
+	// Create creates a new OAuth2 provider
+	Create(ctx context.Context, provider *domain.OAuth2Provider) error
+	// Update updates an OAuth2 provider
+	Update(ctx context.Context, provider *domain.OAuth2Provider) error
+	// Delete deletes an OAuth2 provider
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// OAuth2AppRepository defines the interface for OAuth2 app persistence
+type OAuth2AppRepository interface {
+	// GetByID retrieves an OAuth2 app by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.OAuth2App, error)
+	// GetByTenantAndProvider retrieves an OAuth2 app by tenant and provider
+	GetByTenantAndProvider(ctx context.Context, tenantID, providerID uuid.UUID) (*domain.OAuth2App, error)
+	// ListByTenant retrieves all OAuth2 apps for a tenant
+	ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]*domain.OAuth2App, error)
+	// Create creates a new OAuth2 app
+	Create(ctx context.Context, app *domain.OAuth2App) error
+	// Update updates an OAuth2 app
+	Update(ctx context.Context, app *domain.OAuth2App) error
+	// Delete deletes an OAuth2 app
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// OAuth2ConnectionRepository defines the interface for OAuth2 connection persistence
+type OAuth2ConnectionRepository interface {
+	// GetByID retrieves an OAuth2 connection by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.OAuth2Connection, error)
+	// GetByCredentialID retrieves an OAuth2 connection by credential ID
+	GetByCredentialID(ctx context.Context, credentialID uuid.UUID) (*domain.OAuth2Connection, error)
+	// GetByState retrieves an OAuth2 connection by state (for callback)
+	GetByState(ctx context.Context, state string) (*domain.OAuth2Connection, error)
+	// ListByApp retrieves all OAuth2 connections for an app
+	ListByApp(ctx context.Context, oauth2AppID uuid.UUID) ([]*domain.OAuth2Connection, error)
+	// ListExpiring retrieves connections that will expire within the given duration
+	ListExpiring(ctx context.Context, within time.Duration) ([]*domain.OAuth2Connection, error)
+	// Create creates a new OAuth2 connection
+	Create(ctx context.Context, connection *domain.OAuth2Connection) error
+	// Update updates an OAuth2 connection
+	Update(ctx context.Context, connection *domain.OAuth2Connection) error
+	// Delete deletes an OAuth2 connection
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// ============================================================================
+// Credential Share Repository
+// ============================================================================
+
+// CredentialShareRepository defines the interface for credential share persistence
+type CredentialShareRepository interface {
+	// GetByID retrieves a credential share by ID
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.CredentialShare, error)
+	// ListByCredential retrieves all shares for a credential
+	ListByCredential(ctx context.Context, credentialID uuid.UUID) ([]*domain.CredentialShare, error)
+	// ListByUser retrieves all shares with a specific user
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]*domain.CredentialShare, error)
+	// ListByProject retrieves all shares with a specific project
+	ListByProject(ctx context.Context, projectID uuid.UUID) ([]*domain.CredentialShare, error)
+	// GetByCredentialAndUser retrieves a share by credential and user
+	GetByCredentialAndUser(ctx context.Context, credentialID, userID uuid.UUID) (*domain.CredentialShare, error)
+	// GetByCredentialAndProject retrieves a share by credential and project
+	GetByCredentialAndProject(ctx context.Context, credentialID, projectID uuid.UUID) (*domain.CredentialShare, error)
+	// Create creates a new credential share
+	Create(ctx context.Context, share *domain.CredentialShare) error
+	// Update updates a credential share
+	Update(ctx context.Context, share *domain.CredentialShare) error
+	// Delete deletes a credential share
+	Delete(ctx context.Context, id uuid.UUID) error
+	// DeleteExpired deletes all expired shares
+	DeleteExpired(ctx context.Context) (int, error)
+}
+
+// CredentialAccessFilter defines filtering options for available credentials
+type CredentialAccessFilter struct {
+	TenantID       uuid.UUID
+	UserID         uuid.UUID
+	ProjectID      *uuid.UUID
+	CredentialType *domain.CredentialType
+	RequiredScope  *domain.CredentialScope // system or tenant
 }

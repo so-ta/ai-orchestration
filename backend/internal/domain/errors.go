@@ -54,9 +54,24 @@ var (
 	ErrWebhookInvalidSecret  = errors.New("invalid webhook secret")
 
 	// Credential errors
-	ErrCredentialNotFound = errors.New("credential not found")
-	ErrCredentialExpired  = errors.New("credential has expired")
-	ErrCredentialRevoked  = errors.New("credential has been revoked")
+	ErrCredentialNotFound       = errors.New("credential not found")
+	ErrCredentialExpired        = errors.New("credential has expired")
+	ErrCredentialRevoked        = errors.New("credential has been revoked")
+	ErrCredentialInvalidScope   = errors.New("credential scope is inconsistent with project_id and owner_user_id")
+	ErrCredentialAccessDenied   = errors.New("access to credential denied")
+	ErrCredentialBindingMissing = errors.New("required credential binding not found")
+
+	// OAuth2 errors
+	ErrOAuth2ProviderNotFound   = errors.New("oauth2 provider not found")
+	ErrOAuth2AppNotFound        = errors.New("oauth2 app not found")
+	ErrOAuth2ConnectionNotFound = errors.New("oauth2 connection not found")
+	ErrOAuth2InvalidState       = errors.New("invalid oauth2 state parameter")
+	ErrOAuth2TokenExpired       = errors.New("oauth2 access token expired")
+	ErrOAuth2RefreshFailed      = errors.New("oauth2 token refresh failed")
+
+	// Credential Share errors
+	ErrCredentialShareNotFound  = errors.New("credential share not found")
+	ErrCredentialShareDuplicate = errors.New("credential share already exists")
 
 	// System Credential errors
 	ErrSystemCredentialNotFound = errors.New("system credential not found")

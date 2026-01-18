@@ -12,11 +12,13 @@ import (
 type CredentialType string
 
 const (
-	CredentialTypeOAuth2 CredentialType = "oauth2"
-	CredentialTypeAPIKey CredentialType = "api_key"
-	CredentialTypeBasic  CredentialType = "basic"
-	CredentialTypeBearer CredentialType = "bearer"
-	CredentialTypeCustom CredentialType = "custom"
+	CredentialTypeOAuth2     CredentialType = "oauth2"
+	CredentialTypeAPIKey     CredentialType = "api_key"
+	CredentialTypeBasic      CredentialType = "basic"
+	CredentialTypeBearer     CredentialType = "bearer"
+	CredentialTypeCustom     CredentialType = "custom"
+	CredentialTypeQueryAuth  CredentialType = "query_auth"  // Phase 2: Query parameter authentication
+	CredentialTypeHeaderAuth CredentialType = "header_auth" // Phase 2: Multiple header authentication
 )
 
 // ValidCredentialTypes returns all valid credential types
@@ -27,7 +29,41 @@ func ValidCredentialTypes() []CredentialType {
 		CredentialTypeBasic,
 		CredentialTypeBearer,
 		CredentialTypeCustom,
+		CredentialTypeQueryAuth,
+		CredentialTypeHeaderAuth,
 	}
+}
+
+// ============================================================================
+// OwnerScope - Ownership scope for credentials (organization/project/personal)
+// ============================================================================
+
+// OwnerScope represents the ownership level of a credential
+type OwnerScope string
+
+const (
+	OwnerScopeOrganization OwnerScope = "organization" // Tenant-wide, managed by tenant admins
+	OwnerScopeProject      OwnerScope = "project"      // Project-specific, managed by project admins
+	OwnerScopePersonal     OwnerScope = "personal"     // User-specific, managed by the user
+)
+
+// ValidOwnerScopes returns all valid owner scopes
+func ValidOwnerScopes() []OwnerScope {
+	return []OwnerScope{
+		OwnerScopeOrganization,
+		OwnerScopeProject,
+		OwnerScopePersonal,
+	}
+}
+
+// IsValid checks if the owner scope is valid
+func (s OwnerScope) IsValid() bool {
+	for _, valid := range ValidOwnerScopes() {
+		if s == valid {
+			return true
+		}
+	}
+	return false
 }
 
 // IsValid checks if the credential type is valid
@@ -57,18 +93,26 @@ type Credential struct {
 	Name           string           `json:"name"`
 	Description    string           `json:"description,omitempty"`
 	CredentialType CredentialType   `json:"credential_type"`
-	EncryptedData  []byte           `json:"-"` // Never expose in JSON
-	EncryptedDEK   []byte           `json:"-"` // Never expose in JSON
-	DataNonce      []byte           `json:"-"` // Nonce for data encryption
-	DEKNonce       []byte           `json:"-"` // Nonce for DEK encryption
-	Metadata       json.RawMessage  `json:"metadata"`
-	ExpiresAt      *time.Time       `json:"expires_at,omitempty"`
-	Status         CredentialStatus `json:"status"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+
+	// Ownership scope fields
+	Scope       OwnerScope `json:"scope"`                  // organization, project, or personal
+	ProjectID   *uuid.UUID `json:"project_id,omitempty"`   // Set when scope is "project"
+	OwnerUserID *uuid.UUID `json:"owner_user_id,omitempty"` // Set when scope is "personal"
+
+	// Encrypted credential data
+	EncryptedData []byte `json:"-"` // Never expose in JSON
+	EncryptedDEK  []byte `json:"-"` // Never expose in JSON
+	DataNonce     []byte `json:"-"` // Nonce for data encryption
+	DEKNonce      []byte `json:"-"` // Nonce for DEK encryption
+
+	Metadata  json.RawMessage  `json:"metadata"`
+	ExpiresAt *time.Time       `json:"expires_at,omitempty"`
+	Status    CredentialStatus `json:"status"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 }
 
-// NewCredential creates a new credential
+// NewCredential creates a new credential with organization scope (default)
 func NewCredential(tenantID uuid.UUID, name string, credType CredentialType) *Credential {
 	now := time.Now().UTC()
 	return &Credential{
@@ -76,11 +120,49 @@ func NewCredential(tenantID uuid.UUID, name string, credType CredentialType) *Cr
 		TenantID:       tenantID,
 		Name:           name,
 		CredentialType: credType,
+		Scope:          OwnerScopeOrganization,
 		Metadata:       json.RawMessage("{}"),
 		Status:         CredentialStatusActive,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
+}
+
+// NewProjectCredential creates a new credential scoped to a project
+func NewProjectCredential(tenantID uuid.UUID, projectID uuid.UUID, name string, credType CredentialType) *Credential {
+	cred := NewCredential(tenantID, name, credType)
+	cred.Scope = OwnerScopeProject
+	cred.ProjectID = &projectID
+	return cred
+}
+
+// NewPersonalCredential creates a new credential scoped to a user
+func NewPersonalCredential(tenantID uuid.UUID, ownerUserID uuid.UUID, name string, credType CredentialType) *Credential {
+	cred := NewCredential(tenantID, name, credType)
+	cred.Scope = OwnerScopePersonal
+	cred.OwnerUserID = &ownerUserID
+	return cred
+}
+
+// ValidateScope validates that the credential scope is consistent with its fields
+func (c *Credential) ValidateScope() error {
+	switch c.Scope {
+	case OwnerScopeOrganization:
+		if c.ProjectID != nil || c.OwnerUserID != nil {
+			return ErrCredentialInvalidScope
+		}
+	case OwnerScopeProject:
+		if c.ProjectID == nil || c.OwnerUserID != nil {
+			return ErrCredentialInvalidScope
+		}
+	case OwnerScopePersonal:
+		if c.ProjectID != nil || c.OwnerUserID == nil {
+			return ErrCredentialInvalidScope
+		}
+	default:
+		return ErrCredentialInvalidScope
+	}
+	return nil
 }
 
 // IsExpired checks if the credential has expired
@@ -117,8 +199,28 @@ type CredentialData struct {
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	Scopes       []string   `json:"scopes,omitempty"`
 
+	// Query Auth (Phase 2) - multiple query parameters
+	QueryParams map[string]string `json:"query_params,omitempty"` // e.g., {"api_key": "xxx", "token": "yyy"}
+
+	// Header Auth (Phase 2) - multiple headers
+	Headers map[string]string `json:"headers,omitempty"` // e.g., {"X-API-Key": "xxx", "X-Secret": "yyy"}
+
 	// Custom (arbitrary key-value pairs)
 	Custom map[string]string `json:"custom,omitempty"`
+}
+
+// GetSecretValue returns the primary secret value for the credential
+func (c *CredentialData) GetSecretValue() string {
+	switch c.Type {
+	case string(CredentialTypeAPIKey):
+		return c.APIKey
+	case string(CredentialTypeBearer), string(CredentialTypeOAuth2):
+		return c.AccessToken
+	case string(CredentialTypeBasic):
+		return c.Username + ":" + c.Password
+	default:
+		return ""
+	}
 }
 
 // ToJSON serializes CredentialData to JSON
