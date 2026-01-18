@@ -16,7 +16,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "ai-builder",
 		Name:        "AI Workflow Builder",
 		Description: "AI-assisted workflow building with interactive hearing, automatic construction, and refinement capabilities",
-		Version:     8,
+		Version:     12,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -99,9 +99,9 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 					"model": "claude-3-haiku-20240307",
 					"provider": "anthropic",
 					"max_tokens": 2000,
-					"temperature": 0.5,
+					"temperature": 0.3,
 					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "あなたは親切で専門的なワークフロービルダーAIです。ユーザーの要望を丁寧にヒアリングし、最適なワークフローを設計するための情報を収集します。不明点は仮定として記録し、最後に確認します。常に有効なJSONで応答してください。",
+					"system_prompt": "あなたは親切で専門的なワークフロービルダーAIです。ユーザーの要望を丁寧にヒアリングし、最適なワークフローを設計するための情報を収集します。\n\n【重要】必ず以下の形式のJSONのみで応答してください。JSON以外のテキストは出力しないでください：\n{\"response\":\"...\",\"extractedData\":{...},\"suggestedQuestions\":[...],\"nextPhase\":\"...\",\"progress\":...}\n\nユーザーが「OK」「はい」「問題ない」「大丈夫」と答えた場合、nextPhaseを次のフェーズまたはcompletedに進めてください。",
 					"passthrough_fields": ["session_id", "tenant_id", "user_id", "current_phase", "current_spec"]
 				}`),
 			},
@@ -112,7 +112,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 				PositionX: 520,
 				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "try { let content = input.content || ''; if (content.startsWith('` + "```json" + `')) content = content.slice(7); if (content.startsWith('` + "```" + `')) content = content.slice(3); if (content.endsWith('` + "```" + `')) content = content.slice(0, -3); content = content.trim(); const result = JSON.parse(content); const existingAssumptions = input.current_spec?.assumptions || []; const newAssumptions = result.extractedData?.assumptions || []; const mergedAssumptions = [...existingAssumptions]; for (const newA of newAssumptions) { const idx = mergedAssumptions.findIndex(a => a.id === newA.id); if (idx >= 0) { mergedAssumptions[idx] = newA; } else { mergedAssumptions.push(newA); } } if (result.extractedData) { result.extractedData.assumptions = mergedAssumptions; } return { success: true, response: result.response || '', extractedData: result.extractedData || {}, suggestedQuestions: result.suggestedQuestions || [], nextPhase: result.nextPhase || 'purpose', progress: result.progress || 0, session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_spec: input.current_spec }; } catch (e) { return { success: false, error: 'Failed to parse LLM response: ' + e.message, response: input.content || '', session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_spec: input.current_spec }; }",
+					"code": "try { let content = input.content || ''; if (content.startsWith('` + "```json" + `')) content = content.slice(7); if (content.startsWith('` + "```" + `')) content = content.slice(3); if (content.endsWith('` + "```" + `')) content = content.slice(0, -3); content = content.trim(); let jsonStart = content.indexOf('{'); let jsonEnd = content.lastIndexOf('}'); if (jsonStart >= 0 && jsonEnd > jsonStart) { content = content.slice(jsonStart, jsonEnd + 1); } const result = JSON.parse(content); const existingAssumptions = input.current_spec?.assumptions || []; const newAssumptions = result.extractedData?.assumptions || []; const mergedAssumptions = [...existingAssumptions]; for (const newA of newAssumptions) { const idx = mergedAssumptions.findIndex(a => a.id === newA.id); if (idx >= 0) { mergedAssumptions[idx] = newA; } else { mergedAssumptions.push(newA); } } if (result.extractedData) { result.extractedData.assumptions = mergedAssumptions; } const phaseOrder = ['purpose', 'conditions', 'actors', 'frequency', 'integrations', 'pain_points', 'confirmation', 'completed']; const currentIdx = phaseOrder.indexOf(input.current_phase || 'purpose'); let nextPhase = result.nextPhase || phaseOrder[Math.min(currentIdx + 1, phaseOrder.length - 1)]; const nextIdx = phaseOrder.indexOf(nextPhase); if (nextIdx >= 0 && nextIdx <= currentIdx && currentIdx < phaseOrder.length - 1) { nextPhase = phaseOrder[currentIdx + 1]; } return { success: true, response: result.response || '', extractedData: result.extractedData || {}, suggestedQuestions: result.suggestedQuestions || [], nextPhase: nextPhase, progress: result.progress || (phaseOrder.indexOf(nextPhase) + 1) * 12, session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_spec: input.current_spec }; } catch (e) { return { success: false, error: 'Failed to parse LLM response: ' + e.message, response: input.content || '', session_id: input.session_id, tenant_id: input.tenant_id, user_id: input.user_id, current_spec: input.current_spec }; }",
 					"language": "javascript",
 					"output_schema": {
 						"type": "object",
