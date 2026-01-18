@@ -16,7 +16,7 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "ai-builder",
 		Name:        "AI Workflow Builder",
 		Description: "AI-assisted workflow building with interactive hearing, automatic construction, and refinement capabilities",
-		Version:     18,
+		Version:     21,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -374,7 +374,8 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 					"max_tokens": 2000,
 					"temperature": 0.3,
 					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "あなたはワークフロー修正AIです。ユーザーのフィードバックを正確に理解し、最小限の変更で要望を実現します。常に有効なJSONで応答してください。"
+					"system_prompt": "あなたはワークフロー修正AIです。ユーザーのフィードバックを正確に理解し、最小限の変更で要望を実現します。常に有効なJSONで応答してください。",
+					"passthrough_fields": ["session_id", "project_id", "tenant_id", "user_id", "current_workflow"]
 				}`),
 			},
 			{
