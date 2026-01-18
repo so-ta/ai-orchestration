@@ -114,7 +114,13 @@ function getIcon(type: string) {
 }
 
 .toast-leave-active {
+  position: absolute;
+  width: 100%;
   animation: toast-out 0.3s ease forwards;
+}
+
+.toast-move {
+  transition: transform 0.3s ease;
 }
 
 @keyframes toast-in {
