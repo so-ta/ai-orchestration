@@ -2,159 +2,185 @@ package workflows
 
 import "encoding/json"
 
-func (r *Registry) registerComprehensiveWorkflows() {
-	r.register(ComprehensiveBlockDemoWorkflow())
-}
-
 func (r *Registry) registerDemoWorkflows() {
-	r.register(DataPipelineBlockDemoWorkflow())
-	// Note: AIRoutingBlockDemoWorkflow and ControlFlowBlockDemoWorkflow were removed
-	// because they use branching (router/condition) with multiple output edges outside Block Groups,
-	// which is no longer supported. Use Block Groups for parallel/branching flows.
+	r.register(DemoWorkflow())
 }
 
-// ComprehensiveBlockDemoWorkflow demonstrates all non-external-integration blocks
-// This workflow tests core AI, Logic, Control, Data, and Utility blocks
-func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
+// DemoWorkflow demonstrates multiple workflow patterns with multiple entry points
+// This workflow consolidates: Block Demo, Data Pipeline, Block Group Demo
+// Each entry point demonstrates different block patterns
+func DemoWorkflow() *SystemWorkflowDefinition {
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000200",
-		SystemSlug:  "comprehensive-block-demo",
-		Name:        "Comprehensive Block Demo",
-		Description: "A workflow demonstrating all non-external-integration blocks including AI, Logic, Control, Data, RAG, and Utility blocks",
+		SystemSlug:  "demo",
+		Name:        "Demo Workflows",
+		Description: "Demonstrates multiple workflow patterns: block demo, data pipeline, and block groups with multiple entry points",
 		Version:     1,
 		IsSystem:    true,
+		// Note: InputSchema/OutputSchema are defined per entry point in each Start step's config
+		// Top-level schemas are optional for multi-entry-point workflows
 		InputSchema: json.RawMessage(`{
 			"type": "object",
-			"required": ["message", "items"],
-			"properties": {
-				"message": {
-					"type": "string",
-					"title": "メッセージ",
-					"description": "処理するメッセージ"
-				},
-				"items": {
-					"type": "array",
-					"title": "アイテム",
-					"description": "処理対象のアイテム配列",
-					"items": {"type": "object"}
-				}
-			}
+			"description": "This workflow has multiple entry points. See each Start step for specific input schemas.",
+			"properties": {}
 		}`),
 		OutputSchema: json.RawMessage(`{
 			"type": "object",
-			"properties": {
-				"result": {"type": "object"},
-				"processed_count": {"type": "integer"},
-				"llm_response": {"type": "string"}
-			}
+			"description": "Output varies by entry point.",
+			"properties": {}
 		}`),
-		Steps: []SystemStepDefinition{
-			// === Control: Start ===
+
+		// Block Groups for the block_group entry point
+		BlockGroups: []SystemBlockGroupDefinition{
+			// Parallel group: executes multiple branches concurrently
 			{
-				TempID:    "start",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
-				PositionY: 50,
+				TempID:    "bg_parallel_group",
+				Name:      "Parallel Processing",
+				Type:      "parallel",
+				PositionX: 280,
+				PositionY: 400,
+				Width:     280,
+				Height:    320,
+				Config: json.RawMessage(`{
+					"max_concurrent": 3,
+					"fail_fast": false
+				}`),
+			},
+			// Try-Catch group: handles errors gracefully
+			{
+				TempID:    "bg_try_catch_group",
+				Name:      "Error Handling",
+				Type:      "try_catch",
+				PositionX: 720,
+				PositionY: 400,
+				Width:     240,
+				Height:    160,
+				Config: json.RawMessage(`{
+					"retry_count": 2,
+					"retry_delay_ms": 1000
+				}`),
+			},
+			// ForEach group: iterates over array items
+			{
+				TempID:    "bg_foreach_group",
+				Name:      "Item Iterator",
+				Type:      "foreach",
+				PositionX: 1080,
+				PositionY: 400,
+				Width:     240,
+				Height:    160,
+				Config: json.RawMessage(`{
+					"input_path": "$.items",
+					"parallel": true,
+					"max_workers": 5
+				}`),
+			},
+			// While group: repeats until condition is false
+			{
+				TempID:    "bg_while_group",
+				Name:      "Counter Loop",
+				Type:      "while",
+				PositionX: 1440,
+				PositionY: 400,
+				Width:     240,
+				Height:    160,
+				Config: json.RawMessage(`{
+					"condition": "$.counter < $.max_iterations",
+					"max_iterations": 100,
+					"do_while": false
+				}`),
+			},
+		},
+
+		Steps: []SystemStepDefinition{
+			// ============================
+			// Block Demo Entry Point (横並び: Y=40固定, X増加)
+			// Demonstrates: start, log, function, llm, code, wait, note
+			// ============================
+			{
+				TempID:      "start_block_demo",
+				Name:        "Start: Block Demo",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "block_demo",
+					"description": "Demonstrate core block types"
+				}`),
+				PositionX: 40,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
 						"required": ["message", "items"],
 						"properties": {
-							"message": {"type": "string"},
-							"items": {"type": "array"}
+							"message": {"type": "string", "title": "メッセージ"},
+							"items": {"type": "array", "title": "アイテム", "items": {"type": "object"}}
 						}
 					}
 				}`),
 			},
-			// === Utility: Log ===
 			{
-				TempID:    "log_input",
+				TempID:    "block_log_input",
 				Name:      "Log Input",
 				Type:      "log",
-				PositionX: 400,
-				PositionY: 150,
+				PositionX: 160,
+				PositionY: 40,
 				BlockSlug: "log",
 				Config: json.RawMessage(`{
 					"level": "info",
 					"message": "Processing started with {{$.items.length}} items"
 				}`),
 			},
-			// === Utility: Function (data preparation with message preservation) ===
 			{
-				TempID:    "prepare_data",
+				TempID:    "block_prepare_data",
 				Name:      "Prepare Data",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 250,
+				PositionX: 280,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "const items = input.items || []; const enhanced = items.map((item, idx) => ({...item, index: idx, processed_at: new Date().toISOString()})); return { message: input.message, items: enhanced, item_count: enhanced.length };",
-					"language": "javascript",
-					"output_schema": {
-						"type": "object",
-						"properties": {
-							"message": {"type": "string"},
-							"items": {"type": "array"},
-							"item_count": {"type": "integer"}
-						}
-					}
+					"language": "javascript"
 				}`),
 			},
-			// === Data: Filter (filter items based on criteria, preserve message) ===
 			{
-				TempID:    "filter_items",
+				TempID:    "block_filter_items",
 				Name:      "Filter Items",
 				Type:      "function",
 				PositionX: 400,
-				PositionY: 350,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "const filtered = (input.items || []).filter(item => (item.index || 0) < 10); return { message: input.message, items: filtered, filtered_count: filtered.length };",
 					"language": "javascript"
 				}`),
 			},
-			// === Data: Transform items (preserve message) ===
 			{
-				TempID:    "map_items",
+				TempID:    "block_transform_items",
 				Name:      "Transform Items",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 450,
+				PositionX: 520,
+				PositionY: 40,
 				Config: json.RawMessage(`{
 					"code": "const transformed = (input.items || []).map(item => ({...item, transformed: true})); return { message: input.message, items: transformed };",
 					"language": "javascript"
 				}`),
 			},
-			// === Data: Split into batches (preserve message) ===
 			{
-				TempID:    "split_batches",
-				Name:      "Split Batches",
-				Type:      "function",
-				PositionX: 400,
-				PositionY: 550,
-				Config: json.RawMessage(`{
-					"code": "const items = input.items || []; const batchSize = 3; const batches = []; for (let i = 0; i < items.length; i += batchSize) { batches.push(items.slice(i, i + batchSize)); } return { message: input.message, items: items, batches: batches, batch_count: batches.length };",
-					"language": "javascript"
-				}`),
-			},
-			// === Aggregate results (add function to preserve message) ===
-			{
-				TempID:    "aggregate_results",
+				TempID:    "block_aggregate",
 				Name:      "Aggregate Results",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 650,
+				PositionX: 640,
+				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "const items = input.items || input.batches || []; const total_count = items.length; const max_index = items.reduce((max, item) => Math.max(max, item.index || 0), 0); return { message: input.message, items: items, total_count: total_count, max_index: max_index };",
+					"code": "const items = input.items || []; const total_count = items.length; const max_index = items.reduce((max, item) => Math.max(max, item.index || 0), 0); return { message: input.message, items: items, total_count: total_count, max_index: max_index };",
 					"language": "javascript"
 				}`),
 			},
-			// === AI: LLM for processing ===
 			{
-				TempID:    "llm_process",
+				TempID:    "block_llm_process",
 				Name:      "LLM Process",
 				Type:      "llm",
-				PositionX: 400,
-				PositionY: 750,
+				PositionX: 760,
+				PositionY: 40,
 				BlockSlug: "llm",
 				Config: json.RawMessage(`{
 					"provider": "mock",
@@ -165,159 +191,117 @@ func ComprehensiveBlockDemoWorkflow() *SystemWorkflowDefinition {
 					"max_tokens": 500
 				}`),
 			},
-			// === Utility: Code block (final processing) ===
 			{
-				TempID:    "final_code",
+				TempID:    "block_final_code",
 				Name:      "Final Processing",
 				Type:      "code",
-				PositionX: 400,
-				PositionY: 850,
+				PositionX: 880,
+				PositionY: 40,
 				BlockSlug: "code",
 				Config: json.RawMessage(`{
-					"code": "const result = { status: 'completed', llm_summary: input.content || 'No summary', total_processed: input.total_count || 0, timestamp: new Date().toISOString() }; return result;",
-					"output_schema": {
-						"type": "object",
-						"properties": {
-							"status": {"type": "string"},
-							"llm_summary": {"type": "string"},
-							"total_processed": {"type": "integer"},
-							"timestamp": {"type": "string"}
-						}
-					}
+					"code": "const result = { status: 'completed', llm_summary: input.content || 'No summary', total_processed: input.total_count || 0, timestamp: new Date().toISOString() }; return result;"
 				}`),
 			},
-			// === Control: Wait (brief pause before final output) ===
 			{
-				TempID:    "wait_brief",
+				TempID:    "block_wait",
 				Name:      "Brief Wait",
 				Type:      "wait",
-				PositionX: 400,
-				PositionY: 950,
+				PositionX: 1000,
+				PositionY: 40,
 				BlockSlug: "wait",
 				Config: json.RawMessage(`{
 					"duration_ms": 100
 				}`),
 			},
-			// === Utility: Note (documentation) ===
 			{
-				TempID:    "note_end",
+				TempID:    "block_final_output",
+				Name:      "Block Demo Output",
+				Type:      "function",
+				PositionX: 1120,
+				PositionY: 40,
+				Config: json.RawMessage(`{
+					"code": "return { result: input, processed_count: input.total_processed || 0, llm_response: input.llm_summary || '', completed_at: new Date().toISOString() };",
+					"language": "javascript"
+				}`),
+			},
+			{
+				TempID:    "block_note",
 				Name:      "End Note",
 				Type:      "note",
-				PositionX: 100,
-				PositionY: 1050,
+				PositionX: 1000,
+				PositionY: 160,
 				BlockSlug: "note",
 				Config: json.RawMessage(`{
 					"content": "This workflow demonstrates all core block types",
 					"color": "#10B981"
 				}`),
 			},
-			// === Final output ===
-			{
-				TempID:    "final_output",
-				Name:      "Final Output",
-				Type:      "function",
-				PositionX: 400,
-				PositionY: 1050,
-				Config: json.RawMessage(`{
-					"code": "return { result: input, processed_count: input.total_processed || 0, llm_response: input.llm_summary || '', completed_at: new Date().toISOString() };",
-					"language": "javascript"
-				}`),
-			},
-		},
-		Edges: []SystemEdgeDefinition{
-			// Start -> Log
-			{SourceTempID: "start", TargetTempID: "log_input", SourcePort: "output"},
-			// Log -> Prepare
-			{SourceTempID: "log_input", TargetTempID: "prepare_data", SourcePort: "output"},
-			// Prepare -> Filter
-			{SourceTempID: "prepare_data", TargetTempID: "filter_items", SourcePort: "output"},
-			// Filter -> Map (now function, uses output port)
-			{SourceTempID: "filter_items", TargetTempID: "map_items", SourcePort: "output"},
-			// Map -> Split (now function, uses output port)
-			{SourceTempID: "map_items", TargetTempID: "split_batches", SourcePort: "output"},
-			// Split -> Aggregate
-			{SourceTempID: "split_batches", TargetTempID: "aggregate_results", SourcePort: "output"},
-			// Aggregate -> LLM
-			{SourceTempID: "aggregate_results", TargetTempID: "llm_process", SourcePort: "output"},
-			// LLM -> Final Code
-			{SourceTempID: "llm_process", TargetTempID: "final_code", SourcePort: "output"},
-			// Final Code -> Wait
-			{SourceTempID: "final_code", TargetTempID: "wait_brief", SourcePort: "output"},
-			// Wait -> Final Output
-			{SourceTempID: "wait_brief", TargetTempID: "final_output", SourcePort: "output"},
-		},
-	}
-}
 
-// DataPipelineBlockDemoWorkflow demonstrates data processing blocks
-func DataPipelineBlockDemoWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000201",
-		SystemSlug:  "data-pipeline-block-demo",
-		Name:        "Data Pipeline Block Demo",
-		Description: "Demonstrates data processing blocks: split, filter, map, and aggregate",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["data"],
-			"properties": {
-				"data": {
-					"type": "array",
-					"title": "データ",
-					"description": "処理対象のデータ配列",
-					"items": {
+			// ============================
+			// Data Pipeline Entry Point (横並び: Y=200固定, X増加)
+			// Demonstrates: split, filter, map, aggregate
+			// ============================
+			{
+				TempID:      "start_data_pipeline",
+				Name:        "Start: Data Pipeline",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "data_pipeline",
+					"description": "Data processing pipeline demo"
+				}`),
+				PositionX: 40,
+				PositionY: 200,
+				Config: json.RawMessage(`{
+					"input_schema": {
 						"type": "object",
+						"required": ["data"],
 						"properties": {
-							"id": {"type": "integer"},
-							"value": {"type": "number"},
-							"category": {"type": "string"}
+							"data": {
+								"type": "array",
+								"title": "データ",
+								"items": {
+									"type": "object",
+									"properties": {
+										"id": {"type": "integer"},
+										"value": {"type": "number"},
+										"category": {"type": "string"}
+									}
+								}
+							}
 						}
 					}
-				}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
-			{
-				TempID:    "start",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
-				PositionY: 50,
-				Config:    json.RawMessage(`{}`),
+				}`),
 			},
-			// Split into batches
 			{
-				TempID:    "split_data",
+				TempID:    "pipeline_split",
 				Name:      "Split Data",
 				Type:      "split",
-				PositionX: 400,
-				PositionY: 150,
+				PositionX: 160,
+				PositionY: 200,
 				BlockSlug: "split",
 				Config: json.RawMessage(`{
 					"input_path": "data",
 					"batch_size": 5
 				}`),
 			},
-			// Filter only valid items
 			{
-				TempID:    "filter_valid",
+				TempID:    "pipeline_filter",
 				Name:      "Filter Valid",
 				Type:      "filter",
-				PositionX: 400,
-				PositionY: 250,
+				PositionX: 280,
+				PositionY: 200,
 				BlockSlug: "filter",
 				Config: json.RawMessage(`{
 					"expression": "$.value > 0"
 				}`),
 			},
-			// Map to process each item
 			{
-				TempID:    "map_process",
+				TempID:    "pipeline_map",
 				Name:      "Map Process",
 				Type:      "map",
 				PositionX: 400,
-				PositionY: 350,
+				PositionY: 200,
 				BlockSlug: "map",
 				Config: json.RawMessage(`{
 					"input_path": "items",
@@ -325,13 +309,12 @@ func DataPipelineBlockDemoWorkflow() *SystemWorkflowDefinition {
 					"max_workers": 10
 				}`),
 			},
-			// Aggregate results
 			{
-				TempID:    "aggregate_data",
+				TempID:    "pipeline_aggregate",
 				Name:      "Aggregate Data",
 				Type:      "aggregate",
-				PositionX: 400,
-				PositionY: 450,
+				PositionX: 520,
+				PositionY: 200,
 				BlockSlug: "aggregate",
 				Config: json.RawMessage(`{
 					"operations": [
@@ -343,263 +326,263 @@ func DataPipelineBlockDemoWorkflow() *SystemWorkflowDefinition {
 					]
 				}`),
 			},
-			// Final function
 			{
-				TempID:    "format_result",
+				TempID:    "pipeline_format",
 				Name:      "Format Result",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 550,
+				PositionX: 640,
+				PositionY: 200,
 				Config: json.RawMessage(`{
 					"code": "return { summary: { total: input.total_value, average: input.avg_value, count: input.count, min: input.min_value, max: input.max_value }, processed_at: new Date().toISOString() };",
 					"language": "javascript"
 				}`),
 			},
-		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "start", TargetTempID: "split_data", SourcePort: "output"},
-			{SourceTempID: "split_data", TargetTempID: "filter_valid", SourcePort: "output"},
-			{SourceTempID: "filter_valid", TargetTempID: "map_process", SourcePort: "matched"},
-			{SourceTempID: "map_process", TargetTempID: "aggregate_data", SourcePort: "complete"},
-			{SourceTempID: "aggregate_data", TargetTempID: "format_result", SourcePort: "output"},
-		},
-	}
-}
 
-// AIRoutingBlockDemoWorkflow demonstrates AI routing blocks
-func AIRoutingBlockDemoWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000202",
-		SystemSlug:  "ai-routing-block-demo",
-		Name:        "AI Routing Block Demo",
-		Description: "Demonstrates AI blocks: router for dynamic routing based on content",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["query"],
-			"properties": {
-				"query": {
-					"type": "string",
-					"title": "クエリ",
-					"description": "ルーティング対象のクエリ"
-				}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
+			// ============================
+			// Block Group Entry Point (横並び: Y=400固定, X増加)
+			// Demonstrates: parallel, try_catch, foreach, while block groups
+			// ============================
 			{
-				TempID:    "start",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
-				PositionY: 50,
-				Config:    json.RawMessage(`{}`),
-			},
-			// AI Router
-			{
-				TempID:    "ai_router",
-				Name:      "AI Router",
-				Type:      "router",
-				PositionX: 400,
-				PositionY: 150,
-				BlockSlug: "router",
+				TempID:      "start_block_group",
+				Name:        "Start: Block Group",
+				Type:        "start",
+				TriggerType: "internal",
+				TriggerConfig: json.RawMessage(`{
+					"entry_point": "block_group",
+					"description": "Demonstrate block group types"
+				}`),
+				PositionX: 40,
+				PositionY: 400,
 				Config: json.RawMessage(`{
-					"provider": "mock",
-					"model": "test",
-					"routes": [
-						{"name": "technical", "description": "Technical questions about code, APIs, or systems"},
-						{"name": "general", "description": "General knowledge questions"},
-						{"name": "creative", "description": "Creative writing or brainstorming requests"}
-					]
+					"input_schema": {
+						"type": "object",
+						"required": ["items"],
+						"properties": {
+							"items": {
+								"type": "array",
+								"title": "Items",
+								"description": "Array of items to process",
+								"items": {
+									"type": "object",
+									"properties": {
+										"id": {"type": "integer"},
+										"value": {"type": "number"},
+										"name": {"type": "string"}
+									}
+								}
+							},
+							"max_iterations": {
+								"type": "integer",
+								"title": "Max Iterations",
+								"description": "Maximum iterations for while loop",
+								"default": 5
+							}
+						}
+					}
 				}`),
 			},
-			// Technical route
 			{
-				TempID:    "technical_llm",
-				Name:      "Technical LLM",
-				Type:      "llm",
-				PositionX: 200,
-				PositionY: 300,
-				BlockSlug: "llm",
-				Config: json.RawMessage(`{
-					"provider": "mock",
-					"model": "test",
-					"system_prompt": "You are a technical expert. Provide detailed technical explanations.",
-					"user_prompt": "{{$.query}}",
-					"temperature": 0.3
-				}`),
-			},
-			// General route
-			{
-				TempID:    "general_llm",
-				Name:      "General LLM",
-				Type:      "llm",
-				PositionX: 400,
-				PositionY: 300,
-				BlockSlug: "llm",
-				Config: json.RawMessage(`{
-					"provider": "mock",
-					"model": "test",
-					"system_prompt": "You are a helpful assistant. Provide clear and informative answers.",
-					"user_prompt": "{{$.query}}",
-					"temperature": 0.5
-				}`),
-			},
-			// Creative route
-			{
-				TempID:    "creative_llm",
-				Name:      "Creative LLM",
-				Type:      "llm",
-				PositionX: 600,
-				PositionY: 300,
-				BlockSlug: "llm",
-				Config: json.RawMessage(`{
-					"provider": "mock",
-					"model": "test",
-					"system_prompt": "You are a creative writer. Be imaginative and engaging.",
-					"user_prompt": "{{$.query}}",
-					"temperature": 0.9
-				}`),
-			},
-			// Join results
-			{
-				TempID:    "join_routes",
-				Name:      "Join Routes",
-				Type:      "join",
-				PositionX: 400,
-				PositionY: 450,
-				BlockSlug: "join",
-				Config:    json.RawMessage(`{}`),
-			},
-			// Format output
-			{
-				TempID:    "format_output",
-				Name:      "Format Output",
+				TempID:    "bg_init",
+				Name:      "Initialize",
 				Type:      "function",
-				PositionX: 400,
-				PositionY: 550,
+				PositionX: 160,
+				PositionY: 400,
 				Config: json.RawMessage(`{
-					"code": "return { response: input.content, route: input.__branch || 'unknown', query: input.query };",
+					"code": "return { ...input, counter: 0, max_iterations: input.max_iterations || 5, results: [] };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Parallel Group Steps (inside group)
+			{
+				TempID:           "bg_parallel_branch_a",
+				Name:             "Branch A",
+				Type:             "function",
+				PositionX:        320,
+				PositionY:        440,
+				BlockGroupTempID: "bg_parallel_group",
+				Config: json.RawMessage(`{
+					"code": "const items = input.items || []; const half = Math.floor(items.length / 2); return { branch: 'A', processed: items.slice(0, half), count: half };",
+					"language": "javascript"
+				}`),
+			},
+			{
+				TempID:           "bg_parallel_branch_b",
+				Name:             "Branch B",
+				Type:             "function",
+				PositionX:        320,
+				PositionY:        540,
+				BlockGroupTempID: "bg_parallel_group",
+				Config: json.RawMessage(`{
+					"code": "const items = input.items || []; const half = Math.floor(items.length / 2); return { branch: 'B', processed: items.slice(half), count: items.length - half };",
+					"language": "javascript"
+				}`),
+			},
+			{
+				TempID:           "bg_parallel_branch_c",
+				Name:             "Branch C",
+				Type:             "function",
+				PositionX:        320,
+				PositionY:        640,
+				BlockGroupTempID: "bg_parallel_group",
+				Config: json.RawMessage(`{
+					"code": "const items = input.items || []; const values = items.map(i => i.value || 0); const sum = values.reduce((a, b) => a + b, 0); return { branch: 'C', sum: sum, avg: values.length > 0 ? sum / values.length : 0, count: values.length };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Process Parallel Results
+			{
+				TempID:    "bg_merge_parallel",
+				Name:      "Process Results",
+				Type:      "function",
+				PositionX: 600,
+				PositionY: 400,
+				Config: json.RawMessage(`{
+					"code": "return { ...input, parallel_completed: true };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Parallel Error Handler
+			{
+				TempID:    "bg_parallel_error",
+				Name:      "Parallel Error",
+				Type:      "function",
+				PositionX: 600,
+				PositionY: 760,
+				Config: json.RawMessage(`{
+					"code": "return { error: 'Parallel processing failed', original_error: input.error || 'Unknown error' };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Try-Catch Group Steps
+			{
+				TempID:           "bg_try_operation",
+				Name:             "Risky Op",
+				Type:             "function",
+				PositionX:        760,
+				PositionY:        440,
+				BlockGroupTempID: "bg_try_catch_group",
+				Config: json.RawMessage(`{
+					"code": "if (input.items && input.items.length === 0) { throw new Error('Empty items array'); } return { success: true, processed: input.items.length };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Catch Handler
+			{
+				TempID:    "bg_catch_handler",
+				Name:      "Catch Handler",
+				Type:      "function",
+				PositionX: 720,
+				PositionY: 600,
+				Config: json.RawMessage(`{
+					"code": "return { handled: true, message: 'Error was caught and handled', original_error: input.error || 'Unknown' };",
+					"language": "javascript"
+				}`),
+			},
+
+			// ForEach Group Steps
+			{
+				TempID:           "bg_foreach_process",
+				Name:             "Process Item",
+				Type:             "function",
+				PositionX:        1120,
+				PositionY:        440,
+				BlockGroupTempID: "bg_foreach_group",
+				Config: json.RawMessage(`{
+					"code": "const item = input.item || input; return { id: item.id, processed_name: (item.name || 'unknown').toUpperCase(), doubled_value: (item.value || 0) * 2 };",
+					"language": "javascript"
+				}`),
+			},
+
+			// ForEach Error Handler
+			{
+				TempID:    "bg_foreach_error",
+				Name:      "ForEach Error",
+				Type:      "function",
+				PositionX: 1080,
+				PositionY: 600,
+				Config: json.RawMessage(`{
+					"code": "return { error: 'ForEach iteration failed', item_error: input.error || 'Unknown' };",
+					"language": "javascript"
+				}`),
+			},
+
+			// While Group Steps
+			{
+				TempID:           "bg_while_increment",
+				Name:             "Increment",
+				Type:             "function",
+				PositionX:        1480,
+				PositionY:        440,
+				BlockGroupTempID: "bg_while_group",
+				Config: json.RawMessage(`{
+					"code": "const counter = (input.counter || 0) + 1; return { ...input, counter: counter, iteration_result: 'Iteration ' + counter };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Max Iterations Handler
+			{
+				TempID:    "bg_max_iterations_handler",
+				Name:      "Max Reached",
+				Type:      "function",
+				PositionX: 1440,
+				PositionY: 600,
+				Config: json.RawMessage(`{
+					"code": "return { warning: 'Maximum iterations reached', final_counter: input.counter || 0 };",
+					"language": "javascript"
+				}`),
+			},
+
+			// Final Output
+			{
+				TempID:    "bg_final_output",
+				Name:      "Block Group Output",
+				Type:      "function",
+				PositionX: 1760,
+				PositionY: 400,
+				Config: json.RawMessage(`{
+					"code": "return { parallel_completed: input.parallel_completed || false, foreach_results: input.foreach_results || [], while_result: { final_counter: input.counter || 0 }, final_status: 'completed' };",
 					"language": "javascript"
 				}`),
 			},
 		},
-		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "start", TargetTempID: "ai_router", SourcePort: "output"},
-			{SourceTempID: "ai_router", TargetTempID: "technical_llm", SourcePort: "technical"},
-			{SourceTempID: "ai_router", TargetTempID: "general_llm", SourcePort: "general"},
-			{SourceTempID: "ai_router", TargetTempID: "creative_llm", SourcePort: "creative"},
-			// Note: "default" port is handled by general_llm via the "general" edge
-			// The router block falls back to general when no specific route matches
-			{SourceTempID: "technical_llm", TargetTempID: "join_routes", SourcePort: "output"},
-			{SourceTempID: "general_llm", TargetTempID: "join_routes", SourcePort: "output"},
-			{SourceTempID: "creative_llm", TargetTempID: "join_routes", SourcePort: "output"},
-			{SourceTempID: "join_routes", TargetTempID: "format_output", SourcePort: "output"},
-		},
-	}
-}
 
-// ControlFlowBlockDemoWorkflow demonstrates control flow blocks
-func ControlFlowBlockDemoWorkflow() *SystemWorkflowDefinition {
-	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000203",
-		SystemSlug:  "control-flow-block-demo",
-		Name:        "Control Flow Block Demo",
-		Description: "Demonstrates control flow blocks: condition, switch, loop, wait, and human_in_loop",
-		Version:     1,
-		IsSystem:    true,
-		InputSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["count", "require_approval"],
-			"properties": {
-				"count": {
-					"type": "integer",
-					"title": "カウント",
-					"description": "ループ回数"
-				},
-				"require_approval": {
-					"type": "boolean",
-					"title": "承認必要",
-					"description": "人間の承認を必要とするか"
-				}
-			}
-		}`),
-		Steps: []SystemStepDefinition{
-			{
-				TempID:    "start",
-				Name:      "Start",
-				Type:      "start",
-				PositionX: 400,
-				PositionY: 50,
-				Config:    json.RawMessage(`{}`),
-			},
-			// Condition check
-			{
-				TempID:    "check_approval",
-				Name:      "Check Approval Required",
-				Type:      "condition",
-				PositionX: 400,
-				PositionY: 150,
-				BlockSlug: "condition",
-				Config: json.RawMessage(`{
-					"expression": "$.require_approval === true"
-				}`),
-			},
-			// Human in loop (if approval required)
-			{
-				TempID:    "human_approval",
-				Name:      "Human Approval",
-				Type:      "human_in_loop",
-				PositionX: 200,
-				PositionY: 250,
-				BlockSlug: "human_in_loop",
-				Config: json.RawMessage(`{
-					"instructions": "Please review and approve the following operation",
-					"timeout_hours": 24
-				}`),
-			},
-			// Wait (if no approval required)
-			{
-				TempID:    "wait_step",
-				Name:      "Wait",
-				Type:      "wait",
-				PositionX: 600,
-				PositionY: 250,
-				BlockSlug: "wait",
-				Config: json.RawMessage(`{
-					"duration_ms": 500
-				}`),
-			},
-			// Join paths
-			{
-				TempID:    "join_approval",
-				Name:      "Join Approval",
-				Type:      "join",
-				PositionX: 400,
-				PositionY: 350,
-				BlockSlug: "join",
-				Config:    json.RawMessage(`{}`),
-			},
-			// Final output
-			{
-				TempID:    "final_result",
-				Name:      "Final Result",
-				Type:      "function",
-				PositionX: 400,
-				PositionY: 450,
-				Config: json.RawMessage(`{
-					"code": "return { message: input.message, require_approval: input.require_approval, completed: true };",
-					"language": "javascript"
-				}`),
-			},
-		},
 		Edges: []SystemEdgeDefinition{
-			{SourceTempID: "start", TargetTempID: "check_approval", SourcePort: "output"},
-			{SourceTempID: "check_approval", TargetTempID: "human_approval", SourcePort: "true"},
-			{SourceTempID: "check_approval", TargetTempID: "wait_step", SourcePort: "false"},
-			{SourceTempID: "human_approval", TargetTempID: "join_approval", SourcePort: "approved"},
-			{SourceTempID: "wait_step", TargetTempID: "join_approval", SourcePort: "output"},
-			{SourceTempID: "join_approval", TargetTempID: "final_result", SourcePort: "output"},
+			// Block Demo flow
+			{SourceTempID: "start_block_demo", TargetTempID: "block_log_input", SourcePort: "output"},
+			{SourceTempID: "block_log_input", TargetTempID: "block_prepare_data", SourcePort: "output"},
+			{SourceTempID: "block_prepare_data", TargetTempID: "block_filter_items", SourcePort: "output"},
+			{SourceTempID: "block_filter_items", TargetTempID: "block_transform_items", SourcePort: "output"},
+			{SourceTempID: "block_transform_items", TargetTempID: "block_aggregate", SourcePort: "output"},
+			{SourceTempID: "block_aggregate", TargetTempID: "block_llm_process", SourcePort: "output"},
+			{SourceTempID: "block_llm_process", TargetTempID: "block_final_code", SourcePort: "output"},
+			{SourceTempID: "block_final_code", TargetTempID: "block_wait", SourcePort: "output"},
+			{SourceTempID: "block_wait", TargetTempID: "block_final_output", SourcePort: "output"},
+
+			// Data Pipeline flow
+			{SourceTempID: "start_data_pipeline", TargetTempID: "pipeline_split", SourcePort: "output"},
+			{SourceTempID: "pipeline_split", TargetTempID: "pipeline_filter", SourcePort: "output"},
+			{SourceTempID: "pipeline_filter", TargetTempID: "pipeline_map", SourcePort: "matched"},
+			{SourceTempID: "pipeline_map", TargetTempID: "pipeline_aggregate", SourcePort: "complete"},
+			{SourceTempID: "pipeline_aggregate", TargetTempID: "pipeline_format", SourcePort: "output"},
+
+			// Block Group flow
+			{SourceTempID: "start_block_group", TargetTempID: "bg_init", SourcePort: "output"},
+			{SourceTempID: "bg_init", TargetGroupTempID: "bg_parallel_group", SourcePort: "output", TargetPort: "group-input"},
+			{SourceGroupTempID: "bg_parallel_group", TargetTempID: "bg_merge_parallel", SourcePort: "out"},
+			{SourceGroupTempID: "bg_parallel_group", TargetTempID: "bg_parallel_error", SourcePort: "error"},
+			{SourceTempID: "bg_merge_parallel", TargetGroupTempID: "bg_try_catch_group", SourcePort: "output", TargetPort: "group-input"},
+			{SourceGroupTempID: "bg_try_catch_group", TargetGroupTempID: "bg_foreach_group", SourcePort: "out", TargetPort: "group-input"},
+			{SourceGroupTempID: "bg_try_catch_group", TargetTempID: "bg_catch_handler", SourcePort: "error"},
+			{SourceGroupTempID: "bg_foreach_group", TargetGroupTempID: "bg_while_group", SourcePort: "out", TargetPort: "group-input"},
+			{SourceGroupTempID: "bg_foreach_group", TargetTempID: "bg_foreach_error", SourcePort: "error"},
+			{SourceGroupTempID: "bg_while_group", TargetTempID: "bg_final_output", SourcePort: "out"},
+			{SourceGroupTempID: "bg_while_group", TargetTempID: "bg_max_iterations_handler", SourcePort: "error"},
 		},
 	}
 }
