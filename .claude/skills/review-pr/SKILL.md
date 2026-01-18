@@ -1,6 +1,13 @@
+---
+name: review-pr
+description: |
+  PR review workflow after push. Use after creating a pull request to check
+  CI status and Codex review results, and handle any required changes.
+---
+
 # PR Review Workflow
 
-PRをpush後のレビュー待機フロー。
+PRをpush後のレビュー待機・対応フロー。
 
 ## 前提
 
@@ -55,16 +62,11 @@ git push
 # 5. 再度レビュー結果を確認（自動実行される）
 ```
 
-## チェックリスト
+## 注意事項
 
-```
-[ ] CIステータスを確認した
-[ ] Codexレビュー結果を確認した
-[ ] REQUEST_CHANGESがあれば全て対応した
-[ ] 修正後、再度レビュー結果を確認した
-[ ] APPROVE + CI通過を確認した
-[ ] Mergeを実行した
-```
+- REQUEST_CHANGESは全て対応必須
+- CI失敗を無視してマージしない
+- レビュー結果を待たずにマージしない
 
 ## 参考
 
