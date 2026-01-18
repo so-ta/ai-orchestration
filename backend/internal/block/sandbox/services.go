@@ -1157,8 +1157,8 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}
 
 	query := `
-		INSERT INTO steps (project_id, name, type, config, position_x, position_y, block_definition_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO steps (tenant_id, project_id, name, type, config, position_x, position_y, block_definition_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at
 	`
 
@@ -1167,7 +1167,7 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 		createdAt time.Time
 	)
 
-	err = s.pool.QueryRow(s.ctx, query, pID, name, stepType, configJSON, positionX, positionY, blockDefID).Scan(&id, &createdAt)
+	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, name, stepType, configJSON, positionX, positionY, blockDefID).Scan(&id, &createdAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create step: %w", err)
 	}
@@ -1348,13 +1348,13 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}
 
 	query := `
-		INSERT INTO edges (project_id, source_step_id, target_step_id, source_port, target_port)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO edges (tenant_id, project_id, source_step_id, target_step_id, source_port, target_port)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id
 	`
 
 	var id uuid.UUID
-	err = s.pool.QueryRow(s.ctx, query, pID, ssID, tsID, sourcePort, targetPort).Scan(&id)
+	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, ssID, tsID, sourcePort, targetPort).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create edge: %w", err)
 	}
