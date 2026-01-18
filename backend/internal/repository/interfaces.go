@@ -328,3 +328,38 @@ type TenantFilter struct {
 	Limit          int
 	IncludeDeleted bool
 }
+
+// BuilderSessionRepository defines the interface for builder session persistence
+type BuilderSessionRepository interface {
+	// Create creates a new builder session
+	Create(ctx context.Context, session *domain.BuilderSession) error
+	// GetByID retrieves a builder session by ID
+	GetByID(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.BuilderSession, error)
+	// GetWithMessages retrieves a session with all its messages
+	GetWithMessages(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) (*domain.BuilderSession, error)
+	// GetActiveByUser retrieves the most recent active session for a user
+	GetActiveByUser(ctx context.Context, tenantID uuid.UUID, userID string) (*domain.BuilderSession, error)
+	// ListByUser retrieves all sessions for a user
+	ListByUser(ctx context.Context, tenantID uuid.UUID, userID string, filter BuilderSessionFilter) ([]*domain.BuilderSession, int, error)
+	// Update updates a builder session
+	Update(ctx context.Context, session *domain.BuilderSession) error
+	// AddMessage adds a message to a session
+	AddMessage(ctx context.Context, message *domain.BuilderMessage) error
+	// UpdateStatus updates the session status
+	UpdateStatus(ctx context.Context, tenantID uuid.UUID, id uuid.UUID, status domain.BuilderSessionStatus) error
+	// UpdatePhase updates the hearing phase and progress
+	UpdatePhase(ctx context.Context, tenantID uuid.UUID, id uuid.UUID, phase domain.HearingPhase, progress int) error
+	// SetSpec sets the workflow spec
+	SetSpec(ctx context.Context, tenantID uuid.UUID, id uuid.UUID, spec []byte) error
+	// SetProjectID sets the generated project ID
+	SetProjectID(ctx context.Context, tenantID uuid.UUID, id uuid.UUID, projectID uuid.UUID) error
+	// Delete deletes a builder session
+	Delete(ctx context.Context, tenantID uuid.UUID, id uuid.UUID) error
+}
+
+// BuilderSessionFilter defines filtering options for builder session list
+type BuilderSessionFilter struct {
+	Status *domain.BuilderSessionStatus
+	Page   int
+	Limit  int
+}
