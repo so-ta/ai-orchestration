@@ -490,9 +490,10 @@ func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSyst
 	}
 
 	// 3. Find the Start block by entry_point
+	// For system projects, use the project's tenant ID to find steps
 	var startStepID *uuid.UUID
 	if input.EntryPoint != "" {
-		steps, err := u.stepRepo.ListByProject(ctx, input.TenantID, project.ID)
+		steps, err := u.stepRepo.ListByProject(ctx, project.TenantID, project.ID)
 		if err != nil {
 			return nil, err
 		}
