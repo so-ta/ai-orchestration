@@ -234,8 +234,12 @@ func TestWorkflowE2E_CRUD(t *testing.T) {
 ```
 frontend/
 ├── composables/
-│   ├── useWorkflows.ts
-│   └── useWorkflows.test.ts
+│   ├── useProjects.ts          # API呼び出しcomposable
+│   ├── useProjects.test.ts
+│   ├── useBlockSearch.ts       # ブロック検索（共通）
+│   ├── useStoredInput.ts       # localStorage永続化
+│   ├── usePolling.ts           # ポーリングロジック
+│   └── useTemplateVariables.ts # テンプレート変数処理
 ├── components/
 │   └── dag-editor/
 │       ├── DagEditor.vue
@@ -247,7 +251,7 @@ frontend/
 
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { useWorkflows } from './useWorkflows'
+import { useProjects } from './useProjects'
 
 // API モック
 vi.mock('./useApi', () => ({
@@ -259,33 +263,26 @@ vi.mock('./useApi', () => ({
   }),
 }))
 
-describe('useWorkflows', () => {
+describe('useProjects', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  describe('fetchWorkflows', () => {
-    it('fetches workflows successfully', async () => {
+  describe('list', () => {
+    it('fetches projects successfully', async () => {
       // 準備
-      const mockWorkflows = [
-        { id: '1', name: 'Test Workflow', status: 'draft' },
+      const mockProjects = [
+        { id: '1', name: 'Test Project', status: 'draft' },
       ]
       const { get } = useApi()
-      vi.mocked(get).mockResolvedValue({ workflows: mockWorkflows })
+      vi.mocked(get).mockResolvedValue({ data: mockProjects })
 
       // 実行
-      const { workflows, loading, error, fetchWorkflows } = useWorkflows()
-      expect(loading.value).toBe(false)
-
-      const fetchPromise = fetchWorkflows()
-      expect(loading.value).toBe(true)
-
-      await fetchPromise
+      const { list } = useProjects()
+      const result = await list()
 
       // 検証
-      expect(loading.value).toBe(false)
-      expect(error.value).toBeNull()
-      expect(workflows.value).toEqual(mockWorkflows)
+      expect(result.data).toEqual(mockProjects)
     })
 
     it('handles API error', async () => {
@@ -293,25 +290,22 @@ describe('useWorkflows', () => {
       const { get } = useApi()
       vi.mocked(get).mockRejectedValue(new Error('Network error'))
 
-      // 実行
-      const { error, fetchWorkflows } = useWorkflows()
-      await fetchWorkflows()
-
-      // 検証
-      expect(error.value).toBe('Network error')
+      // 実行 & 検証
+      const { list } = useProjects()
+      await expect(list()).rejects.toThrow('Network error')
     })
 
     it('handles empty response', async () => {
       // 準備
       const { get } = useApi()
-      vi.mocked(get).mockResolvedValue({ workflows: [] })
+      vi.mocked(get).mockResolvedValue({ data: [] })
 
       // 実行
-      const { workflows, fetchWorkflows } = useWorkflows()
-      await fetchWorkflows()
+      const { list } = useProjects()
+      const result = await list()
 
       // 検証
-      expect(workflows.value).toEqual([])
+      expect(result.data).toEqual([])
     })
   })
 })
@@ -373,7 +367,7 @@ describe('StepNode', () => {
 npm run test
 
 # 単一ファイル
-npm run test -- useWorkflows.test.ts
+npm run test -- useProjects.test.ts
 
 # Watch モード
 npm run test:watch

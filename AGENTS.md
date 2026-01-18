@@ -60,13 +60,22 @@ result, _ := repo.GetByID(ctx, id)
 ```vue
 <!-- Good -->
 <script setup lang="ts">
-const { workflows, loading } = useWorkflows()
+const projectsApi = useProjects()
+const projects = ref<Project[]>([])
+const loading = ref(false)
+
+onMounted(async () => {
+  loading.value = true
+  const result = await projectsApi.list()
+  projects.value = result.data || []
+  loading.value = false
+})
 </script>
 
 <!-- Bad: Options API -->
 <script>
 export default {
-  data() { return { workflows: [] } }
+  data() { return { projects: [] } }
 }
 </script>
 ```

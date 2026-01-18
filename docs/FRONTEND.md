@@ -40,8 +40,14 @@ frontend/
 ├── composables/            # Vue 3 Composables
 │   ├── useAuth.ts          # Keycloak 認証
 │   ├── useApi.ts           # API クライアント
-│   ├── useWorkflows.ts     # Workflow 操作
-│   └── useRuns.ts          # Run 操作
+│   ├── useProjects.ts      # プロジェクト操作
+│   ├── useRuns.ts          # Run 操作
+│   ├── useBlocks.ts        # ブロック定義・検索ユーティリティ
+│   ├── useBlockSearch.ts   # ブロック検索（共通composable）
+│   ├── useStoredInput.ts   # localStorage入力値永続化
+│   ├── usePolling.ts       # ポーリングロジック
+│   ├── useTemplateVariables.ts # テンプレート変数処理
+│   └── ...                 # その他のcomposables
 ├── plugins/
 │   └── auth.client.ts      # Keycloak 初期化
 ├── layouts/
@@ -185,46 +191,119 @@ const {
 // X-Tenant-ID ヘッダーを自動注入
 ```
 
-### useWorkflows (composables/useWorkflows.ts)
+### useProjects (composables/useProjects.ts)
+
+> 注: バックエンドAPIは `/workflows` エンドポイントを使用。このcomposableはそれにマッピング。
 
 ```typescript
 const {
-  workflows,        // Ref<Workflow[]>
-  loading,          // Ref<boolean>
-  error,            // Ref<string | null>
-  fetchWorkflows,   // () => Promise<void>
-  createWorkflow,   // (data: CreateWorkflowInput) => Promise<Workflow>
-  updateWorkflow,   // (id: string, data: UpdateWorkflowInput) => Promise<Workflow>
-  deleteWorkflow,   // (id: string) => Promise<void>
-  publishWorkflow,  // (id: string) => Promise<Workflow>
+  list,           // (params?) => Promise<PaginatedResponse<Project>>
+  get,            // (id: string) => Promise<ApiResponse<Project>>
+  create,         // (data) => Promise<ApiResponse<Project>>
+  update,         // (id: string, data) => Promise<ApiResponse<Project>>
+  remove,         // (id: string) => Promise<void>
+  save,           // (id: string, data) => Promise<ApiResponse<Project>> - 新バージョン作成
+  saveDraft,      // (id: string, data) => Promise<ApiResponse<Project>> - ドラフト保存
+  publish,        // (id: string) => Promise<ApiResponse<Project>>
 
   // Steps
-  fetchSteps,       // (workflowId: string) => Promise<Step[]>
-  createStep,       // (workflowId: string, data: CreateStepInput) => Promise<Step>
-  updateStep,       // (workflowId: string, stepId: string, data: UpdateStepInput) => Promise<Step>
-  deleteStep,       // (workflowId: string, stepId: string) => Promise<void>
+  listSteps,      // (projectId: string) => Promise<Step[]>
+  createStep,     // (projectId: string, data) => Promise<Step>
+  updateStep,     // (projectId: string, stepId: string, data) => Promise<Step>
+  deleteStep,     // (projectId: string, stepId: string) => Promise<void>
 
   // Edges
-  fetchEdges,       // (workflowId: string) => Promise<Edge[]>
-  createEdge,       // (workflowId: string, data: CreateEdgeInput) => Promise<Edge>
-  deleteEdge        // (workflowId: string, edgeId: string) => Promise<void>
-} = useWorkflows()
+  listEdges,      // (projectId: string) => Promise<Edge[]>
+  createEdge,     // (projectId: string, data) => Promise<Edge>
+  deleteEdge,     // (projectId: string, edgeId: string) => Promise<void>
+
+  // Execution
+  execute,        // (projectId: string, input, mode) => Promise<Run>
+} = useProjects()
 ```
 
 ### useRuns (composables/useRuns.ts)
 
 ```typescript
 const {
-  runs,           // Ref<Run[]>
-  currentRun,     // Ref<Run | null>
-  loading,        // Ref<boolean>
-  error,          // Ref<string | null>
-  fetchRuns,      // (workflowId?: string) => Promise<void>
-  fetchRun,       // (runId: string) => Promise<Run>
-  executeWorkflow,// (workflowId: string, input: object, mode: 'test' | 'production') => Promise<Run>
-  cancelRun,      // (runId: string) => Promise<void>
-  resumeRun       // (runId: string) => Promise<Run>
+  list,           // (workflowId: string, params?) => Promise<PaginatedResponse<Run>>
+  get,            // (runId: string) => Promise<ApiResponse<Run>>
+  cancel,         // (runId: string) => Promise<void>
+  resume,         // (runId: string) => Promise<ApiResponse<Run>>
 } = useRuns()
+```
+
+### useBlockSearch (composables/useBlockSearch.ts)
+
+ブロック検索ロジックの共通composable。StepPaletteで使用。
+
+```typescript
+import { useBlockSearchWithCategory } from '~/composables/useBlockSearch'
+
+const {
+  searchQuery,        // Ref<string> - 検索クエリ
+  isSearchActive,     // ComputedRef<boolean> - 検索がアクティブか
+  clearSearch,        // () => void - 検索をクリア
+  activeCategory,     // Ref<BlockCategory> - アクティブカテゴリ
+  blocksBySubcategory,// ComputedRef<Record<string, BlockDefinition[]>>
+  activeSubcategories,// ComputedRef<BlockSubcategory[]>
+} = useBlockSearchWithCategory(blocks)
+```
+
+### useStoredInput (composables/useStoredInput.ts)
+
+localStorageを使った入力値の永続化。ExecutionTabで使用。
+
+```typescript
+import { useStoredInput } from '~/composables/useStoredInput'
+
+const { save, load, clear, getKey } = useStoredInput({
+  keyPrefix: 'aio:input:workflow-123'
+})
+
+// 使用例
+save('step-1', { message: 'Hello' })  // 保存
+const data = load('step-1')            // 読み込み
+clear('step-1')                        // クリア
+```
+
+### usePolling (composables/usePolling.ts)
+
+定期的にデータをフェッチするためのcomposable。
+
+```typescript
+import { usePolling } from '~/composables/usePolling'
+
+const { isPolling, pollingId, start, stop } = usePolling<Run>({
+  interval: 1000,     // ポーリング間隔（ms）
+  maxAttempts: 60,    // 最大試行回数
+  onTimeout: () => toast.warning('Timeout'),
+})
+
+// ポーリング開始
+start('run-123', async () => {
+  const response = await api.get(runId)
+  return response.data
+}, (data) => {
+  if (data.status === 'completed') return true  // 停止
+  return false  // 継続
+})
+```
+
+### useTemplateVariables (composables/useTemplateVariables.ts)
+
+テンプレート変数の検出・解決。ExecutionTabで使用。
+
+```typescript
+import { useTemplateVariables } from '~/composables/useTemplateVariables'
+
+const configRef = computed(() => props.step?.config)
+const {
+  variables,        // ComputedRef<string[]> - 検出された変数
+  formatVariable,   // (name: string) => string - {{name}} 形式にフォーマット
+  resolveVariable,  // (path: string, context: object) => string - 値を解決
+  createPreview,    // (context: object) => TemplatePreviewItem[] - プレビュー生成
+} = useTemplateVariables(configRef)
 ```
 
 ## コンポーネント
@@ -577,19 +656,35 @@ Claude Code はこのセクションのパターンに従ってコードを書�
 ### Composable パターン
 
 ```typescript
-// ✅ 正しいパターン
-export function useWorkflows() {
-  const workflows = ref<Workflow[]>([])
+// ✅ 正しいパターン: API呼び出しを行うシンプルなcomposable
+export function useProjects() {
+  const api = useApi()
+
+  // APIメソッドを直接返す（状態を持たない）
+  async function list(params?: { status?: string }) {
+    return api.get<PaginatedResponse<Project>>('/workflows')
+  }
+
+  async function get(id: string) {
+    return api.get<ApiResponse<Project>>(`/workflows/${id}`)
+  }
+
+  return { list, get }
+}
+
+// ✅ 正しいパターン: 状態を持つcomposable
+export function useProjectList() {
+  const projects = ref<Project[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const { get, post, put, del } = useApi()
+  const { list } = useProjects()
 
-  async function fetchWorkflows() {
+  async function fetchProjects() {
     loading.value = true
     error.value = null
     try {
-      const data = await get<{ workflows: Workflow[] }>('/api/v1/workflows')
-      workflows.value = data.workflows
+      const response = await list()
+      projects.value = response.data || []
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error'
     } finally {
@@ -598,28 +693,28 @@ export function useWorkflows() {
   }
 
   return {
-    workflows: readonly(workflows),
+    projects: readonly(projects),
     loading: readonly(loading),
     error: readonly(error),
-    fetchWorkflows,
+    fetchProjects,
   }
 }
 
 // ❌ 禁止パターン
-export function useWorkflows() {
-  const workflows = ref<Workflow[]>([])
+export function useProjects() {
+  const projects = ref<Project[]>([])
   const { get } = useApi()
 
-  async function fetchWorkflows() {
+  async function fetchProjects() {
     // loading 状態なし → NG
     // error ハンドリングなし → NG
     const data = await get('/api/v1/workflows')
-    workflows.value = data.workflows  // 型チェックなし → NG
+    projects.value = data.workflows  // 型チェックなし → NG
   }
 
   return {
-    workflows,  // readonly でない → NG（外部から変更可能）
-    fetchWorkflows,
+    projects,  // readonly でない → NG（外部から変更可能）
+    fetchProjects,
   }
 }
 ```
@@ -637,7 +732,7 @@ export function useWorkflows() {
 <!-- ✅ 正しいパターン -->
 <script setup lang="ts">
 interface Props {
-  workflowId: string
+  projectId: string
   readonly?: boolean
 }
 
@@ -650,11 +745,11 @@ const emit = defineEmits<{
   'error': [message: string]
 }>()
 
-const { workflows, fetchWorkflows, loading, error } = useWorkflows()
+const projectsApi = useProjects()
 
 // 初期化は onMounted で
 onMounted(async () => {
-  await fetchWorkflows()
+  await projectsApi.get(props.projectId)
 })
 
 // イベントハンドラは明示的な関数で
@@ -885,20 +980,20 @@ function getAbsolutePosition(node: Node): Position {
 
 ```typescript
 // ✅ 正しいパターン
-describe('useWorkflows', () => {
-  it('fetches workflows successfully', async () => {
+describe('useProjectList', () => {
+  it('fetches projects successfully', async () => {
     // Arrange
-    const mockWorkflows = [{ id: '1', name: 'Test' }]
+    const mockProjects = [{ id: '1', name: 'Test' }]
     vi.mocked(useApi).mockReturnValue({
-      get: vi.fn().mockResolvedValue({ workflows: mockWorkflows }),
+      get: vi.fn().mockResolvedValue({ data: mockProjects }),
     })
 
     // Act
-    const { workflows, fetchWorkflows, loading, error } = useWorkflows()
-    await fetchWorkflows()
+    const { projects, fetchProjects, loading, error } = useProjectList()
+    await fetchProjects()
 
     // Assert
-    expect(workflows.value).toEqual(mockWorkflows)
+    expect(projects.value).toEqual(mockProjects)
     expect(loading.value).toBe(false)
     expect(error.value).toBeNull()
   })
@@ -910,8 +1005,8 @@ describe('useWorkflows', () => {
     })
 
     // Act
-    const { error, fetchWorkflows } = useWorkflows()
-    await fetchWorkflows()
+    const { error, fetchProjects } = useProjectList()
+    await fetchProjects()
 
     // Assert
     expect(error.value).toBe('Network error')
