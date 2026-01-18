@@ -1522,15 +1522,22 @@ func VectorUpsertBlock() *SystemBlockDefinition {
 		Icon:        "database",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
-			"required": ["collection"],
 			"properties": {
-				"collection": {"type": "string", "title": "Collection Name"},
+				"collection": {"type": "string", "title": "Collection Name", "description": "Collection name (can also be provided via input.collection)"},
 				"embedding_provider": {"type": "string", "default": "openai", "title": "Embedding Provider"},
 				"embedding_model": {"type": "string", "default": "text-embedding-3-small", "title": "Embedding Model"}
 			}
 		}`),
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"required": ["documents"],
+			"properties": {
+				"documents": {"type": "array", "description": "Documents to store (each with content and optional metadata)"},
+				"collection": {"type": "string", "description": "Collection name (used if not set in config)"}
+			}
+		}`),
 		InputPorts: []domain.InputPort{
-			{Name: "documents", Label: "Documents", Schema: json.RawMessage(`{"type": "array"}`), Required: true, Description: "Documents to store"},
+			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: true, Description: "Documents and optional collection name"},
 		},
 		OutputPorts: []domain.OutputPort{
 			{Name: "output", Label: "Output", IsDefault: true, Description: "Upsert result"},
@@ -1563,9 +1570,8 @@ func VectorSearchBlock() *SystemBlockDefinition {
 		Icon:        "search",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
-			"required": ["collection"],
 			"properties": {
-				"collection": {"type": "string", "title": "Collection Name"},
+				"collection": {"type": "string", "title": "Collection Name", "description": "Collection name (can also be provided via input.collection)"},
 				"top_k": {"type": "integer", "default": 5, "minimum": 1, "maximum": 100, "title": "Number of Results"},
 				"threshold": {"type": "number", "minimum": 0, "maximum": 1, "title": "Similarity Threshold"},
 				"include_content": {"type": "boolean", "default": true, "title": "Include Content"},
@@ -1573,8 +1579,16 @@ func VectorSearchBlock() *SystemBlockDefinition {
 				"embedding_model": {"type": "string", "default": "text-embedding-3-small"}
 			}
 		}`),
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "Query text to search for"},
+				"vector": {"type": "array", "description": "Pre-computed vector to search with"},
+				"collection": {"type": "string", "description": "Collection name (used if not set in config)"}
+			}
+		}`),
 		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: true, Description: "Vector or query text"},
+			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: true, Description: "Query text, vector, and optional collection name"},
 		},
 		OutputPorts: []domain.OutputPort{
 			{Name: "output", Label: "Output", IsDefault: true, Description: "Search results"},

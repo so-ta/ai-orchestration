@@ -191,9 +191,8 @@ func RAGQueryBlock() *SystemBlockDefinition {
 		Icon:        "message-square",
 		ConfigSchema: json.RawMessage(`{
 			"type": "object",
-			"required": ["collection"],
 			"properties": {
-				"collection": {"type": "string", "title": "Collection Name"},
+				"collection": {"type": "string", "title": "Collection Name", "description": "Collection name (can also be provided via input.collection)"},
 				"top_k": {"type": "integer", "default": 5, "title": "Search Results"},
 				"embedding_provider": {"type": "string", "default": "openai"},
 				"embedding_model": {"type": "string", "default": "text-embedding-3-small"},
@@ -208,8 +207,9 @@ func RAGQueryBlock() *SystemBlockDefinition {
 			"type": "object",
 			"required": ["query"],
 			"properties": {
-				"query": {"type": "string"},
-				"question": {"type": "string"}
+				"query": {"type": "string", "description": "Question to answer"},
+				"question": {"type": "string", "description": "Alias for query"},
+				"collection": {"type": "string", "description": "Collection name (used if not set in config)"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{
