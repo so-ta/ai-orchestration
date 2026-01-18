@@ -981,15 +981,8 @@ func (s *ProjectsServiceImpl) Update(projectID string, updates map[string]interf
 	args := []interface{}{}
 	argIndex := 1
 
-	if startStepID, ok := updates["start_step_id"].(string); ok {
-		ssID, err := uuid.Parse(startStepID)
-		if err != nil {
-			return fmt.Errorf("invalid start_step_id: %w", err)
-		}
-		setClauses = append(setClauses, fmt.Sprintf("start_step_id = $%d", argIndex))
-		args = append(args, ssID)
-		argIndex++
-	}
+	// Note: start_step_id is not a column in projects table
+	// Start steps are identified by step type = "start"
 
 	if name, ok := updates["name"].(string); ok {
 		setClauses = append(setClauses, fmt.Sprintf("name = $%d", argIndex))
@@ -1071,7 +1064,7 @@ func (s *StepsServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 		SELECT s.id, s.name, s.type, s.config, s.position_x, s.position_y, s.created_at
 		FROM steps s
 		JOIN projects p ON s.project_id = p.id
-		WHERE s.project_id = $1 AND p.tenant_id = $2 AND s.deleted_at IS NULL
+		WHERE s.project_id = $1 AND p.tenant_id = $2
 		ORDER BY s.created_at
 	`
 
@@ -1210,7 +1203,7 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 	args = append(args, sID)
 
 	query := fmt.Sprintf(
-		"UPDATE steps SET %s WHERE id = $%d AND deleted_at IS NULL",
+		"UPDATE steps SET %s WHERE id = $%d",
 		strings.Join(setClauses, ", "),
 		argIndex,
 	)
@@ -1223,14 +1216,14 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 	return nil
 }
 
-// Delete soft-deletes a step
+// Delete hard-deletes a step (steps table has no deleted_at column)
 func (s *StepsServiceImpl) Delete(stepID string) error {
 	sID, err := uuid.Parse(stepID)
 	if err != nil {
 		return fmt.Errorf("invalid step ID: %w", err)
 	}
 
-	query := `UPDATE steps SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+	query := `DELETE FROM steps WHERE id = $1`
 
 	_, err = s.pool.Exec(s.ctx, query, sID)
 	if err != nil {
@@ -1271,7 +1264,7 @@ func (s *EdgesServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 		SELECT e.id, e.source_step_id, e.target_step_id, e.source_port, e.target_port, e.condition
 		FROM edges e
 		JOIN projects p ON e.project_id = p.id
-		WHERE e.project_id = $1 AND p.tenant_id = $2 AND e.deleted_at IS NULL
+		WHERE e.project_id = $1 AND p.tenant_id = $2
 	`
 
 	rows, err := s.pool.Query(s.ctx, query, pID, s.tenantID)
@@ -1369,14 +1362,14 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	}, nil
 }
 
-// Delete soft-deletes an edge
+// Delete hard-deletes an edge (edges table has no deleted_at column)
 func (s *EdgesServiceImpl) Delete(edgeID string) error {
 	eID, err := uuid.Parse(edgeID)
 	if err != nil {
 		return fmt.Errorf("invalid edge ID: %w", err)
 	}
 
-	query := `UPDATE edges SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`
+	query := `DELETE FROM edges WHERE id = $1`
 
 	_, err = s.pool.Exec(s.ctx, query, eID)
 	if err != nil {
