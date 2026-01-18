@@ -105,7 +105,11 @@ func HandleError(w http.ResponseWriter, err error) {
 		errors.Is(err, domain.ErrCredentialNotFound),
 		errors.Is(err, domain.ErrSystemCredentialNotFound),
 		errors.Is(err, domain.ErrBlockDefinitionNotFound),
-		errors.Is(err, domain.ErrStepRunNotFound):
+		errors.Is(err, domain.ErrStepRunNotFound),
+		errors.Is(err, domain.ErrOAuth2ProviderNotFound),
+		errors.Is(err, domain.ErrOAuth2AppNotFound),
+		errors.Is(err, domain.ErrOAuth2ConnectionNotFound),
+		errors.Is(err, domain.ErrCredentialShareNotFound):
 		Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
 
 	case errors.Is(err, domain.ErrRunNotCancellable),
@@ -116,8 +120,22 @@ func HandleError(w http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrCredentialExpired),
 		errors.Is(err, domain.ErrCredentialRevoked),
 		errors.Is(err, domain.ErrSystemCredentialExpired),
-		errors.Is(err, domain.ErrSystemCredentialRevoked):
+		errors.Is(err, domain.ErrSystemCredentialRevoked),
+		errors.Is(err, domain.ErrOAuth2TokenExpired),
+		errors.Is(err, domain.ErrOAuth2RefreshFailed):
 		Error(w, http.StatusForbidden, "CREDENTIAL_UNAVAILABLE", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrOAuth2AppAlreadyExists),
+		errors.Is(err, domain.ErrCredentialShareDuplicate):
+		Error(w, http.StatusConflict, "ALREADY_EXISTS", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrOAuth2InvalidState):
+		Error(w, http.StatusBadRequest, "INVALID_STATE", err.Error(), nil)
+
+	case errors.Is(err, domain.ErrCredentialAccessDenied),
+		errors.Is(err, domain.ErrCredentialBindingMissing),
+		errors.Is(err, domain.ErrCredentialInvalidScope):
+		Error(w, http.StatusForbidden, "ACCESS_DENIED", err.Error(), nil)
 
 	case errors.Is(err, domain.ErrBlockDefinitionSlugExists):
 		Error(w, http.StatusConflict, "SLUG_EXISTS", err.Error(), nil)

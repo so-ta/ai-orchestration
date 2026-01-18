@@ -64,6 +64,7 @@ var (
 	// OAuth2 errors
 	ErrOAuth2ProviderNotFound   = errors.New("oauth2 provider not found")
 	ErrOAuth2AppNotFound        = errors.New("oauth2 app not found")
+	ErrOAuth2AppAlreadyExists   = errors.New("oauth2 app already exists for this provider")
 	ErrOAuth2ConnectionNotFound = errors.New("oauth2 connection not found")
 	ErrOAuth2InvalidState       = errors.New("invalid oauth2 state parameter")
 	ErrOAuth2TokenExpired       = errors.New("oauth2 access token expired")
