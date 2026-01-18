@@ -73,6 +73,12 @@ interface ListSessionsResponse {
 
 type BuilderRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+const TERMINAL_STATUSES: ReadonlySet<BuilderRunStatus> = new Set(['completed', 'failed', 'cancelled'])
+
+function isTerminalStatus(status: BuilderRunStatus): boolean {
+  return TERMINAL_STATUSES.has(status)
+}
+
 interface BuilderRunResult {
   run_id: string
   status: BuilderRunStatus
@@ -194,7 +200,7 @@ export function useBuilder() {
         onProgress(result.status)
       }
 
-      if (result.status === 'completed' || result.status === 'failed' || result.status === 'cancelled') {
+      if (isTerminalStatus(result.status)) {
         return result
       }
 

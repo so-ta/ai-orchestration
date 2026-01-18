@@ -256,17 +256,21 @@ function useSuggestedQuestion(question: string) {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    if (currentSessionId.value) {
-      if (isReviewing.value) {
-        refineWorkflow()
-      } else {
-        sendMessage()
-      }
-    } else {
-      startNewSession()
-    }
+  if (e.key !== 'Enter' || e.shiftKey) {
+    return
+  }
+
+  e.preventDefault()
+
+  if (!currentSessionId.value) {
+    startNewSession()
+    return
+  }
+
+  if (isReviewing.value) {
+    refineWorkflow()
+  } else {
+    sendMessage()
   }
 }
 

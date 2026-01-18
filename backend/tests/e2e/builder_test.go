@@ -30,6 +30,36 @@ type BuilderMessage struct {
 	SuggestedQuestions []string `json:"suggested_questions,omitempty"`
 }
 
+// createBuilderSession creates a builder session and returns the session ID.
+// Returns empty string and skips the test if the system project is not seeded.
+func createBuilderSession(t *testing.T, prompt string) string {
+	t.Helper()
+
+	startReq := map[string]string{
+		"initial_prompt": prompt,
+	}
+	resp, body := makeRequest(t, "POST", "/api/v1/builder/sessions", startReq)
+
+	if resp.StatusCode == http.StatusInternalServerError {
+		t.Skip("AI Builder system project may not be seeded")
+	}
+	require.Equal(t, http.StatusCreated, resp.StatusCode, "Start session response: %s", string(body))
+
+	var startResp struct {
+		SessionID string `json:"session_id"`
+	}
+	err := json.Unmarshal(body, &startResp)
+	require.NoError(t, err)
+
+	return startResp.SessionID
+}
+
+// deleteBuilderSession deletes a builder session
+func deleteBuilderSession(t *testing.T, sessionID string) {
+	t.Helper()
+	makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/builder/sessions/%s", sessionID), nil)
+}
+
 func TestBuilderSessionCRUD(t *testing.T) {
 	// Skip if AI builder system project is not seeded
 	t.Run("Start Session", func(t *testing.T) {
@@ -131,21 +161,8 @@ func TestBuilderSessionList(t *testing.T) {
 }
 
 func TestBuilderSendMessage(t *testing.T) {
-	// Create session
-	startReq := map[string]string{
-		"initial_prompt": "メール通知を自動送信するワークフロー",
-	}
-	resp, body := makeRequest(t, "POST", "/api/v1/builder/sessions", startReq)
-	if resp.StatusCode == http.StatusInternalServerError {
-		t.Skip("AI Builder system project may not be seeded")
-	}
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var startResp struct {
-		SessionID string `json:"session_id"`
-	}
-	json.Unmarshal(body, &startResp)
-	sessionID := startResp.SessionID
+	sessionID := createBuilderSession(t, "メール通知を自動送信するワークフロー")
+	defer deleteBuilderSession(t, sessionID)
 
 	// Send message (async)
 	msgReq := map[string]string{
@@ -192,9 +209,6 @@ func TestBuilderSendMessage(t *testing.T) {
 
 	// Note: Run may fail if LLM is not configured, but we're testing the API flow
 	assert.Contains(t, []string{"completed", "failed", "pending", "running"}, finalStatus)
-
-	// Cleanup
-	makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/builder/sessions/%s", sessionID), nil)
 }
 
 func TestBuilderValidation(t *testing.T) {
@@ -214,26 +228,14 @@ func TestBuilderValidation(t *testing.T) {
 	})
 
 	t.Run("Empty message content", func(t *testing.T) {
-		// First create a session
-		startReq := map[string]string{
-			"initial_prompt": "テストワークフロー",
-		}
-		resp, body := makeRequest(t, "POST", "/api/v1/builder/sessions", startReq)
-		if resp.StatusCode == http.StatusInternalServerError {
-			t.Skip("AI Builder system project may not be seeded")
-		}
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-		var startResp struct {
-			SessionID string `json:"session_id"`
-		}
-		json.Unmarshal(body, &startResp)
+		sessionID := createBuilderSession(t, "テストワークフロー")
+		defer deleteBuilderSession(t, sessionID)
 
 		// Try to send empty message
 		msgReq := map[string]string{
 			"content": "",
 		}
-		resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/messages", startResp.SessionID), msgReq)
+		resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/messages", sessionID), msgReq)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 		var errResp struct {
@@ -241,9 +243,6 @@ func TestBuilderValidation(t *testing.T) {
 		}
 		json.Unmarshal(body, &errResp)
 		assert.Equal(t, "INVALID_REQUEST", errResp.Code)
-
-		// Cleanup
-		makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/builder/sessions/%s", startResp.SessionID), nil)
 	})
 
 	t.Run("Invalid session ID", func(t *testing.T) {
@@ -258,24 +257,11 @@ func TestBuilderValidation(t *testing.T) {
 }
 
 func TestBuilderConstructValidation(t *testing.T) {
-	// Create session
-	startReq := map[string]string{
-		"initial_prompt": "テストワークフロー",
-	}
-	resp, body := makeRequest(t, "POST", "/api/v1/builder/sessions", startReq)
-	if resp.StatusCode == http.StatusInternalServerError {
-		t.Skip("AI Builder system project may not be seeded")
-	}
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var startResp struct {
-		SessionID string `json:"session_id"`
-	}
-	json.Unmarshal(body, &startResp)
-	sessionID := startResp.SessionID
+	sessionID := createBuilderSession(t, "テストワークフロー")
+	defer deleteBuilderSession(t, sessionID)
 
 	// Try to construct before hearing is completed
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/construct", sessionID), nil)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/construct", sessionID), nil)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Construct response: %s", string(body))
 
 	var errResp struct {
@@ -284,33 +270,17 @@ func TestBuilderConstructValidation(t *testing.T) {
 	}
 	json.Unmarshal(body, &errResp)
 	assert.Equal(t, "HEARING_NOT_COMPLETED", errResp.Code)
-
-	// Cleanup
-	makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/builder/sessions/%s", sessionID), nil)
 }
 
 func TestBuilderRefineValidation(t *testing.T) {
-	// Create session
-	startReq := map[string]string{
-		"initial_prompt": "テストワークフロー",
-	}
-	resp, body := makeRequest(t, "POST", "/api/v1/builder/sessions", startReq)
-	if resp.StatusCode == http.StatusInternalServerError {
-		t.Skip("AI Builder system project may not be seeded")
-	}
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var startResp struct {
-		SessionID string `json:"session_id"`
-	}
-	json.Unmarshal(body, &startResp)
-	sessionID := startResp.SessionID
+	sessionID := createBuilderSession(t, "テストワークフロー")
+	defer deleteBuilderSession(t, sessionID)
 
 	// Try to refine before project is created
 	refineReq := map[string]string{
 		"feedback": "もう少しシンプルにしてください",
 	}
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/refine", sessionID), refineReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/refine", sessionID), refineReq)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Refine response: %s", string(body))
 
 	var errResp struct {
@@ -319,33 +289,17 @@ func TestBuilderRefineValidation(t *testing.T) {
 	}
 	json.Unmarshal(body, &errResp)
 	assert.Equal(t, "PROJECT_NOT_CREATED", errResp.Code)
-
-	// Cleanup
-	makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/builder/sessions/%s", sessionID), nil)
 }
 
 func TestBuilderRefineEmptyFeedback(t *testing.T) {
-	// Create session
-	startReq := map[string]string{
-		"initial_prompt": "テストワークフロー",
-	}
-	resp, body := makeRequest(t, "POST", "/api/v1/builder/sessions", startReq)
-	if resp.StatusCode == http.StatusInternalServerError {
-		t.Skip("AI Builder system project may not be seeded")
-	}
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var startResp struct {
-		SessionID string `json:"session_id"`
-	}
-	json.Unmarshal(body, &startResp)
-	sessionID := startResp.SessionID
+	sessionID := createBuilderSession(t, "テストワークフロー")
+	defer deleteBuilderSession(t, sessionID)
 
 	// Try to refine with empty feedback
 	refineReq := map[string]string{
 		"feedback": "",
 	}
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/refine", sessionID), refineReq)
+	resp, body := makeRequest(t, "POST", fmt.Sprintf("/api/v1/builder/sessions/%s/refine", sessionID), refineReq)
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "Refine response: %s", string(body))
 
 	var errResp struct {
@@ -353,7 +307,4 @@ func TestBuilderRefineEmptyFeedback(t *testing.T) {
 	}
 	json.Unmarshal(body, &errResp)
 	assert.Equal(t, "INVALID_REQUEST", errResp.Code)
-
-	// Cleanup
-	makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/builder/sessions/%s", sessionID), nil)
 }

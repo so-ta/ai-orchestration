@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -791,7 +792,7 @@ func (s *BuilderSessionsServiceImpl) Update(sessionID string, updates map[string
 
 	query := fmt.Sprintf(
 		"UPDATE builder_sessions SET %s WHERE id = $%d AND tenant_id = $%d",
-		joinStrings(setClauses, ", "),
+		strings.Join(setClauses, ", "),
 		argIndex,
 		argIndex+1,
 	)
@@ -850,17 +851,6 @@ func (s *BuilderSessionsServiceImpl) AddMessage(sessionID string, message map[st
 	return nil
 }
 
-// joinStrings joins strings with separator (helper function)
-func joinStrings(strs []string, sep string) string {
-	if len(strs) == 0 {
-		return ""
-	}
-	result := strs[0]
-	for i := 1; i < len(strs); i++ {
-		result += sep + strs[i]
-	}
-	return result
-}
 
 // ============================================================================
 // ProjectsServiceImpl - Implementation of ProjectsService for builder
@@ -1017,7 +1007,7 @@ func (s *ProjectsServiceImpl) Update(projectID string, updates map[string]interf
 
 	query := fmt.Sprintf(
 		"UPDATE projects SET %s WHERE id = $%d AND tenant_id = $%d AND deleted_at IS NULL",
-		joinStrings(setClauses, ", "),
+		strings.Join(setClauses, ", "),
 		argIndex,
 		argIndex+1,
 	)
@@ -1221,7 +1211,7 @@ func (s *StepsServiceImpl) Update(stepID string, updates map[string]interface{})
 
 	query := fmt.Sprintf(
 		"UPDATE steps SET %s WHERE id = $%d AND deleted_at IS NULL",
-		joinStrings(setClauses, ", "),
+		strings.Join(setClauses, ", "),
 		argIndex,
 	)
 
