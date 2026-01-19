@@ -108,7 +108,7 @@ async function handleDeprecate(pkg: CustomBlockPackage) {
     message: `パッケージ「${pkg.name}」を非推奨にしますか？`,
     confirmText: t('blockPackages.deprecate'),
     cancelText: t('common.cancel'),
-    variant: 'warning'
+    variant: 'danger'
   })
 
   if (confirmed) {
@@ -288,7 +288,7 @@ function formatDate(dateStr: string): string {
     </div>
 
     <!-- Create Modal -->
-    <UiModal :show="showCreateModal" :title="t('blockPackages.createPackage')" size="medium" @close="showCreateModal = false">
+    <UiModal :show="showCreateModal" :title="t('blockPackages.createPackage')" size="md" @close="showCreateModal = false">
       <div class="create-form">
         <div class="form-group">
           <label class="form-label">{{ t('blockPackages.form.name') }} *</label>

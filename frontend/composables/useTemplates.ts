@@ -4,7 +4,6 @@ import type {
   TemplateReview,
   TemplateCategory,
   TemplateVisibility,
-  PaginatedList,
   Project,
 } from '~/types/api'
 
@@ -36,10 +35,75 @@ export interface ListTemplatesInput {
   search?: string
   scope?: 'my' | 'tenant' | 'public'
   featured?: boolean
+  isFeatured?: boolean // alias for featured
 }
 
 export function useTemplates() {
   const api = useApi()
+
+  // Reactive state
+  const templates = ref<ProjectTemplate[]>([])
+  const categories = ref<TemplateCategory[]>([])
+  const loading = ref(false)
+  const error = ref<string | null>(null)
+
+  // Fetch templates
+  async function fetchTemplates(input: ListTemplatesInput = {}): Promise<ProjectTemplate[]> {
+    loading.value = true
+    error.value = null
+    try {
+      const params = new URLSearchParams()
+      if (input.page) params.set('page', input.page.toString())
+      if (input.limit) params.set('limit', input.limit.toString())
+      if (input.category) params.set('category', input.category)
+      if (input.search) params.set('search', input.search)
+      if (input.scope) params.set('scope', input.scope)
+      const query = params.toString()
+      const result = await api.get<ProjectTemplate[]>(`/api/v1/templates${query ? '?' + query : ''}`)
+      templates.value = result
+      return result
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch templates'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Fetch marketplace templates
+  async function fetchMarketplace(input: ListTemplatesInput = {}): Promise<ProjectTemplate[]> {
+    loading.value = true
+    error.value = null
+    try {
+      const params = new URLSearchParams()
+      if (input.page) params.set('page', input.page.toString())
+      if (input.limit) params.set('limit', input.limit.toString())
+      if (input.category) params.set('category', input.category)
+      if (input.search) params.set('search', input.search)
+      if (input.featured || input.isFeatured) params.set('featured', 'true')
+      const query = params.toString()
+      const result = await api.get<ProjectTemplate[]>(`/api/v1/marketplace/templates${query ? '?' + query : ''}`)
+      templates.value = result
+      return result
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : 'Failed to fetch marketplace templates'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Fetch categories
+  async function fetchCategories(): Promise<TemplateCategory[]> {
+    try {
+      const result = await api.get<TemplateCategory[]>('/api/v1/templates/categories')
+      categories.value = result
+      return result
+    } catch {
+      // Silently fail for categories
+      return []
+    }
+  }
 
   // Create a new template
   async function createTemplate(input: CreateTemplateInput): Promise<ProjectTemplate> {
@@ -56,30 +120,6 @@ export function useTemplates() {
     return api.get<ProjectTemplate>(`/api/v1/templates/${id}`)
   }
 
-  // List templates
-  async function listTemplates(input: ListTemplatesInput = {}): Promise<PaginatedList<ProjectTemplate>> {
-    const params = new URLSearchParams()
-    if (input.page) params.set('page', input.page.toString())
-    if (input.limit) params.set('limit', input.limit.toString())
-    if (input.category) params.set('category', input.category)
-    if (input.search) params.set('search', input.search)
-    if (input.scope) params.set('scope', input.scope)
-    const query = params.toString()
-    return api.get<PaginatedList<ProjectTemplate>>(`/api/v1/templates${query ? '?' + query : ''}`)
-  }
-
-  // List marketplace templates
-  async function listMarketplaceTemplates(input: ListTemplatesInput = {}): Promise<PaginatedList<ProjectTemplate>> {
-    const params = new URLSearchParams()
-    if (input.page) params.set('page', input.page.toString())
-    if (input.limit) params.set('limit', input.limit.toString())
-    if (input.category) params.set('category', input.category)
-    if (input.search) params.set('search', input.search)
-    if (input.featured) params.set('featured', 'true')
-    const query = params.toString()
-    return api.get<PaginatedList<ProjectTemplate>>(`/api/v1/marketplace/templates${query ? '?' + query : ''}`)
-  }
-
   // Update a template
   async function updateTemplate(id: string, input: Partial<CreateTemplateInput>): Promise<ProjectTemplate> {
     return api.put<ProjectTemplate>(`/api/v1/templates/${id}`, input)
@@ -87,7 +127,8 @@ export function useTemplates() {
 
   // Delete a template
   async function deleteTemplate(id: string): Promise<void> {
-    return api.delete<void>(`/api/v1/templates/${id}`)
+    await api.delete<void>(`/api/v1/templates/${id}`)
+    templates.value = templates.value.filter(t => t.id !== id)
   }
 
   // Use a template to create a new project
@@ -105,17 +146,24 @@ export function useTemplates() {
     return api.post<TemplateReview>(`/api/v1/templates/${templateId}/reviews`, { rating, comment })
   }
 
-  // Get template categories
+  // Get template categories (alias)
   async function getCategories(): Promise<TemplateCategory[]> {
-    return api.get<TemplateCategory[]>('/api/v1/templates/categories')
+    return fetchCategories()
   }
 
   return {
+    // Reactive state
+    templates,
+    categories,
+    loading,
+    error,
+    // Methods
+    fetchTemplates,
+    fetchMarketplace,
+    fetchCategories,
     createTemplate,
     createFromProject,
     getTemplate,
-    listTemplates,
-    listMarketplaceTemplates,
     updateTemplate,
     deleteTemplate,
     useTemplate,

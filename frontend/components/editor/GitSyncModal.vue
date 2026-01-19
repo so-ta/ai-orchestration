@@ -59,11 +59,11 @@ async function loadData() {
 
   // Load credentials for dropdown
   try {
-    const result = await credentials.fetchCredentials()
-    availableCredentials.value = result.filter(c =>
+    await credentials.fetchCredentials()
+    availableCredentials.value = credentials.credentials.value.filter((c: Credential) =>
       c.credential_type === 'api_key' || c.credential_type === 'oauth2'
     )
-  } catch (e) {
+  } catch {
     // Ignore credentials error
   }
 
@@ -159,7 +159,7 @@ function handleClose() {
 </script>
 
 <template>
-  <UiModal :show="show" :title="t('gitSync.title')" size="medium" @close="handleClose">
+  <UiModal :show="show" :title="t('gitSync.title')" size="md" @close="handleClose">
     <div class="git-sync-modal">
       <!-- Loading -->
       <div v-if="loading" class="loading-state">
