@@ -305,6 +305,9 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 			}
 		}
 
+		// In Anthropic Messages API, system prompt is a top-level parameter, NOT a message role
+		// See: https://docs.anthropic.com/en/api/messages
+		// The "system" parameter is separate from "messages" array
 		if systemMsg != "" {
 			anthropicReq["system"] = systemMsg
 		}
