@@ -649,4 +649,3 @@ function formatDate(dateStr: string): string {
   margin-top: 0.5rem;
 }
 </style>
-</template>

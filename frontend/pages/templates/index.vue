@@ -546,4 +546,3 @@ function getVisibilityBadgeClass(visibility: string): string {
   border-color: var(--color-error);
 }
 </style>
-</template>

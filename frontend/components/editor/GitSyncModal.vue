@@ -520,4 +520,3 @@ function handleClose() {
   border-color: var(--color-error);
 }
 </style>
-</template>

@@ -293,4 +293,3 @@ const formatDelay = (ms: number): string => {
   font-style: italic;
 }
 </style>
-</template>
