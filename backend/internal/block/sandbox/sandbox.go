@@ -902,7 +902,9 @@ func (s *Sandbox) workflowRun(vm *goja.Runtime, service WorkflowService, call go
 
 	result, err := service.Run(workflowID, input)
 	if err != nil {
-		panic(vm.ToValue(fmt.Sprintf("Workflow run failed: %v", err)))
+		// Sanitize error to prevent leaking internal implementation details
+		sanitized := sanitizeError(err)
+		panic(vm.ToValue(fmt.Sprintf("Workflow run failed: %v", sanitized)))
 	}
 
 	return vm.ToValue(result)
@@ -925,7 +927,9 @@ func (s *Sandbox) workflowExecuteStep(vm *goja.Runtime, service WorkflowService,
 
 	result, err := service.ExecuteStep(stepName, input)
 	if err != nil {
-		panic(vm.ToValue(fmt.Sprintf("Step execution failed: %v", err)))
+		// Sanitize error to prevent leaking internal implementation details
+		sanitized := sanitizeError(err)
+		panic(vm.ToValue(fmt.Sprintf("Step execution failed: %v", sanitized)))
 	}
 
 	return vm.ToValue(result)

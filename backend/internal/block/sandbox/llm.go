@@ -209,7 +209,8 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 		return nil, fmt.Errorf("LLM provider (anthropic) is not configured")
 	}
 
-	// Default model
+	// Default model: Claude Sonnet 4 (current production model as of 2025-05)
+	// See: https://docs.anthropic.com/en/docs/about-claude/models
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
