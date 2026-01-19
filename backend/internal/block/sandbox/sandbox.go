@@ -84,12 +84,18 @@ type LLMService interface {
 	Chat(provider, model string, request map[string]interface{}) (map[string]interface{}, error)
 }
 
-// WorkflowService provides subflow execution capability
+// WorkflowService provides subflow execution capability.
+//
+// Note: Methods do not take context.Context as a parameter because this interface
+// is called from JavaScript code via goja, which cannot pass Go contexts.
+// The context is captured in closures at service creation time (see WorkflowServiceImpl)
+// and is properly used for execution, cancellation, timeout, and tenant isolation.
 type WorkflowService interface {
 	// Run executes a subflow and returns its output
 	Run(workflowID string, input map[string]interface{}) (map[string]interface{}, error)
-	// ExecuteStep executes a step within the current workflow by name and returns its output
-	// This enables agent blocks to call other steps as tools
+	// ExecuteStep executes a step within the current workflow by name and returns its output.
+	// This enables agent blocks to call other steps as tools.
+	// Context for execution is captured when the service is created via NewWorkflowServiceWithExecutor.
 	ExecuteStep(stepName string, input map[string]interface{}) (map[string]interface{}, error)
 }
 

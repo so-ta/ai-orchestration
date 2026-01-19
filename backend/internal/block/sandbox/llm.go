@@ -101,7 +101,9 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		openaiReq["stop"] = stop
 	}
 
-	// Copy tool parameters
+	// Copy tool parameters for OpenAI Function Calling API
+	// See: https://platform.openai.com/docs/guides/function-calling
+	// "tools" and "tool_choice" are standard parameters for Chat Completions with function calling
 	if tools, ok := request["tools"]; ok {
 		openaiReq["tools"] = tools
 	}
