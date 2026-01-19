@@ -23,9 +23,9 @@ func (r *Registry) registerIntegrationBlocks() {
 
 	// === Level 3: Service-specific base blocks ===
 	// github-api is defined in YAML (integration_github.yaml)
-	r.register(NotionAPIBlock())
+	// notion-api is defined in YAML (integration_notion.yaml)
+	// linear-api is defined in YAML (integration_linear.yaml)
 	r.register(GoogleAPIBlock())
-	r.register(LinearAPIBlock())
 
 	// === Level 4+: Concrete operation blocks ===
 	// slack, discord are defined in YAML (integration_webhook.yaml)
@@ -35,7 +35,7 @@ func (r *Registry) registerIntegrationBlocks() {
 	r.register(NotionCreatePageBlock())
 	// Google Sheets
 	r.register(GSheetsAppendBlock())
-	r.register(GSheetsReadBlock())
+	// gsheets_read is defined in YAML (integration_google.yaml)
 	// Other API-based
 	r.register(WebSearchBlock())
 	r.register(EmailSendGridBlock())
@@ -266,49 +266,11 @@ return input;
 // GitHubAPIBlock is defined in YAML files
 // See: yaml/integration_github.yaml
 
-// NotionAPIBlock provides Notion API base configuration
-func NotionAPIBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "notion-api",
-		Version:         1,
-		Name:            "Notion API",
-		Description:     "Notion API基盤ブロック",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryNotion,
-		Icon:            "file-text",
-		ParentBlockSlug: "bearer-api",
-		ConfigDefaults: json.RawMessage(`{
-			"base_url": "https://api.notion.com/v1",
-			"secret_key": "NOTION_API_KEY"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"api_key": {"type": "string", "title": "API Key"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PreProcess: `
-// api_key -> token にマッピング（親のbearer-api用）
-if (config.api_key && !config.token) {
-    config.token = config.api_key;
-}
-return {
-    ...input,
-    headers: {
-        ...(input.headers || {}),
-        'Notion-Version': '2022-06-28'
-    }
-};
-`,
-		UIConfig: json.RawMessage(`{"icon": "file-text", "color": "#000000"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "NOTION_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
+// NotionAPIBlock is defined in YAML files
+// See: yaml/integration_notion.yaml
+
+// LinearAPIBlock is defined in YAML files
+// See: yaml/integration_linear.yaml
 
 // GoogleAPIBlock provides Google API base configuration
 func GoogleAPIBlock() *SystemBlockDefinition {
@@ -346,44 +308,6 @@ return input;
 			{Code: "GOOGLE_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
 			{Code: "GOOGLE_002", Name: "API_ERROR", Description: "Google APIエラー", Retryable: true},
 			{Code: "GOOGLE_003", Name: "NOT_FOUND", Description: "リソースが見つかりません", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
-
-// LinearAPIBlock provides Linear API base configuration
-func LinearAPIBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "linear-api",
-		Version:         1,
-		Name:            "Linear API",
-		Description:     "Linear API基盤ブロック",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryLinear,
-		Icon:            "check-square",
-		ParentBlockSlug: "graphql",
-		ConfigDefaults: json.RawMessage(`{
-			"endpoint": "https://api.linear.app/graphql",
-			"secret_key": "LINEAR_API_KEY"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"api_key": {"type": "string", "title": "API Key"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PreProcess: `
-// api_key -> auth_key にマッピング
-if (config.api_key && !config.auth_key) {
-    config.auth_key = config.api_key;
-}
-return input;
-`,
-		UIConfig: json.RawMessage(`{"icon": "check-square", "color": "#5E6AD2"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "LINEAR_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
 		},
 		Enabled: true,
 	}
@@ -619,70 +543,8 @@ return {
 	}
 }
 
-// GSheetsReadBlock reads data from Google Sheets
-func GSheetsReadBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "gsheets_read",
-		Version:         2, // Incremented for google-api inheritance
-		Name:            "Google Sheets: 読み取り",
-		Description:     "Google Sheetsから範囲を読み取り",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryGoogle,
-		Icon:            "table",
-		ParentBlockSlug: "google-api",
-		ConfigDefaults: json.RawMessage(`{
-			"base_url": "https://sheets.googleapis.com/v4/spreadsheets"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["spreadsheet_id", "range"],
-			"properties": {
-				"range": {"type": "string", "title": "範囲"},
-				"api_key": {"type": "string", "title": "API Key"},
-				"spreadsheet_id": {"type": "string", "title": "スプレッドシートID"},
-				"major_dimension": {"enum": ["ROWS", "COLUMNS"], "type": "string", "title": "次元", "default": "ROWS"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"range": {"type": "string"},
-				"values": {"type": "array"}
-			}
-		}`),
-		PreProcess: `
-const range = encodeURIComponent(config.range);
-const majorDimension = config.major_dimension || 'ROWS';
-return {
-    ...input,
-    url: '/' + config.spreadsheet_id + '/values/' + range + '?majorDimension=' + majorDimension,
-    method: 'GET'
-};
-`,
-		PostProcess: `
-if (input.status === 404) {
-    throw new Error('[GSHEETS_003] スプレッドシートが見つかりません');
-}
-if (input.status >= 400) {
-    const errorMsg = input.body?.error?.message || 'Unknown error';
-    throw new Error('[GSHEETS_004] 読み取り失敗: ' + errorMsg);
-}
-return {
-    range: input.body.range,
-    values: input.body.values || []
-};
-`,
-		UIConfig: json.RawMessage(`{"icon": "table", "color": "#0F9D58"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "GSHEETS_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
-			{Code: "GSHEETS_003", Name: "INVALID_SPREADSHEET", Description: "スプレッドシートが見つかりません", Retryable: false},
-			{Code: "GSHEETS_004", Name: "READ_FAILED", Description: "読み取りに失敗しました", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
+// GSheetsReadBlock is defined in YAML files
+// See: yaml/integration_google.yaml
 
 // GitHubCreateIssueBlock and GitHubAddCommentBlock are defined in YAML files
 // See: yaml/integration_github.yaml

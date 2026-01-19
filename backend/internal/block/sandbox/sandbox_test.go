@@ -789,3 +789,170 @@ func TestSandbox_DeclarativeHTTP_Integration(t *testing.T) {
 	assert.EqualValues(t, float64(12345), result["id"])
 	assert.Equal(t, "https://github.com/octocat/hello-world/issues/1", result["url"])
 }
+
+// ============================================================================
+// URL Path Encoding Tests
+// ============================================================================
+
+func TestExpandTemplateForURLPath_BasicEncoding(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"spreadsheet_id": "abc123",
+			"range":          "Sheet1!A1:B10",
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	// Range should be URL-encoded (! is encoded, : is allowed in path per RFC 3986)
+	result := ExpandTemplateForURLPath("/{{spreadsheet_id}}/values/{{range}}", ctx)
+	assert.Equal(t, "/abc123/values/Sheet1%21A1:B10", result)
+}
+
+func TestExpandTemplateForURLPath_SpacesAndSpecialChars(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"folder": "My Documents",
+			"file":   "test file.txt",
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	result := ExpandTemplateForURLPath("/files/{{folder}}/{{file}}", ctx)
+	assert.Equal(t, "/files/My%20Documents/test%20file.txt", result)
+}
+
+func TestExpandTemplateForURLPath_JapaneseChars(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"name": "テスト",
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	result := ExpandTemplateForURLPath("/users/{{name}}", ctx)
+	// Japanese characters should be percent-encoded
+	assert.Contains(t, result, "/users/")
+	assert.NotContains(t, result, "テスト")
+}
+
+func TestExpandTemplateForURLPath_AlreadyEncodedValue(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"path": "already%20encoded",
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	// Already encoded value should not be double-encoded
+	result := ExpandTemplateForURLPath("/files/{{path}}", ctx)
+	assert.Equal(t, "/files/already%20encoded", result)
+}
+
+func TestExpandTemplateForURLPath_DoesNotDoubleEncode(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"encoded_slash": "%2F",
+			"encoded_space": "hello%20world",
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	// Should not double-encode
+	result := ExpandTemplateForURLPath("/path/{{encoded_slash}}/{{encoded_space}}", ctx)
+	assert.Equal(t, "/path/%2F/hello%20world", result)
+}
+
+func TestExpandTemplateForURLPath_MixedEncodedAndUnencoded(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"id":    "123",                 // No encoding needed
+			"range": "Sheet1!A:Z",          // Needs encoding (! is encoded, : is allowed)
+			"name":  "already%20encoded",   // Already encoded
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	result := ExpandTemplateForURLPath("/spreadsheets/{{id}}/values/{{range}}/{{name}}", ctx)
+	// id: 123 (no encoding needed)
+	// range: Sheet1!A:Z -> Sheet1%21A:Z (: is allowed in path per RFC 3986)
+	// name: already%20encoded (already encoded, should not double-encode)
+	assert.Equal(t, "/spreadsheets/123/values/Sheet1%21A:Z/already%20encoded", result)
+}
+
+func TestIsAlreadyURLEncoded(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"hello", false},
+		{"hello%20world", true},
+		{"%2F", true},
+		{"%20", true},
+		{"%", false},
+		{"%2", false},
+		{"%GG", false},  // Invalid hex
+		{"100%", false}, // Just a percent sign
+		{"Sheet1!A:Z", false},
+		{"already%2Fencoded", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := isAlreadyURLEncoded(tt.input)
+			assert.Equal(t, tt.expected, result, "isAlreadyURLEncoded(%q) = %v, want %v", tt.input, result, tt.expected)
+		})
+	}
+}
+
+func TestUrlEncodePathSegment(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"", ""},
+		{"hello", "hello"},
+		{"hello world", "hello%20world"},
+		{"Sheet1!A:Z", "Sheet1%21A:Z"},               // : is allowed in path per RFC 3986
+		{"already%20encoded", "already%20encoded"},   // Should not double-encode
+		{"path/to/file", "path%2Fto%2Ffile"},
+		{"テスト", "%E3%83%86%E3%82%B9%E3%83%88"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := urlEncodePathSegment(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestSandbox_BuildDeclarativeRequest_URLEncoding(t *testing.T) {
+	sb := New(DefaultConfig())
+
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"spreadsheet_id": "1abc-def-123",
+			"range":          "Sheet1!A1:B10",
+		},
+		Input:       map[string]interface{}{},
+		Credentials: map[string]interface{}{},
+	}
+
+	reqConfig := &domain.RequestConfig{
+		URL:    "https://sheets.googleapis.com/v4/spreadsheets/{{spreadsheet_id}}/values/{{range}}",
+		Method: "GET",
+	}
+
+	req, err := sb.BuildDeclarativeRequest(reqConfig, ctx)
+	require.NoError(t, err)
+
+	// The range should be URL-encoded in the path (! is encoded, : is allowed per RFC 3986)
+	expectedURL := "https://sheets.googleapis.com/v4/spreadsheets/1abc-def-123/values/Sheet1%21A1:B10"
+	assert.Equal(t, expectedURL, req.URL.String())
+}

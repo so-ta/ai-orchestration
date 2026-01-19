@@ -1,0 +1,40 @@
+# Linear API基盤ブロック
+---
+slug: linear-api
+version: 2
+name: Linear API
+description: Linear API基盤ブロック
+category: apps
+subcategory: linear
+icon: check-square
+parent_block_slug: graphql
+enabled: true
+
+config_defaults:
+  endpoint: https://api.linear.app/graphql
+  secret_key: LINEAR_API_KEY
+
+config_schema:
+  type: object
+  properties:
+    api_key:
+      type: string
+      title: API Key
+      x-ui-widget: secret-key
+
+pre_process: |
+  // api_key -> auth_key にマッピング
+  if (config.api_key && !config.auth_key) {
+      config.auth_key = config.api_key;
+  }
+  return input;
+
+ui_config:
+  icon: check-square
+  color: "#5E6AD2"
+
+error_codes:
+  - code: LINEAR_001
+    name: API_KEY_NOT_CONFIGURED
+    description: API Keyが設定されていません
+    retryable: false

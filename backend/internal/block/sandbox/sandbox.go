@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -1583,6 +1584,68 @@ func ExpandTemplate(template string, ctx *DeclarativeContext) string {
 	})
 }
 
+// ExpandTemplateForURLPath expands template variables and URL-encodes values for use in URL paths
+// Automatically detects already-encoded values to prevent double-encoding
+func ExpandTemplateForURLPath(template string, ctx *DeclarativeContext) string {
+	return templateVarRegex.ReplaceAllStringFunc(template, func(match string) string {
+		// Extract variable path without {{ }}
+		path := strings.TrimPrefix(strings.TrimSuffix(match, "}}"), "{{")
+		path = strings.TrimSpace(path)
+
+		var value string
+		// Handle different prefixes
+		if strings.HasPrefix(path, "input.") {
+			fieldPath := strings.TrimPrefix(path, "input.")
+			value = getNestedValue(ctx.Input, fieldPath)
+		} else if strings.HasPrefix(path, "secret.") {
+			credName := strings.TrimPrefix(path, "secret.")
+			value = getNestedValue(ctx.Credentials, credName)
+		} else {
+			// Default: config value
+			value = getNestedValue(ctx.Config, path)
+		}
+
+		// URL encode the value, but detect already-encoded values to prevent double-encoding
+		return urlEncodePathSegment(value)
+	})
+}
+
+// urlEncodePathSegment URL-encodes a value for use in a URL path segment
+// Detects already-encoded values to prevent double-encoding
+func urlEncodePathSegment(value string) string {
+	if value == "" {
+		return value
+	}
+
+	// Check if value appears to be already URL-encoded
+	// Look for percent-encoded sequences like %20, %2F, etc.
+	if isAlreadyURLEncoded(value) {
+		return value
+	}
+
+	// Use PathEscape for URL path segments (encodes spaces as %20, not +)
+	return url.PathEscape(value)
+}
+
+// isAlreadyURLEncoded checks if a string appears to be already URL-encoded
+func isAlreadyURLEncoded(s string) bool {
+	// If string contains % followed by two hex digits, it's likely already encoded
+	for i := 0; i < len(s)-2; i++ {
+		if s[i] == '%' {
+			// Check if next two characters are hex digits
+			if isHexDigit(s[i+1]) && isHexDigit(s[i+2]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isHexDigit checks if a byte is a valid hexadecimal digit
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'A' && b <= 'F') || (b >= 'a' && b <= 'f')
+}
+
 // ExpandTemplateValue recursively expands templates in any value type
 func ExpandTemplateValue(value interface{}, ctx *DeclarativeContext) interface{} {
 	switch v := value.(type) {
@@ -1644,9 +1707,9 @@ func (s *Sandbox) BuildDeclarativeRequest(reqConfig *domain.RequestConfig, ctx *
 		return nil, errors.New("request config is nil")
 	}
 
-	// Expand URL template
-	url := ExpandTemplate(reqConfig.URL, ctx)
-	if url == "" {
+	// Expand URL template with automatic URL-encoding for path variables
+	expandedURL := ExpandTemplateForURLPath(reqConfig.URL, ctx)
+	if expandedURL == "" {
 		return nil, errors.New("URL is required in request config")
 	}
 
@@ -1668,7 +1731,7 @@ func (s *Sandbox) BuildDeclarativeRequest(reqConfig *domain.RequestConfig, ctx *
 	}
 
 	// Create request
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequest(method, expandedURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

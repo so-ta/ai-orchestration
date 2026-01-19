@@ -1,0 +1,75 @@
+# Google Sheets読み取りブロック - 宣言的設定を使用
+---
+slug: gsheets_read
+version: 3
+name: "Google Sheets: 読み取り"
+description: Google Sheetsから範囲を読み取り
+category: apps
+subcategory: google
+icon: table
+parent_block_slug: google-api
+enabled: true
+
+config_defaults:
+  base_url: https://sheets.googleapis.com/v4/spreadsheets
+
+config_schema:
+  type: object
+  required: [spreadsheet_id, range]
+  properties:
+    spreadsheet_id:
+      type: string
+      title: スプレッドシートID
+    range:
+      type: string
+      title: 範囲
+    api_key:
+      type: string
+      title: API Key
+      x-ui-widget: secret-key
+    major_dimension:
+      type: string
+      enum: [ROWS, COLUMNS]
+      title: 次元
+      default: ROWS
+
+output_schema:
+  type: object
+  properties:
+    range:
+      type: string
+    values:
+      type: array
+
+# 宣言的設定 - PreProcessの代わり
+# URLパス変数は自動的にエンコードされる
+request:
+  url: "/{{spreadsheet_id}}/values/{{range}}"
+  method: GET
+  query_params:
+    majorDimension: "{{major_dimension}}"
+
+# 宣言的設定 - PostProcessの代わり
+response:
+  success_status: [200]
+  output_mapping:
+    range: body.range
+    values: body.values
+
+ui_config:
+  icon: table
+  color: "#0F9D58"
+
+error_codes:
+  - code: GSHEETS_001
+    name: API_KEY_NOT_CONFIGURED
+    description: API Keyが設定されていません
+    retryable: false
+  - code: GSHEETS_003
+    name: INVALID_SPREADSHEET
+    description: スプレッドシートが見つかりません
+    retryable: false
+  - code: GSHEETS_004
+    name: READ_FAILED
+    description: 読み取りに失敗しました
+    retryable: true
