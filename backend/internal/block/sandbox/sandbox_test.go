@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -495,4 +496,87 @@ try {
 	if errStr, ok := result["error"].(string); ok && errStr != "" {
 		assert.Contains(t, errStr, "not yet implemented")
 	}
+}
+
+// TestSandbox_Execute_WorkflowExecuteStep verifies that ctx.workflow.executeStep works correctly
+func TestSandbox_Execute_WorkflowExecuteStep(t *testing.T) {
+	sb := New(DefaultConfig())
+	ctx := context.Background()
+
+	t.Run("executeStep with executor", func(t *testing.T) {
+		// Create a mock step executor that returns predefined output
+		mockExecutor := func(stepName string, input map[string]interface{}) (map[string]interface{}, error) {
+			if stepName == "test-step" {
+				return map[string]interface{}{
+					"result":  "success",
+					"input":   input["value"],
+					"stepped": true,
+				}, nil
+			}
+			return nil, fmt.Errorf("step not found: %s", stepName)
+		}
+
+		workflowSvc := NewWorkflowServiceWithExecutor(mockExecutor)
+		execCtx := &ExecutionContext{
+			Workflow: workflowSvc,
+		}
+
+		code := `
+var result = context.workflow.executeStep("test-step", { value: "hello" });
+return result;
+`
+		result, err := sb.Execute(ctx, code, map[string]interface{}{}, execCtx)
+		require.NoError(t, err)
+		assert.Equal(t, "success", result["result"])
+		assert.Equal(t, "hello", result["input"])
+		assert.True(t, result["stepped"].(bool))
+	})
+
+	t.Run("executeStep without executor", func(t *testing.T) {
+		// WorkflowService without executor should return error
+		workflowSvc := NewWorkflowService()
+		execCtx := &ExecutionContext{
+			Workflow: workflowSvc,
+		}
+
+		code := `
+try {
+	context.workflow.executeStep("test-step", { value: "hello" });
+	return { caught: false };
+} catch (e) {
+	return { caught: true, error: String(e) };
+}
+`
+		result, err := sb.Execute(ctx, code, map[string]interface{}{}, execCtx)
+		require.NoError(t, err)
+		assert.True(t, result["caught"].(bool))
+		assert.Contains(t, result["error"].(string), "not available")
+	})
+
+	t.Run("executeStep error is sanitized", func(t *testing.T) {
+		// Create a mock executor that returns an error with internal details
+		mockExecutor := func(stepName string, input map[string]interface{}) (map[string]interface{}, error) {
+			return nil, fmt.Errorf("internal error at github.com/internal/path: connection refused")
+		}
+
+		workflowSvc := NewWorkflowServiceWithExecutor(mockExecutor)
+		execCtx := &ExecutionContext{
+			Workflow: workflowSvc,
+		}
+
+		code := `
+try {
+	context.workflow.executeStep("test-step", {});
+	return { caught: false };
+} catch (e) {
+	return { caught: true, error: String(e) };
+}
+`
+		result, err := sb.Execute(ctx, code, map[string]interface{}{}, execCtx)
+		require.NoError(t, err)
+		assert.True(t, result["caught"].(bool))
+		// Error should be sanitized - internal path should be removed
+		errStr := result["error"].(string)
+		assert.NotContains(t, errStr, "github.com/internal/path")
+	})
 }
