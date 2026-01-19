@@ -734,7 +734,7 @@ func (s *Sandbox) httpRequest(vm *goja.Runtime, client *HTTPClient, method strin
 		}
 	}
 
-	result, err := client.Request(method, url, body, options)
+	result, err := client.Request(client.Context(), method, url, body, options)
 	if err != nil {
 		panic(vm.ToValue(fmt.Sprintf("HTTP request failed: %v", err)))
 	}
@@ -747,6 +747,7 @@ type HTTPClient struct {
 	client  *http.Client
 	headers map[string]string
 	mu      sync.RWMutex
+	ctx     context.Context // Context for cancellation/timeout propagation
 }
 
 // NewHTTPClient creates a new HTTPClient
@@ -756,7 +757,27 @@ func NewHTTPClient(timeout time.Duration) *HTTPClient {
 			Timeout: timeout,
 		},
 		headers: make(map[string]string),
+		ctx:     context.Background(),
 	}
+}
+
+// NewHTTPClientWithContext creates a new HTTPClient with a context for cancellation support
+func NewHTTPClientWithContext(ctx context.Context, timeout time.Duration) *HTTPClient {
+	return &HTTPClient{
+		client: &http.Client{
+			Timeout: timeout,
+		},
+		headers: make(map[string]string),
+		ctx:     ctx,
+	}
+}
+
+// Context returns the context associated with this client
+func (c *HTTPClient) Context() context.Context {
+	if c.ctx == nil {
+		return context.Background()
+	}
+	return c.ctx
 }
 
 // SetHeader sets a default header for all requests
@@ -777,8 +798,12 @@ func (c *HTTPClient) getHeaders() map[string]string {
 	return headers
 }
 
-// Request performs an HTTP request
-func (c *HTTPClient) Request(method, url string, body interface{}, options map[string]interface{}) (map[string]interface{}, error) {
+// Request performs an HTTP request with context support for cancellation and timeout
+func (c *HTTPClient) Request(ctx context.Context, method, url string, body interface{}, options map[string]interface{}) (map[string]interface{}, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var bodyReader io.Reader
 	if body != nil {
 		bodyJSON, err := json.Marshal(body)
@@ -788,7 +813,7 @@ func (c *HTTPClient) Request(method, url string, body interface{}, options map[s
 		bodyReader = bytes.NewReader(bodyJSON)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1828,13 +1853,17 @@ func getNestedValue(data map[string]interface{}, path string) string {
 }
 
 // BuildDeclarativeRequest builds an HTTP request from declarative RequestConfig
-func (s *Sandbox) BuildDeclarativeRequest(reqConfig *domain.RequestConfig, ctx *DeclarativeContext) (*http.Request, error) {
+// The goCtx parameter is used for request cancellation and timeout propagation
+func (s *Sandbox) BuildDeclarativeRequest(goCtx context.Context, reqConfig *domain.RequestConfig, declCtx *DeclarativeContext) (*http.Request, error) {
 	if reqConfig == nil {
 		return nil, errors.New("request config is nil")
 	}
+	if goCtx == nil {
+		goCtx = context.Background()
+	}
 
 	// Expand URL template with automatic URL-encoding for path variables
-	expandedURL := ExpandTemplateForURLPath(reqConfig.URL, ctx)
+	expandedURL := ExpandTemplateForURLPath(reqConfig.URL, declCtx)
 	if expandedURL == "" {
 		return nil, errors.New("URL is required in request config")
 	}
@@ -1848,7 +1877,7 @@ func (s *Sandbox) BuildDeclarativeRequest(reqConfig *domain.RequestConfig, ctx *
 	// Build request body
 	var bodyReader io.Reader
 	if reqConfig.Body != nil && (method == "POST" || method == "PUT" || method == "PATCH") {
-		expandedBody := ExpandTemplateValue(reqConfig.Body, ctx)
+		expandedBody := ExpandTemplateValue(reqConfig.Body, declCtx)
 		bodyJSON, err := json.Marshal(expandedBody)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal request body: %w", err)
@@ -1856,8 +1885,8 @@ func (s *Sandbox) BuildDeclarativeRequest(reqConfig *domain.RequestConfig, ctx *
 		bodyReader = bytes.NewReader(bodyJSON)
 	}
 
-	// Create request
-	req, err := http.NewRequest(method, expandedURL, bodyReader)
+	// Create request with context for cancellation/timeout support
+	req, err := http.NewRequestWithContext(goCtx, method, expandedURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1869,14 +1898,14 @@ func (s *Sandbox) BuildDeclarativeRequest(reqConfig *domain.RequestConfig, ctx *
 
 	// Apply headers from config
 	for key, value := range reqConfig.Headers {
-		req.Header.Set(key, ExpandTemplate(value, ctx))
+		req.Header.Set(key, ExpandTemplate(value, declCtx))
 	}
 
 	// Apply query parameters
 	if len(reqConfig.QueryParams) > 0 {
 		q := req.URL.Query()
 		for key, value := range reqConfig.QueryParams {
-			q.Set(key, ExpandTemplate(value, ctx))
+			q.Set(key, ExpandTemplate(value, declCtx))
 		}
 		req.URL.RawQuery = q.Encode()
 	}
@@ -2006,8 +2035,8 @@ func (s *Sandbox) ExecuteWithDeclarative(
 
 	// Check if we have declarative request config
 	if block.Request != nil && block.Request.URL != "" {
-		// Build and execute HTTP request declaratively
-		httpResult, err := s.executeDeclarativeHTTP(block.Request, block.Response, declCtx, execCtx)
+		// Build and execute HTTP request declaratively with context for cancellation
+		httpResult, err := s.executeDeclarativeHTTP(ctx, block.Request, block.Response, declCtx, execCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -2038,13 +2067,18 @@ func (s *Sandbox) ExecuteWithDeclarative(
 
 // executeDeclarativeHTTP executes an HTTP request using declarative configuration
 func (s *Sandbox) executeDeclarativeHTTP(
+	goCtx context.Context,
 	reqConfig *domain.RequestConfig,
 	respConfig *domain.ResponseConfig,
 	declCtx *DeclarativeContext,
 	execCtx *ExecutionContext,
 ) (map[string]interface{}, error) {
-	// Build HTTP request
-	req, err := s.BuildDeclarativeRequest(reqConfig, declCtx)
+	if goCtx == nil {
+		goCtx = context.Background()
+	}
+
+	// Build HTTP request with context for cancellation/timeout
+	req, err := s.BuildDeclarativeRequest(goCtx, reqConfig, declCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build request: %w", err)
 	}

@@ -327,7 +327,7 @@ func TestHTTPClient_Request(t *testing.T) {
 	client := NewHTTPClient(10 * time.Second)
 	client.SetHeader("Authorization", "Bearer test-token")
 
-	result, err := client.Request("POST", server.URL, map[string]string{"data": "test"}, nil)
+	result, err := client.Request(context.Background(), "POST", server.URL, map[string]string{"data": "test"}, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, 200, result["status"])
@@ -632,7 +632,7 @@ func TestSandbox_BuildDeclarativeRequest(t *testing.T) {
 		},
 	}
 
-	req, err := sb.BuildDeclarativeRequest(reqConfig, ctx)
+	req, err := sb.BuildDeclarativeRequest(context.Background(), reqConfig, ctx)
 	require.NoError(t, err)
 
 	assert.Equal(t, "https://api.github.com/repos/octocat/hello-world/issues", req.URL.String())
@@ -784,7 +784,7 @@ func TestSandbox_DeclarativeHTTP_Integration(t *testing.T) {
 		HTTP: NewHTTPClient(10 * time.Second),
 	}
 
-	result, err := sb.executeDeclarativeHTTP(reqConfig, respConfig, declCtx, execCtx)
+	result, err := sb.executeDeclarativeHTTP(context.Background(), reqConfig, respConfig, declCtx, execCtx)
 	require.NoError(t, err)
 
 	assert.EqualValues(t, float64(12345), result["id"])
@@ -950,7 +950,7 @@ func TestSandbox_BuildDeclarativeRequest_URLEncoding(t *testing.T) {
 		Method: "GET",
 	}
 
-	req, err := sb.BuildDeclarativeRequest(reqConfig, ctx)
+	req, err := sb.BuildDeclarativeRequest(context.Background(), reqConfig, ctx)
 	require.NoError(t, err)
 
 	// The range should be URL-encoded in the path (! is encoded, : is allowed per RFC 3986)
