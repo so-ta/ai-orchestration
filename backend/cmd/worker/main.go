@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 	"github.com/souta/ai-orchestration/internal/adapter"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/engine"
@@ -20,6 +21,14 @@ import (
 )
 
 func main() {
+	// Load .env file (try multiple locations)
+	for _, path := range []string{"../.env", ".env"} {
+		if err := godotenv.Load(path); err == nil {
+			log.Printf("Loaded .env from: %s", path)
+			break
+		}
+	}
+
 	log.Println("Starting AI Orchestration Worker...")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -95,13 +104,21 @@ func main() {
 					continue
 				}
 				if job == nil {
+					log.Println("Dequeue timeout, no job")
 					continue // timeout, no job
 				}
 
+				// Debug: log all job fields including ProjectTenantID
+				projectTenantIDStr := "nil"
+				if job.ProjectTenantID != nil {
+					projectTenantIDStr = job.ProjectTenantID.String()
+				}
 				logger.Info("Processing job",
 					"job_id", job.ID,
 					"run_id", job.RunID,
 					"project_id", job.ProjectID,
+					"job_tenant_id", job.TenantID,
+					"project_tenant_id", projectTenantIDStr,
 				)
 
 				// Process job
@@ -148,6 +165,13 @@ func processJob(
 		executionMode = engine.ExecutionModeFull
 	}
 
+	// For system projects, use the project's tenant_id to fetch the project
+	// This allows runs created by different tenants to execute system projects
+	projectTenantID := job.TenantID
+	if job.ProjectTenantID != nil {
+		projectTenantID = *job.ProjectTenantID
+	}
+
 	// Get project definition based on execution mode
 	var def *domain.ProjectDefinition
 
@@ -161,7 +185,7 @@ func processJob(
 				"version", job.ProjectVersion,
 				"error", err,
 			)
-			project, err := projectRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.ProjectID)
+			project, err := projectRepo.GetWithStepsAndEdges(ctx, projectTenantID, job.ProjectID)
 			if err != nil {
 				return err
 			}
@@ -180,7 +204,7 @@ func processJob(
 		}
 	} else {
 		// For full execution, use current project
-		project, err := projectRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.ProjectID)
+		project, err := projectRepo.GetWithStepsAndEdges(ctx, projectTenantID, job.ProjectID)
 		if err != nil {
 			return err
 		}
@@ -227,7 +251,7 @@ func processJob(
 				"step_id", job.TargetStepID,
 				"project_id", job.ProjectID,
 			)
-			currentProject, err := projectRepo.GetWithStepsAndEdges(ctx, job.TenantID, job.ProjectID)
+			currentProject, err := projectRepo.GetWithStepsAndEdges(ctx, projectTenantID, job.ProjectID)
 			if err != nil {
 				return err
 			}

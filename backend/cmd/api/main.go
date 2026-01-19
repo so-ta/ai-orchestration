@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/souta/ai-orchestration/internal/handler"
 	authmw "github.com/souta/ai-orchestration/internal/middleware"
@@ -28,6 +29,26 @@ import (
 )
 
 func main() {
+	// Load .env file (try multiple locations)
+	// First try parent directory (when running from backend/), then current directory
+	envPaths := []string{
+		"../.env",                                                   // When running from backend/
+		".env",                                                      // Current directory
+		"/Users/souta/Product/ai-orchestration/.env",               // Absolute path (dev)
+	}
+	var loaded bool
+	for _, path := range envPaths {
+		if err := godotenv.Load(path); err == nil {
+			fmt.Printf("Loaded .env from: %s\n", path)
+			loaded = true
+			break
+		}
+	}
+	if !loaded {
+		cwd, _ := os.Getwd()
+		fmt.Printf("Warning: Could not load .env file. CWD: %s\n", cwd)
+	}
+
 	// Initialize structured logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -105,11 +126,15 @@ func main() {
 	usageRepo := postgres.NewUsageRepository(pool)
 	budgetRepo := postgres.NewBudgetRepository(pool)
 	tenantRepo := postgres.NewTenantRepository(pool)
+	oauth2ProviderRepo := postgres.NewOAuth2ProviderRepository(pool)
+	oauth2AppRepo := postgres.NewOAuth2AppRepository(pool)
+	oauth2ConnectionRepo := postgres.NewOAuth2ConnectionRepository(pool)
+	credentialShareRepo := postgres.NewCredentialShareRepository(pool)
 
 	// Initialize usecases
 	projectUsecase := usecase.NewProjectUsecase(projectRepo, stepRepo, edgeRepo, versionRepo, blockRepo).
 		WithBlockGroupRepo(blockGroupRepo)
-	stepUsecase := usecase.NewStepUsecase(projectRepo, stepRepo, blockRepo)
+	stepUsecase := usecase.NewStepUsecase(projectRepo, stepRepo, blockRepo, credentialRepo)
 	edgeUsecase := usecase.NewEdgeUsecase(projectRepo, stepRepo, edgeRepo).
 		WithBlockGroupRepo(blockGroupRepo).
 		WithBlockDefinitionRepo(blockRepo)
@@ -122,6 +147,18 @@ func main() {
 	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
 	builderUsecase := usecase.NewBuilderUsecase(builderSessionRepo, projectRepo, blockRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
+
+	// OAuth2 service
+	oauth2BaseURL := getEnv("BASE_URL", "http://localhost:8090")
+	oauth2Service := usecase.NewOAuth2Service(
+		oauth2ProviderRepo,
+		oauth2AppRepo,
+		oauth2ConnectionRepo,
+		credentialRepo,
+		encryptor,
+		oauth2BaseURL,
+	)
+	credentialShareService := usecase.NewCredentialShareService(credentialShareRepo, credentialRepo)
 
 	// Initialize handlers
 	projectHandler := handler.NewProjectHandler(projectUsecase, auditService)
@@ -138,6 +175,8 @@ func main() {
 	usageHandler := handler.NewUsageHandler(usageUsecase)
 	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
 	variablesHandler := handler.NewVariablesHandler(pool)
+	oauth2Handler := handler.NewOAuth2Handler(oauth2Service, auditService)
+	credentialShareHandler := handler.NewCredentialShareHandler(credentialShareService, auditService)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -183,7 +222,7 @@ func main() {
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Tenant-ID", "X-Dev-Role"},
 		ExposedHeaders:   []string{"Link"},
@@ -337,7 +376,48 @@ func main() {
 				r.Delete("/", credentialHandler.Delete)
 				r.Post("/revoke", credentialHandler.Revoke)
 				r.Post("/activate", credentialHandler.Activate)
+
+				// Credential shares
+				r.Route("/shares", func(r chi.Router) {
+					r.Get("/", credentialShareHandler.ListByCredential)
+					r.Post("/user", credentialShareHandler.ShareWithUser)
+					r.Post("/project", credentialShareHandler.ShareWithProject)
+					r.Put("/{share_id}", credentialShareHandler.UpdateShare)
+					r.Delete("/{share_id}", credentialShareHandler.RevokeShare)
+				})
 			})
+		})
+
+		// OAuth2 (External service authentication)
+		r.Route("/oauth2", func(r chi.Router) {
+			// Providers (read-only list of supported OAuth2 providers)
+			r.Get("/providers", oauth2Handler.ListProviders)
+			r.Get("/providers/{slug}", oauth2Handler.GetProvider)
+
+			// Apps (tenant's OAuth2 client configurations)
+			r.Route("/apps", func(r chi.Router) {
+				r.Get("/", oauth2Handler.ListApps)
+				r.Post("/", oauth2Handler.CreateApp)
+				r.Route("/{app_id}", func(r chi.Router) {
+					r.Get("/", oauth2Handler.GetApp)
+					r.Delete("/", oauth2Handler.DeleteApp)
+				})
+			})
+
+			// Authorization flow
+			r.Post("/authorize/start", oauth2Handler.StartAuthorization)
+			r.Get("/callback", oauth2Handler.HandleCallback)
+
+			// Connections (OAuth2 token management)
+			r.Route("/connections", func(r chi.Router) {
+				r.Get("/{connection_id}", oauth2Handler.GetConnection)
+				r.Post("/{connection_id}/refresh", oauth2Handler.RefreshConnection)
+				r.Post("/{connection_id}/revoke", oauth2Handler.RevokeConnection)
+				r.Delete("/{connection_id}", oauth2Handler.DeleteConnection)
+			})
+
+			// Connection by credential (for looking up connection from credential)
+			r.Get("/connections/by-credential/{credential_id}", oauth2Handler.GetConnectionByCredential)
 		})
 
 		// Copilot (AI-assisted workflow building)

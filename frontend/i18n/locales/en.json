@@ -1325,6 +1325,33 @@
         "rolledBack": "Rolled back to version {version}",
         "rollbackFailed": "Failed to rollback"
       }
+    },
+    "oauth2Apps": {
+      "title": "OAuth2 Apps",
+      "subtitle": "Manage OAuth2 client configurations for external service integrations",
+      "configured": "Configured",
+      "notConfigured": "Not Configured",
+      "configure": "Configure",
+      "addAnother": "Add Another",
+      "clientId": "Client ID",
+      "clientIdPlaceholder": "Enter OAuth client ID",
+      "clientSecret": "Client Secret",
+      "clientSecretPlaceholder": "Enter OAuth client secret",
+      "scopesLabel": "Scopes",
+      "scopes": "scopes",
+      "customAuthUrl": "Custom Authorization URL",
+      "customTokenUrl": "Custom Token URL",
+      "customUrlHint": "Leave empty to use default URL",
+      "createTitle": "Configure OAuth2 App",
+      "createSuccess": "OAuth2 app configured successfully",
+      "createError": "Failed to configure OAuth2 app",
+      "deleteTitle": "Delete OAuth2 App",
+      "deleteMessage": "Are you sure you want to delete the OAuth2 configuration for {provider}? Related credentials will become invalid.",
+      "deleteSuccess": "OAuth2 app deleted successfully",
+      "deleteError": "Failed to delete OAuth2 app",
+      "validation": {
+        "required": "Client ID and secret are required"
+      }
     }
   },
   "tenantBlocks": {
@@ -1532,6 +1559,7 @@
       "webhook": {
         "secret": "Webhook Secret",
         "secretPlaceholder": "Auto-generated or enter custom value",
+        "secretHint": "Secret key used to verify webhook requests",
         "inputMapping": "Input Mapping",
         "inputMappingPlaceholder": "$.body.data",
         "inputMappingHint": "JSON path from request body to workflow input",
@@ -1614,6 +1642,70 @@
     "referenceTitle": "Reference",
     "exampleKey": "variable_name"
   },
+  "builder": {
+    "title": "AI Workflow Builder",
+    "subtitle": "Create workflows with AI assistance",
+    "phases": {
+      "analysis": "Analyzing",
+      "proposal": "Proposal & Confirmation",
+      "completed": "Completed"
+    },
+    "assumptionCategories": {
+      "trigger": "Trigger",
+      "actor": "Actor",
+      "step": "Step",
+      "integration": "Integration",
+      "constraint": "Constraint"
+    },
+    "confidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "welcome": {
+      "title": "What workflow would you like to create?",
+      "description": "Describe the workflow you want to create. AI will analyze your requirements and propose a solution."
+    },
+    "thinking": {
+      "analyzing": "Analyzing your requirements...",
+      "proposing": "Creating proposal...",
+      "building": "Building workflow..."
+    },
+    "assumptions": {
+      "title": "Assumed Conditions",
+      "description": "AI analyzed your input and made the following assumptions. Please review and modify if needed.",
+      "confirm": "OK",
+      "modify": "Modify",
+      "modifyPlaceholder": "Enter correction..."
+    },
+    "clarifyingPoints": {
+      "title": "Questions to Clarify",
+      "description": "Please answer the following questions to finalize the specification.",
+      "selectOption": "Select an option",
+      "answerPlaceholder": "Enter your answer..."
+    },
+    "actions": {
+      "startSession": "Start",
+      "confirmAndBuild": "Confirm & Build",
+      "regenerate": "Regenerate",
+      "viewWorkflow": "View Workflow",
+      "newSession": "New Session"
+    },
+    "messages": {
+      "sessionStarted": "Session started",
+      "buildStarted": "Workflow building started",
+      "buildCompleted": "Workflow completed",
+      "sessionDeleted": "Session deleted"
+    },
+    "errors": {
+      "sessionFailed": "Failed to start session",
+      "messageFailed": "Failed to send message",
+      "buildFailed": "Failed to build workflow"
+    },
+    "input": {
+      "placeholder": "Example: Automate the weekly report creation process"
+    }
+  },
   "credentials": {
     "title": "Credentials",
     "subtitle": "Securely manage API keys and authentication",
@@ -1682,5 +1774,143 @@
       "activateFailed": "Failed to activate credential"
     },
     "securityNote": "Credentials are encrypted and stored securely. API keys and passwords cannot be viewed after saving."
+  },
+  "oauth": {
+    "title": "OAuth2 Connections",
+    "subtitle": "Manage authentication with external services",
+    "connectService": "Connect Service",
+    "connectionSuccess": "Connection Successful",
+    "connectionSuccessMessage": "Authentication with the external service was completed successfully.",
+    "connectionFailed": "Connection Failed",
+    "processing": "Processing authentication...",
+    "redirectingIn": "Redirecting in {seconds} seconds...",
+    "goToSettings": "Go to Settings",
+    "selectProvider": "Select a service to connect",
+    "configureApp": "Configure OAuth2 App",
+    "configureAppDesc": "To use this provider, you need to configure an OAuth2 client first.",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "providers": {
+      "google": "Google",
+      "github": "GitHub",
+      "slack": "Slack",
+      "notion": "Notion",
+      "linear": "Linear",
+      "microsoft": "Microsoft",
+      "discord": "Discord",
+      "atlassian": "Atlassian"
+    },
+    "scope": {
+      "organization": "Organization",
+      "organizationDesc": "Available to everyone in the organization",
+      "project": "Project",
+      "projectDesc": "Available to members of the selected project",
+      "personal": "Personal",
+      "personalDesc": "Only available to you"
+    },
+    "form": {
+      "credentialName": "Credential Name",
+      "credentialNamePlaceholder": "e.g., GitHub - Dev Team",
+      "selectScope": "Select Scope",
+      "selectProject": "Select Project",
+      "selectPermissions": "Select Permissions",
+      "connect": "Connect"
+    },
+    "connection": {
+      "connectedAs": "Connected Account",
+      "expiresAt": "Expires At",
+      "lastUsed": "Last Used",
+      "refresh": "Refresh Token",
+      "disconnect": "Disconnect",
+      "expired": "Expired",
+      "error": "Error"
+    },
+    "errors": {
+      "authorizationFailed": "Authorization failed. Please try again.",
+      "accessDenied": "Access denied. Please ensure you have granted the necessary permissions.",
+      "invalidState": "Invalid session. Please try again from the beginning.",
+      "tokenExchangeFailed": "Failed to exchange token. Please try again.",
+      "unknown": "An unknown error occurred."
+    },
+    "app": {
+      "title": "OAuth2 App Settings",
+      "subtitle": "Configure OAuth2 clients for external services",
+      "addApp": "Add App",
+      "clientId": "Client ID",
+      "clientIdPlaceholder": "Enter OAuth2 Client ID",
+      "clientSecret": "Client Secret",
+      "clientSecretPlaceholder": "Enter OAuth2 Client Secret",
+      "customScopes": "Custom Scopes",
+      "customScopesPlaceholder": "Space-separated list",
+      "deleteConfirm": "Are you sure you want to delete this OAuth2 app? All related connections will be invalidated."
+    },
+    "share": {
+      "title": "Share Credential",
+      "shareWith": "Share with",
+      "user": "User",
+      "project": "Project",
+      "permission": "Permission",
+      "permissions": {
+        "use": "Use only",
+        "useDesc": "Can use the credential but cannot view details",
+        "edit": "Edit",
+        "editDesc": "Can view and edit credential details",
+        "admin": "Admin",
+        "adminDesc": "Can delete and reshare"
+      },
+      "expiresAt": "Expires At",
+      "note": "Note",
+      "notePlaceholder": "Reason for sharing, etc.",
+      "sharedBy": "Shared by",
+      "revoke": "Revoke Share"
+    }
+  },
+  "credentialBindings": {
+    "title": "Credentials",
+    "subtitle": "Select credentials for this block",
+    "required": "Required",
+    "optional": "Optional",
+    "selectCredential": "Select credential...",
+    "noCredentials": "No credentials available",
+    "createNew": "Create New",
+    "fetchError": "Failed to load credentials",
+    "scope": {
+      "organization": "Organization",
+      "project": "Project",
+      "personal": "Personal",
+      "shared": "Shared"
+    }
+  },
+  "credentialShares": {
+    "title": "Share Credential",
+    "addShare": "Add Share",
+    "shareWithUser": "Share with User",
+    "shareWithProject": "Share with Project",
+    "userEmail": "User Email",
+    "userEmailPlaceholder": "user{'@'}example.com",
+    "projectId": "Project ID",
+    "projectIdPlaceholder": "Enter project ID",
+    "permission": "Permission",
+    "permissions": {
+      "use": "Use Only",
+      "edit": "Can Edit",
+      "admin": "Admin"
+    },
+    "share": "Share",
+    "existingShares": "Current Shares",
+    "noShares": "Not shared yet",
+    "unknownUser": "Unknown User",
+    "unknownProject": "Unknown Project",
+    "unknown": "Unknown",
+    "shareSuccess": "Shared successfully",
+    "shareError": "Failed to share",
+    "updateSuccess": "Permission updated",
+    "updateError": "Failed to update permission",
+    "revokeSuccess": "Share revoked",
+    "revokeError": "Failed to revoke share",
+    "validation": {
+      "emailRequired": "Please enter an email address",
+      "projectRequired": "Please enter a project ID"
+    }
   }
 }

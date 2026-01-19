@@ -525,13 +525,15 @@ func (u *RunUsecase) ExecuteSystemProject(ctx context.Context, input ExecuteSyst
 	}
 
 	// 7. Enqueue job for async execution
+	// For system projects, pass the project's tenant_id so the worker can fetch the project
 	job := &engine.Job{
-		TenantID:       input.TenantID,
-		ProjectID:      project.ID,
-		ProjectVersion: project.Version,
-		RunID:          run.ID,
-		Input:          input.Input,
-		TargetStepID:   startStepID,
+		TenantID:        input.TenantID,
+		ProjectID:       project.ID,
+		ProjectVersion:  project.Version,
+		RunID:           run.ID,
+		Input:           input.Input,
+		TargetStepID:    startStepID,
+		ProjectTenantID: &project.TenantID, // System project may belong to different tenant
 	}
 	if err := u.queue.Enqueue(ctx, job); err != nil {
 		return nil, err

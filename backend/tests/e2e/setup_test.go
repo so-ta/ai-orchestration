@@ -78,21 +78,43 @@ func CleanupTestData() error {
 
 	// Delete in order respecting foreign key constraints
 	// Note: Tables renamed from workflow_* to project_*
-	tables := []string{
+
+	// First, delete tables with tenant_id that don't depend on projects
+	preProjectTables := []string{
 		"step_runs",
 		"runs",
 		"edges",
 		"steps",
 		"block_groups",
 		"schedules",
-		"project_versions",
+	}
+
+	for _, table := range preProjectTables {
+		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1", table), testTenantID)
+		if err != nil {
+			return fmt.Errorf("failed to clean %s: %w", table, err)
+		}
+	}
+
+	// project_versions doesn't have tenant_id, delete via project_id join
+	// Must be deleted before projects due to foreign key constraint
+	_, err := db.Exec(`
+		DELETE FROM project_versions
+		WHERE project_id IN (SELECT id FROM projects WHERE tenant_id = $1)
+	`, testTenantID)
+	if err != nil {
+		return fmt.Errorf("failed to clean project_versions: %w", err)
+	}
+
+	// Now delete projects and remaining tables
+	postProjectTables := []string{
 		"projects",
 		"secrets",
 		"credentials",
 		"audit_logs",
 	}
 
-	for _, table := range tables {
+	for _, table := range postProjectTables {
 		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1", table), testTenantID)
 		if err != nil {
 			return fmt.Errorf("failed to clean %s: %w", table, err)

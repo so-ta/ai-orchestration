@@ -108,6 +108,8 @@ type BlocksService interface {
 	List() ([]map[string]interface{}, error)
 	// Get retrieves a block definition by slug
 	Get(slug string) (map[string]interface{}, error)
+	// GetWithSchema retrieves a block with full config schema (for AI agents)
+	GetWithSchema(slug string) (map[string]interface{}, error)
 }
 
 // WorkflowsService provides workflow read access to scripts
@@ -447,6 +449,11 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		}
 		if err := blocksObj.Set("get", func(call goja.FunctionCall) goja.Value {
 			return s.blocksGet(vm, execCtx.Blocks, call)
+		}); err != nil {
+			return err
+		}
+		if err := blocksObj.Set("getWithSchema", func(call goja.FunctionCall) goja.Value {
+			return s.blocksGetWithSchema(vm, execCtx.Blocks, call)
 		}); err != nil {
 			return err
 		}
@@ -953,6 +960,23 @@ func (s *Sandbox) blocksGet(vm *goja.Runtime, service BlocksService, call goja.F
 	result, err := service.Get(slug)
 	if err != nil {
 		panic(vm.ToValue(fmt.Sprintf("Blocks get failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// blocksGetWithSchema handles ctx.blocks.getWithSchema(slug) calls
+// Returns full block information including config_schema for AI agents
+func (s *Sandbox) blocksGetWithSchema(vm *goja.Runtime, service BlocksService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.blocks.getWithSchema requires slug argument"))
+	}
+
+	slug := call.Arguments[0].String()
+
+	result, err := service.GetWithSchema(slug)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Blocks getWithSchema failed: %v", err)))
 	}
 
 	return vm.ToValue(result)

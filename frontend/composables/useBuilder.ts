@@ -27,7 +27,27 @@ interface BuilderMessage {
 }
 
 type BuilderSessionStatus = 'hearing' | 'building' | 'reviewing' | 'completed' | 'abandoned'
-type HearingPhase = 'purpose' | 'conditions' | 'actors' | 'frequency' | 'integrations' | 'pain_points' | 'confirmation' | 'completed'
+// New 3-phase approach: AI thinks first → proposes → confirms
+type HearingPhase = 'analysis' | 'proposal' | 'completed'
+
+// Assumption made by AI during analysis
+interface Assumption {
+  id: string
+  category: 'trigger' | 'actor' | 'step' | 'integration' | 'constraint'
+  description: string
+  default: string
+  confidence: 'high' | 'medium' | 'low'
+  confirmed: boolean
+}
+
+// Question that needs user clarification
+interface ClarifyingPoint {
+  id: string
+  question: string
+  options?: string[]
+  required: boolean
+  answer?: string
+}
 
 interface StartSessionResponse {
   session_id: string
@@ -88,27 +108,27 @@ interface BuilderRunResult {
   error?: string
 }
 
+// New 3-phase labels
 const HEARING_PHASE_LABELS: Record<HearingPhase, string> = {
-  purpose: '目的・ゴール',
-  conditions: '開始・終了条件',
-  actors: '関与者・承認',
-  frequency: '実行頻度・期限',
-  integrations: 'ツール連携',
-  pain_points: '課題・困りごと',
-  confirmation: '確認',
+  analysis: '分析中',
+  proposal: '提案・確認',
   completed: '完了',
 }
 
 const HEARING_PHASES: HearingPhase[] = [
-  'purpose',
-  'conditions',
-  'actors',
-  'frequency',
-  'integrations',
-  'pain_points',
-  'confirmation',
+  'analysis',
+  'proposal',
   'completed',
 ]
+
+// Assumption category labels
+const ASSUMPTION_CATEGORY_LABELS: Record<Assumption['category'], string> = {
+  trigger: 'トリガー',
+  actor: '実行者',
+  step: 'ステップ',
+  integration: '連携',
+  constraint: '制約',
+}
 
 export function useBuilder() {
   const { get, post, delete: del } = useApi()
@@ -184,14 +204,16 @@ export function useBuilder() {
 
   /**
    * Poll for run completion
+   * Default timeout: 180 attempts * 2 seconds = 6 minutes
+   * (Agent-based construction with multiple LLM calls can take several minutes)
    */
   async function pollForCompletion(
     runId: string,
     onProgress?: (status: BuilderRunStatus) => void,
     options?: { interval?: number; maxAttempts?: number }
   ): Promise<BuilderRunResult> {
-    const interval = options?.interval ?? 1000
-    const maxAttempts = options?.maxAttempts ?? 60
+    const interval = options?.interval ?? 2000
+    const maxAttempts = options?.maxAttempts ?? 180
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const result = await getRun(runId)
@@ -271,6 +293,7 @@ export function useBuilder() {
     // Constants
     HEARING_PHASE_LABELS,
     HEARING_PHASES,
+    ASSUMPTION_CATEGORY_LABELS,
   }
 }
 
@@ -279,6 +302,8 @@ export type {
   BuilderMessage,
   BuilderSessionStatus,
   HearingPhase,
+  Assumption,
+  ClarifyingPoint,
   StartSessionResponse,
   SendMessageResponse,
   GetSessionResponse,

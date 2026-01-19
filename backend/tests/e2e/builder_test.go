@@ -88,8 +88,8 @@ func TestBuilderSessionCRUD(t *testing.T) {
 		sessionID := startResp.SessionID
 		assert.NotEmpty(t, sessionID)
 		assert.Equal(t, "hearing", startResp.Status)
-		assert.Equal(t, "purpose", startResp.Phase)
-		assert.Equal(t, 10, startResp.Progress) // purpose phase starts at 10%
+		assert.Equal(t, "proposal", startResp.Phase)
+		assert.Equal(t, 70, startResp.Progress) // proposal phase starts at 70%
 
 		// Get session
 		resp, body = makeRequest(t, "GET", fmt.Sprintf("/api/v1/builder/sessions/%s", sessionID), nil)

@@ -10,6 +10,7 @@ import PropertiesEmptyState from './properties/PropertiesEmptyState.vue'
 import TemplatePreviewSection from './properties/TemplatePreviewSection.vue'
 import AvailableVariablesSection from './properties/AvailableVariablesSection.vue'
 import IOPortsDisplay from './properties/IOPortsDisplay.vue'
+import CredentialBindingsSection from '../credentials/CredentialBindingsSection.vue'
 // Legacy Forms
 import LegacyLlmForm from './properties/legacy/LegacyLlmForm.vue'
 import LegacyToolForm from './properties/legacy/LegacyToolForm.vue'
@@ -52,13 +53,14 @@ const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
 const isGenericStartBlock = computed(() => props.step?.type === 'start')
 
 const emit = defineEmits<{
-  (e: 'save', data: { name: string; type: StepType; config: StepConfig }): void
-  (e: 'delete'): void
+  (e: 'save', data: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> }): void
+  (e: 'delete' | 'open-settings'): void
   (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
   (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
   (e: 'update:name', name: string): void
   (e: 'update:trigger', data: { trigger_type: StartTriggerType; trigger_config: object }): void
+  (e: 'update:credential-bindings', bindings: Record<string, string>): void
   (e: 'run:created', run: Run): void
 }>()
 
@@ -163,7 +165,16 @@ function handleTriggerUpdate(data: { trigger_type: StartTriggerType; trigger_con
 
 function handleSave() {
   const mergedConfig = { ...formConfig.value, ...flowConfig.value }
-  emit('save', { name: formName.value, type: formType.value, config: mergedConfig })
+  const saveData: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> } = {
+    name: formName.value,
+    type: formType.value,
+    config: mergedConfig
+  }
+  // Include credential_bindings if any are set
+  if (Object.keys(localCredentialBindings.value).length > 0) {
+    saveData.credential_bindings = localCredentialBindings.value
+  }
+  emit('save', saveData)
 }
 
 async function handleDelete() {
@@ -189,6 +200,23 @@ function handleApplySuggestion(suggestion: StepSuggestion) {
 
 function handleApplyWorkflow(workflow: GenerateWorkflowResponse) {
   emit('apply-workflow', workflow)
+}
+
+// Credential bindings state
+const localCredentialBindings = ref<Record<string, string>>({})
+
+// Initialize credential bindings from props
+watch(() => props.step?.credential_bindings, (bindings) => {
+  localCredentialBindings.value = { ...bindings }
+}, { immediate: true, deep: true })
+
+function handleCredentialBindingsUpdate(bindings: Record<string, string>) {
+  localCredentialBindings.value = bindings
+  emit('update:credential-bindings', bindings)
+}
+
+function handleOpenSettings() {
+  emit('open-settings')
 }
 
 // Block definition for current step type
@@ -336,6 +364,16 @@ const showIOPorts = computed(() => {
           <h4 class="section-title">{{ currentBlockDef?.name || formType }} 設定</h4>
           <DynamicConfigForm v-model="formConfig" :schema="configSchema" :ui-config="uiConfig" :disabled="readonlyMode" />
         </div>
+
+        <!-- Credential Bindings -->
+        <CredentialBindingsSection
+          v-if="currentBlockDef"
+          :block-definition="currentBlockDef"
+          :credential-bindings="step?.credential_bindings"
+          :readonly="readonlyMode"
+          @update:credential-bindings="handleCredentialBindingsUpdate"
+          @open-settings="handleOpenSettings"
+        />
 
         <!-- Trigger Configuration -->
         <div v-if="isGenericStartBlock" class="form-section trigger-section">

@@ -38,6 +38,10 @@ type Job struct {
 	Input          json.RawMessage `json:"input"`
 	CreatedAt      time.Time       `json:"created_at"`
 
+	// For system projects, the project's tenant_id may differ from the run's tenant_id
+	// This allows the worker to fetch the project using the correct tenant
+	ProjectTenantID *uuid.UUID `json:"project_tenant_id,omitempty"`
+
 	// Partial execution fields
 	ExecutionMode   ExecutionMode              `json:"execution_mode,omitempty"`   // "full", "single_step", "resume"
 	TargetStepID    *uuid.UUID                 `json:"target_step_id,omitempty"`   // Target step for single_step/resume
@@ -60,6 +64,8 @@ func (q *Queue) Enqueue(ctx context.Context, job *Job) error {
 	job.ID = uuid.New().String()
 	job.CreatedAt = time.Now().UTC()
 
+	slog.Info("Enqueuing job", "job_id", job.ID, "run_id", job.RunID, "project_id", job.ProjectID)
+
 	// Store job data
 	data, err := json.Marshal(job)
 	if err != nil {
@@ -68,14 +74,17 @@ func (q *Queue) Enqueue(ctx context.Context, job *Job) error {
 
 	dataKey := jobDataKeyPrefix + job.ID
 	if err := q.client.Set(ctx, dataKey, data, 24*time.Hour).Err(); err != nil {
+		slog.Error("Failed to store job data", "error", err)
 		return fmt.Errorf("failed to store job data: %w", err)
 	}
 
 	// Add to queue
 	if err := q.client.LPush(ctx, jobQueueKey, job.ID).Err(); err != nil {
+		slog.Error("Failed to enqueue job", "error", err)
 		return fmt.Errorf("failed to enqueue job: %w", err)
 	}
 
+	slog.Info("Job enqueued successfully", "job_id", job.ID, "queue_key", jobQueueKey)
 	return nil
 }
 

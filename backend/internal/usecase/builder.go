@@ -1,9 +1,12 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -129,21 +132,26 @@ func (u *BuilderUsecase) StartSession(ctx context.Context, input StartBuilderSes
 
 	// Add user message
 	userMsg := domain.NewBuilderMessage(session.ID, "user", input.InitialPrompt)
-	phase := domain.HearingPhasePurpose
-	userMsg.Phase = &phase
+	analysisPhase := domain.HearingPhaseAnalysis
+	userMsg.Phase = &analysisPhase
 	if err := u.sessionRepo.AddMessage(ctx, userMsg); err != nil {
 		return nil, fmt.Errorf("add user message: %w", err)
 	}
 
-	// Generate initial assistant response
+	// Generate initial assistant response (analysis phase)
+	// This generates both the analysis AND the proposal with assumptions
 	response, suggestedQuestions, err := u.generateInitialResponse(ctx, input.InitialPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("generate initial response: %w", err)
 	}
 
+	// After initial analysis, move to proposal phase
+	// The response already contains assumptions, so we're ready for user confirmation
+	proposalPhase := domain.HearingPhaseProposal
+
 	// Add assistant message
 	assistantMsg := domain.NewBuilderMessage(session.ID, "assistant", response)
-	assistantMsg.Phase = &phase
+	assistantMsg.Phase = &proposalPhase
 	if len(suggestedQuestions) > 0 {
 		questionsJSON, _ := json.Marshal(suggestedQuestions)
 		assistantMsg.SuggestedQuestions = questionsJSON
@@ -152,8 +160,8 @@ func (u *BuilderUsecase) StartSession(ctx context.Context, input StartBuilderSes
 		return nil, fmt.Errorf("add assistant message: %w", err)
 	}
 
-	// Update session progress
-	session.SetPhase(domain.HearingPhasePurpose, domain.GetPhaseProgress(domain.HearingPhasePurpose))
+	// Update session progress to proposal phase (analysis is done in generateInitialResponse)
+	session.SetPhase(domain.HearingPhaseProposal, domain.GetPhaseProgress(domain.HearingPhaseProposal))
 	if err := u.sessionRepo.Update(ctx, session); err != nil {
 		return nil, fmt.Errorf("update session: %w", err)
 	}
@@ -414,29 +422,239 @@ type llmHearingOutput struct {
 }
 
 // generateInitialResponse generates the initial assistant response
+// New 3-phase approach: AI analyzes first, then proposes assumptions
 func (u *BuilderUsecase) generateInitialResponse(ctx context.Context, initialPrompt string) (string, []string, error) {
-	// For now, return a templated response
-	// In production, this would call an LLM
-	response := fmt.Sprintf(`ワークフローの作成をお手伝いします。
+	// Get available blocks for context
+	blocks, err := u.blockRepo.List(ctx, nil, repository.BlockDefinitionFilter{
+		EnabledOnly: true,
+	})
+	if err != nil {
+		slog.Warn("failed to get blocks for context", "error", err)
+		blocks = []*domain.BlockDefinition{}
+	}
 
-「%s」についてお聞かせください。
+	// Build block list for prompt
+	var blockList []string
+	for _, b := range blocks {
+		blockList = append(blockList, fmt.Sprintf("- %s: %s", b.Name, b.Description))
+	}
 
-まず、このワークフローの目的を確認させてください：
-- 最終的に何が達成されれば成功と言えますか？
-- 成果物はありますか？（レポート、通知、データ更新など）`, initialPrompt)
+	prompt := fmt.Sprintf(`あなたはワークフロー自動化の専門家です。ユーザーの要望を深く分析し、最適なワークフローを提案してください。
 
-	suggestedQuestions := []string{
-		"このワークフローで達成したいゴールは何ですか？",
-		"成果物の形式は何ですか？（PDF、Excel、Slack通知など）",
+## ユーザーの要望
+%s
+
+## 利用可能なブロック
+%s
+
+## タスク
+1. ユーザーの要望を分析し、以下を推察してください：
+   - トリガー（開始条件）: manual（手動）、schedule（定期実行）、webhook（外部からのトリガー）
+   - 実行頻度
+   - 必要なステップと処理フロー
+   - 必要な連携サービス
+
+2. 推察した内容を「想定した条件」として提示してください
+
+3. 不明確な点があれば、最大3つまでの質問を提示してください
+
+## 出力形式（JSON）
+{
+  "response": "ユーザーへの応答メッセージ（分析結果の説明）",
+  "assumptions": {
+    "trigger": "manual|schedule|webhook",
+    "trigger_detail": "トリガーの詳細説明",
+    "frequency": "実行頻度の説明",
+    "steps": ["ステップ1", "ステップ2", ...],
+    "integrations": ["連携サービス1", ...]
+  },
+  "clarifying_questions": ["質問1", "質問2", ...],
+  "suggested_responses": ["この内容で問題ありません", "トリガーを変更したい", "ステップを追加したい"]
+}
+
+JSONのみを出力してください。`, initialPrompt, joinStrings(blockList, "\n"))
+
+	// Call LLM
+	llmResponse, err := u.callLLM(ctx, prompt)
+	if err != nil {
+		slog.Error("LLM call failed", "error", err)
+		// Fallback to template response
+		resp, questions := u.fallbackInitialResponse(initialPrompt)
+		return resp, questions, nil
+	}
+
+	// Parse LLM response
+	var parsed struct {
+		Response           string   `json:"response"`
+		Assumptions        struct {
+			Trigger       string   `json:"trigger"`
+			TriggerDetail string   `json:"trigger_detail"`
+			Frequency     string   `json:"frequency"`
+			Steps         []string `json:"steps"`
+			Integrations  []string `json:"integrations"`
+		} `json:"assumptions"`
+		ClarifyingQuestions []string `json:"clarifying_questions"`
+		SuggestedResponses  []string `json:"suggested_responses"`
+	}
+
+	if err := json.Unmarshal([]byte(llmResponse), &parsed); err != nil {
+		slog.Warn("failed to parse LLM response", "error", err, "response", llmResponse)
+		resp, questions := u.fallbackInitialResponse(initialPrompt)
+		return resp, questions, nil
+	}
+
+	// Build response message
+	var response string
+	if parsed.Response != "" {
+		response = parsed.Response
+	} else {
+		response = fmt.Sprintf("「%s」について分析しました。", initialPrompt)
+	}
+
+	// Add assumptions to response
+	response += "\n\n【想定した条件】"
+	if parsed.Assumptions.TriggerDetail != "" {
+		response += fmt.Sprintf("\n- トリガー: %s", parsed.Assumptions.TriggerDetail)
+	}
+	if parsed.Assumptions.Frequency != "" {
+		response += fmt.Sprintf("\n- 実行頻度: %s", parsed.Assumptions.Frequency)
+	}
+	if len(parsed.Assumptions.Steps) > 0 {
+		response += fmt.Sprintf("\n- 主要なステップ: %s", joinStrings(parsed.Assumptions.Steps, " → "))
+	}
+	if len(parsed.Assumptions.Integrations) > 0 {
+		response += fmt.Sprintf("\n- 連携サービス: %s", joinStrings(parsed.Assumptions.Integrations, ", "))
+	}
+
+	// Add clarifying questions if any
+	if len(parsed.ClarifyingQuestions) > 0 {
+		response += "\n\n【確認したい点】"
+		for _, q := range parsed.ClarifyingQuestions {
+			response += fmt.Sprintf("\n- %s", q)
+		}
+	}
+
+	response += "\n\n上記の前提で問題なければ「確認して構築」を押してください。修正が必要な場合はお知らせください。"
+
+	// Use suggested responses or defaults
+	suggestedQuestions := parsed.SuggestedResponses
+	if len(suggestedQuestions) == 0 {
+		suggestedQuestions = []string{
+			"この内容で問題ありません",
+			"トリガーを変更したい",
+			"ステップを追加したい",
+		}
 	}
 
 	return response, suggestedQuestions, nil
 }
 
+// fallbackInitialResponse returns a template response when LLM fails
+func (u *BuilderUsecase) fallbackInitialResponse(initialPrompt string) (string, []string) {
+	response := fmt.Sprintf(`「%s」について分析しています...
+
+AIが要件を分析し、以下を推察しました：
+
+【想定した条件】
+- トリガー: 手動実行（必要に応じて定期実行に変更可能）
+- 実行頻度: オンデマンド
+- 主要なステップ: データ取得 → 処理 → 出力
+
+上記の前提で問題なければ「確認して構築」を押してください。
+修正が必要な場合はお知らせください。`, initialPrompt)
+
+	suggestedQuestions := []string{
+		"この内容で問題ありません",
+		"トリガーを変更したい",
+		"ステップを追加したい",
+	}
+
+	return response, suggestedQuestions
+}
+
+// callLLM calls the LLM API
+func (u *BuilderUsecase) callLLM(ctx context.Context, prompt string) (string, error) {
+	if u.apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY is not set")
+	}
+
+	reqBody := map[string]interface{}{
+		"model": "gpt-4o-mini",
+		"messages": []map[string]string{
+			{"role": "system", "content": "You are an AI workflow automation expert. Always respond with valid JSON."},
+			{"role": "user", "content": prompt},
+		},
+		"temperature": 0.3,
+		"max_tokens":  2000,
+	}
+
+	reqJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", u.baseURL+"/chat/completions", bytes.NewReader(reqJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+u.apiKey)
+
+	slog.Info("calling LLM API", "url", u.baseURL+"/chat/completions", "model", "gpt-4o-mini")
+
+	resp, err := u.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to call OpenAI API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(result.Choices) == 0 {
+		return "", fmt.Errorf("no response from OpenAI")
+	}
+
+	slog.Info("LLM response received", "length", len(result.Choices[0].Message.Content))
+	return result.Choices[0].Message.Content, nil
+}
+
+// joinStrings joins strings with a separator
+func joinStrings(strs []string, sep string) string {
+	if len(strs) == 0 {
+		return ""
+	}
+	result := strs[0]
+	for i := 1; i < len(strs); i++ {
+		result += sep + strs[i]
+	}
+	return result
+}
+
 // processHearingWithLLM processes a hearing message with LLM
+// New 3-phase approach: analysis -> proposal -> completed
 func (u *BuilderUsecase) processHearingWithLLM(ctx context.Context, session *domain.BuilderSession, message string, blocks []*domain.BlockDefinition) (*llmHearingOutput, error) {
 	// For now, return a templated response based on phase
-	// In production, this would call an LLM with proper prompts
+	// In production, this would call the system workflow (dogfooding)
 
 	currentPhase := session.HearingPhase
 	nextPhase := domain.NextPhase(currentPhase)
@@ -445,47 +663,20 @@ func (u *BuilderUsecase) processHearingWithLLM(ctx context.Context, session *dom
 	var suggestedQuestions []string
 
 	switch nextPhase {
-	case domain.HearingPhaseConditions:
-		response = "承知しました。次に、ワークフローの開始条件と終了条件を確認させてください。\n\n- いつ・どのようなタイミングでこのフローが始まりますか？\n- どの状態になったら完了とみなしますか？"
-		suggestedQuestions = []string{
-			"手動で開始しますか、それとも定期実行ですか？",
-			"完了時に何が出力されますか？",
-		}
-	case domain.HearingPhaseActors:
-		response = "開始・終了条件を理解しました。次に、このワークフローに関わる人物や役割を確認させてください。\n\n- 作業を実行する担当者は誰ですか？\n- 承認やレビューが必要ですか？"
-		suggestedQuestions = []string{
-			"承認者は必要ですか？",
-			"複数人が関わりますか？",
-		}
-	case domain.HearingPhaseFrequency:
-		response = "関係者を把握しました。次に、実行頻度と期限について確認させてください。\n\n- どのくらいの頻度で実行されますか？\n- 期限や締切はありますか？"
-		suggestedQuestions = []string{
-			"毎日/毎週/毎月のいずれですか？",
-			"期限はありますか？",
-		}
-	case domain.HearingPhaseIntegrations:
-		response = "実行頻度を確認しました。次に、使用するツールやシステムを確認させてください。\n\n- すでに使っているツールはありますか？（Slack、メール、Google Drive、Notionなど）"
-		suggestedQuestions = []string{
-			"通知先はSlackですか、メールですか？",
-			"データの保存先はありますか？",
-		}
-	case domain.HearingPhasePainPoints:
-		response = "ツールを把握しました。最後に、現在の課題や改善したいポイントを教えてください。\n\n- なぜワークフローを作りたいのですか？\n- 現在うまくいっていない点はありますか？"
-		suggestedQuestions = []string{
-			"手動作業で困っていることはありますか？",
-			"自動化したい部分はどこですか？",
-		}
-	case domain.HearingPhaseConfirmation:
-		response = "ありがとうございます。いただいた情報をまとめます。\n\n以下の前提でワークフローを構築してよろしいでしょうか？\n\n（詳細なサマリーがここに入ります）\n\n問題なければ「構築を開始」ボタンを押してください。修正があればお知らせください。"
+	case domain.HearingPhaseProposal:
+		// After analysis, move to proposal phase
+		response = "ご要望を分析しました。\n\n以下の前提でワークフローを構築することを提案します。\n\n【想定した条件】\n- トリガー: 手動実行\n- 主要なステップ: データ取得 → 処理 → 通知\n\n問題なければ「確認して構築」ボタンを押してください。修正があればお知らせください。"
 		suggestedQuestions = []string{
 			"この内容で問題ありません",
 			"修正したい点があります",
 		}
 	case domain.HearingPhaseCompleted:
+		// After proposal confirmation, move to completed
 		response = "ヒアリングが完了しました。ワークフローの構築を開始できます。"
 		suggestedQuestions = []string{}
 	default:
-		response = "ご回答ありがとうございます。続けてお聞かせください。"
+		// Stay in analysis phase, gather more information
+		response = "ご回答ありがとうございます。引き続き分析中です。"
 		suggestedQuestions = []string{}
 	}
 
