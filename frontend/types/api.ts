@@ -257,13 +257,14 @@ export interface BlockListResponse {
 }
 
 // Block Group Types (Control Flow Constructs)
-// Redesigned to 4 types only: parallel, try_catch, foreach, while
+// 5 types: parallel, try_catch, foreach, while, agent
 // Removed: if_else (use condition block), switch_case (use switch block)
 export type BlockGroupType =
   | 'parallel'     // Parallel execution of different flows
   | 'try_catch'    // Error handling with retry support
   | 'foreach'      // Array iteration (same process for each element)
   | 'while'        // Condition-based loop
+  | 'agent'        // AI Agent with tool calling (child steps = tools)
 
 // Simplified: all groups now only have "body" role
 // Removed: try, catch, finally, then, else, default, case_N
@@ -314,12 +315,25 @@ export interface WhileConfig {
   do_while?: boolean            // Execute at least once (do-while)
 }
 
-// 4 types only: parallel, try_catch, foreach, while
+// Agent group config - child steps become callable tools
+export interface AgentConfig {
+  provider: string              // LLM provider: "openai", "anthropic"
+  model: string                 // Model ID (e.g., "claude-sonnet-4-20250514")
+  system_prompt: string         // System prompt defining agent behavior
+  max_iterations?: number       // ReAct loop max iterations (default: 10)
+  temperature?: number          // LLM temperature (default: 0.7)
+  tool_choice?: 'auto' | 'none' | 'required'  // Tool calling mode (default: "auto")
+  enable_memory?: boolean       // Enable conversation memory
+  memory_window?: number        // Number of messages to keep (default: 20)
+}
+
+// 5 types: parallel, try_catch, foreach, while, agent
 export type BlockGroupConfig =
   | ParallelConfig
   | TryCatchConfig
   | ForeachConfig
   | WhileConfig
+  | AgentConfig
   | object
 
 export interface BlockGroupRun {

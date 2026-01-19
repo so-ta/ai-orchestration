@@ -95,8 +95,10 @@ func (e *BlockGroupExecutor) ExecuteGroup(ctx context.Context, bgCtx *BlockGroup
 		internalOutput, err = e.executeForeach(ctx, bgCtx)
 	case domain.BlockGroupTypeWhile:
 		internalOutput, err = e.executeWhile(ctx, bgCtx)
+	case domain.BlockGroupTypeAgent:
+		internalOutput, err = e.executeAgent(ctx, bgCtx)
 	default:
-		err = fmt.Errorf("unknown block group type: %s (valid types: parallel, try_catch, foreach, while)", bgCtx.Group.Type)
+		err = fmt.Errorf("unknown block group type: %s (valid types: parallel, try_catch, foreach, while, agent)", bgCtx.Group.Type)
 	}
 
 	if err != nil {
@@ -666,4 +668,253 @@ func (e *BlockGroupExecutor) executeWhile(ctx context.Context, bgCtx *BlockGroup
 	}
 
 	return json.Marshal(output)
+}
+
+// executeAgent executes an AI agent with ReAct loop
+// Child steps become tools that the agent can call
+func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
+	ctx, span := tracer.Start(ctx, "block_group.agent")
+	defer span.End()
+
+	// Parse config
+	var config domain.AgentConfig
+	if bgCtx.Group.Config != nil {
+		if err := json.Unmarshal(bgCtx.Group.Config, &config); err != nil {
+			e.logger.Warn("Failed to parse agent config, using defaults", "error", err)
+		}
+	}
+
+	// Set defaults
+	if config.MaxIterations <= 0 {
+		config.MaxIterations = 10
+	}
+	if config.Temperature == 0 {
+		config.Temperature = 0.7
+	}
+	if config.ToolChoice == "" {
+		config.ToolChoice = "auto"
+	}
+	if config.MemoryWindow <= 0 {
+		config.MemoryWindow = 20
+	}
+
+	span.SetAttributes(
+		attribute.String("provider", config.Provider),
+		attribute.String("model", config.Model),
+		attribute.Int("max_iterations", config.MaxIterations),
+	)
+
+	// Get child steps (these become tools)
+	var toolSteps []*domain.Step
+	for _, step := range bgCtx.Steps {
+		if step.GroupRole == "" || step.GroupRole == string(domain.GroupRoleBody) {
+			toolSteps = append(toolSteps, step)
+		}
+	}
+
+	span.SetAttributes(attribute.Int("tool_count", len(toolSteps)))
+
+	// Build tools from child steps
+	tools := e.buildToolsFromSteps(toolSteps, bgCtx)
+
+	// Parse input for user message
+	var inputData map[string]interface{}
+	if err := json.Unmarshal(bgCtx.Input, &inputData); err != nil {
+		inputData = map[string]interface{}{"message": string(bgCtx.Input)}
+	}
+
+	userMessage := ""
+	if msg, ok := inputData["message"].(string); ok {
+		userMessage = msg
+	} else if content, ok := inputData["content"].(string); ok {
+		userMessage = content
+	} else {
+		// Stringify the entire input
+		userMessage = string(bgCtx.Input)
+	}
+
+	// Build initial messages
+	messages := []map[string]interface{}{
+		{"role": "system", "content": config.SystemPrompt},
+		{"role": "user", "content": userMessage},
+	}
+
+	// Create LLM service
+	llmService := sandbox.NewLLMService(ctx)
+
+	var finalResponse string
+	var lastError error
+
+	// ReAct loop
+	for iteration := 0; iteration < config.MaxIterations; iteration++ {
+		span.AddEvent("agent_iteration", trace.WithAttributes(attribute.Int("iteration", iteration)))
+
+		e.logger.Info("Agent iteration",
+			"group_id", bgCtx.Group.ID,
+			"iteration", iteration,
+			"message_count", len(messages),
+		)
+
+		// Build LLM request
+		llmRequest := map[string]interface{}{
+			"messages":    messages,
+			"temperature": config.Temperature,
+			"max_tokens":  4096,
+		}
+
+		if len(tools) > 0 {
+			llmRequest["tools"] = tools
+			llmRequest["tool_choice"] = config.ToolChoice
+		}
+
+		// Call LLM
+		response, err := llmService.Chat(config.Provider, config.Model, llmRequest)
+		if err != nil {
+			lastError = err
+			e.logger.Error("Agent LLM call failed", "iteration", iteration, "error", err)
+			break
+		}
+
+		content, _ := response["content"].(string)
+		toolCalls, hasToolCalls := response["tool_calls"].([]map[string]interface{})
+
+		if !hasToolCalls || len(toolCalls) == 0 {
+			// No tool calls - final response
+			finalResponse = content
+			e.logger.Info("Agent completed with final response",
+				"group_id", bgCtx.Group.ID,
+				"iterations", iteration+1,
+			)
+			break
+		}
+
+		// Add assistant message with tool calls
+		assistantMsg := map[string]interface{}{
+			"role":       "assistant",
+			"content":    content,
+			"tool_calls": toolCalls,
+		}
+		messages = append(messages, assistantMsg)
+
+		// Execute each tool call
+		for _, toolCall := range toolCalls {
+			toolCallID, _ := toolCall["id"].(string)
+			fn, _ := toolCall["function"].(map[string]interface{})
+			toolName, _ := fn["name"].(string)
+			argsStr, _ := fn["arguments"].(string)
+
+			e.logger.Info("Agent executing tool",
+				"group_id", bgCtx.Group.ID,
+				"tool_name", toolName,
+				"tool_call_id", toolCallID,
+			)
+
+			// Parse arguments
+			var toolArgs map[string]interface{}
+			if err := json.Unmarshal([]byte(argsStr), &toolArgs); err != nil {
+				toolArgs = map[string]interface{}{}
+			}
+
+			// Find and execute the corresponding step
+			var toolResult interface{}
+			toolFound := false
+			for _, step := range toolSteps {
+				if step.Name == toolName {
+					toolFound = true
+					toolInput, _ := json.Marshal(toolArgs)
+					output, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, toolInput)
+					if err != nil {
+						toolResult = map[string]interface{}{
+							"error": err.Error(),
+						}
+					} else {
+						if err := json.Unmarshal(output, &toolResult); err != nil {
+							toolResult = string(output)
+						}
+					}
+					break
+				}
+			}
+
+			if !toolFound {
+				toolResult = map[string]interface{}{
+					"error": fmt.Sprintf("Tool not found: %s", toolName),
+				}
+			}
+
+			// Add tool result to messages
+			toolResultStr, _ := json.Marshal(toolResult)
+			messages = append(messages, map[string]interface{}{
+				"role":         "tool",
+				"tool_call_id": toolCallID,
+				"content":      string(toolResultStr),
+			})
+		}
+	}
+
+	// Build output
+	if lastError != nil {
+		// Return error via error port
+		errorOutput := map[string]interface{}{
+			"__error":    true,
+			"__port":     "error",
+			"error":      lastError.Error(),
+			"iterations": config.MaxIterations,
+		}
+		return json.Marshal(errorOutput)
+	}
+
+	if finalResponse == "" {
+		finalResponse = "Agent reached maximum iterations without final response."
+	}
+
+	output := map[string]interface{}{
+		"response":      finalResponse,
+		"iterations":    len(messages) / 2, // Rough estimate of iterations
+		"message_count": len(messages),
+	}
+
+	return json.Marshal(output)
+}
+
+// buildToolsFromSteps builds OpenAI-style tool definitions from child steps
+func (e *BlockGroupExecutor) buildToolsFromSteps(steps []*domain.Step, bgCtx *BlockGroupContext) []interface{} {
+	var tools []interface{}
+
+	for _, step := range steps {
+		// Try to get tool definition from step config
+		var config map[string]interface{}
+		if step.Config != nil {
+			json.Unmarshal(step.Config, &config)
+		}
+
+		// Get description from config or use step name
+		description := step.Name
+		if desc, ok := config["description"].(string); ok && desc != "" {
+			description = desc
+		}
+
+		// Get parameters schema from config or default to empty object
+		parameters := map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+		}
+		if params, ok := config["input_schema"].(map[string]interface{}); ok {
+			parameters = params
+		} else if params, ok := config["parameters"].(map[string]interface{}); ok {
+			parameters = params
+		}
+
+		tool := map[string]interface{}{
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":        step.Name,
+				"description": description,
+				"parameters":  parameters,
+			},
+		}
+		tools = append(tools, tool)
+	}
+
+	return tools
 }

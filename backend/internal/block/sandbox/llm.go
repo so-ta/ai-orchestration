@@ -52,6 +52,22 @@ func (s *LLMServiceImpl) Chat(provider, model string, request map[string]interfa
 	}
 }
 
+// ToolCall represents a tool call from LLM
+type ToolCall struct {
+	ID       string            `json:"id"`
+	Type     string            `json:"type"`
+	Function ToolCallFunction  `json:"function"`
+}
+
+// ToolCallFunction represents the function part of a tool call.
+// Note: Arguments is a JSON string as per OpenAI API specification.
+// The API returns function arguments as a stringified JSON object, not a parsed object.
+// See: https://platform.openai.com/docs/api-reference/chat/object#chat/object-choices
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"` // JSON string, e.g. "{\"location\": \"Boston\"}"
+}
+
 // chatOpenAI calls OpenAI's chat completion API
 func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}) (map[string]interface{}, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -88,6 +104,20 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		openaiReq["stop"] = stop
 	}
 
+	// Copy tool parameters for OpenAI Function Calling API (tools API, not legacy functions API)
+	// See: https://platform.openai.com/docs/guides/function-calling
+	// Note: OpenAI has two APIs:
+	// - Legacy: "functions" and "function_call" (deprecated since Nov 2023)
+	// - Current: "tools" and "tool_choice" (recommended, used here)
+	// The "tools" parameter is an array of tool definitions with type: "function"
+	// The "tool_choice" parameter controls how the model selects tools
+	if tools, ok := request["tools"]; ok {
+		openaiReq["tools"] = tools
+	}
+	if toolChoice, ok := request["tool_choice"]; ok {
+		openaiReq["tool_choice"] = toolChoice
+	}
+
 	jsonBody, err := json.Marshal(openaiReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -116,13 +146,15 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		return nil, fmt.Errorf("OpenAI API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
+	// Parse response with tool calls support
+	// Response struct includes: ID, Choices (with Message, FinishReason), and Usage (with token counts)
 	var respData struct {
 		ID      string `json:"id"`
 		Choices []struct {
 			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
+				Role       string     `json:"role"`
+				Content    string     `json:"content"`
+				ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 			} `json:"message"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
@@ -137,19 +169,42 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Extract content
+	// Extract content, finish_reason and tool calls
 	content := ""
+	finishReason := ""
+	var toolCalls []map[string]interface{}
 	if len(respData.Choices) > 0 {
 		content = respData.Choices[0].Message.Content
+		finishReason = respData.Choices[0].FinishReason
+		// Convert tool calls to generic map format
+		for _, tc := range respData.Choices[0].Message.ToolCalls {
+			toolCalls = append(toolCalls, map[string]interface{}{
+				"id":   tc.ID,
+				"type": tc.Type,
+				"function": map[string]interface{}{
+					"name":      tc.Function.Name,
+					"arguments": tc.Function.Arguments,
+				},
+			})
+		}
 	}
 
-	return map[string]interface{}{
-		"content": content,
+	result := map[string]interface{}{
+		"content":       content,
+		"finish_reason": finishReason,
 		"usage": map[string]interface{}{
 			"input_tokens":  respData.Usage.PromptTokens,
 			"output_tokens": respData.Usage.CompletionTokens,
+			"total_tokens":  respData.Usage.TotalTokens,
 		},
-	}, nil
+	}
+
+	// Add tool_calls only if present
+	if len(toolCalls) > 0 {
+		result["tool_calls"] = toolCalls
+	}
+
+	return result, nil
 }
 
 // chatAnthropic calls Anthropic's messages API
@@ -159,9 +214,10 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 		return nil, fmt.Errorf("LLM provider (anthropic) is not configured")
 	}
 
-	// Default model
+	// Default model: Claude Sonnet 4 (current production model as of 2025-05)
+	// See: https://docs.anthropic.com/en/docs/about-claude/models
 	if model == "" {
-		model = "claude-3-5-sonnet-20241022"
+		model = "claude-sonnet-4-20250514"
 	}
 
 	// Build Anthropic request
@@ -180,18 +236,82 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 				continue
 			}
 			role, _ := msg["role"].(string)
-			content, _ := msg["content"].(string)
 
 			if role == "system" {
-				systemMsg = content
-			} else {
+				if content, ok := msg["content"].(string); ok {
+					systemMsg = content
+				}
+			} else if role == "tool" {
+				// Convert tool result to Anthropic format
+				toolCallID, _ := msg["tool_call_id"].(string)
+				content, _ := msg["content"].(string)
 				anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
-					"role":    role,
-					"content": content,
+					"role": "user",
+					"content": []map[string]interface{}{
+						{
+							"type":        "tool_result",
+							"tool_use_id": toolCallID,
+							"content":     content,
+						},
+					},
 				})
+			} else {
+				// Handle both string content and content array (for tool_calls)
+				if content, ok := msg["content"].(string); ok {
+					anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
+						"role":    role,
+						"content": content,
+					})
+				} else if contentArr, ok := msg["content"].([]interface{}); ok {
+					anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
+						"role":    role,
+						"content": contentArr,
+					})
+				}
+				// Handle assistant messages with tool_calls
+				if role == "assistant" {
+					if toolCalls, ok := msg["tool_calls"].([]interface{}); ok && len(toolCalls) > 0 {
+						// Build content array with text and tool_use blocks
+						var contentBlocks []map[string]interface{}
+						if textContent, ok := msg["content"].(string); ok && textContent != "" {
+							contentBlocks = append(contentBlocks, map[string]interface{}{
+								"type": "text",
+								"text": textContent,
+							})
+						}
+						for _, tc := range toolCalls {
+							if tcMap, ok := tc.(map[string]interface{}); ok {
+								fn, _ := tcMap["function"].(map[string]interface{})
+								name, _ := fn["name"].(string)
+								argsStr, _ := fn["arguments"].(string)
+								var argsMap map[string]interface{}
+								if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
+									// If JSON parsing fails, use empty map to avoid nil input
+									argsMap = make(map[string]interface{})
+								}
+								contentBlocks = append(contentBlocks, map[string]interface{}{
+									"type":  "tool_use",
+									"id":    tcMap["id"],
+									"name":  name,
+									"input": argsMap,
+								})
+							}
+						}
+						// Replace the last message with proper content blocks
+						if len(anthropicMsgs) > 0 {
+							anthropicMsgs[len(anthropicMsgs)-1] = map[string]interface{}{
+								"role":    "assistant",
+								"content": contentBlocks,
+							}
+						}
+					}
+				}
 			}
 		}
 
+		// In Anthropic Messages API, system prompt is a top-level parameter, NOT a message role
+		// See: https://docs.anthropic.com/en/api/messages
+		// The "system" parameter is separate from "messages" array
 		if systemMsg != "" {
 			anthropicReq["system"] = systemMsg
 		}
@@ -214,6 +334,37 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 	}
 	if stop, ok := request["stop"]; ok {
 		anthropicReq["stop_sequences"] = stop
+	}
+
+	// Convert OpenAI-style tools to Anthropic format
+	if tools, ok := request["tools"].([]interface{}); ok && len(tools) > 0 {
+		var anthropicTools []map[string]interface{}
+		for _, t := range tools {
+			if tool, ok := t.(map[string]interface{}); ok {
+				if fn, ok := tool["function"].(map[string]interface{}); ok {
+					anthropicTools = append(anthropicTools, map[string]interface{}{
+						"name":         fn["name"],
+						"description":  fn["description"],
+						"input_schema": fn["parameters"],
+					})
+				}
+			}
+		}
+		if len(anthropicTools) > 0 {
+			anthropicReq["tools"] = anthropicTools
+		}
+	}
+
+	// Convert tool_choice
+	if toolChoice, ok := request["tool_choice"].(string); ok {
+		switch toolChoice {
+		case "none":
+			// Don't include tool_choice
+		case "required":
+			anthropicReq["tool_choice"] = map[string]interface{}{"type": "any"}
+		case "auto":
+			anthropicReq["tool_choice"] = map[string]interface{}{"type": "auto"}
+		}
 	}
 
 	jsonBody, err := json.Marshal(anthropicReq)
@@ -245,13 +396,17 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 		return nil, fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
-	// Parse response
+	// Parse response with tool_use support
 	var respData struct {
 		Content []struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type  string                 `json:"type"`
+			Text  string                 `json:"text,omitempty"`
+			ID    string                 `json:"id,omitempty"`
+			Name  string                 `json:"name,omitempty"`
+			Input map[string]interface{} `json:"input,omitempty"`
 		} `json:"content"`
-		Usage struct {
+		StopReason string `json:"stop_reason"`
+		Usage      struct {
 			InputTokens  int `json:"input_tokens"`
 			OutputTokens int `json:"output_tokens"`
 		} `json:"usage"`
@@ -261,19 +416,40 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Extract content
+	// Extract content and tool calls
 	content := ""
+	var toolCalls []map[string]interface{}
 	for _, c := range respData.Content {
 		if c.Type == "text" {
 			content += c.Text
+		} else if c.Type == "tool_use" {
+			// Convert Anthropic tool_use to OpenAI-style tool_calls format
+			argsBytes, _ := json.Marshal(c.Input)
+			toolCalls = append(toolCalls, map[string]interface{}{
+				"id":   c.ID,
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":      c.Name,
+					"arguments": string(argsBytes),
+				},
+			})
 		}
 	}
 
-	return map[string]interface{}{
-		"content": content,
+	result := map[string]interface{}{
+		"content":       content,
+		"finish_reason": respData.StopReason, // Use unified key name across providers
 		"usage": map[string]interface{}{
 			"input_tokens":  respData.Usage.InputTokens,
 			"output_tokens": respData.Usage.OutputTokens,
+			"total_tokens":  respData.Usage.InputTokens + respData.Usage.OutputTokens,
 		},
-	}, nil
+	}
+
+	// Add tool_calls only if present
+	if len(toolCalls) > 0 {
+		result["tool_calls"] = toolCalls
+	}
+
+	return result, nil
 }

@@ -276,6 +276,7 @@ function getGroupColor(type: BlockGroupType): string {
     try_catch: '#ef4444',   // Red
     foreach: '#22c55e',     // Green
     while: '#14b8a6',       // Teal
+    agent: '#10b981',       // Emerald
   }
   return colors[type] || '#64748b'
 }
@@ -287,6 +288,7 @@ function getGroupIcon(type: BlockGroupType): string {
     try_catch: '⚡',
     foreach: '∀',
     while: '↻',
+    agent: '🤖',
   }
   return icons[type] || '▢'
 }
@@ -298,6 +300,7 @@ function getGroupTypeLabel(type: BlockGroupType): string {
     try_catch: 'Try-Catch',
     foreach: 'ForEach',
     while: 'While',
+    agent: 'Agent',
   }
   return labels[type] || type
 }
@@ -325,6 +328,10 @@ const GROUP_OUTPUT_PORTS: Record<BlockGroupType, GroupPort[]> = {
   while: [
     { name: 'out', label: 'Output', color: '#22c55e' },
   ],
+  agent: [
+    { name: 'out', label: 'Response', color: '#22c55e' },
+    { name: 'error', label: 'Error', color: '#ef4444' },
+  ],
 }
 
 // Get group output ports
@@ -348,6 +355,7 @@ const GROUP_ZONES: Record<BlockGroupType, GroupZone[] | null> = {
   try_catch: null, // Phase A: simplified to single body zone
   foreach: null,
   while: null,
+  agent: null, // Single body zone - child steps become tools
 }
 
 // Get zones for a group type
