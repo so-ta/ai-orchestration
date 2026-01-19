@@ -8,6 +8,8 @@ import (
 
 func (r *Registry) registerAIBlocks() {
 	r.register(LLMBlock())
+	r.register(LLMJSONBlock())
+	r.register(LLMStructuredBlock())
 	r.register(RouterBlock())
 }
 
@@ -102,6 +104,263 @@ return {
 				Config: map[string]interface{}{"provider": "mock", "model": "test", "user_prompt": "Say hello"},
 				ExpectedOutput: map[string]interface{}{
 					"content": "Mock LLM response",
+				},
+			},
+		},
+	}
+}
+
+// LLMJSONBlock provides LLM with automatic JSON output parsing
+func LLMJSONBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "llm-json",
+		Version:         1,
+		Name:            "LLM (JSON)",
+		Description:     "LLM with automatic JSON output parsing",
+		Category:        domain.BlockCategoryAI,
+		Subcategory:     domain.BlockSubcategoryChat,
+		Icon:            "braces",
+		ParentBlockSlug: "llm",
+		ConfigDefaults: json.RawMessage(`{
+			"temperature": 0.3
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"json_instruction": {
+					"type": "string",
+					"title": "JSON指示",
+					"default": "Always respond with valid JSON only. No markdown, no explanation.",
+					"description": "システムプロンプトに追加されるJSON形式の指示"
+				},
+				"strict_parse": {
+					"type": "boolean",
+					"title": "厳密パース",
+					"default": false,
+					"description": "パース失敗時にエラーを投げる（falseの場合は{error: ...}を返す）"
+				}
+			}
+		}`),
+		PreProcess: `
+// Append JSON instruction to system prompt
+const jsonInstruction = config.json_instruction || 'Always respond with valid JSON only. No markdown, no explanation.';
+if (config.system_prompt) {
+    config.system_prompt = config.system_prompt + '\n\n' + jsonInstruction;
+} else {
+    config.system_prompt = jsonInstruction;
+}
+return input;
+`,
+		PostProcess: "// Parse JSON from LLM response\n" +
+			"let content = input.content || '';\n" +
+			"\n" +
+			"// Strip Markdown code blocks\n" +
+			"if (content.startsWith('```json')) {\n" +
+			"    content = content.slice(7);\n" +
+			"} else if (content.startsWith('```')) {\n" +
+			"    content = content.slice(3);\n" +
+			"}\n" +
+			"if (content.endsWith('```')) {\n" +
+			"    content = content.slice(0, -3);\n" +
+			"}\n" +
+			"content = content.trim();\n" +
+			"\n" +
+			"try {\n" +
+			"    const parsed = JSON.parse(content);\n" +
+			"    return {\n" +
+			"        ...parsed,\n" +
+			"        __raw: input.content,\n" +
+			"        __usage: input.usage\n" +
+			"    };\n" +
+			"} catch (e) {\n" +
+			"    if (config.strict_parse) {\n" +
+			"        throw new Error('[LLM_JSON_001] Failed to parse JSON: ' + e.message);\n" +
+			"    }\n" +
+			"    return {\n" +
+			"        error: 'JSON parse failed: ' + e.message,\n" +
+			"        raw_content: input.content,\n" +
+			"        __usage: input.usage\n" +
+			"    };\n" +
+			"}\n",
+		UIConfig: json.RawMessage(`{
+			"icon": "braces",
+			"color": "#F59E0B",
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "モデル設定"},
+				{"id": "prompt", "icon": "message", "title": "プロンプト"},
+				{"id": "json", "icon": "braces", "title": "JSON設定"}
+			],
+			"fieldGroups": {
+				"model": "model",
+				"provider": "model",
+				"user_prompt": "prompt",
+				"system_prompt": "prompt",
+				"json_instruction": "json",
+				"strict_parse": "json"
+			},
+			"fieldOverrides": {
+				"user_prompt": {"rows": 8, "widget": "textarea"}
+			}
+		}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "LLM_JSON_001", Name: "PARSE_FAILED", Description: "Failed to parse LLM response as JSON", Retryable: false},
+		},
+		Enabled: true,
+		TestCases: []BlockTestCase{
+			{
+				Name:   "valid JSON response",
+				Input:  map[string]interface{}{},
+				Config: map[string]interface{}{"provider": "mock", "model": "test", "user_prompt": "Return JSON"},
+				ExpectedOutput: map[string]interface{}{
+					"__raw": "Mock LLM response",
+				},
+			},
+		},
+	}
+}
+
+// LLMStructuredBlock provides LLM with schema-driven structured output
+func LLMStructuredBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "llm-structured",
+		Version:         1,
+		Name:            "LLM (Structured)",
+		Description:     "LLM with schema-driven structured output and validation",
+		Category:        domain.BlockCategoryAI,
+		Subcategory:     domain.BlockSubcategoryChat,
+		Icon:            "layout-template",
+		ParentBlockSlug: "llm-json",
+		ConfigDefaults: json.RawMessage(`{
+			"strict_parse": true,
+			"validate_output": true,
+			"include_examples": true
+		}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"output_schema": {
+					"type": "object",
+					"title": "出力スキーマ",
+					"x-ui-widget": "output-schema",
+					"description": "期待する出力のJSON Schema"
+				},
+				"validate_output": {
+					"type": "boolean",
+					"title": "出力検証",
+					"default": true,
+					"description": "スキーマに基づいて出力を検証する"
+				},
+				"include_examples": {
+					"type": "boolean",
+					"title": "例を含める",
+					"default": true,
+					"description": "プロンプトにスキーマの例を含める"
+				}
+			}
+		}`),
+		PreProcess: `
+// Build schema instruction for system prompt
+if (config.output_schema && config.output_schema.properties) {
+    const schema = config.output_schema;
+    const fields = Object.entries(schema.properties).map(function(entry) {
+        const name = entry[0];
+        const prop = entry[1];
+        const required = (schema.required || []).includes(name) ? ' (required)' : '';
+        const type = prop.type || 'any';
+        const desc = prop.description ? ': ' + prop.description : '';
+        return '  - ' + name + ' (' + type + ')' + required + desc;
+    }).join('\n');
+
+    let schemaInstruction = '\n\n## Required Output Format\nRespond with a JSON object containing these fields:\n' + fields;
+
+    // Generate example if enabled
+    if (config.include_examples !== false) {
+        const example = {};
+        for (const entry of Object.entries(schema.properties)) {
+            const name = entry[0];
+            const prop = entry[1];
+            if (prop.type === 'string') example[name] = prop.title || 'string value';
+            else if (prop.type === 'number') example[name] = 0;
+            else if (prop.type === 'boolean') example[name] = true;
+            else if (prop.type === 'array') example[name] = [];
+            else if (prop.type === 'object') example[name] = {};
+            else example[name] = null;
+        }
+        schemaInstruction = schemaInstruction + '\n\nExample:\n' + JSON.stringify(example, null, 2);
+    }
+
+    config.json_instruction = (config.json_instruction || 'Always respond with valid JSON only. No markdown, no explanation.') + schemaInstruction;
+}
+return input;
+`,
+		PostProcess: `
+// Validate output against schema if enabled
+if (config.validate_output !== false && config.output_schema && config.output_schema.required) {
+    const required = config.output_schema.required;
+    const missing = required.filter(function(field) {
+        return input[field] === undefined;
+    });
+    if (missing.length > 0) {
+        throw new Error('[LLM_STRUCT_001] Missing required fields: ' + missing.join(', '));
+    }
+}
+
+// Type coercion for schema-defined fields
+if (config.output_schema && config.output_schema.properties) {
+    for (const entry of Object.entries(config.output_schema.properties)) {
+        const name = entry[0];
+        const prop = entry[1];
+        if (input[name] !== undefined && prop.type === 'array' && !Array.isArray(input[name])) {
+            input[name] = [input[name]];
+        }
+    }
+}
+
+return input;
+`,
+		UIConfig: json.RawMessage(`{
+			"icon": "layout-template",
+			"color": "#8B5CF6",
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "モデル設定"},
+				{"id": "prompt", "icon": "message", "title": "プロンプト"},
+				{"id": "schema", "icon": "braces", "title": "出力スキーマ"}
+			],
+			"fieldGroups": {
+				"model": "model",
+				"provider": "model",
+				"user_prompt": "prompt",
+				"system_prompt": "prompt",
+				"output_schema": "schema",
+				"validate_output": "schema",
+				"include_examples": "schema"
+			},
+			"fieldOverrides": {
+				"user_prompt": {"rows": 8, "widget": "textarea"}
+			}
+		}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "LLM_STRUCT_001", Name: "VALIDATION_FAILED", Description: "Output validation failed - missing required fields", Retryable: false},
+		},
+		Enabled: true,
+		TestCases: []BlockTestCase{
+			{
+				Name:  "structured output with schema",
+				Input: map[string]interface{}{},
+				Config: map[string]interface{}{
+					"provider":    "mock",
+					"model":       "test",
+					"user_prompt": "Generate structured output",
+					"output_schema": map[string]interface{}{
+						"type":     "object",
+						"required": []string{"name"},
+						"properties": map[string]interface{}{
+							"name": map[string]interface{}{"type": "string"},
+						},
+					},
+				},
+				ExpectedOutput: map[string]interface{}{
+					"__raw": "Mock LLM response",
 				},
 			},
 		},
