@@ -8,33 +8,28 @@ import (
 
 func (r *Registry) registerIntegrationBlocks() {
 	// === Level 0: Base blocks ===
-	r.register(HTTPBlock())
+	// http, rest-api, bearer-api are defined in YAML (integration_http.yaml)
 	r.register(SubflowBlock())
 	r.register(ToolBlock())
 
 	// === Level 1: Foundation pattern blocks ===
-	r.register(WebhookBlock())
-	r.register(RestAPIBlock())
+	// webhook is defined in YAML (integration_webhook.yaml)
 	r.register(GraphQLBlock())
 
 	// === Level 2: Authentication pattern blocks ===
-	r.register(BearerAPIBlock())
+	// bearer-api is defined in YAML (integration_http.yaml)
 	r.register(APIKeyHeaderBlock())
 	r.register(APIKeyQueryBlock())
 
 	// === Level 3: Service-specific base blocks ===
-	r.register(GitHubAPIBlock())
+	// github-api is defined in YAML (integration_github.yaml)
 	r.register(NotionAPIBlock())
 	r.register(GoogleAPIBlock())
 	r.register(LinearAPIBlock())
 
 	// === Level 4+: Concrete operation blocks ===
-	// Webhook-based
-	r.register(SlackBlock())
-	r.register(DiscordBlock())
-	// GitHub
-	r.register(GitHubCreateIssueBlock())
-	r.register(GitHubAddCommentBlock())
+	// slack, discord are defined in YAML (integration_webhook.yaml)
+	// github_create_issue, github_add_comment are defined in YAML (integration_github.yaml)
 	// Notion
 	r.register(NotionQueryDBBlock())
 	r.register(NotionCreatePageBlock())
@@ -53,53 +48,8 @@ func (r *Registry) registerIntegrationBlocks() {
 	r.register(VectorDeleteBlock())
 }
 
-func HTTPBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:        "http",
-		Version:     2, // Incremented for inheritance support
-		Name:        "HTTP Request",
-		Description: "Make HTTP API calls",
-		Category:    domain.BlockCategoryApps,
-		Subcategory: domain.BlockSubcategoryWeb,
-		Icon:        "globe",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"url": {"type": "string"},
-				"body": {"type": "object"},
-				"method": {"enum": ["GET", "POST", "PUT", "DELETE", "PATCH"], "type": "string"},
-				"headers": {"type": "object"},
-				"enable_error_port": {
-					"type": "boolean",
-					"title": "エラーハンドルを有効化",
-					"description": "エラー発生時に専用のエラーポートに出力します",
-					"default": false
-				}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		Code: `
-// Support inheritance: input can override config values
-const url = renderTemplate(input.url || config.url, input);
-const method = input.method || config.method || 'GET';
-const headers = Object.assign({}, config.headers || {}, input.headers || {});
-const body = input.body !== undefined ? input.body : config.body;
-const response = ctx.http.request(url, {
-    method: method,
-    headers: headers,
-    body: body ? (typeof body === 'string' ? body : renderTemplate(JSON.stringify(body), input)) : null
-});
-return response;
-`,
-		UIConfig: json.RawMessage(`{"icon": "globe", "color": "#3B82F6"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "HTTP_001", Name: "CONNECTION_ERROR", Description: "Failed to connect", Retryable: true},
-			{Code: "HTTP_002", Name: "TIMEOUT", Description: "Request timeout", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
+// HTTPBlock, WebhookBlock, RestAPIBlock, BearerAPIBlock are defined in YAML files
+// See: yaml/integration_http.yaml, yaml/integration_webhook.yaml
 
 func SubflowBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
@@ -174,131 +124,8 @@ func ToolBlock() *SystemBlockDefinition {
 // Level 1: Foundation Pattern Blocks
 // =============================================================================
 
-// WebhookBlock provides a base for webhook-style POST notifications
-func WebhookBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "webhook",
-		Version:         1,
-		Name:            "Webhook",
-		Description:     "Webhook POST通知の基盤ブロック",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryWeb,
-		Icon:            "send",
-		ParentBlockSlug: "http",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"webhook_url": {"type": "string", "title": "Webhook URL"},
-				"secret_key": {"type": "string", "title": "シークレットキー名", "description": "ctx.secretsから取得するキー名"}
-			}
-		}`),
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"success": {"type": "boolean"},
-				"status": {"type": "number"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PreProcess: `
-const url = config.webhook_url || (config.secret_key ? ctx.secrets[config.secret_key] : null);
-if (!url) {
-    throw new Error('[WEBHOOK_001] Webhook URLが設定されていません');
-}
-return {
-    ...input,
-    url: url,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: input.payload || input
-};
-`,
-		PostProcess: `
-if (input.status >= 400) {
-    throw new Error('[WEBHOOK_002] Webhook送信失敗: ' + input.status);
-}
-return { success: true, status: input.status };
-`,
-		UIConfig: json.RawMessage(`{"icon": "send", "color": "#6366F1"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "WEBHOOK_001", Name: "URL_NOT_CONFIGURED", Description: "Webhook URLが設定されていません", Retryable: false},
-			{Code: "WEBHOOK_002", Name: "SEND_FAILED", Description: "送信に失敗しました", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
-
-// RestAPIBlock provides a base for REST API calls with authentication
-func RestAPIBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "rest-api",
-		Version:         1,
-		Name:            "REST API",
-		Description:     "REST API呼び出しの基盤ブロック（認証サポート）",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryWeb,
-		Icon:            "cloud",
-		ParentBlockSlug: "http",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"base_url": {"type": "string", "title": "ベースURL"},
-				"auth_type": {"type": "string", "enum": ["none", "bearer", "api_key_header", "api_key_query"], "title": "認証タイプ", "default": "none"},
-				"auth_key": {"type": "string", "title": "認証キー（直接指定）"},
-				"secret_key": {"type": "string", "title": "シークレットキー名"},
-				"header_name": {"type": "string", "title": "ヘッダー名", "default": "X-API-Key", "description": "api_key_header使用時のヘッダー名"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PreProcess: `
-// 認証キー解決
-const authValue = config.auth_key || (config.secret_key ? ctx.secrets[config.secret_key] : null);
-
-// ヘッダー構築
-const headers = { ...(input.headers || {}) };
-const authType = config.auth_type || 'none';
-
-if (authType === 'bearer' && authValue) {
-    headers['Authorization'] = 'Bearer ' + authValue;
-} else if (authType === 'api_key_header' && authValue) {
-    const headerName = config.header_name || 'X-API-Key';
-    headers[headerName] = authValue;
-}
-
-// URL構築
-let url = input.url || '';
-if (config.base_url) {
-    url = config.base_url + url;
-}
-if (authType === 'api_key_query' && authValue) {
-    url += (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(authValue);
-}
-
-return { ...input, url, headers };
-`,
-		PostProcess: `
-// レート制限チェック
-if (input.status === 429) {
-    throw new Error('[REST_003] レート制限に達しました');
-}
-// エラーステータス
-if (input.status >= 400) {
-    const errorMsg = input.body?.message || input.body?.error || 'Unknown error';
-    throw new Error('[REST_002] APIエラー: ' + errorMsg);
-}
-return input;
-`,
-		UIConfig: json.RawMessage(`{"icon": "cloud", "color": "#0EA5E9"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "REST_001", Name: "AUTH_FAILED", Description: "認証に失敗しました", Retryable: false},
-			{Code: "REST_002", Name: "API_ERROR", Description: "APIエラー", Retryable: true},
-			{Code: "REST_003", Name: "RATE_LIMITED", Description: "レート制限に達しました", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
+// WebhookBlock and RestAPIBlock are defined in YAML files
+// See: yaml/integration_http.yaml, yaml/integration_webhook.yaml
 
 // GraphQLBlock provides a base for GraphQL API calls
 func GraphQLBlock() *SystemBlockDefinition {
@@ -354,42 +181,8 @@ return input.body?.data || input;
 // Level 2: Authentication Pattern Blocks
 // =============================================================================
 
-// BearerAPIBlock provides Bearer token authentication
-func BearerAPIBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "bearer-api",
-		Version:         1,
-		Name:            "Bearer API",
-		Description:     "Bearer Token認証API基盤",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryWeb,
-		Icon:            "key",
-		ParentBlockSlug: "rest-api",
-		ConfigDefaults: json.RawMessage(`{
-			"auth_type": "bearer"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"token": {"type": "string", "title": "アクセストークン（直接指定）"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PreProcess: `
-// token -> auth_key にマッピング
-if (config.token && !config.auth_key) {
-    config.auth_key = config.token;
-}
-return input;
-`,
-		UIConfig: json.RawMessage(`{"icon": "key", "color": "#F59E0B"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "BEARER_001", Name: "TOKEN_NOT_CONFIGURED", Description: "トークンが設定されていません", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
+// BearerAPIBlock is defined in YAML files
+// See: yaml/integration_http.yaml
 
 // APIKeyHeaderBlock provides API Key header authentication
 func APIKeyHeaderBlock() *SystemBlockDefinition {
@@ -470,53 +263,8 @@ return input;
 // Level 3: Service-Specific Base Blocks
 // =============================================================================
 
-// GitHubAPIBlock provides GitHub API base configuration
-func GitHubAPIBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "github-api",
-		Version:         1,
-		Name:            "GitHub API",
-		Description:     "GitHub API基盤ブロック",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryGitHub,
-		Icon:            "github",
-		ParentBlockSlug: "bearer-api",
-		ConfigDefaults: json.RawMessage(`{
-			"base_url": "https://api.github.com",
-			"secret_key": "GITHUB_TOKEN"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"token": {"type": "string", "title": "アクセストークン"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PreProcess: `
-return {
-    ...input,
-    headers: {
-        ...(input.headers || {}),
-        'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28'
-    }
-};
-`,
-		PostProcess: `
-if (input.status === 404) {
-    throw new Error('[GITHUB_003] リソースが見つかりません');
-}
-return input;
-`,
-		UIConfig: json.RawMessage(`{"icon": "github", "color": "#24292F"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "GITHUB_001", Name: "TOKEN_NOT_CONFIGURED", Description: "トークンが設定されていません", Retryable: false},
-			{Code: "GITHUB_003", Name: "NOT_FOUND", Description: "リソースが見つかりません", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
+// GitHubAPIBlock is defined in YAML files
+// See: yaml/integration_github.yaml
 
 // NotionAPIBlock provides Notion API base configuration
 func NotionAPIBlock() *SystemBlockDefinition {
@@ -645,128 +393,8 @@ return input;
 // Level 4+: Concrete Operation Blocks
 // =============================================================================
 
-// SlackBlock sends messages to Slack via webhook
-func SlackBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "slack",
-		Version:         3, // Incremented for webhook inheritance
-		Name:            "Slack",
-		Description:     "Slackチャンネルにメッセージを送信",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategorySlack,
-		Icon:            "message-square",
-		ParentBlockSlug: "webhook",
-		ConfigDefaults: json.RawMessage(`{
-			"secret_key": "SLACK_WEBHOOK_URL"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["message"],
-			"properties": {
-				"blocks": {"type": "array", "title": "Block Kit", "x-ui-widget": "output-schema"},
-				"channel": {"type": "string", "title": "チャンネル"},
-				"message": {"type": "string", "title": "メッセージ", "x-ui-widget": "textarea"},
-				"username": {"type": "string", "title": "表示名"},
-				"icon_emoji": {"type": "string", "title": "アイコン絵文字"},
-				"webhook_url": {"type": "string", "title": "Webhook URL"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"status": {"type": "number"},
-				"success": {"type": "boolean"}
-			}
-		}`),
-		PreProcess: `
-const payload = {
-    text: renderTemplate(config.message, input)
-};
-if (config.channel) payload.channel = config.channel;
-if (config.username) payload.username = config.username;
-if (config.icon_emoji) payload.icon_emoji = config.icon_emoji;
-if (config.blocks && config.blocks.length > 0) payload.blocks = config.blocks;
-return { ...input, payload };
-`,
-		PostProcess: `
-if (input.status >= 400) {
-    throw new Error('[SLACK_002] Slack送信失敗: ' + input.status);
-}
-return { success: true, status: input.status };
-`,
-		UIConfig: json.RawMessage(`{"icon": "message-square", "color": "#4A154B"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "SLACK_001", Name: "WEBHOOK_NOT_CONFIGURED", Description: "Webhook URLが設定されていません", Retryable: false},
-			{Code: "SLACK_002", Name: "SEND_FAILED", Description: "メッセージ送信に失敗しました", Retryable: true},
-			{Code: "SLACK_003", Name: "INVALID_WEBHOOK", Description: "無効なWebhook URL", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
-
-// DiscordBlock sends messages to Discord via webhook
-func DiscordBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "discord",
-		Version:         3, // Incremented for webhook inheritance
-		Name:            "Discord",
-		Description:     "Discord Webhookにメッセージを送信",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryDiscord,
-		Icon:            "message-circle",
-		ParentBlockSlug: "webhook",
-		ConfigDefaults: json.RawMessage(`{
-			"secret_key": "DISCORD_WEBHOOK_URL"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["content"],
-			"properties": {
-				"embeds": {"type": "array", "title": "Embeds", "x-ui-widget": "output-schema"},
-				"content": {"type": "string", "title": "メッセージ", "x-ui-widget": "textarea"},
-				"username": {"type": "string", "title": "ユーザー名"},
-				"avatar_url": {"type": "string", "title": "アバターURL"},
-				"webhook_url": {"type": "string", "title": "Webhook URL"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"status": {"type": "number"},
-				"success": {"type": "boolean"}
-			}
-		}`),
-		PreProcess: `
-const payload = {
-    content: renderTemplate(config.content, input)
-};
-if (config.username) payload.username = config.username;
-if (config.avatar_url) payload.avatar_url = config.avatar_url;
-if (config.embeds && config.embeds.length > 0) payload.embeds = config.embeds;
-return { ...input, payload };
-`,
-		PostProcess: `
-if (input.status === 429) {
-    throw new Error('[DISCORD_003] レート制限に達しました');
-}
-if (input.status >= 400) {
-    throw new Error('[DISCORD_002] Discord送信失敗: ' + input.status);
-}
-return { success: true, status: input.status };
-`,
-		UIConfig: json.RawMessage(`{"icon": "message-circle", "color": "#5865F2"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "DISCORD_001", Name: "WEBHOOK_NOT_CONFIGURED", Description: "Webhook URLが設定されていません", Retryable: false},
-			{Code: "DISCORD_002", Name: "SEND_FAILED", Description: "メッセージ送信に失敗しました", Retryable: true},
-			{Code: "DISCORD_003", Name: "RATE_LIMITED", Description: "レート制限に達しました", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
+// SlackBlock and DiscordBlock are defined in YAML files
+// See: yaml/integration_webhook.yaml
 
 // NotionQueryDBBlock queries a Notion database
 func NotionQueryDBBlock() *SystemBlockDefinition {
@@ -1056,136 +684,8 @@ return {
 	}
 }
 
-// GitHubCreateIssueBlock creates an issue on GitHub
-func GitHubCreateIssueBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "github_create_issue",
-		Version:         2, // Incremented for github-api inheritance
-		Name:            "GitHub: Issue作成",
-		Description:     "GitHubリポジトリにIssueを作成",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryGitHub,
-		Icon:            "git-pull-request",
-		ParentBlockSlug: "github-api",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["owner", "repo", "title"],
-			"properties": {
-				"body": {"type": "string", "title": "本文", "x-ui-widget": "textarea"},
-				"repo": {"type": "string", "title": "リポジトリ"},
-				"owner": {"type": "string", "title": "オーナー"},
-				"title": {"type": "string", "title": "タイトル"},
-				"token": {"type": "string", "title": "アクセストークン"},
-				"labels": {"type": "array", "items": {"type": "string"}, "title": "ラベル"},
-				"assignees": {"type": "array", "items": {"type": "string"}, "title": "アサイン"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"id": {"type": "number"},
-				"number": {"type": "number"},
-				"url": {"type": "string"},
-				"html_url": {"type": "string"}
-			}
-		}`),
-		PreProcess: `
-const payload = {
-    title: renderTemplate(config.title, input),
-    body: config.body ? renderTemplate(config.body, input) : undefined,
-    labels: config.labels,
-    assignees: config.assignees
-};
-return {
-    ...input,
-    url: '/repos/' + config.owner + '/' + config.repo + '/issues',
-    method: 'POST',
-    body: payload
-};
-`,
-		PostProcess: `
-if (input.status >= 400) {
-    const errorMsg = input.body?.message || 'Unknown error';
-    throw new Error('[GITHUB_002] Issue作成失敗: ' + errorMsg);
-}
-return {
-    id: input.body.id,
-    number: input.body.number,
-    url: input.body.url,
-    html_url: input.body.html_url
-};
-`,
-		UIConfig: json.RawMessage(`{"icon": "git-pull-request", "color": "#24292F"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "GITHUB_001", Name: "TOKEN_NOT_CONFIGURED", Description: "トークンが設定されていません", Retryable: false},
-			{Code: "GITHUB_002", Name: "CREATE_FAILED", Description: "Issue作成に失敗しました", Retryable: true},
-			{Code: "GITHUB_003", Name: "REPO_NOT_FOUND", Description: "リポジトリが見つかりません", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
-
-// GitHubAddCommentBlock adds a comment to a GitHub issue or PR
-func GitHubAddCommentBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "github_add_comment",
-		Version:         2, // Incremented for github-api inheritance
-		Name:            "GitHub: コメント追加",
-		Description:     "GitHub IssueまたはPRにコメントを追加",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryGitHub,
-		Icon:            "message-square",
-		ParentBlockSlug: "github-api",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["owner", "repo", "issue_number", "body"],
-			"properties": {
-				"body": {"type": "string", "title": "コメント本文", "x-ui-widget": "textarea"},
-				"repo": {"type": "string", "title": "リポジトリ"},
-				"owner": {"type": "string", "title": "オーナー"},
-				"token": {"type": "string", "title": "アクセストークン"},
-				"issue_number": {"type": "number", "title": "Issue/PR番号"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"id": {"type": "number"},
-				"url": {"type": "string"},
-				"html_url": {"type": "string"}
-			}
-		}`),
-		PreProcess: `
-return {
-    ...input,
-    url: '/repos/' + config.owner + '/' + config.repo + '/issues/' + config.issue_number + '/comments',
-    method: 'POST',
-    body: { body: renderTemplate(config.body, input) }
-};
-`,
-		PostProcess: `
-if (input.status >= 400) {
-    const errorMsg = input.body?.message || 'Unknown error';
-    throw new Error('[GITHUB_004] コメント追加失敗: ' + errorMsg);
-}
-return {
-    id: input.body.id,
-    url: input.body.url,
-    html_url: input.body.html_url
-};
-`,
-		UIConfig: json.RawMessage(`{"icon": "message-square", "color": "#24292F"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "GITHUB_001", Name: "TOKEN_NOT_CONFIGURED", Description: "トークンが設定されていません", Retryable: false},
-			{Code: "GITHUB_004", Name: "COMMENT_FAILED", Description: "コメント追加に失敗しました", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
+// GitHubCreateIssueBlock and GitHubAddCommentBlock are defined in YAML files
+// See: yaml/integration_github.yaml
 
 // WebSearchBlock performs web search using Tavily API
 func WebSearchBlock() *SystemBlockDefinition {
