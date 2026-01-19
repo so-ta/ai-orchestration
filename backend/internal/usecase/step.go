@@ -227,3 +227,68 @@ func (u *StepUsecase) Delete(ctx context.Context, tenantID, projectID, stepID uu
 
 	return u.stepRepo.Delete(ctx, tenantID, projectID, stepID)
 }
+
+// UpdateRetryConfigInput represents input for updating retry config
+type UpdateRetryConfigInput struct {
+	TenantID   uuid.UUID
+	ProjectID  uuid.UUID
+	StepID     uuid.UUID
+	RetryConfig *domain.RetryConfig
+}
+
+// UpdateRetryConfig updates the retry configuration for a step
+func (u *StepUsecase) UpdateRetryConfig(ctx context.Context, input UpdateRetryConfigInput) (*domain.Step, error) {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, input.TenantID, input.ProjectID); err != nil {
+		return nil, err
+	}
+
+	step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, input.StepID)
+	if err != nil {
+		return nil, err
+	}
+
+	if input.RetryConfig != nil {
+		// Validate retry config
+		if input.RetryConfig.MaxRetries < 0 {
+			return nil, domain.NewValidationError("max_retries", "max_retries must be non-negative")
+		}
+		if input.RetryConfig.DelayMs < 0 {
+			return nil, domain.NewValidationError("delay_ms", "delay_ms must be non-negative")
+		}
+
+		retryJSON, err := json.Marshal(input.RetryConfig)
+		if err != nil {
+			return nil, err
+		}
+		step.RetryConfig = retryJSON
+	} else {
+		step.RetryConfig = nil
+	}
+
+	if err := u.stepRepo.Update(ctx, step); err != nil {
+		return nil, err
+	}
+
+	return step, nil
+}
+
+// GetRetryConfig retrieves the retry configuration for a step
+func (u *StepUsecase) GetRetryConfig(ctx context.Context, tenantID, projectID, stepID uuid.UUID) (*domain.RetryConfig, error) {
+	step, err := u.stepRepo.GetByID(ctx, tenantID, projectID, stepID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(step.RetryConfig) == 0 || string(step.RetryConfig) == "null" {
+		config := domain.DefaultRetryConfig()
+		return &config, nil
+	}
+
+	var config domain.RetryConfig
+	if err := json.Unmarshal(step.RetryConfig, &config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}

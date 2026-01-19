@@ -1052,6 +1052,270 @@ ALTER TABLE ONLY public.vector_collections ADD CONSTRAINT vector_collections_ten
 ALTER TABLE ONLY public.vector_documents ADD CONSTRAINT vector_documents_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
 ALTER TABLE ONLY public.vector_documents ADD CONSTRAINT vector_documents_collection_id_fkey FOREIGN KEY (collection_id) REFERENCES public.vector_collections(id) ON DELETE CASCADE;
 
+-- ============================================================================
+-- Agent Execution Memory (N8N-style Agent Memory for ReAct Loop)
+-- ============================================================================
+
+--
+-- Name: agent_memory; Type: TABLE; Schema: public; Owner: -
+-- Stores conversation history for agent block executions
+--
+
+CREATE TABLE public.agent_memory (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    step_id uuid NOT NULL,
+    role character varying(50) NOT NULL,
+    content text NOT NULL,
+    tool_calls jsonb,
+    tool_call_id character varying(100),
+    metadata jsonb DEFAULT '{}'::jsonb,
+    sequence_number integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_memory_role_check CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying, 'system'::character varying, 'tool'::character varying])::text[])))
+);
+
+COMMENT ON TABLE public.agent_memory IS 'Agent execution memory for ReAct loop conversation history';
+COMMENT ON COLUMN public.agent_memory.role IS 'Message role: user, assistant, system, tool';
+COMMENT ON COLUMN public.agent_memory.tool_calls IS 'Tool calls made by assistant (JSON array of tool call objects)';
+COMMENT ON COLUMN public.agent_memory.tool_call_id IS 'ID of tool call this message responds to (for role=tool)';
+COMMENT ON COLUMN public.agent_memory.sequence_number IS 'Order of message within the run+step conversation';
+
+-- Agent Memory Constraints
+ALTER TABLE ONLY public.agent_memory ADD CONSTRAINT agent_memory_pkey PRIMARY KEY (id);
+
+-- Agent Memory Indexes
+CREATE INDEX idx_agent_memory_run_step ON public.agent_memory USING btree (run_id, step_id);
+CREATE INDEX idx_agent_memory_sequence ON public.agent_memory USING btree (run_id, step_id, sequence_number);
+
+-- Agent Memory Foreign Keys
+ALTER TABLE ONLY public.agent_memory ADD CONSTRAINT agent_memory_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.agent_memory ADD CONSTRAINT agent_memory_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.runs(id) ON DELETE CASCADE;
+
+-- ============================================================================
+-- Error Workflow Configuration
+-- ============================================================================
+
+-- Projects: Error Workflow
+ALTER TABLE public.projects ADD COLUMN error_workflow_id uuid;
+ALTER TABLE public.projects ADD COLUMN error_workflow_config jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE ONLY public.projects ADD CONSTRAINT projects_error_workflow_id_fkey FOREIGN KEY (error_workflow_id) REFERENCES public.projects(id) ON DELETE SET NULL;
+
+COMMENT ON COLUMN public.projects.error_workflow_id IS 'Project to execute when this project run fails';
+COMMENT ON COLUMN public.projects.error_workflow_config IS 'Error workflow config: {"trigger_on": ["failed"], "input_mapping": {...}}';
+
+-- Runs: Error Trigger Source
+ALTER TABLE public.runs ADD COLUMN parent_run_id uuid;
+ALTER TABLE public.runs ADD COLUMN error_trigger_source jsonb;
+ALTER TABLE ONLY public.runs ADD CONSTRAINT runs_parent_run_id_fkey FOREIGN KEY (parent_run_id) REFERENCES public.runs(id) ON DELETE SET NULL;
+CREATE INDEX idx_runs_parent ON public.runs USING btree (parent_run_id) WHERE (parent_run_id IS NOT NULL);
+
+COMMENT ON COLUMN public.runs.parent_run_id IS 'Parent run that triggered this error workflow run';
+COMMENT ON COLUMN public.runs.error_trigger_source IS 'Error info: {"original_run_id", "error_step_id", "error_step_name", "error_message"}';
+
+-- ============================================================================
+-- Phase 2: Debug & Retry Features
+-- ============================================================================
+
+-- Steps: Retry Configuration
+ALTER TABLE public.steps ADD COLUMN retry_config jsonb DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN public.steps.retry_config IS 'Retry config: {"max_retries": 3, "delay_ms": 1000, "exponential_backoff": true, "retry_on_errors": ["TIMEOUT"]}';
+
+-- StepRuns: Pinned Input for Debugging
+ALTER TABLE public.step_runs ADD COLUMN pinned_input jsonb;
+COMMENT ON COLUMN public.step_runs.pinned_input IS 'Pinned input data for debugging/replay';
+
+-- Agent Chat Sessions (for agent-chat trigger)
+CREATE TABLE public.agent_chat_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    start_step_id uuid NOT NULL,
+    user_id character varying(255) NOT NULL,
+    status character varying(50) DEFAULT 'active'::character varying NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_chat_sessions_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'closed'::character varying])::text[])))
+);
+
+COMMENT ON TABLE public.agent_chat_sessions IS 'Chat sessions for agent-chat trigger type';
+
+-- Agent Chat Sessions Constraints
+ALTER TABLE ONLY public.agent_chat_sessions ADD CONSTRAINT agent_chat_sessions_pkey PRIMARY KEY (id);
+
+-- Agent Chat Sessions Indexes
+CREATE INDEX idx_agent_chat_sessions_tenant ON public.agent_chat_sessions USING btree (tenant_id);
+CREATE INDEX idx_agent_chat_sessions_project ON public.agent_chat_sessions USING btree (project_id);
+CREATE INDEX idx_agent_chat_sessions_user ON public.agent_chat_sessions USING btree (tenant_id, user_id);
+CREATE INDEX idx_agent_chat_sessions_active ON public.agent_chat_sessions USING btree (tenant_id, user_id, status) WHERE ((status)::text = 'active'::text);
+
+-- Agent Chat Sessions Foreign Keys
+ALTER TABLE ONLY public.agent_chat_sessions ADD CONSTRAINT agent_chat_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.agent_chat_sessions ADD CONSTRAINT agent_chat_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.agent_chat_sessions ADD CONSTRAINT agent_chat_sessions_start_step_id_fkey FOREIGN KEY (start_step_id) REFERENCES public.steps(id) ON DELETE CASCADE;
+
+-- Agent Chat Sessions Trigger
+CREATE TRIGGER trigger_agent_chat_sessions_updated_at BEFORE UPDATE ON public.agent_chat_sessions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================================================
+-- Phase 3: Templates & Streaming
+-- ============================================================================
+
+-- Project Templates
+CREATE TABLE public.project_templates (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid,
+    name character varying(255) NOT NULL,
+    description text,
+    category character varying(100),
+    tags jsonb DEFAULT '[]'::jsonb,
+    definition jsonb NOT NULL,
+    variables jsonb DEFAULT '{}'::jsonb,
+    thumbnail_url text,
+    author_name character varying(255),
+    download_count integer DEFAULT 0,
+    is_featured boolean DEFAULT false,
+    -- Phase 4: Marketplace fields
+    visibility character varying(50) DEFAULT 'private'::character varying NOT NULL,
+    review_status character varying(50),
+    price_usd numeric(10,2) DEFAULT 0,
+    rating numeric(3,2),
+    review_count integer DEFAULT 0,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT project_templates_visibility_check CHECK (((visibility)::text = ANY ((ARRAY['private'::character varying, 'tenant'::character varying, 'public'::character varying])::text[]))),
+    CONSTRAINT project_templates_review_status_check CHECK ((review_status IS NULL OR (review_status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[])))
+);
+
+COMMENT ON TABLE public.project_templates IS 'Reusable workflow templates';
+COMMENT ON COLUMN public.project_templates.tenant_id IS 'NULL for system templates';
+COMMENT ON COLUMN public.project_templates.definition IS 'Snapshot of steps, edges, block_groups';
+COMMENT ON COLUMN public.project_templates.variables IS 'Template variables for customization';
+COMMENT ON COLUMN public.project_templates.visibility IS 'private (owner only), tenant (organization), public (marketplace)';
+
+-- Project Templates Constraints
+ALTER TABLE ONLY public.project_templates ADD CONSTRAINT project_templates_pkey PRIMARY KEY (id);
+
+-- Project Templates Indexes
+CREATE INDEX idx_project_templates_tenant ON public.project_templates USING btree (tenant_id);
+CREATE INDEX idx_project_templates_category ON public.project_templates USING btree (category);
+CREATE INDEX idx_project_templates_visibility ON public.project_templates USING btree (visibility);
+CREATE INDEX idx_project_templates_featured ON public.project_templates USING btree (is_featured) WHERE (is_featured = true);
+CREATE INDEX idx_project_templates_public ON public.project_templates USING btree (visibility, review_status) WHERE ((visibility)::text = 'public'::text AND (review_status)::text = 'approved'::text);
+
+-- Project Templates Foreign Keys
+ALTER TABLE ONLY public.project_templates ADD CONSTRAINT project_templates_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+
+-- Project Templates Trigger
+CREATE TRIGGER trigger_project_templates_updated_at BEFORE UPDATE ON public.project_templates FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- StepRuns: Streaming Output
+ALTER TABLE public.step_runs ADD COLUMN streaming_output jsonb DEFAULT '[]'::jsonb;
+COMMENT ON COLUMN public.step_runs.streaming_output IS 'Streaming output chunks: [{"chunk": "...", "timestamp": "...", "type": "text|json"}]';
+
+-- ============================================================================
+-- Phase 4: Marketplace & Git Integration
+-- ============================================================================
+
+-- Template Reviews
+CREATE TABLE public.template_reviews (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    template_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    rating integer NOT NULL,
+    comment text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT template_reviews_rating_check CHECK ((rating >= 1 AND rating <= 5))
+);
+
+COMMENT ON TABLE public.template_reviews IS 'User reviews for marketplace templates';
+
+-- Template Reviews Constraints
+ALTER TABLE ONLY public.template_reviews ADD CONSTRAINT template_reviews_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.template_reviews ADD CONSTRAINT template_reviews_unique_user UNIQUE (template_id, user_id);
+
+-- Template Reviews Indexes
+CREATE INDEX idx_template_reviews_template ON public.template_reviews USING btree (template_id);
+
+-- Template Reviews Foreign Keys
+ALTER TABLE ONLY public.template_reviews ADD CONSTRAINT template_reviews_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.project_templates(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.template_reviews ADD CONSTRAINT template_reviews_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+-- Project Git Sync
+CREATE TABLE public.project_git_sync (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    repository_url text NOT NULL,
+    branch character varying(255) DEFAULT 'main'::character varying NOT NULL,
+    file_path character varying(500) DEFAULT 'workflow.json'::character varying NOT NULL,
+    sync_direction character varying(50) DEFAULT 'bidirectional'::character varying NOT NULL,
+    auto_sync boolean DEFAULT false NOT NULL,
+    last_sync_at timestamp with time zone,
+    last_commit_sha character varying(100),
+    credentials_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT project_git_sync_direction_check CHECK (((sync_direction)::text = ANY ((ARRAY['push'::character varying, 'pull'::character varying, 'bidirectional'::character varying])::text[])))
+);
+
+COMMENT ON TABLE public.project_git_sync IS 'Git repository sync configuration for projects';
+COMMENT ON COLUMN public.project_git_sync.sync_direction IS 'push (project->git), pull (git->project), bidirectional';
+
+-- Project Git Sync Constraints
+ALTER TABLE ONLY public.project_git_sync ADD CONSTRAINT project_git_sync_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.project_git_sync ADD CONSTRAINT project_git_sync_project_unique UNIQUE (project_id);
+
+-- Project Git Sync Indexes
+CREATE INDEX idx_project_git_sync_tenant ON public.project_git_sync USING btree (tenant_id);
+CREATE INDEX idx_project_git_sync_auto ON public.project_git_sync USING btree (auto_sync) WHERE (auto_sync = true);
+
+-- Project Git Sync Foreign Keys
+ALTER TABLE ONLY public.project_git_sync ADD CONSTRAINT project_git_sync_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+ALTER TABLE ONLY public.project_git_sync ADD CONSTRAINT project_git_sync_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.project_git_sync ADD CONSTRAINT project_git_sync_credentials_id_fkey FOREIGN KEY (credentials_id) REFERENCES public.credentials(id) ON DELETE SET NULL;
+
+-- Project Git Sync Trigger
+CREATE TRIGGER trigger_project_git_sync_updated_at BEFORE UPDATE ON public.project_git_sync FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- Custom Block Packages
+CREATE TABLE public.custom_block_packages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid NOT NULL,
+    name character varying(255) NOT NULL,
+    version character varying(50) NOT NULL,
+    description text,
+    bundle_url text,
+    blocks jsonb NOT NULL,
+    dependencies jsonb DEFAULT '[]'::jsonb,
+    status character varying(50) DEFAULT 'draft'::character varying NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT custom_block_packages_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying, 'deprecated'::character varying])::text[])))
+);
+
+COMMENT ON TABLE public.custom_block_packages IS 'Custom block SDK packages';
+COMMENT ON COLUMN public.custom_block_packages.blocks IS 'Array of block definitions in this package';
+COMMENT ON COLUMN public.custom_block_packages.dependencies IS 'NPM-style dependencies';
+
+-- Custom Block Packages Constraints
+ALTER TABLE ONLY public.custom_block_packages ADD CONSTRAINT custom_block_packages_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.custom_block_packages ADD CONSTRAINT custom_block_packages_version_unique UNIQUE (tenant_id, name, version);
+
+-- Custom Block Packages Indexes
+CREATE INDEX idx_custom_block_packages_tenant ON public.custom_block_packages USING btree (tenant_id);
+CREATE INDEX idx_custom_block_packages_status ON public.custom_block_packages USING btree (status);
+
+-- Custom Block Packages Foreign Keys
+ALTER TABLE ONLY public.custom_block_packages ADD CONSTRAINT custom_block_packages_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.custom_block_packages ADD CONSTRAINT custom_block_packages_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+-- Custom Block Packages Trigger
+CREATE TRIGGER trigger_custom_block_packages_updated_at BEFORE UPDATE ON public.custom_block_packages FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 --
 -- PostgreSQL database dump complete
 --

@@ -11,6 +11,8 @@ func (r *Registry) registerAIBlocks() {
 	r.register(LLMJSONBlock())
 	r.register(LLMStructuredBlock())
 	r.register(RouterBlock())
+	r.register(AgentBlock())
+	r.register(MemoryBufferBlock())
 }
 
 func LLMBlock() *SystemBlockDefinition {
@@ -363,6 +365,371 @@ return input;
 				},
 				ExpectedOutput: map[string]interface{}{
 					"__raw": "Mock LLM response",
+				},
+			},
+		},
+	}
+}
+
+// AgentBlock provides an AI agent with ReAct loop and tool calling capabilities
+func AgentBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:        "agent",
+		Version:     1,
+		Name:        "AI Agent",
+		Description: "Autonomous AI agent with ReAct loop, tool calling, and memory management",
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryChat,
+		Icon:        "bot",
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"required": ["provider", "model", "system_prompt"],
+			"properties": {
+				"provider": {
+					"enum": ["openai", "anthropic"],
+					"type": "string",
+					"title": "プロバイダー",
+					"default": "anthropic"
+				},
+				"model": {
+					"type": "string",
+					"title": "モデル",
+					"default": "claude-sonnet-4-20250514"
+				},
+				"system_prompt": {
+					"type": "string",
+					"title": "システムプロンプト",
+					"maxLength": 20000,
+					"description": "エージェントの役割と振る舞いを定義"
+				},
+				"max_iterations": {
+					"type": "integer",
+					"title": "最大イテレーション",
+					"default": 10,
+					"minimum": 1,
+					"maximum": 50,
+					"description": "ReActループの最大反復回数"
+				},
+				"tools": {
+					"type": "array",
+					"title": "利用可能なツール",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"},
+							"description": {"type": "string"},
+							"parameters": {"type": "object"}
+						}
+					},
+					"description": "エージェントが使用できるツール定義"
+				},
+				"tool_choice": {
+					"enum": ["auto", "none", "required"],
+					"type": "string",
+					"title": "ツール選択",
+					"default": "auto"
+				},
+				"temperature": {
+					"type": "number",
+					"title": "温度",
+					"default": 0.7,
+					"minimum": 0,
+					"maximum": 2
+				},
+				"memory_window": {
+					"type": "integer",
+					"title": "メモリウィンドウ",
+					"default": 20,
+					"minimum": 1,
+					"maximum": 100,
+					"description": "保持する会話履歴の最大数"
+				},
+				"enable_memory": {
+					"type": "boolean",
+					"title": "メモリ有効化",
+					"default": true,
+					"description": "会話履歴を保持する"
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{
+			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: true, Description: "User message or task input"},
+		},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Agent final response"},
+			{Name: "error", Label: "Error", Description: "Error output"},
+		},
+		Code: `
+// Initialize memory if enabled
+const memoryEnabled = config.enable_memory !== false;
+const memoryWindow = config.memory_window || 20;
+let history = [];
+
+if (memoryEnabled && ctx.memory) {
+    history = ctx.memory.getLastN(memoryWindow) || [];
+}
+
+// Add user message
+const userMessage = input.message || input.content || JSON.stringify(input);
+if (memoryEnabled && ctx.memory) {
+    ctx.memory.addUser(userMessage);
+}
+history.push({ role: 'user', content: userMessage });
+
+// Prepare tools
+const tools = (config.tools || []).map(function(t) {
+    return {
+        type: 'function',
+        function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters || {}
+        }
+    };
+});
+
+const maxIterations = config.max_iterations || 10;
+let finalResponse = null;
+
+// ReAct loop
+for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // Call LLM
+    const llmOptions = {
+        messages: [
+            { role: 'system', content: config.system_prompt || 'You are a helpful AI assistant.' },
+            ...history
+        ],
+        temperature: config.temperature || 0.7,
+        maxTokens: 4096
+    };
+
+    if (tools.length > 0) {
+        llmOptions.tools = tools;
+        llmOptions.tool_choice = config.tool_choice || 'auto';
+    }
+
+    const response = ctx.llm.chat(config.provider, config.model, llmOptions);
+
+    // Check for tool calls
+    if (response.tool_calls && response.tool_calls.length > 0) {
+        // Add assistant message with tool calls
+        history.push({
+            role: 'assistant',
+            content: response.content || '',
+            tool_calls: response.tool_calls
+        });
+
+        if (memoryEnabled && ctx.memory) {
+            ctx.memory.addWithToolCalls('assistant', response.content || '', response.tool_calls);
+        }
+
+        // Execute each tool call
+        for (const toolCall of response.tool_calls) {
+            let toolResult;
+            try {
+                // Execute tool via workflow if available
+                if (ctx.workflow && ctx.workflow.executeStep) {
+                    const args = JSON.parse(toolCall.function.arguments || '{}');
+                    toolResult = ctx.workflow.executeStep(toolCall.function.name, args);
+                } else {
+                    toolResult = { error: 'Tool execution not available' };
+                }
+            } catch (e) {
+                toolResult = { error: e.message || 'Tool execution failed' };
+            }
+
+            // Add tool result to history
+            const toolResultStr = JSON.stringify(toolResult);
+            history.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: toolResultStr
+            });
+
+            if (memoryEnabled && ctx.memory) {
+                ctx.memory.addTool(toolResultStr, toolCall.id);
+            }
+        }
+    } else {
+        // No tool calls - final response
+        finalResponse = response.content;
+
+        if (memoryEnabled && ctx.memory) {
+            ctx.memory.addAssistant(finalResponse);
+        }
+
+        break;
+    }
+}
+
+// Return final response
+if (finalResponse === null) {
+    finalResponse = 'Agent reached maximum iterations without final response.';
+}
+
+return {
+    response: finalResponse,
+    iterations: history.filter(function(m) { return m.role === 'assistant'; }).length,
+    memory_count: history.length
+};
+`,
+		UIConfig: json.RawMessage(`{
+			"icon": "bot",
+			"color": "#10B981",
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "モデル設定"},
+				{"id": "agent", "icon": "bot", "title": "エージェント設定"},
+				{"id": "memory", "icon": "database", "title": "メモリ設定"},
+				{"id": "tools", "icon": "wrench", "title": "ツール設定"}
+			],
+			"fieldGroups": {
+				"model": "model",
+				"provider": "model",
+				"system_prompt": "agent",
+				"max_iterations": "agent",
+				"temperature": "agent",
+				"memory_window": "memory",
+				"enable_memory": "memory",
+				"tools": "tools",
+				"tool_choice": "tools"
+			},
+			"fieldOverrides": {
+				"system_prompt": {"rows": 6, "widget": "textarea"}
+			}
+		}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "AGENT_001", Name: "MAX_ITERATIONS", Description: "Agent reached maximum iterations", Retryable: false},
+			{Code: "AGENT_002", Name: "TOOL_ERROR", Description: "Tool execution failed", Retryable: true},
+			{Code: "AGENT_003", Name: "LLM_ERROR", Description: "LLM API error", Retryable: true},
+		},
+		RequiredCredentials: json.RawMessage(`[{"name": "llm_api_key", "type": "api_key", "scope": "system", "required": true, "description": "LLM Provider API Key"}]`),
+		Enabled:             true,
+		TestCases: []BlockTestCase{
+			{
+				Name:   "basic agent call",
+				Input:  map[string]interface{}{"message": "Hello"},
+				Config: map[string]interface{}{"provider": "mock", "model": "test", "system_prompt": "You are helpful"},
+				ExpectedOutput: map[string]interface{}{
+					"response": "Mock LLM response",
+				},
+			},
+		},
+	}
+}
+
+// MemoryBufferBlock provides conversation memory management for agents
+func MemoryBufferBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:        "memory-buffer",
+		Version:     1,
+		Name:        "Memory Buffer",
+		Description: "Manage conversation memory with sliding window",
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryChat,
+		Icon:        "database",
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"window_size": {
+					"type": "integer",
+					"title": "ウィンドウサイズ",
+					"default": 20,
+					"minimum": 1,
+					"maximum": 100,
+					"description": "保持するメッセージの最大数"
+				},
+				"memory_key": {
+					"type": "string",
+					"title": "メモリキー",
+					"default": "default",
+					"description": "複数のメモリを区別するためのキー"
+				},
+				"operation": {
+					"enum": ["get", "add", "clear"],
+					"type": "string",
+					"title": "操作",
+					"default": "get",
+					"description": "実行する操作"
+				},
+				"message_role": {
+					"enum": ["user", "assistant", "system"],
+					"type": "string",
+					"title": "メッセージロール",
+					"default": "user",
+					"description": "追加するメッセージのロール（operation=add時）"
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{
+			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: false, Description: "Message to add (for add operation)"},
+		},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Memory buffer contents or operation result"},
+		},
+		Code: `
+const windowSize = config.window_size || 20;
+const operation = config.operation || 'get';
+const key = config.memory_key || 'default';
+
+if (!ctx.memory) {
+    return { error: 'Memory service not available', messages: [] };
+}
+
+switch (operation) {
+    case 'get':
+        const messages = ctx.memory.getLastN(windowSize) || [];
+        return {
+            messages: messages,
+            count: messages.length,
+            window_size: windowSize
+        };
+
+    case 'add':
+        const content = input.message || input.content || JSON.stringify(input);
+        const role = config.message_role || 'user';
+        ctx.memory.add(role, content);
+        return {
+            success: true,
+            added: { role: role, content: content }
+        };
+
+    case 'clear':
+        ctx.memory.clear();
+        return {
+            success: true,
+            cleared: true
+        };
+
+    default:
+        return { error: 'Unknown operation: ' + operation };
+}
+`,
+		UIConfig: json.RawMessage(`{
+			"icon": "database",
+			"color": "#6366F1",
+			"groups": [
+				{"id": "buffer", "icon": "database", "title": "バッファ設定"},
+				{"id": "operation", "icon": "settings", "title": "操作設定"}
+			],
+			"fieldGroups": {
+				"window_size": "buffer",
+				"memory_key": "buffer",
+				"operation": "operation",
+				"message_role": "operation"
+			}
+		}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "MEMORY_001", Name: "NOT_AVAILABLE", Description: "Memory service not available", Retryable: false},
+		},
+		Enabled: true,
+		TestCases: []BlockTestCase{
+			{
+				Name:   "get memory buffer",
+				Input:  map[string]interface{}{},
+				Config: map[string]interface{}{"operation": "get", "window_size": 10},
+				ExpectedOutput: map[string]interface{}{
+					"messages": []interface{}{},
+					"count":    0,
 				},
 			},
 		},
