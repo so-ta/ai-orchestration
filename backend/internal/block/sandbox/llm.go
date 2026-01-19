@@ -101,9 +101,13 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		openaiReq["stop"] = stop
 	}
 
-	// Copy tool parameters for OpenAI Function Calling API
+	// Copy tool parameters for OpenAI Function Calling API (tools API, not legacy functions API)
 	// See: https://platform.openai.com/docs/guides/function-calling
-	// "tools" and "tool_choice" are standard parameters for Chat Completions with function calling
+	// Note: OpenAI has two APIs:
+	// - Legacy: "functions" and "function_call" (deprecated since Nov 2023)
+	// - Current: "tools" and "tool_choice" (recommended, used here)
+	// The "tools" parameter is an array of tool definitions with type: "function"
+	// The "tool_choice" parameter controls how the model selects tools
 	if tools, ok := request["tools"]; ok {
 		openaiReq["tools"] = tools
 	}
@@ -272,7 +276,10 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 								name, _ := fn["name"].(string)
 								argsStr, _ := fn["arguments"].(string)
 								var argsMap map[string]interface{}
-								json.Unmarshal([]byte(argsStr), &argsMap)
+								if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
+									// If JSON parsing fails, use empty map to avoid nil input
+									argsMap = make(map[string]interface{})
+								}
 								contentBlocks = append(contentBlocks, map[string]interface{}{
 									"type":  "tool_use",
 									"id":    tcMap["id"],
