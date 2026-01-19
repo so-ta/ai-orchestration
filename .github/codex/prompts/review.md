@@ -26,6 +26,9 @@
 | **「エラーパスのテストがない」** | **テストファイルは数千行あり、差分に含まれない部分にテストがある** |
 | **「`deleted_at IS NULL`条件がない」** | **そのテーブルに`deleted_at`カラムが存在しない（steps, edgesなど）** |
 | **「`start_step_id`の更新処理がない」** | **projectsテーブルに`start_step_id`カラムは存在しない** |
+| **「`ref`/`computed`/`onMounted` がインポートされていません」** | **Nuxt 3が自動インポートするため不要** |
+| **「`useToast`/`useAuth` がインポートされていません」** | **`composables/` から自動インポートされる** |
+| **「`UiModal` コンポーネントがインポートされていません」** | **`components/` から自動インポートされる** |
 
 ### 見当違いを防ぐためのルール
 
@@ -56,6 +59,14 @@
 6. **🚨 `start_step_id`カラムの存在確認**
    - `projects`テーブルには`start_step_id`カラムが**存在しない**
    - 開始ステップは`steps`テーブルの`type = 'start'`で識別される
+
+7. **🚨 Nuxt 3の自動インポートを理解する**
+   - **「○○がインポートされていません」という指摘は、Nuxt 3では多くの場合誤りです**
+   - Vue Composition API（`ref`, `computed`, `watch`, `onMounted` 等）は自動インポート
+   - Nuxt組み込み関数（`useRoute`, `useRouter`, `navigateTo`, `useFetch` 等）は自動インポート
+   - `composables/` ディレクトリ内の `use*` 関数は自動インポート
+   - `components/` ディレクトリ内のVueコンポーネントは自動インポート
+   - **外部ライブラリ（lodash, axios等）と型定義のみ明示的インポートが必要**
 
 ### 厳しくレビューすべき項目（遠慮なく指摘）
 
@@ -185,22 +196,62 @@ query := `SELECT * FROM workflows WHERE id = $1`
 | reactive/ref の使い分けが適切か | **Medium** | Vue 3 リアクティビティ |
 | onMounted/onUnmounted でクリーンアップしているか | **Medium** | メモリリーク防止 |
 
-```vue
-<!-- Good -->
-<script setup lang="ts">
-import { useToast } from '~/composables/useToast'
+#### 🚨 Nuxt 3 自動インポートについて（誤検知防止）
 
-const toast = useToast()
-const handleError = () => {
-  toast.error('エラーが発生しました')
-}
+**重要: Nuxt 3は以下を自動インポートするため、明示的なimport文がなくても問題ありません。**
+
+このプロジェクトは`@nuxt/eslint`モジュールを使用しており、自動インポートが正しく設定されています。
+
+| カテゴリ | 自動インポートされるもの | 例 |
+|---------|-------------------------|-----|
+| **Vue Composition API** | `ref`, `reactive`, `computed`, `watch`, `watchEffect`, `readonly`, `toRef`, `toRefs`, `shallowRef`, `triggerRef`, `customRef` | `const count = ref(0)` |
+| **Vue Lifecycle Hooks** | `onMounted`, `onUnmounted`, `onBeforeMount`, `onBeforeUnmount`, `onUpdated`, `onBeforeUpdate`, `onActivated`, `onDeactivated`, `onErrorCaptured` | `onMounted(() => {...})` |
+| **Vue Component Utilities** | `defineProps`, `defineEmits`, `defineExpose`, `defineSlots`, `defineModel`, `withDefaults`, `useSlots`, `useAttrs` | `const props = defineProps<{...}>()` |
+| **Vue Reactivity Utilities** | `isRef`, `unref`, `isProxy`, `isReactive`, `isReadonly`, `toRaw`, `markRaw`, `effectScope`, `getCurrentScope`, `onScopeDispose` | `if (isRef(val)) {...}` |
+| **Nuxt Composables** | `useRuntimeConfig`, `useAppConfig`, `useNuxtApp`, `useState`, `useFetch`, `useAsyncData`, `useLazyFetch`, `useLazyAsyncData`, `useHead`, `useSeoMeta`, `useRoute`, `useRouter`, `navigateTo`, `abortNavigation`, `setPageLayout`, `definePageMeta` | `const config = useRuntimeConfig()` |
+| **Nuxt Utilities** | `$fetch`, `clearNuxtData`, `refreshNuxtData`, `clearNuxtState`, `callOnce`, `setResponseStatus`, `prerenderRoutes` | `await $fetch('/api/data')` |
+| **プロジェクト固有** | `composables/` ディレクトリ内の `use*` 関数 | `useToast()`, `useAuth()`, `useApi()` |
+| **コンポーネント** | `components/` ディレクトリ内のVueコンポーネント | `<UiModal>`, `<ToastContainer>` |
+
+**以下は見当違いな指摘です（絶対にしないこと）：**
+
+| 見当違いな指摘 | 理由 |
+|--------------|------|
+| 「`ref` がインポートされていません」 | Nuxtが自動インポート |
+| 「`computed` をインポートしてください」 | Nuxtが自動インポート |
+| 「`onMounted` の明示的なインポートが必要です」 | Nuxtが自動インポート |
+| 「`useToast` がインポートされていません」 | `composables/` から自動インポート |
+| 「`navigateTo` が未定義です」 | Nuxtが自動インポート |
+| 「`UiModal` コンポーネントがインポートされていません」 | `components/` から自動インポート |
+
+**正当な指摘の例：**
+
+| 正当な指摘 | 理由 |
+|-----------|------|
+| 「`lodash` の `debounce` がインポートされていません」 | 外部ライブラリは自動インポート対象外 |
+| 「`axios` が未定義です」 | 外部ライブラリは明示的インポートが必要 |
+| 「カスタム型 `User` がインポートされていません」 | 型定義は `~/types/` から明示的にインポートが必要 |
+
+```vue
+<!-- Good: Nuxt 3の自動インポートを活用 -->
+<script setup lang="ts">
+// 以下は全てNuxt/Vueが自動インポートするため、import文不要
+const count = ref(0)
+const doubled = computed(() => count.value * 2)
+const toast = useToast()  // composables/から自動インポート
+const route = useRoute()  // Nuxtが自動インポート
+
+onMounted(() => {
+  console.log('mounted')
+})
 </script>
 
-<!-- Bad: alert使用 -->
+<!-- 明示的インポートが必要なケース -->
 <script setup lang="ts">
-const handleError = () => {
-  alert('エラーが発生しました') // NG: AI操作をブロック
-}
+import { debounce } from 'lodash-es'  // 外部ライブラリ
+import type { User } from '~/types/user'  // 型定義
+
+const search = debounce(() => {...}, 300)
 </script>
 ```
 
@@ -468,10 +519,15 @@ const response = await fetch(config.url); // NG
 | **「この関数のテストがない」** | **テストファイルは差分の一部のみ、既存テストが差分外に存在** | **絶対に指摘しない** |
 | **「エラーケースのテストがない」** | **同上、テストファイルは数千行あり差分に全て含まれない** | **絶対に指摘しない** |
 | **「テストを追加してください」** | **既に存在している可能性が高い** | **新規ファイル作成時のみ指摘可** |
+| **「`ref`/`computed`/`onMounted` がインポートされていません」** | **Nuxt 3が自動インポート** | **絶対に指摘しない** |
+| **「`useToast`/`useAuth` 等のcomposableがインポートされていません」** | **`composables/` から自動インポート** | **絶対に指摘しない** |
+| **「コンポーネントがインポートされていません」** | **`components/` から自動インポート** | **絶対に指摘しない** |
 
 **注意**: これらは「指摘を控えろ」という意味ではありません。見当違いを防ぐために確認してから指摘してください。
 
 **🚨 テストに関する指摘は特に誤検知が多いため、原則禁止です。**
+
+**🚨 Nuxt 3の自動インポートに関する指摘も誤検知です。外部ライブラリと型定義のみインポートが必要です。**
 
 ---
 
