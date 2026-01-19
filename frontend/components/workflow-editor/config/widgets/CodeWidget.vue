@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
 
 // DOMPurify is loaded dynamically for SSR compatibility
@@ -59,14 +59,15 @@ const rows = computed(() => {
   return props.override?.rows || 10
 })
 
-// Debounce utility
-let heightDebounceTimer: ReturnType<typeof setTimeout> | null = null
-function debounce<T extends (...args: Parameters<T>) => void>(fn: T, delay: number): (...args: Parameters<T>) => void {
-  return (...args: Parameters<T>) => {
-    if (heightDebounceTimer) clearTimeout(heightDebounceTimer)
-    heightDebounceTimer = setTimeout(() => fn(...args), delay)
+// Debounce timer (component-scoped via ref)
+const heightDebounceTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+
+// Cleanup timer on unmount
+onUnmounted(() => {
+  if (heightDebounceTimer.value) {
+    clearTimeout(heightDebounceTimer.value)
   }
-}
+})
 
 // Calculate editor height based on content
 function calculateHeightImpl() {
@@ -84,7 +85,12 @@ function calculateHeightImpl() {
 }
 
 // Debounced version for input events (100ms delay)
-const calculateHeight = debounce(calculateHeightImpl, 100)
+function calculateHeight() {
+  if (heightDebounceTimer.value) {
+    clearTimeout(heightDebounceTimer.value)
+  }
+  heightDebounceTimer.value = setTimeout(() => calculateHeightImpl(), 100)
+}
 
 // Watch for content changes and recalculate height
 watch(
