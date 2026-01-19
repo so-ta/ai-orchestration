@@ -457,3 +457,99 @@ type CredentialAccessFilter struct {
 	CredentialType *domain.CredentialType
 	RequiredScope  *domain.CredentialScope // system or tenant
 }
+
+// ============================================================================
+// N8N-Style Feature Repositories (Phase 2-4)
+// ============================================================================
+
+// AgentMemoryRepository defines the interface for agent memory persistence
+type AgentMemoryRepository interface {
+	Create(ctx context.Context, memory *domain.AgentMemory) error
+	CreateBatch(ctx context.Context, memories []*domain.AgentMemory) error
+	GetByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error)
+	GetLastNByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error)
+	GetNextSequenceNumber(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error)
+	DeleteByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) error
+	DeleteByRun(ctx context.Context, tenantID, runID uuid.UUID) error
+}
+
+// AgentChatSessionRepository defines the interface for agent chat session persistence
+type AgentChatSessionRepository interface {
+	Create(ctx context.Context, session *domain.AgentChatSession) error
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.AgentChatSession, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID, filter AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error)
+	ListByUser(ctx context.Context, tenantID uuid.UUID, userID string, filter AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error)
+	Update(ctx context.Context, session *domain.AgentChatSession) error
+	Close(ctx context.Context, tenantID, id uuid.UUID) error
+}
+
+// AgentChatSessionFilter defines filtering options for agent chat session list
+type AgentChatSessionFilter struct {
+	Status *domain.AgentChatSessionStatus
+	Page   int
+	Limit  int
+}
+
+// ProjectTemplateRepository defines the interface for project template persistence
+type ProjectTemplateRepository interface {
+	Create(ctx context.Context, template *domain.ProjectTemplate) error
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.ProjectTemplate, error)
+	List(ctx context.Context, filter TemplateFilter) ([]*domain.ProjectTemplate, int, error)
+	ListPublic(ctx context.Context, filter TemplateFilter) ([]*domain.ProjectTemplate, int, error)
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, filter TemplateFilter) ([]*domain.ProjectTemplate, int, error)
+	Update(ctx context.Context, template *domain.ProjectTemplate) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	IncrementDownloadCount(ctx context.Context, id uuid.UUID) error
+}
+
+// TemplateFilter defines filtering options for template list
+type TemplateFilter struct {
+	Category   *string
+	Tags       []string
+	Search     *string
+	IsFeatured *bool
+	MinRating  *float64
+	Visibility *domain.TemplateVisibility
+	Page       int
+	Limit      int
+}
+
+// TemplateReviewRepository defines the interface for template review persistence
+type TemplateReviewRepository interface {
+	Create(ctx context.Context, review *domain.TemplateReview) error
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.TemplateReview, error)
+	ListByTemplate(ctx context.Context, templateID uuid.UUID) ([]*domain.TemplateReview, error)
+	GetByTemplateAndUser(ctx context.Context, templateID, userID uuid.UUID) (*domain.TemplateReview, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+}
+
+// ProjectGitSyncRepository defines the interface for git sync persistence
+type ProjectGitSyncRepository interface {
+	Create(ctx context.Context, gitSync *domain.ProjectGitSync) error
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.ProjectGitSync, error)
+	GetByProject(ctx context.Context, projectID uuid.UUID) (*domain.ProjectGitSync, error)
+	ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]*domain.ProjectGitSync, error)
+	Update(ctx context.Context, gitSync *domain.ProjectGitSync) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	UpdateLastSync(ctx context.Context, id uuid.UUID, commitSHA string) error
+}
+
+// CustomBlockPackageRepository defines the interface for custom block package persistence
+type CustomBlockPackageRepository interface {
+	Create(ctx context.Context, pkg *domain.CustomBlockPackage) error
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.CustomBlockPackage, error)
+	GetByNameAndVersion(ctx context.Context, tenantID uuid.UUID, name, version string) (*domain.CustomBlockPackage, error)
+	ListByTenant(ctx context.Context, tenantID uuid.UUID, filter BlockPackageFilter) ([]*domain.CustomBlockPackage, int, error)
+	Update(ctx context.Context, pkg *domain.CustomBlockPackage) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	Publish(ctx context.Context, id uuid.UUID) error
+	Deprecate(ctx context.Context, id uuid.UUID) error
+}
+
+// BlockPackageFilter defines filtering options for block package list
+type BlockPackageFilter struct {
+	Status *domain.BlockPackageStatus
+	Search *string
+	Page   int
+	Limit  int
+}

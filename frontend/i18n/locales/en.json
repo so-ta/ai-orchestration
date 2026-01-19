@@ -1964,5 +1964,156 @@
       "emailRequired": "Please enter an email address",
       "projectRequired": "Please enter a project ID"
     }
+  },
+  "retryConfig": {
+    "title": "Retry Configuration",
+    "maxRetries": "Max Retries",
+    "maxRetriesHint": "Maximum number of retries when step fails (0-10)",
+    "delayMs": "Initial Delay (ms)",
+    "delayMsHint": "Wait time before first retry (milliseconds)",
+    "exponentialBackoff": "Use Exponential Backoff",
+    "exponentialBackoffHint": "Double the delay for each retry attempt",
+    "maxDelayMs": "Max Delay (ms)",
+    "maxDelayMsHint": "Maximum delay when using exponential backoff",
+    "retryOnErrors": "Retry on Error Codes",
+    "retryOnErrorsPlaceholder": "e.g., TIMEOUT, RATE_LIMIT",
+    "retryOnErrorsHint": "Leave empty to retry on all errors",
+    "backoffPreview": "Retry Timing Preview",
+    "retryNumber": "Retry {n}",
+    "moreRetries": "{n} more..."
+  },
+  "templates": {
+    "title": "Templates",
+    "subtitle": "Manage project templates and marketplace",
+    "myTemplates": "My Templates",
+    "marketplace": "Marketplace",
+    "createTemplate": "Create Template",
+    "createFromProject": "Create from Project",
+    "useTemplate": "Use This Template",
+    "noTemplates": "No templates",
+    "noTemplatesDesc": "You can create templates from your projects",
+    "searchPlaceholder": "Search templates...",
+    "category": "Category",
+    "tags": "Tags",
+    "visibility": {
+      "title": "Visibility",
+      "private": "Private",
+      "tenant": "Tenant Only",
+      "public": "Public"
+    },
+    "downloads": "Downloads",
+    "rating": "Rating",
+    "reviews": "Reviews",
+    "author": "Author",
+    "featured": "Featured",
+    "filters": {
+      "all": "All",
+      "featured": "Featured",
+      "topRated": "Top Rated"
+    },
+    "form": {
+      "name": "Template Name",
+      "namePlaceholder": "Enter template name",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter template description",
+      "category": "Category",
+      "categoryPlaceholder": "Select category",
+      "tags": "Tags",
+      "tagsPlaceholder": "Enter tags, comma separated",
+      "visibility": "Visibility"
+    },
+    "review": {
+      "title": "Write a Review",
+      "rating": "Rating",
+      "comment": "Comment",
+      "commentPlaceholder": "Share your feedback about this template",
+      "submit": "Submit Review"
+    },
+    "messages": {
+      "createSuccess": "Template created",
+      "createFailed": "Failed to create template",
+      "useSuccess": "Project created from template",
+      "useFailed": "Failed to apply template",
+      "reviewSuccess": "Review submitted"
+    },
+    "categories": {
+      "automation": "Automation",
+      "ai": "AI/ML",
+      "integration": "Integration",
+      "data": "Data Processing",
+      "notification": "Notification",
+      "other": "Other"
+    }
+  },
+  "gitSync": {
+    "title": "Git Integration",
+    "subtitle": "Sync workflows with Git repository",
+    "enable": "Enable Git Sync",
+    "disable": "Disable Git Sync",
+    "syncNow": "Sync Now",
+    "syncing": "Syncing...",
+    "lastSync": "Last Sync",
+    "commitSha": "Commit SHA",
+    "noSync": "Git sync not configured",
+    "noSyncDesc": "Connect to a repository to version control your workflows",
+    "form": {
+      "repositoryUrl": "Repository URL",
+      "repositoryUrlPlaceholder": "https://github.com/user/repo.git",
+      "branch": "Branch",
+      "branchPlaceholder": "main",
+      "filePath": "File Path",
+      "filePathPlaceholder": "workflows/my-workflow.json",
+      "syncDirection": "Sync Direction",
+      "autoSync": "Auto Sync",
+      "autoSyncHint": "Automatically sync with Git when changes are made",
+      "credentials": "Credentials"
+    },
+    "direction": {
+      "push": "Push (Local → Git)",
+      "pull": "Pull (Git → Local)",
+      "bidirectional": "Bidirectional"
+    },
+    "messages": {
+      "configured": "Git sync configured",
+      "configFailed": "Failed to configure Git sync",
+      "syncSuccess": "Sync completed",
+      "syncFailed": "Sync failed",
+      "deleted": "Git sync disabled"
+    }
+  },
+  "blockPackages": {
+    "title": "Custom Block Packages",
+    "subtitle": "Create and manage your own blocks",
+    "createPackage": "Create Package",
+    "uploadPackage": "Upload Package",
+    "noPackages": "No packages",
+    "noPackagesDesc": "Create custom blocks and package them",
+    "searchPlaceholder": "Search packages...",
+    "status": {
+      "draft": "Draft",
+      "published": "Published",
+      "deprecated": "Deprecated"
+    },
+    "blocks": "Blocks",
+    "dependencies": "Dependencies",
+    "version": "Version",
+    "publish": "Publish",
+    "deprecate": "Deprecate",
+    "form": {
+      "name": "Package Name",
+      "namePlaceholder": "my-custom-blocks",
+      "version": "Version",
+      "versionPlaceholder": "1.0.0",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter package description"
+    },
+    "messages": {
+      "createSuccess": "Package created",
+      "createFailed": "Failed to create package",
+      "publishSuccess": "Package published",
+      "publishFailed": "Failed to publish package",
+      "deprecateSuccess": "Package deprecated",
+      "deleteSuccess": "Package deleted"
+    }
   }
 }

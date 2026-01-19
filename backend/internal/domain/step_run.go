@@ -35,6 +35,10 @@ type StepRun struct {
 	CompletedAt    *time.Time      `json:"completed_at,omitempty"`
 	DurationMs     *int            `json:"duration_ms,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
+
+	// Debug features
+	PinnedInput     json.RawMessage `json:"pinned_input,omitempty"`     // Pinned input for debugging/replay
+	StreamingOutput json.RawMessage `json:"streaming_output,omitempty"` // Streaming output chunks
 }
 
 // NewStepRun creates a new step run
@@ -112,4 +116,68 @@ func (sr *StepRun) Retry() {
 	sr.StartedAt = nil
 	sr.CompletedAt = nil
 	sr.DurationMs = nil
+}
+
+// SetPinnedInput sets the pinned input for debugging
+func (sr *StepRun) SetPinnedInput(input json.RawMessage) {
+	sr.PinnedInput = input
+}
+
+// GetEffectiveInput returns the pinned input if set, otherwise the regular input
+func (sr *StepRun) GetEffectiveInput() json.RawMessage {
+	if len(sr.PinnedInput) > 0 && string(sr.PinnedInput) != "null" {
+		return sr.PinnedInput
+	}
+	return sr.Input
+}
+
+// HasPinnedInput returns true if the step run has a pinned input
+func (sr *StepRun) HasPinnedInput() bool {
+	return len(sr.PinnedInput) > 0 && string(sr.PinnedInput) != "null"
+}
+
+// StreamingChunk represents a single chunk of streaming output
+type StreamingChunk struct {
+	Chunk     string    `json:"chunk"`
+	Timestamp time.Time `json:"timestamp"`
+	Type      string    `json:"type"` // "text", "json", "error"
+}
+
+// AppendStreamingChunk appends a chunk to the streaming output
+func (sr *StepRun) AppendStreamingChunk(chunk string, chunkType string) error {
+	newChunk := StreamingChunk{
+		Chunk:     chunk,
+		Timestamp: time.Now().UTC(),
+		Type:      chunkType,
+	}
+
+	var chunks []StreamingChunk
+	if len(sr.StreamingOutput) > 0 {
+		if err := json.Unmarshal(sr.StreamingOutput, &chunks); err != nil {
+			return err
+		}
+	}
+
+	chunks = append(chunks, newChunk)
+	data, err := json.Marshal(chunks)
+	if err != nil {
+		return err
+	}
+
+	sr.StreamingOutput = data
+	return nil
+}
+
+// GetStreamingChunks returns the streaming output chunks
+func (sr *StepRun) GetStreamingChunks() ([]StreamingChunk, error) {
+	if len(sr.StreamingOutput) == 0 {
+		return nil, nil
+	}
+
+	var chunks []StreamingChunk
+	if err := json.Unmarshal(sr.StreamingOutput, &chunks); err != nil {
+		return nil, err
+	}
+
+	return chunks, nil
 }

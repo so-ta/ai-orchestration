@@ -99,6 +99,15 @@ var (
 	ErrUnauthorized   = errors.New("unauthorized")
 	ErrForbidden      = errors.New("forbidden")
 
+	// Template errors
+	ErrTemplateNotFound = errors.New("template not found")
+
+	// Git Sync errors
+	ErrGitSyncNotFound = errors.New("git sync configuration not found")
+
+	// Block Package errors
+	ErrBlockPackageNotFound = errors.New("block package not found")
+
 	// Validation errors
 	ErrValidation = errors.New("validation error")
 )
