@@ -595,52 +595,28 @@ CREATE TABLE public.audit_logs (
 );
 
 -- ============================================================================
--- Copilot
+-- Copilot (AI Workflow Assistant)
+-- NOTE: Unified copilot system - integrated into workflow editor
 -- ============================================================================
 
 --
 -- Name: copilot_sessions; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id
+-- Copilot sessions for AI-assisted workflow creation/enhancement
 --
 
 CREATE TABLE public.copilot_sessions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid NOT NULL,
     user_id character varying(255) NOT NULL,
-    project_id uuid,
-    title character varying(255),
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
 
---
--- Name: copilot_messages; Type: TABLE; Schema: public; Owner: -
---
+    -- Context: which workflow this session is scoped to
+    context_project_id uuid,
 
-CREATE TABLE public.copilot_messages (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    session_id uuid NOT NULL,
-    role character varying(20) NOT NULL,
-    content text NOT NULL,
-    metadata jsonb,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT copilot_messages_role_check CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying])::text[])))
-);
+    -- Mode: create (new workflow), enhance (improve existing), explain (understand)
+    mode character varying(50) DEFAULT 'create'::character varying NOT NULL,
 
--- ============================================================================
--- AI Workflow Builder Tables
--- ============================================================================
-
---
--- Name: builder_sessions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.builder_sessions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid NOT NULL,
-    user_id character varying(255) NOT NULL,
-    copilot_session_id uuid,
+    -- Title: derived from first user message
+    title character varying(200),
 
     -- Status
     status character varying(50) DEFAULT 'hearing'::character varying NOT NULL,
@@ -655,22 +631,25 @@ CREATE TABLE public.builder_sessions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
 
-    CONSTRAINT builder_sessions_status_check CHECK (((status)::text = ANY ((ARRAY['hearing'::character varying, 'building'::character varying, 'reviewing'::character varying, 'refining'::character varying, 'completed'::character varying, 'abandoned'::character varying])::text[]))),
-    CONSTRAINT builder_sessions_phase_check CHECK (((hearing_phase)::text = ANY ((ARRAY['analysis'::character varying, 'proposal'::character varying, 'completed'::character varying])::text[]))),
-    CONSTRAINT builder_sessions_progress_check CHECK ((hearing_progress >= 0 AND hearing_progress <= 100))
+    CONSTRAINT copilot_sessions_mode_check CHECK (((mode)::text = ANY ((ARRAY['create'::character varying, 'enhance'::character varying, 'explain'::character varying])::text[]))),
+    CONSTRAINT copilot_sessions_status_check CHECK (((status)::text = ANY ((ARRAY['hearing'::character varying, 'building'::character varying, 'reviewing'::character varying, 'refining'::character varying, 'completed'::character varying, 'abandoned'::character varying])::text[]))),
+    CONSTRAINT copilot_sessions_phase_check CHECK (((hearing_phase)::text = ANY ((ARRAY['analysis'::character varying, 'proposal'::character varying, 'completed'::character varying])::text[]))),
+    CONSTRAINT copilot_sessions_progress_check CHECK ((hearing_progress >= 0 AND hearing_progress <= 100))
 );
 
-COMMENT ON TABLE public.builder_sessions IS 'AI Workflow Builder sessions for interactive workflow creation';
-COMMENT ON COLUMN public.builder_sessions.status IS 'Session status: hearing, building, reviewing, refining, completed, abandoned';
-COMMENT ON COLUMN public.builder_sessions.hearing_phase IS 'Current hearing phase: analysis, proposal, completed';
-COMMENT ON COLUMN public.builder_sessions.spec IS 'WorkflowSpec DSL as JSON';
-COMMENT ON COLUMN public.builder_sessions.project_id IS 'Generated project ID after construction';
+COMMENT ON TABLE public.copilot_sessions IS 'AI Copilot sessions for interactive workflow creation/enhancement';
+COMMENT ON COLUMN public.copilot_sessions.context_project_id IS 'The workflow this session is scoped to (NULL for global create)';
+COMMENT ON COLUMN public.copilot_sessions.mode IS 'Copilot mode: create (new workflow), enhance (improve existing), explain (understand)';
+COMMENT ON COLUMN public.copilot_sessions.status IS 'Session status: hearing, building, reviewing, refining, completed, abandoned';
+COMMENT ON COLUMN public.copilot_sessions.hearing_phase IS 'Current hearing phase: analysis, proposal, completed';
+COMMENT ON COLUMN public.copilot_sessions.spec IS 'WorkflowSpec DSL as JSON';
+COMMENT ON COLUMN public.copilot_sessions.project_id IS 'Generated/modified project ID after construction';
 
 --
--- Name: builder_messages; Type: TABLE; Schema: public; Owner: -
+-- Name: copilot_messages; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.builder_messages (
+CREATE TABLE public.copilot_messages (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     session_id uuid NOT NULL,
     role character varying(20) NOT NULL,
@@ -684,13 +663,13 @@ CREATE TABLE public.builder_messages (
     -- Timestamps
     created_at timestamp with time zone DEFAULT now() NOT NULL,
 
-    CONSTRAINT builder_messages_role_check CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying, 'system'::character varying])::text[])))
+    CONSTRAINT copilot_messages_role_check CHECK (((role)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying, 'system'::character varying])::text[])))
 );
 
-COMMENT ON TABLE public.builder_messages IS 'Messages in AI Workflow Builder sessions';
-COMMENT ON COLUMN public.builder_messages.phase IS 'Hearing phase when this message was created';
-COMMENT ON COLUMN public.builder_messages.extracted_data IS 'Data extracted from user message';
-COMMENT ON COLUMN public.builder_messages.suggested_questions IS 'Suggested follow-up questions';
+COMMENT ON TABLE public.copilot_messages IS 'Messages in AI Copilot sessions';
+COMMENT ON COLUMN public.copilot_messages.phase IS 'Hearing phase when this message was created';
+COMMENT ON COLUMN public.copilot_messages.extracted_data IS 'Data extracted from user message';
+COMMENT ON COLUMN public.copilot_messages.suggested_questions IS 'Suggested follow-up questions';
 
 -- ============================================================================
 -- Primary Keys
@@ -736,9 +715,6 @@ ALTER TABLE ONLY public.audit_logs ADD CONSTRAINT audit_logs_pkey PRIMARY KEY (i
 
 ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY public.copilot_messages ADD CONSTRAINT copilot_messages_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.builder_sessions ADD CONSTRAINT builder_sessions_pkey PRIMARY KEY (id);
-ALTER TABLE ONLY public.builder_messages ADD CONSTRAINT builder_messages_pkey PRIMARY KEY (id);
 
 -- ============================================================================
 -- Unique Indexes
@@ -849,18 +825,12 @@ CREATE INDEX idx_audit_logs_created ON public.audit_logs USING btree (created_at
 
 -- Copilot
 CREATE INDEX idx_copilot_sessions_tenant ON public.copilot_sessions USING btree (tenant_id);
-CREATE INDEX idx_copilot_sessions_user_project ON public.copilot_sessions USING btree (tenant_id, user_id, project_id);
-CREATE INDEX idx_copilot_sessions_active ON public.copilot_sessions USING btree (tenant_id, user_id, project_id, is_active) WHERE (is_active = true);
+CREATE INDEX idx_copilot_sessions_user ON public.copilot_sessions USING btree (tenant_id, user_id);
+CREATE INDEX idx_copilot_sessions_status ON public.copilot_sessions USING btree (tenant_id, status);
+CREATE INDEX idx_copilot_sessions_context_project ON public.copilot_sessions USING btree (context_project_id) WHERE (context_project_id IS NOT NULL);
+CREATE INDEX idx_copilot_sessions_active ON public.copilot_sessions USING btree (tenant_id, user_id, status) WHERE (status NOT IN ('completed', 'abandoned'));
 CREATE INDEX idx_copilot_messages_session ON public.copilot_messages USING btree (session_id);
 CREATE INDEX idx_copilot_messages_created ON public.copilot_messages USING btree (session_id, created_at);
-
--- Builder
-CREATE INDEX idx_builder_sessions_tenant ON public.builder_sessions USING btree (tenant_id);
-CREATE INDEX idx_builder_sessions_user ON public.builder_sessions USING btree (tenant_id, user_id);
-CREATE INDEX idx_builder_sessions_status ON public.builder_sessions USING btree (tenant_id, status);
-CREATE INDEX idx_builder_sessions_active ON public.builder_sessions USING btree (tenant_id, user_id, status) WHERE (status NOT IN ('completed', 'abandoned'));
-CREATE INDEX idx_builder_messages_session ON public.builder_messages USING btree (session_id);
-CREATE INDEX idx_builder_messages_created ON public.builder_messages USING btree (session_id, created_at);
 
 -- ============================================================================
 -- Trigger Functions
@@ -900,7 +870,6 @@ CREATE TRIGGER trigger_credentials_updated_at BEFORE UPDATE ON public.credential
 CREATE TRIGGER trigger_system_credentials_updated_at BEFORE UPDATE ON public.system_credentials FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER trigger_schedules_updated_at BEFORE UPDATE ON public.schedules FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER trigger_copilot_sessions_updated_at BEFORE UPDATE ON public.copilot_sessions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-CREATE TRIGGER trigger_builder_sessions_updated_at BEFORE UPDATE ON public.builder_sessions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER trigger_assign_run_number BEFORE INSERT ON public.runs FOR EACH ROW EXECUTE FUNCTION public.assign_run_number();
 
@@ -989,14 +958,9 @@ ALTER TABLE ONLY public.audit_logs ADD CONSTRAINT audit_logs_tenant_id_fkey FORE
 
 -- Copilot
 ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_context_project_id_fkey FOREIGN KEY (context_project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.copilot_sessions ADD CONSTRAINT copilot_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL;
 ALTER TABLE ONLY public.copilot_messages ADD CONSTRAINT copilot_messages_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.copilot_sessions(id) ON DELETE CASCADE;
-
--- Builder
-ALTER TABLE ONLY public.builder_sessions ADD CONSTRAINT builder_sessions_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
-ALTER TABLE ONLY public.builder_sessions ADD CONSTRAINT builder_sessions_copilot_session_id_fkey FOREIGN KEY (copilot_session_id) REFERENCES public.copilot_sessions(id) ON DELETE SET NULL;
-ALTER TABLE ONLY public.builder_sessions ADD CONSTRAINT builder_sessions_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL;
-ALTER TABLE ONLY public.builder_messages ADD CONSTRAINT builder_messages_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.builder_sessions(id) ON DELETE CASCADE;
 
 -- ============================================================================
 -- RAG (Retrieval-Augmented Generation) Tables

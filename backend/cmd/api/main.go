@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
+	"github.com/souta/ai-orchestration/internal/copilot/agent"
 	"github.com/souta/ai-orchestration/internal/handler"
 	authmw "github.com/souta/ai-orchestration/internal/middleware"
 	"github.com/souta/ai-orchestration/internal/repository/postgres"
@@ -122,7 +123,6 @@ func main() {
 	blockGroupRepo := postgres.NewBlockGroupRepository(pool)
 	credentialRepo := postgres.NewCredentialRepository(pool)
 	copilotSessionRepo := postgres.NewCopilotSessionRepository(pool)
-	builderSessionRepo := postgres.NewBuilderSessionRepository(pool)
 	usageRepo := postgres.NewUsageRepository(pool)
 	budgetRepo := postgres.NewBudgetRepository(pool)
 	tenantRepo := postgres.NewTenantRepository(pool)
@@ -144,9 +144,13 @@ func main() {
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(projectRepo, blockGroupRepo, stepRepo)
 	blockUsecase := usecase.NewBlockUsecase(blockRepo, blockVersionRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
-	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo)
-	builderUsecase := usecase.NewBuilderUsecase(builderSessionRepo, projectRepo, blockRepo)
+	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo, blockRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
+
+	// Agent-based copilot usecase
+	agentUsecase := agent.NewAgentUsecase(
+		copilotSessionRepo, blockRepo, projectRepo, stepRepo, edgeRepo, runRepo, stepRunRepo,
+	)
 
 	// OAuth2 service
 	oauth2BaseURL := getEnv("BASE_URL", "http://localhost:8090")
@@ -171,12 +175,12 @@ func main() {
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase, auditService)
 	copilotHandler := handler.NewCopilotHandler(copilotUsecase, runUsecase)
-	builderHandler := handler.NewBuilderHandler(builderUsecase, runUsecase)
 	usageHandler := handler.NewUsageHandler(usageUsecase)
 	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
 	variablesHandler := handler.NewVariablesHandler(pool)
 	oauth2Handler := handler.NewOAuth2Handler(oauth2Service, auditService)
 	credentialShareHandler := handler.NewCredentialShareHandler(credentialShareService, auditService)
+	copilotAgentHandler := handler.NewCopilotAgentHandler(agentUsecase)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -285,12 +289,34 @@ func main() {
 
 				// Workflow-level Copilot (with session management)
 				r.Route("/copilot", func(r chi.Router) {
+					// Legacy endpoints
 					r.Get("/session", copilotHandler.GetOrCreateSession)
-					r.Get("/sessions", copilotHandler.ListSessions)
 					r.Post("/sessions/new", copilotHandler.StartNewSession)
-					r.Get("/sessions/{session_id}", copilotHandler.GetSessionMessages)
 					r.Post("/chat", copilotHandler.ChatWithSession)
 					r.Post("/generate", copilotHandler.GenerateProject)
+
+					// Builder session endpoints (integrated from /builder)
+					r.Get("/sessions", copilotHandler.ListCopilotSessionsByProject)
+					r.Post("/sessions", copilotHandler.StartCopilotSession)
+					r.Route("/sessions/{session_id}", func(r chi.Router) {
+						r.Get("/", copilotHandler.GetCopilotSession)
+						r.Delete("/", copilotHandler.DeleteCopilotSession)
+						r.Get("/messages", copilotHandler.GetSessionMessages)
+						r.Post("/messages", copilotHandler.SendCopilotMessage)
+						r.Post("/construct", copilotHandler.ConstructCopilotWorkflow)
+						r.Post("/refine", copilotHandler.RefineCopilotWorkflow)
+						r.Post("/finalize", copilotHandler.FinalizeCopilotSession)
+					})
+
+					// Agent-based copilot (NEW: autonomous tool-calling agent)
+					r.Route("/agent", func(r chi.Router) {
+						r.Post("/sessions", copilotAgentHandler.StartAgentSession)
+						r.Route("/sessions/{session_id}", func(r chi.Router) {
+							r.Post("/messages", copilotAgentHandler.SendAgentMessage)
+							r.Get("/stream", copilotAgentHandler.StreamAgentMessage)
+							r.Post("/cancel", copilotAgentHandler.CancelAgentStream)
+						})
+					})
 				})
 
 				// Edges
@@ -439,22 +465,9 @@ func main() {
 
 			// Polling endpoint for async results
 			r.Get("/runs/{id}", copilotHandler.GetCopilotRun)
-		})
 
-		// AI Workflow Builder (interactive workflow creation)
-		r.Route("/builder", func(r chi.Router) {
-			r.Route("/sessions", func(r chi.Router) {
-				r.Get("/", builderHandler.ListSessions)
-				r.Post("/", builderHandler.StartSession)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Get("/", builderHandler.GetSession)
-					r.Delete("/", builderHandler.DeleteSession)
-					r.Post("/messages", builderHandler.SendMessage)
-					r.Post("/construct", builderHandler.Construct)
-					r.Post("/refine", builderHandler.Refine)
-					r.Post("/finalize", builderHandler.Finalize)
-				})
-			})
+			// Agent tools (list available tools for the agent)
+			r.Get("/agent/tools", copilotAgentHandler.GetAvailableTools)
 		})
 
 		// Usage tracking and cost management

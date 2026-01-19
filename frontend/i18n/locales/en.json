@@ -562,7 +562,12 @@
     "sessionHistory": "Session History",
     "active": "Active",
     "noSessions": "No sessions",
+    "noActiveSession": "No active session",
+    "deleteSession": "Delete session",
+    "confirmDelete": "Are you sure you want to delete this session?",
+    "sessionDeleted": "Session deleted",
     "loading": "Loading...",
+    "processing": "Processing...",
     "generateWorkflow": "Generate Workflow",
     "generateWorkflowTitle": "Generate Workflow with AI",
     "generateWorkflowDescription": "Describe the workflow you want to create in natural language. AI will automatically generate the step structure.",
@@ -572,6 +577,32 @@
     "statusPending": "Starting...",
     "statusRunning": "Processing...",
     "workflowGenerated": "Workflow generated. It will be applied to the canvas.",
+    "construct": "Build Workflow",
+    "finalize": "Finalize",
+    "refine": "Refine",
+    "refinePlaceholder": "Enter refinements...",
+    "startingConstruction": "Building workflow...",
+    "workflowConstructed": "Workflow built successfully",
+    "workflowRefined": "Workflow refined successfully",
+    "sessionFinalized": "Session finalized",
+    "status": {
+      "hearing": "Hearing",
+      "building": "Building",
+      "reviewing": "Reviewing",
+      "refining": "Refining",
+      "completed": "Completed",
+      "abandoned": "Abandoned"
+    },
+    "phase": {
+      "analysis": "Analyzing",
+      "proposal": "Proposal & Confirmation",
+      "completed": "Completed"
+    },
+    "modes": {
+      "create": "Create New",
+      "enhance": "Enhance",
+      "explain": "Explain"
+    },
     "actions": {
       "suggest": "Suggest",
       "explain": "Explain"
@@ -581,7 +612,28 @@
       "suggestFailed": "Failed to get suggestions",
       "explainFailed": "Failed to get explanation",
       "sessionFailed": "Failed to load session",
-      "generateFailed": "Failed to generate workflow"
+      "generateFailed": "Failed to generate workflow",
+      "emptyMessage": "Please enter a message",
+      "constructFailed": "Failed to build workflow",
+      "refineFailed": "Failed to refine workflow",
+      "finalizeFailed": "Failed to finalize session",
+      "deleteFailed": "Failed to delete session",
+      "agentFailed": "Agent execution failed"
+    },
+    "agent": {
+      "mode": "Agent Mode",
+      "legacyMode": "Legacy Mode",
+      "resetSession": "Reset Session",
+      "welcome": "Ask the AI Agent anything",
+      "hint": "The agent uses tools to autonomously help build your workflow",
+      "placeholder": "Describe your workflow requirements or ask a question...",
+      "cancelled": "Cancelled",
+      "cancel": "Cancel"
+    },
+    "toolStatus": {
+      "calling": "Running",
+      "success": "Success",
+      "error": "Error"
     }
   },
   "stepConfig": {

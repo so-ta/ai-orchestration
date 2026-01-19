@@ -77,5 +77,8 @@ export function useApi() {
       }),
 
     delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
+
+    // Get base URL for SSE/WebSocket connections
+    getBaseUrl: () => baseURL,
   }
 }
