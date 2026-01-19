@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/testutil"
 
 	"github.com/stretchr/testify/assert"
@@ -515,6 +516,230 @@ return {
 
 	require.NoError(t, err, "Google Sheets API call should succeed")
 	t.Logf("Spreadsheet: %s, Sheets: %v", result["title"], result["sheets"])
+}
+
+// =============================================================================
+// Declarative Block Integration Tests
+// =============================================================================
+
+func TestDeclarativeBlock_Integration_GitHub_GetUser(t *testing.T) {
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	token := testutil.RequireEnvVar(t, "GITHUB_TOKEN")
+
+	// Use declarative configuration instead of JS code
+	block := &domain.BlockDefinition{
+		Slug: "github_get_user",
+		Request: &domain.RequestConfig{
+			URL:    "https://api.github.com/user",
+			Method: "GET",
+			Headers: map[string]string{
+				"Authorization":       "Bearer {{secret.token}}",
+				"Accept":              "application/vnd.github+json",
+				"X-GitHub-Api-Version": "2022-11-28",
+				"User-Agent":          "AI-Orchestration-Test",
+			},
+		},
+		Response: &domain.ResponseConfig{
+			SuccessStatus: []int{200},
+			OutputMapping: map[string]string{
+				"login": "body.login",
+				"id":    "body.id",
+				"name":  "body.name",
+			},
+		},
+	}
+
+	sandbox, execCtx := createTestSandbox()
+	execCtx.Credentials = map[string]interface{}{
+		"token": token,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := sandbox.ExecuteWithDeclarative(ctx, block, map[string]interface{}{}, map[string]interface{}{}, execCtx)
+
+	require.NoError(t, err, "Declarative GitHub API call should succeed")
+	assert.NotEmpty(t, result["login"], "Should return user login")
+	t.Logf("Declarative GitHub user: %s (ID: %v)", result["login"], result["id"])
+}
+
+func TestDeclarativeBlock_Integration_GitHub_ListRepos(t *testing.T) {
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	token := testutil.RequireEnvVar(t, "GITHUB_TOKEN")
+
+	block := &domain.BlockDefinition{
+		Slug: "github_list_repos",
+		Request: &domain.RequestConfig{
+			URL:    "https://api.github.com/user/repos",
+			Method: "GET",
+			Headers: map[string]string{
+				"Authorization":       "Bearer {{secret.token}}",
+				"Accept":              "application/vnd.github+json",
+				"X-GitHub-Api-Version": "2022-11-28",
+				"User-Agent":          "AI-Orchestration-Test",
+			},
+			QueryParams: map[string]string{
+				"per_page": "{{per_page}}",
+				"sort":     "updated",
+			},
+		},
+		Response: &domain.ResponseConfig{
+			SuccessStatus: []int{200},
+			OutputMapping: map[string]string{
+				"repos":  "body",
+				"status": "status",
+			},
+		},
+	}
+
+	sandbox, execCtx := createTestSandbox()
+	execCtx.Credentials = map[string]interface{}{
+		"token": token,
+	}
+
+	config := map[string]interface{}{
+		"per_page": "5",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := sandbox.ExecuteWithDeclarative(ctx, block, config, map[string]interface{}{}, execCtx)
+
+	require.NoError(t, err, "Declarative GitHub repos list should succeed")
+	repos, ok := result["repos"].([]interface{})
+	require.True(t, ok, "repos should be an array")
+	t.Logf("Found %d repositories (declarative)", len(repos))
+}
+
+func TestDeclarativeBlock_Integration_Slack_SendMessage(t *testing.T) {
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	webhookURL := testutil.RequireEnvVar(t, "SLACK_WEBHOOK_URL")
+
+	block := &domain.BlockDefinition{
+		Slug: "slack_declarative",
+		Request: &domain.RequestConfig{
+			URL:    webhookURL,
+			Method: "POST",
+			Body: map[string]interface{}{
+				"text": "{{input.message}}",
+				"blocks": []interface{}{
+					map[string]interface{}{
+						"type": "section",
+						"text": map[string]interface{}{
+							"type": "mrkdwn",
+							"text": "*Declarative Integration Test*\n{{input.message}}",
+						},
+					},
+				},
+			},
+		},
+		Response: &domain.ResponseConfig{
+			SuccessStatus: []int{200},
+			OutputMapping: map[string]string{
+				"success": "true",
+				"status":  "status",
+			},
+		},
+	}
+
+	sandbox, execCtx := createTestSandbox()
+
+	input := map[string]interface{}{
+		"message": "Declarative test at " + time.Now().Format(time.RFC3339),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := sandbox.ExecuteWithDeclarative(ctx, block, map[string]interface{}{}, input, execCtx)
+
+	require.NoError(t, err, "Declarative Slack message should be sent successfully")
+	assert.Equal(t, true, result["success"])
+	t.Logf("Declarative Slack message sent successfully")
+}
+
+func TestDeclarativeBlock_Integration_Discord_SendMessage(t *testing.T) {
+	testutil.SkipIfNotIntegration(t)
+	testutil.LoadTestEnv(t)
+	webhookURL := testutil.RequireEnvVar(t, "DISCORD_WEBHOOK_URL")
+
+	block := &domain.BlockDefinition{
+		Slug: "discord_declarative",
+		Request: &domain.RequestConfig{
+			URL:    webhookURL,
+			Method: "POST",
+			Body: map[string]interface{}{
+				"content":  "{{input.message}}",
+				"username": "Declarative Test Bot",
+			},
+		},
+		Response: &domain.ResponseConfig{
+			SuccessStatus: []int{200, 204},
+			OutputMapping: map[string]string{
+				"success": "true",
+			},
+		},
+	}
+
+	sandbox, execCtx := createTestSandbox()
+
+	input := map[string]interface{}{
+		"message": "Declarative test at " + time.Now().Format(time.RFC3339),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := sandbox.ExecuteWithDeclarative(ctx, block, map[string]interface{}{}, input, execCtx)
+
+	require.NoError(t, err, "Declarative Discord message should be sent successfully")
+	assert.Equal(t, true, result["success"])
+	t.Logf("Declarative Discord message sent successfully")
+}
+
+func TestDeclarativeBlock_Integration_PublicAPI(t *testing.T) {
+	testutil.SkipIfNotIntegration(t)
+
+	// Test against JSONPlaceholder (public API - always available)
+	block := &domain.BlockDefinition{
+		Slug: "jsonplaceholder_posts",
+		Request: &domain.RequestConfig{
+			URL:    "https://jsonplaceholder.typicode.com/posts",
+			Method: "GET",
+			QueryParams: map[string]string{
+				"_limit": "{{limit}}",
+			},
+		},
+		Response: &domain.ResponseConfig{
+			SuccessStatus: []int{200},
+			OutputMapping: map[string]string{
+				"posts":  "body",
+				"status": "status",
+			},
+		},
+	}
+
+	sandbox, execCtx := createTestSandbox()
+
+	config := map[string]interface{}{
+		"limit": "5",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := sandbox.ExecuteWithDeclarative(ctx, block, config, map[string]interface{}{}, execCtx)
+
+	require.NoError(t, err, "Declarative public API call should succeed")
+	posts, ok := result["posts"].([]interface{})
+	require.True(t, ok, "posts should be an array")
+	assert.LessOrEqual(t, len(posts), 5)
+	t.Logf("Declarative public API: Found %d posts", len(posts))
 }
 
 // =============================================================================

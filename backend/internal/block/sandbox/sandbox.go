@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/dop251/goja"
+	"github.com/souta/ai-orchestration/internal/domain"
 )
 
 // Errors
@@ -731,7 +734,7 @@ func (s *Sandbox) httpRequest(vm *goja.Runtime, client *HTTPClient, method strin
 		}
 	}
 
-	result, err := client.Request(method, url, body, options)
+	result, err := client.Request(client.Context(), method, url, body, options)
 	if err != nil {
 		panic(vm.ToValue(fmt.Sprintf("HTTP request failed: %v", err)))
 	}
@@ -744,6 +747,7 @@ type HTTPClient struct {
 	client  *http.Client
 	headers map[string]string
 	mu      sync.RWMutex
+	ctx     context.Context // Context for cancellation/timeout propagation
 }
 
 // NewHTTPClient creates a new HTTPClient
@@ -753,7 +757,27 @@ func NewHTTPClient(timeout time.Duration) *HTTPClient {
 			Timeout: timeout,
 		},
 		headers: make(map[string]string),
+		ctx:     context.Background(),
 	}
+}
+
+// NewHTTPClientWithContext creates a new HTTPClient with a context for cancellation support
+func NewHTTPClientWithContext(ctx context.Context, timeout time.Duration) *HTTPClient {
+	return &HTTPClient{
+		client: &http.Client{
+			Timeout: timeout,
+		},
+		headers: make(map[string]string),
+		ctx:     ctx,
+	}
+}
+
+// Context returns the context associated with this client
+func (c *HTTPClient) Context() context.Context {
+	if c.ctx == nil {
+		return context.Background()
+	}
+	return c.ctx
 }
 
 // SetHeader sets a default header for all requests
@@ -774,8 +798,12 @@ func (c *HTTPClient) getHeaders() map[string]string {
 	return headers
 }
 
-// Request performs an HTTP request
-func (c *HTTPClient) Request(method, url string, body interface{}, options map[string]interface{}) (map[string]interface{}, error) {
+// Request performs an HTTP request with context support for cancellation and timeout
+func (c *HTTPClient) Request(ctx context.Context, method, url string, body interface{}, options map[string]interface{}) (map[string]interface{}, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var bodyReader io.Reader
 	if body != nil {
 		bodyJSON, err := json.Marshal(body)
@@ -785,7 +813,7 @@ func (c *HTTPClient) Request(method, url string, body interface{}, options map[s
 		bodyReader = bytes.NewReader(bodyJSON)
 	}
 
-	req, err := http.NewRequest(method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -1585,4 +1613,566 @@ func (s *Sandbox) edgesDelete(vm *goja.Runtime, service EdgesService, call goja.
 	}
 
 	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// ============================================================================
+// Declarative Request/Response Processing
+// ============================================================================
+
+// templateVarRegex matches template variables like {{field}}, {{input.field}}, {{secret.KEY}}
+var templateVarRegex = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+
+// DeclarativeContext holds context for declarative request/response processing
+type DeclarativeContext struct {
+	Config      map[string]interface{} // Block configuration values
+	Input       map[string]interface{} // Input data from previous step
+	Credentials map[string]interface{} // Resolved credentials
+}
+
+// ExpandTemplate expands template variables in a string
+// Supports: {{field}} (config), {{input.field}} (input data), {{secret.KEY}} (credentials)
+func ExpandTemplate(template string, ctx *DeclarativeContext) string {
+	return templateVarRegex.ReplaceAllStringFunc(template, func(match string) string {
+		// Extract variable path without {{ }}
+		path := strings.TrimPrefix(strings.TrimSuffix(match, "}}"), "{{")
+		path = strings.TrimSpace(path)
+
+		// Handle different prefixes
+		if strings.HasPrefix(path, "input.") {
+			fieldPath := strings.TrimPrefix(path, "input.")
+			return getNestedValue(ctx.Input, fieldPath)
+		}
+		if strings.HasPrefix(path, "secret.") {
+			credName := strings.TrimPrefix(path, "secret.")
+			return getNestedValue(ctx.Credentials, credName)
+		}
+
+		// Default: config value
+		return getNestedValue(ctx.Config, path)
+	})
+}
+
+// ExpandTemplateForURLPath expands template variables and URL-encodes values for use in URL paths
+// Automatically detects already-encoded values to prevent double-encoding
+func ExpandTemplateForURLPath(template string, ctx *DeclarativeContext) string {
+	return templateVarRegex.ReplaceAllStringFunc(template, func(match string) string {
+		// Extract variable path without {{ }}
+		path := strings.TrimPrefix(strings.TrimSuffix(match, "}}"), "{{")
+		path = strings.TrimSpace(path)
+
+		var value string
+		// Handle different prefixes
+		if strings.HasPrefix(path, "input.") {
+			fieldPath := strings.TrimPrefix(path, "input.")
+			value = getNestedValue(ctx.Input, fieldPath)
+		} else if strings.HasPrefix(path, "secret.") {
+			credName := strings.TrimPrefix(path, "secret.")
+			value = getNestedValue(ctx.Credentials, credName)
+		} else {
+			// Default: config value
+			value = getNestedValue(ctx.Config, path)
+		}
+
+		// URL encode the value, but detect already-encoded values to prevent double-encoding
+		return urlEncodePathSegment(value)
+	})
+}
+
+// urlEncodePathSegment URL-encodes a value for use in a URL path segment
+// Detects already-encoded values to prevent double-encoding
+func urlEncodePathSegment(value string) string {
+	if value == "" {
+		return value
+	}
+
+	// Check if value appears to be already URL-encoded
+	// Look for percent-encoded sequences like %20, %2F, etc.
+	if isAlreadyURLEncoded(value) {
+		return value
+	}
+
+	// Use PathEscape for URL path segments (encodes spaces as %20, not +)
+	return url.PathEscape(value)
+}
+
+// isAlreadyURLEncoded checks if a string appears to be already URL-encoded
+func isAlreadyURLEncoded(s string) bool {
+	// If string contains % followed by two hex digits, it's likely already encoded
+	for i := 0; i < len(s)-2; i++ {
+		if s[i] == '%' {
+			// Check if next two characters are hex digits
+			if isHexDigit(s[i+1]) && isHexDigit(s[i+2]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isHexDigit checks if a byte is a valid hexadecimal digit
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'A' && b <= 'F') || (b >= 'a' && b <= 'f')
+}
+
+// ExpandTemplateValue recursively expands templates in any value type
+// Supports object format with omit_empty option:
+//
+//	field:
+//	  value: "{{template}}"
+//	  omit_empty: true
+func ExpandTemplateValue(value interface{}, ctx *DeclarativeContext) interface{} {
+	switch v := value.(type) {
+	case string:
+		// Check if this is a pure template variable reference (e.g., "{{input.filter}}")
+		// If so, return the actual value instead of a string representation
+		trimmed := strings.TrimSpace(v)
+		if strings.HasPrefix(trimmed, "{{") && strings.HasSuffix(trimmed, "}}") {
+			// Check if there's only one template variable
+			if strings.Count(trimmed, "{{") == 1 {
+				path := strings.TrimPrefix(strings.TrimSuffix(trimmed, "}}"), "{{")
+				path = strings.TrimSpace(path)
+
+				// Get the actual value (not string representation)
+				actualValue := getNestedValueAny(ctx.Config, path)
+				if strings.HasPrefix(path, "input.") {
+					fieldPath := strings.TrimPrefix(path, "input.")
+					actualValue = getNestedValueAny(ctx.Input, fieldPath)
+				} else if strings.HasPrefix(path, "secret.") {
+					credName := strings.TrimPrefix(path, "secret.")
+					actualValue = getNestedValueAny(ctx.Credentials, credName)
+				}
+
+				// Return actual value (preserves arrays, maps, etc.)
+				if actualValue != nil {
+					return actualValue
+				}
+				// If nil, return empty string (for template compatibility)
+				return ""
+			}
+		}
+		// For mixed strings with templates, use string expansion
+		return ExpandTemplate(v, ctx)
+	case map[string]interface{}:
+		// Check if this is a field with omit_empty option
+		if valueField, hasValue := v["value"]; hasValue {
+			// This is an object format field
+			expanded := ExpandTemplateValue(valueField, ctx)
+
+			// Check omit_empty option
+			if omitEmpty, ok := v["omit_empty"].(bool); ok && omitEmpty {
+				if isEmptyValue(expanded) {
+					// Return special marker to indicate this field should be omitted
+					return omitEmptyMarker{}
+				}
+			}
+			return expanded
+		}
+
+		// Regular map - recursively expand and filter out omit_empty markers
+		result := make(map[string]interface{})
+		for key, val := range v {
+			expanded := ExpandTemplateValue(val, ctx)
+			// Skip fields marked for omission
+			if _, isMarker := expanded.(omitEmptyMarker); !isMarker {
+				result[key] = expanded
+			}
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, 0, len(v))
+		for _, val := range v {
+			expanded := ExpandTemplateValue(val, ctx)
+			// Skip items marked for omission
+			if _, isMarker := expanded.(omitEmptyMarker); !isMarker {
+				result = append(result, expanded)
+			}
+		}
+		return result
+	default:
+		return v
+	}
+}
+
+// omitEmptyMarker is used to mark fields that should be omitted from output
+type omitEmptyMarker struct{}
+
+// isEmptyValue checks if a value should be considered "empty" for omit_empty
+func isEmptyValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	switch val := v.(type) {
+	case string:
+		return val == ""
+	case []interface{}:
+		return len(val) == 0
+	case map[string]interface{}:
+		return len(val) == 0
+	case bool:
+		return false // booleans are never "empty"
+	case float64:
+		return false // numbers are never "empty"
+	case int:
+		return false // numbers are never "empty"
+	default:
+		return false
+	}
+}
+
+// getNestedValue retrieves a nested value from a map using dot notation
+func getNestedValue(data map[string]interface{}, path string) string {
+	if data == nil {
+		return ""
+	}
+
+	parts := strings.Split(path, ".")
+	current := interface{}(data)
+
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			if val, ok := v[part]; ok {
+				current = val
+			} else {
+				return ""
+			}
+		default:
+			return ""
+		}
+	}
+
+	// Convert final value to string
+	switch v := current.(type) {
+	case string:
+		return v
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// BuildDeclarativeRequest builds an HTTP request from declarative RequestConfig
+// The goCtx parameter is used for request cancellation and timeout propagation
+func (s *Sandbox) BuildDeclarativeRequest(goCtx context.Context, reqConfig *domain.RequestConfig, declCtx *DeclarativeContext) (*http.Request, error) {
+	if reqConfig == nil {
+		return nil, errors.New("request config is nil")
+	}
+	if goCtx == nil {
+		goCtx = context.Background()
+	}
+
+	// Expand URL template with automatic URL-encoding for path variables
+	expandedURL := ExpandTemplateForURLPath(reqConfig.URL, declCtx)
+	if expandedURL == "" {
+		return nil, errors.New("URL is required in request config")
+	}
+
+	// Determine method
+	method := reqConfig.Method
+	if method == "" {
+		method = "GET"
+	}
+
+	// Build request body
+	var bodyReader io.Reader
+	if reqConfig.Body != nil && (method == "POST" || method == "PUT" || method == "PATCH") {
+		expandedBody := ExpandTemplateValue(reqConfig.Body, declCtx)
+		bodyJSON, err := json.Marshal(expandedBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		bodyReader = bytes.NewReader(bodyJSON)
+	}
+
+	// Create request with context for cancellation/timeout support
+	req, err := http.NewRequestWithContext(goCtx, method, expandedURL, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set Content-Type for requests with body
+	if bodyReader != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	// Apply headers from config
+	for key, value := range reqConfig.Headers {
+		req.Header.Set(key, ExpandTemplate(value, declCtx))
+	}
+
+	// Apply query parameters
+	if len(reqConfig.QueryParams) > 0 {
+		q := req.URL.Query()
+		for key, value := range reqConfig.QueryParams {
+			q.Set(key, ExpandTemplate(value, declCtx))
+		}
+		req.URL.RawQuery = q.Encode()
+	}
+
+	return req, nil
+}
+
+// ProcessDeclarativeResponse processes an HTTP response using declarative ResponseConfig
+func (s *Sandbox) ProcessDeclarativeResponse(respConfig *domain.ResponseConfig, resp *http.Response, respBody []byte) (map[string]interface{}, error) {
+	// Parse response body as JSON
+	var bodyData interface{}
+	if err := json.Unmarshal(respBody, &bodyData); err != nil {
+		// If not JSON, use as string
+		bodyData = string(respBody)
+	}
+
+	// Check status code
+	statusOK := false
+	if respConfig != nil && len(respConfig.SuccessStatus) > 0 {
+		for _, code := range respConfig.SuccessStatus {
+			if resp.StatusCode == code {
+				statusOK = true
+				break
+			}
+		}
+	} else {
+		// Default: 200-299 is success
+		statusOK = resp.StatusCode >= 200 && resp.StatusCode < 300
+	}
+
+	if !statusOK {
+		return nil, fmt.Errorf("HTTP request failed with status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// If no output mapping, return raw response
+	if respConfig == nil || len(respConfig.OutputMapping) == 0 {
+		return map[string]interface{}{
+			"status":  resp.StatusCode,
+			"headers": headersToMap(resp.Header),
+			"body":    bodyData,
+		}, nil
+	}
+
+	// Apply output mapping
+	result := make(map[string]interface{})
+	responseData := map[string]interface{}{
+		"status":  resp.StatusCode,
+		"headers": headersToMap(resp.Header),
+		"body":    bodyData,
+	}
+
+	for outputKey, sourcePath := range respConfig.OutputMapping {
+		// Check for literal values (e.g., "true", "false", numbers in quotes)
+		if sourcePath == "true" {
+			result[outputKey] = true
+			continue
+		}
+		if sourcePath == "false" {
+			result[outputKey] = false
+			continue
+		}
+
+		// Navigate the path
+		value := getNestedValueAny(responseData, sourcePath)
+		if value != nil {
+			result[outputKey] = value
+		}
+	}
+
+	return result, nil
+}
+
+// getNestedValueAny retrieves a nested value from a map, returning the actual value (not string)
+func getNestedValueAny(data map[string]interface{}, path string) interface{} {
+	if data == nil {
+		return nil
+	}
+
+	parts := strings.Split(path, ".")
+	current := interface{}(data)
+
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			if val, ok := v[part]; ok {
+				current = val
+			} else {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+
+	return current
+}
+
+// ExecuteWithDeclarative runs a block with declarative request/response configuration
+// This combines declarative config processing with optional PreProcess/PostProcess code
+func (s *Sandbox) ExecuteWithDeclarative(
+	ctx context.Context,
+	block *domain.BlockDefinition,
+	config map[string]interface{},
+	input map[string]interface{},
+	execCtx *ExecutionContext,
+) (map[string]interface{}, error) {
+	// Build declarative context
+	declCtx := &DeclarativeContext{
+		Config:      config,
+		Input:       input,
+		Credentials: execCtx.Credentials,
+	}
+
+	// Execute PreProcess chain (if any)
+	processedInput := input
+	if len(block.PreProcessChain) > 0 {
+		var err error
+		processedInput, err = s.executePreProcessChain(ctx, block.PreProcessChain, config, input, execCtx)
+		if err != nil {
+			return nil, fmt.Errorf("preProcess failed: %w", err)
+		}
+		// Update declarative context with processed input
+		declCtx.Input = processedInput
+	}
+
+	var result map[string]interface{}
+
+	// Check if we have declarative request config
+	if block.Request != nil && block.Request.URL != "" {
+		// Build and execute HTTP request declaratively with context for cancellation
+		httpResult, err := s.executeDeclarativeHTTP(ctx, block.Request, block.Response, declCtx, execCtx)
+		if err != nil {
+			return nil, err
+		}
+		result = httpResult
+	} else if block.Code != "" {
+		// Execute code-based block
+		var err error
+		result, err = s.Execute(ctx, block.Code, processedInput, execCtx)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No execution logic - return processed input
+		result = processedInput
+	}
+
+	// Execute PostProcess chain (if any)
+	if len(block.PostProcessChain) > 0 {
+		processedResult, err := s.executePostProcessChain(ctx, block.PostProcessChain, config, result, execCtx)
+		if err != nil {
+			return nil, fmt.Errorf("postProcess failed: %w", err)
+		}
+		result = processedResult
+	}
+
+	return result, nil
+}
+
+// executeDeclarativeHTTP executes an HTTP request using declarative configuration
+func (s *Sandbox) executeDeclarativeHTTP(
+	goCtx context.Context,
+	reqConfig *domain.RequestConfig,
+	respConfig *domain.ResponseConfig,
+	declCtx *DeclarativeContext,
+	execCtx *ExecutionContext,
+) (map[string]interface{}, error) {
+	if goCtx == nil {
+		goCtx = context.Background()
+	}
+
+	// Build HTTP request with context for cancellation/timeout
+	req, err := s.BuildDeclarativeRequest(goCtx, reqConfig, declCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	// Use HTTP client from execution context
+	if execCtx == nil || execCtx.HTTP == nil {
+		return nil, errors.New("HTTP client not available in execution context")
+	}
+
+	// Apply default headers from HTTP client
+	for k, v := range execCtx.HTTP.getHeaders() {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v)
+		}
+	}
+
+	// Execute request
+	resp, err := execCtx.HTTP.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Process response
+	return s.ProcessDeclarativeResponse(respConfig, resp, respBody)
+}
+
+// executePreProcessChain executes the chain of preProcess code (child -> ... -> root)
+func (s *Sandbox) executePreProcessChain(
+	ctx context.Context,
+	chain []string,
+	config map[string]interface{},
+	input map[string]interface{},
+	execCtx *ExecutionContext,
+) (map[string]interface{}, error) {
+	current := input
+
+	// Execute chain in order (child -> parent -> ... -> root)
+	for _, code := range chain {
+		if strings.TrimSpace(code) == "" {
+			continue
+		}
+
+		// Create combined input for preProcess
+		// preProcess receives: input (current data) and config
+		preInput := map[string]interface{}{
+			"data":   current,
+			"config": config,
+		}
+
+		result, err := s.Execute(ctx, code, preInput, execCtx)
+		if err != nil {
+			return nil, err
+		}
+		current = result
+	}
+
+	return current, nil
+}
+
+// executePostProcessChain executes the chain of postProcess code (root -> ... -> child)
+func (s *Sandbox) executePostProcessChain(
+	ctx context.Context,
+	chain []string,
+	config map[string]interface{},
+	output map[string]interface{},
+	execCtx *ExecutionContext,
+) (map[string]interface{}, error) {
+	current := output
+
+	// Execute chain in order (root -> ... -> parent -> child)
+	for _, code := range chain {
+		if strings.TrimSpace(code) == "" {
+			continue
+		}
+
+		// Create combined input for postProcess
+		// postProcess receives: input (current data) and config
+		postInput := map[string]interface{}{
+			"data":   current,
+			"config": config,
+		}
+
+		result, err := s.Execute(ctx, code, postInput, execCtx)
+		if err != nil {
+			return nil, err
+		}
+		current = result
+	}
+
+	return current, nil
 }

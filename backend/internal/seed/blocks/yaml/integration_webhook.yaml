@@ -1,0 +1,220 @@
+# Webhook基盤ブロックとSlack/Discord
+---
+slug: webhook
+version: 1
+name: Webhook
+description: Webhook POST通知の基盤ブロック
+category: apps
+subcategory: web
+icon: send
+parent_block_slug: http
+enabled: true
+
+config_schema:
+  type: object
+  properties:
+    webhook_url:
+      type: string
+      title: Webhook URL
+    secret_key:
+      type: string
+      title: シークレットキー名
+      description: ctx.secretsから取得するキー名
+
+output_schema:
+  type: object
+  properties:
+    success:
+      type: boolean
+    status:
+      type: number
+
+pre_process: |
+  const url = config.webhook_url || (config.secret_key ? ctx.secrets[config.secret_key] : null);
+  if (!url) {
+      throw new Error('[WEBHOOK_001] Webhook URLが設定されていません');
+  }
+  return {
+      ...input,
+      url: url,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: input.payload || input
+  };
+
+post_process: |
+  if (input.status >= 400) {
+      throw new Error('[WEBHOOK_002] Webhook送信失敗: ' + input.status);
+  }
+  return { success: true, status: input.status };
+
+ui_config:
+  icon: send
+  color: "#6366F1"
+
+error_codes:
+  - code: WEBHOOK_001
+    name: URL_NOT_CONFIGURED
+    description: Webhook URLが設定されていません
+    retryable: false
+  - code: WEBHOOK_002
+    name: SEND_FAILED
+    description: 送信に失敗しました
+    retryable: true
+
+---
+# Slackブロック - 宣言的設定対応
+slug: slack
+version: 4
+name: Slack
+description: Slackチャンネルにメッセージを送信
+category: apps
+subcategory: slack
+icon: message-square
+parent_block_slug: webhook
+enabled: true
+
+config_defaults:
+  secret_key: SLACK_WEBHOOK_URL
+
+config_schema:
+  type: object
+  required: [message]
+  properties:
+    message:
+      type: string
+      title: メッセージ
+      x-ui-widget: textarea
+    channel:
+      type: string
+      title: チャンネル
+    username:
+      type: string
+      title: 表示名
+    icon_emoji:
+      type: string
+      title: アイコン絵文字
+    blocks:
+      type: array
+      title: Block Kit
+      x-ui-widget: output-schema
+    webhook_url:
+      type: string
+      title: Webhook URL
+
+output_schema:
+  type: object
+  properties:
+    success:
+      type: boolean
+    status:
+      type: number
+
+# 宣言的リクエスト設定
+request:
+  method: POST
+  body:
+    text: "{{input.message}}"
+    channel: "{{channel}}"
+    username: "{{username}}"
+    icon_emoji: "{{icon_emoji}}"
+
+response:
+  success_status: [200, 204]
+  output_mapping:
+    success: "true"
+    status: status
+
+ui_config:
+  icon: message-square
+  color: "#4A154B"
+
+error_codes:
+  - code: SLACK_001
+    name: WEBHOOK_NOT_CONFIGURED
+    description: Webhook URLが設定されていません
+    retryable: false
+  - code: SLACK_002
+    name: SEND_FAILED
+    description: メッセージ送信に失敗しました
+    retryable: true
+  - code: SLACK_003
+    name: INVALID_WEBHOOK
+    description: 無効なWebhook URL
+    retryable: false
+
+---
+# Discordブロック - 宣言的設定対応
+slug: discord
+version: 4
+name: Discord
+description: Discord Webhookにメッセージを送信
+category: apps
+subcategory: discord
+icon: message-circle
+parent_block_slug: webhook
+enabled: true
+
+config_defaults:
+  secret_key: DISCORD_WEBHOOK_URL
+
+config_schema:
+  type: object
+  required: [content]
+  properties:
+    content:
+      type: string
+      title: メッセージ
+      x-ui-widget: textarea
+    username:
+      type: string
+      title: ユーザー名
+    avatar_url:
+      type: string
+      title: アバターURL
+    embeds:
+      type: array
+      title: Embeds
+      x-ui-widget: output-schema
+    webhook_url:
+      type: string
+      title: Webhook URL
+
+output_schema:
+  type: object
+  properties:
+    success:
+      type: boolean
+    status:
+      type: number
+
+request:
+  method: POST
+  body:
+    content: "{{input.content}}"
+    username: "{{username}}"
+    avatar_url: "{{avatar_url}}"
+
+response:
+  success_status: [200, 204]
+  output_mapping:
+    success: "true"
+    status: status
+
+ui_config:
+  icon: message-circle
+  color: "#5865F2"
+
+error_codes:
+  - code: DISCORD_001
+    name: WEBHOOK_NOT_CONFIGURED
+    description: Webhook URLが設定されていません
+    retryable: false
+  - code: DISCORD_002
+    name: SEND_FAILED
+    description: メッセージ送信に失敗しました
+    retryable: true
+  - code: DISCORD_003
+    name: RATE_LIMITED
+    description: レート制限に達しました
+    retryable: true

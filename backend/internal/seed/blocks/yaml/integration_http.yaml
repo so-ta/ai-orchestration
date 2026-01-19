@@ -1,0 +1,185 @@
+# HTTP基盤ブロック - すべての外部APIコールの基盤
+---
+slug: http
+version: 2
+name: HTTP Request
+description: Make HTTP API calls
+category: apps
+subcategory: web
+icon: globe
+enabled: true
+
+config_schema:
+  type: object
+  properties:
+    url:
+      type: string
+    body:
+      type: object
+    method:
+      enum: [GET, POST, PUT, DELETE, PATCH]
+      type: string
+    headers:
+      type: object
+    enable_error_port:
+      type: boolean
+      title: エラーハンドルを有効化
+      description: エラー発生時に専用のエラーポートに出力します
+      default: false
+
+code: |
+  // Support inheritance: input can override config values
+  const url = renderTemplate(input.url || config.url, input);
+  const method = input.method || config.method || 'GET';
+  const headers = Object.assign({}, config.headers || {}, input.headers || {});
+  const body = input.body !== undefined ? input.body : config.body;
+  const response = ctx.http.request(url, {
+      method: method,
+      headers: headers,
+      body: body ? (typeof body === 'string' ? body : renderTemplate(JSON.stringify(body), input)) : null
+  });
+  return response;
+
+ui_config:
+  icon: globe
+  color: "#3B82F6"
+
+error_codes:
+  - code: HTTP_001
+    name: CONNECTION_ERROR
+    description: Failed to connect
+    retryable: true
+  - code: HTTP_002
+    name: TIMEOUT
+    description: Request timeout
+    retryable: true
+
+---
+# REST API基盤ブロック - 認証付きREST APIの基盤
+slug: rest-api
+version: 1
+name: REST API
+description: REST API呼び出しの基盤ブロック（認証サポート）
+category: apps
+subcategory: web
+icon: cloud
+parent_block_slug: http
+enabled: true
+
+config_schema:
+  type: object
+  properties:
+    base_url:
+      type: string
+      title: ベースURL
+    auth_type:
+      type: string
+      enum: [none, bearer, api_key_header, api_key_query]
+      title: 認証タイプ
+      default: none
+    auth_key:
+      type: string
+      title: 認証キー（直接指定）
+    secret_key:
+      type: string
+      title: シークレットキー名
+    header_name:
+      type: string
+      title: ヘッダー名
+      default: X-API-Key
+      description: api_key_header使用時のヘッダー名
+
+pre_process: |
+  // 認証キー解決
+  const authValue = config.auth_key || (config.secret_key ? ctx.secrets[config.secret_key] : null);
+
+  // ヘッダー構築
+  const headers = { ...(input.headers || {}) };
+  const authType = config.auth_type || 'none';
+
+  if (authType === 'bearer' && authValue) {
+      headers['Authorization'] = 'Bearer ' + authValue;
+  } else if (authType === 'api_key_header' && authValue) {
+      const headerName = config.header_name || 'X-API-Key';
+      headers[headerName] = authValue;
+  }
+
+  // URL構築
+  let url = input.url || '';
+  if (config.base_url) {
+      url = config.base_url + url;
+  }
+  if (authType === 'api_key_query' && authValue) {
+      url += (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(authValue);
+  }
+
+  return { ...input, url, headers };
+
+post_process: |
+  // レート制限チェック
+  if (input.status === 429) {
+      throw new Error('[REST_003] レート制限に達しました');
+  }
+  // エラーステータス
+  if (input.status >= 400) {
+      const errorMsg = input.body?.message || input.body?.error || 'Unknown error';
+      throw new Error('[REST_002] APIエラー: ' + errorMsg);
+  }
+  return input;
+
+ui_config:
+  icon: cloud
+  color: "#0EA5E9"
+
+error_codes:
+  - code: REST_001
+    name: AUTH_FAILED
+    description: 認証に失敗しました
+    retryable: false
+  - code: REST_002
+    name: API_ERROR
+    description: APIエラー
+    retryable: true
+  - code: REST_003
+    name: RATE_LIMITED
+    description: レート制限に達しました
+    retryable: true
+
+---
+# Bearer認証API基盤
+slug: bearer-api
+version: 1
+name: Bearer API
+description: Bearer Token認証API基盤
+category: apps
+subcategory: web
+icon: key
+parent_block_slug: rest-api
+enabled: true
+
+config_defaults:
+  auth_type: bearer
+
+config_schema:
+  type: object
+  properties:
+    token:
+      type: string
+      title: アクセストークン（直接指定）
+
+pre_process: |
+  // token -> auth_key にマッピング
+  if (config.token && !config.auth_key) {
+      config.auth_key = config.token;
+  }
+  return input;
+
+ui_config:
+  icon: key
+  color: "#F59E0B"
+
+error_codes:
+  - code: BEARER_001
+    name: TOKEN_NOT_CONFIGURED
+    description: トークンが設定されていません
+    retryable: false

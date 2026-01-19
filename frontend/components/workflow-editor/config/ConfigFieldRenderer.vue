@@ -11,6 +11,7 @@ import KeyValueWidget from './widgets/KeyValueWidget.vue';
 import CodeWidget from './widgets/CodeWidget.vue';
 import JsonWidget from './widgets/JsonWidget.vue';
 import OutputSchemaWidget from './widgets/OutputSchemaWidget.vue';
+import SecretKeyWidget from './widgets/SecretKeyWidget.vue';
 
 const props = defineProps<{
   field: ParsedField;
@@ -50,6 +51,8 @@ const widgetComponent = computed(() => {
       return OutputSchemaWidget;
     case 'code':
       return CodeWidget;
+    case 'secret':
+      return SecretKeyWidget;
     default:
       return TextWidget;
   }

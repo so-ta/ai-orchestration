@@ -273,6 +273,8 @@ CREATE TABLE public.block_definitions (
     internal_steps jsonb DEFAULT '[]'::jsonb,
     group_kind character varying(50),
     is_container boolean DEFAULT false NOT NULL,
+    request jsonb,
+    response jsonb,
     CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'flow'::character varying, 'apps'::character varying, 'custom'::character varying])::text[]))),
     CONSTRAINT valid_block_subcategory CHECK (subcategory IS NULL OR (subcategory)::text = ANY ((ARRAY['chat'::character varying, 'rag'::character varying, 'routing'::character varying, 'branching'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'slack'::character varying, 'discord'::character varying, 'notion'::character varying, 'github'::character varying, 'google'::character varying, 'linear'::character varying, 'email'::character varying, 'web'::character varying, 'agent'::character varying])::text[])),
     CONSTRAINT valid_group_kind CHECK (group_kind IS NULL OR (group_kind)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying, 'agent'::character varying])::text[])),
@@ -290,6 +292,8 @@ COMMENT ON COLUMN public.block_definitions.config_defaults IS 'Default values fo
 COMMENT ON COLUMN public.block_definitions.pre_process IS 'JavaScript code executed before main code (input transformation)';
 COMMENT ON COLUMN public.block_definitions.post_process IS 'JavaScript code executed after main code (output transformation)';
 COMMENT ON COLUMN public.block_definitions.internal_steps IS 'Array of internal steps to execute sequentially: [{type, config, output_key}]';
+COMMENT ON COLUMN public.block_definitions.request IS 'Declarative HTTP request config: {url, method, body, headers, query_params}. Alternative to pre_process.';
+COMMENT ON COLUMN public.block_definitions.response IS 'Declarative response config: {output_mapping, success_status}. Alternative to post_process.';
 
 --
 -- Name: block_versions; Type: TABLE; Schema: public; Owner: -

@@ -942,6 +942,137 @@ docker compose exec api migrate -path /migrations -database "$DATABASE_URL" up
 
 4. **このドキュメントを更新**: システムブロック一覧に追加
 
+### YAML 形式でのブロック追加（推奨）
+
+外部 API 連携ブロックは YAML ファイルで定義できます。宣言的な `request`/`response` 設定により、JavaScript コードなしで HTTP API 呼び出しを実現できます。
+
+**YAML ファイルの配置場所**: `backend/internal/seed/blocks/yaml/`
+
+**基本構造**:
+
+```yaml
+---
+slug: github_create_issue
+version: 3
+name: "GitHub: Issue作成"
+description: GitHubリポジトリにIssueを作成
+category: apps
+subcategory: github
+icon: git-pull-request
+parent_block_slug: github-api
+enabled: true
+
+config_schema:
+  type: object
+  required: [owner, repo, title]
+  properties:
+    owner:
+      type: string
+      title: オーナー
+    repo:
+      type: string
+      title: リポジトリ
+    title:
+      type: string
+      title: タイトル
+
+# 宣言的リクエスト設定 - PreProcess の代わり
+request:
+  url: "/repos/{{owner}}/{{repo}}/issues"
+  method: POST
+  body:
+    title: "{{input.title}}"
+    body: "{{input.body}}"
+  query_params:
+    param1: "{{value}}"  # クエリパラメータは自動でエンコードされる
+
+# 宣言的レスポンス設定 - PostProcess の代わり
+response:
+  success_status: [200, 201]
+  output_mapping:
+    id: body.id
+    url: body.url
+
+error_codes:
+  - code: GITHUB_002
+    name: CREATE_FAILED
+    description: Issue作成に失敗しました
+    retryable: true
+```
+
+#### テンプレート変数
+
+| 構文 | 説明 | 例 |
+|------|------|-----|
+| `{{field}}` | config の値 | `{{owner}}` |
+| `{{input.field}}` | 入力データの値 | `{{input.title}}` |
+| `{{secret.KEY}}` | シークレット（認証情報） | `{{secret.GITHUB_TOKEN}}` |
+
+#### URL パス変数の自動エンコード
+
+URL テンプレート内の変数は自動的に URL エンコードされます（RFC 3986 準拠）。
+
+```yaml
+request:
+  url: "/spreadsheets/{{spreadsheet_id}}/values/{{range}}"
+  # range が "Sheet1!A1:B10" の場合、自動的に "Sheet1%21A1:B10" にエンコード
+```
+
+- 既にエンコード済みの値（`%20` 等を含む）は二重エンコードされません
+- クエリパラメータ（`query_params`）も自動エンコードされます
+
+#### オブジェクト形式による omit_empty
+
+リクエストボディのオプショナルフィールドは、オブジェクト形式で `omit_empty: true` を指定することで、空の場合に自動的に除外できます:
+
+```yaml
+request:
+  url: "/databases/{{database_id}}/query"
+  method: POST
+  body:
+    # オブジェクト形式: value + omit_empty
+    filter:
+      value: "{{filter}}"
+      omit_empty: true      # filter が空/null の場合、フィールドを省略
+    sorts:
+      value: "{{sorts}}"
+      omit_empty: true      # sorts が空配列の場合、フィールドを省略
+    # 通常形式: 常に含まれる
+    page_size: "{{page_size}}"
+```
+
+**omit_empty の判定基準**:
+
+| 値の型 | 空と判定される条件 |
+|--------|---------------------|
+| 文字列 | `""` (空文字列) |
+| 配列 | `[]` (空配列) |
+| オブジェクト | `{}` (空オブジェクト) |
+| null/未定義 | 常に空 |
+| boolean | 空とは判定されない（`false` も含める） |
+| 数値 | 空とは判定されない（`0` も含める） |
+
+**ユースケース**: Notion API、Google API など、オプショナルパラメータを持つ API で、未指定時にフィールド自体を送信したくない場合に使用します。
+
+#### 複数ブロックを1ファイルに定義
+
+YAML の `---` セパレータで複数のブロックを1ファイルに定義できます:
+
+```yaml
+---
+slug: service-api
+parent_block_slug: bearer-api
+# 基盤ブロックの定義...
+---
+slug: service_operation1
+parent_block_slug: service-api
+# 操作ブロック1の定義...
+---
+slug: service_operation2
+parent_block_slug: service-api
+# 操作ブロック2の定義...
+```
+
 ### Go Adapter が必要なケース（例外）
 
 以下の場合のみ、Go Adapter を実装：

@@ -226,8 +226,11 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 		PreProcess:     seedBlock.PreProcess,
 		PostProcess:    seedBlock.PostProcess,
 		InternalSteps:  seedBlock.InternalSteps,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		// Declarative request/response
+		Request:   seedBlock.Request,
+		Response:  seedBlock.Response,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	if err := m.blockRepo.Create(ctx, block); err != nil {
@@ -293,6 +296,9 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 	existing.PreProcess = seedBlock.PreProcess
 	existing.PostProcess = seedBlock.PostProcess
 	existing.InternalSteps = seedBlock.InternalSteps
+	// Declarative request/response
+	existing.Request = seedBlock.Request
+	existing.Response = seedBlock.Response
 	existing.UpdatedAt = time.Now().UTC()
 
 	if err := m.blockRepo.Update(ctx, existing); err != nil {
