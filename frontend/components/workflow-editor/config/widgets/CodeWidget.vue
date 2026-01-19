@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
 
 const props = defineProps<{
@@ -11,6 +11,11 @@ const props = defineProps<{
   disabled?: boolean
   required?: boolean
 }>()
+
+// Refs for auto-height calculation
+const codeAreaRef = ref<HTMLElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const calculatedHeight = ref<number>(150)
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
@@ -47,10 +52,35 @@ const rows = computed(() => {
   return props.override?.rows || 10
 })
 
+// Calculate editor height based on content
+function calculateHeight() {
+  const textarea = textareaRef.value
+  if (!textarea) return
+
+  // Reset height to auto to get scrollHeight
+  textarea.style.height = 'auto'
+  const scrollHeight = textarea.scrollHeight
+  const minHeight = 150
+  const maxHeight = 500
+
+  const newHeight = Math.max(minHeight, Math.min(scrollHeight, maxHeight))
+  calculatedHeight.value = newHeight
+}
+
+// Watch for content changes and recalculate height
+watch(
+  () => props.modelValue,
+  () => {
+    nextTick(() => calculateHeight())
+  },
+  { immediate: true }
+)
+
 // Handle input
 function handleInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
   emit('update:modelValue', target.value)
+  nextTick(() => calculateHeight())
 }
 
 // Handle blur
@@ -72,85 +102,259 @@ function formatCode() {
   }
 }
 
-// Simple JavaScript formatter
+// Advanced JavaScript formatter - statement-aware
 function formatJavaScript(code: string): string {
-  let result = ''
-  let indentLevel = 0
   const indentString = '  ' // 2 spaces
-  let inMultilineComment = false
 
-  const lines = code.split('\n')
+  // Tokenize the code to identify strings, comments, and code
+  interface Token {
+    type: 'code' | 'string' | 'comment' | 'multiline-comment' | 'template'
+    value: string
+  }
 
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex].trim()
+  function tokenize(src: string): Token[] {
+    const tokens: Token[] = []
+    let i = 0
 
-    // Skip empty lines but preserve one
-    if (!line) {
-      if (result && !result.endsWith('\n\n')) {
-        result += '\n'
+    while (i < src.length) {
+      // Multi-line comment
+      if (src[i] === '/' && src[i + 1] === '*') {
+        let end = src.indexOf('*/', i + 2)
+        if (end === -1) end = src.length
+        else end += 2
+        tokens.push({ type: 'multiline-comment', value: src.slice(i, end) })
+        i = end
+        continue
       }
-      continue
+
+      // Single-line comment
+      if (src[i] === '/' && src[i + 1] === '/') {
+        let end = src.indexOf('\n', i)
+        if (end === -1) end = src.length
+        tokens.push({ type: 'comment', value: src.slice(i, end) })
+        i = end
+        continue
+      }
+
+      // Template literal
+      if (src[i] === '`') {
+        let j = i + 1
+        while (j < src.length) {
+          if (src[j] === '\\') {
+            j += 2
+            continue
+          }
+          if (src[j] === '`') {
+            j++
+            break
+          }
+          j++
+        }
+        tokens.push({ type: 'template', value: src.slice(i, j) })
+        i = j
+        continue
+      }
+
+      // String (single or double quote)
+      if (src[i] === '"' || src[i] === "'") {
+        const quote = src[i]
+        let j = i + 1
+        while (j < src.length) {
+          if (src[j] === '\\') {
+            j += 2
+            continue
+          }
+          if (src[j] === quote) {
+            j++
+            break
+          }
+          j++
+        }
+        tokens.push({ type: 'string', value: src.slice(i, j) })
+        i = j
+        continue
+      }
+
+      // Regular code - collect until next special token
+      let j = i
+      while (j < src.length) {
+        if (
+          src[j] === '"' ||
+          src[j] === "'" ||
+          src[j] === '`' ||
+          (src[j] === '/' && (src[j + 1] === '/' || src[j + 1] === '*'))
+        ) {
+          break
+        }
+        j++
+      }
+      if (j > i) {
+        tokens.push({ type: 'code', value: src.slice(i, j) })
+        i = j
+      } else {
+        // Fallback: single character
+        tokens.push({ type: 'code', value: src[i] })
+        i++
+      }
     }
 
-    // Check for multiline comment start/end
-    if (line.startsWith('/*')) {
-      inMultilineComment = true
-    }
-    if (line.endsWith('*/')) {
-      result += indentString.repeat(indentLevel) + line + '\n'
-      inMultilineComment = false
-      continue
-    }
-    if (inMultilineComment) {
-      result += indentString.repeat(indentLevel) + line + '\n'
-      continue
-    }
+    return tokens
+  }
 
-    // Check for single line comment
-    if (line.startsWith('//')) {
-      result += indentString.repeat(indentLevel) + line + '\n'
-      continue
-    }
+  // Format code tokens - split statements properly
+  function formatCodePart(codeStr: string, currentIndent: number): { formatted: string; indent: number } {
+    let result = ''
+    let indent = currentIndent
+    let buffer = ''
 
-    // Decrease indent for closing braces/brackets at start of line
-    if (line.startsWith('}') || line.startsWith(']') || line.startsWith(')')) {
-      indentLevel = Math.max(0, indentLevel - 1)
-    }
+    const chars = codeStr.split('')
+    let parenDepth = 0 // ()
+    let bracketDepth = 0 // []
 
-    // Add formatted line
-    result += indentString.repeat(indentLevel) + line + '\n'
+    for (let i = 0; i < chars.length; i++) {
+      const ch = chars[i]
 
-    // Count braces to adjust indent (ignoring those in strings)
-    let tempInString: string | null = null
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]
-      const prevChar = i > 0 ? line[i - 1] : ''
+      // Track parentheses and brackets (for multi-line expressions)
+      if (ch === '(') parenDepth++
+      if (ch === ')') parenDepth = Math.max(0, parenDepth - 1)
+      if (ch === '[') bracketDepth++
+      if (ch === ']') bracketDepth = Math.max(0, bracketDepth - 1)
 
-      // Handle string detection
-      if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\') {
-        if (tempInString === char) {
-          tempInString = null
-        } else if (tempInString === null) {
-          tempInString = char
+      // Handle opening braces
+      if (ch === '{') {
+        buffer += ch
+        result += buffer.trim()
+        result += '\n'
+        indent++
+        buffer = ''
+        continue
+      }
+
+      // Handle closing braces
+      if (ch === '}') {
+        if (buffer.trim()) {
+          result += indentString.repeat(indent) + buffer.trim() + '\n'
+        }
+        indent = Math.max(0, indent - 1)
+        result += indentString.repeat(indent) + ch
+        buffer = ''
+
+        // Check if next non-whitespace is else, catch, finally, while (do-while)
+        let lookahead = ''
+        for (let j = i + 1; j < chars.length; j++) {
+          if (chars[j] !== ' ' && chars[j] !== '\n' && chars[j] !== '\t') {
+            lookahead = codeStr.slice(j, j + 10)
+            break
+          }
+        }
+
+        if (
+          lookahead.startsWith('else') ||
+          lookahead.startsWith('catch') ||
+          lookahead.startsWith('finally') ||
+          lookahead.startsWith('while')
+        ) {
+          result += ' '
+        } else {
+          result += '\n'
         }
         continue
       }
 
-      // Only count braces outside strings
-      if (tempInString === null) {
-        if (char === '{' || char === '[' || char === '(') {
-          // Don't increase if closing brace is on same line
-          const remaining = line.slice(i + 1)
-          const closingChar = char === '{' ? '}' : char === '[' ? ']' : ')'
-          if (!remaining.includes(closingChar)) {
-            indentLevel++
+      // Handle semicolons (statement end) - only at top level (not inside parens/brackets)
+      if (ch === ';' && parenDepth === 0 && bracketDepth === 0) {
+        buffer += ch
+        result += indentString.repeat(indent) + buffer.trim() + '\n'
+        buffer = ''
+        continue
+      }
+
+      // Handle newlines in original code
+      if (ch === '\n') {
+        if (buffer.trim()) {
+          // If buffer doesn't end with { or ; at top level, it's a continuation
+          const trimmed = buffer.trim()
+          if (
+            parenDepth > 0 ||
+            bracketDepth > 0 ||
+            trimmed.endsWith(',') ||
+            trimmed.endsWith('&&') ||
+            trimmed.endsWith('||') ||
+            trimmed.endsWith('+') ||
+            trimmed.endsWith('?') ||
+            trimmed.endsWith(':')
+          ) {
+            // Continuation line
+            buffer += ' '
+          } else {
+            result += indentString.repeat(indent) + trimmed + '\n'
+            buffer = ''
           }
         }
+        continue
+      }
+
+      // Collapse multiple spaces
+      if (ch === ' ' || ch === '\t') {
+        if (buffer.length > 0 && !buffer.endsWith(' ')) {
+          buffer += ' '
+        }
+        continue
+      }
+
+      buffer += ch
+    }
+
+    // Flush remaining buffer
+    if (buffer.trim()) {
+      result += indentString.repeat(indent) + buffer.trim() + '\n'
+    }
+
+    return { formatted: result, indent }
+  }
+
+  // Process all tokens
+  const tokens = tokenize(code)
+  let result = ''
+  let currentIndent = 0
+
+  for (const token of tokens) {
+    if (token.type === 'code') {
+      const { formatted, indent } = formatCodePart(token.value, currentIndent)
+      result += formatted
+      currentIndent = indent
+    } else if (token.type === 'comment') {
+      // Single-line comment: add on its own line
+      if (result.endsWith('\n') || result === '') {
+        result += indentString.repeat(currentIndent) + token.value.trim() + '\n'
+      } else {
+        result += ' ' + token.value.trim() + '\n'
+      }
+    } else if (token.type === 'multiline-comment') {
+      // Preserve multiline comment formatting
+      const lines = token.value.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        if (i === 0) {
+          result += indentString.repeat(currentIndent) + lines[i].trim()
+        } else {
+          result += '\n' + indentString.repeat(currentIndent) + ' ' + lines[i].trim()
+        }
+      }
+      result += '\n'
+    } else {
+      // Strings and template literals: preserve as-is, append to last line
+      if (result.endsWith('\n')) {
+        result = result.slice(0, -1) + token.value + '\n'
+      } else {
+        result += token.value
       }
     }
   }
 
-  return result.trim() + '\n'
+  // Clean up: remove multiple blank lines, ensure single trailing newline
+  result = result.replace(/\n{3,}/g, '\n\n').trim() + '\n'
+
+  return result
 }
 
 // Simple syntax highlighting keywords for JavaScript
@@ -220,16 +424,17 @@ const highlightedCode = computed(() => {
     </p>
 
     <div class="code-widget-container">
-      <div class="code-editor">
+      <div class="code-editor" :style="{ height: `${calculatedHeight}px` }">
         <div class="line-numbers">
           <span v-for="i in (modelValue || '').split('\n').length" :key="i">{{ i }}</span>
         </div>
-        <div class="code-area">
+        <div ref="codeAreaRef" class="code-area">
           <!-- Highlighted code display (read-only visual layer) -->
           <pre class="code-highlight" v-html="highlightedCode"/>
           <!-- Actual textarea for input -->
           <textarea
             :id="name"
+            ref="textareaRef"
             :value="modelValue || ''"
             :rows="rows"
             :disabled="disabled"
@@ -298,8 +503,9 @@ const highlightedCode = computed(() => {
 .code-editor {
   display: flex;
   min-height: 150px;
-  max-height: 400px;
+  max-height: 500px;
   overflow: auto;
+  transition: height 0.15s ease;
 }
 
 .line-numbers {
@@ -320,7 +526,8 @@ const highlightedCode = computed(() => {
 .code-area {
   position: relative;
   flex: 1;
-  overflow: auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .code-highlight,
@@ -329,7 +536,7 @@ const highlightedCode = computed(() => {
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
+  min-height: 100%;
   margin: 0;
   padding: 0.75rem;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -337,7 +544,9 @@ const highlightedCode = computed(() => {
   line-height: 1.5;
   white-space: pre-wrap;
   word-wrap: break-word;
+  overflow-wrap: break-word;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .code-highlight {
