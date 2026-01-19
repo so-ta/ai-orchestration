@@ -6,8 +6,14 @@ import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
 const purify = ref<typeof import('dompurify')['default'] | null>(null)
 
 onMounted(async () => {
-  const DOMPurify = (await import('dompurify')).default
-  purify.value = DOMPurify
+  try {
+    const DOMPurify = (await import('dompurify')).default
+    purify.value = DOMPurify
+  } catch {
+    // DOMPurify import failed - fallback to HTML-escaped content without extra sanitization
+    // This is safe because we already HTML-escape user input before processing
+    console.warn('DOMPurify failed to load, using HTML escape fallback')
+  }
 })
 
 const props = defineProps<{
