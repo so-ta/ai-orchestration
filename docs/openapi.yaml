@@ -41,6 +41,10 @@ tags:
     description: 管理者用ブロック管理
   - name: Health
     description: ヘルスチェック
+  - name: OAuth2
+    description: OAuth2外部サービス連携
+  - name: CredentialShares
+    description: 認証情報共有管理
 
 paths:
   /workflows:
@@ -1252,6 +1256,247 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReadinessCheck'
 
+  # OAuth2 Endpoints
+  /oauth2/providers:
+    get:
+      tags: [OAuth2]
+      summary: OAuth2プロバイダー一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OAuth2Provider'
+
+  /oauth2/providers/presets:
+    get:
+      tags: [OAuth2]
+      summary: プリセットプロバイダー一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OAuth2Provider'
+
+  /oauth2/apps:
+    get:
+      tags: [OAuth2]
+      summary: OAuth2アプリ一覧取得
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OAuth2App'
+    post:
+      tags: [OAuth2]
+      summary: OAuth2アプリ登録
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOAuth2AppRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/OAuth2App'
+
+  /oauth2/apps/{app_id}:
+    delete:
+      tags: [OAuth2]
+      summary: OAuth2アプリ削除
+      parameters:
+        - name: app_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 削除成功
+
+  /oauth2/authorize:
+    get:
+      tags: [OAuth2]
+      summary: OAuth2認証URL生成
+      parameters:
+        - name: provider_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: credential_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  auth_url:
+                    type: string
+
+  /oauth2/callback:
+    get:
+      tags: [OAuth2]
+      summary: OAuth2コールバック
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: リダイレクト
+
+  # Credential Share Endpoints
+  /credentials/{credential_id}/shares:
+    get:
+      tags: [CredentialShares]
+      summary: 認証情報の共有一覧取得
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CredentialShare'
+    post:
+      tags: [CredentialShares]
+      summary: 認証情報を共有
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCredentialShareRequest'
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CredentialShare'
+
+  /credentials/{credential_id}/shares/{share_id}:
+    patch:
+      tags: [CredentialShares]
+      summary: 共有設定更新
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCredentialShareRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CredentialShare'
+    delete:
+      tags: [CredentialShares]
+      summary: 共有を取り消し
+      parameters:
+        - name: credential_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: share_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 削除成功
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2405,6 +2650,131 @@ components:
               type: string
             details:
               type: object
+
+    OAuth2Provider:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        auth_url:
+          type: string
+        token_url:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        is_preset:
+          type: boolean
+
+    OAuth2App:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        provider_id:
+          type: string
+          format: uuid
+        provider_name:
+          type: string
+        client_id:
+          type: string
+        redirect_uri:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreateOAuth2AppRequest:
+      type: object
+      required:
+        - provider_id
+        - client_id
+        - client_secret
+        - redirect_uri
+      properties:
+        provider_id:
+          type: string
+          format: uuid
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        redirect_uri:
+          type: string
+
+    CredentialShare:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        credential_id:
+          type: string
+          format: uuid
+        shared_with_user_id:
+          type: string
+          format: uuid
+        shared_with_project_id:
+          type: string
+          format: uuid
+        permission:
+          type: string
+          enum: [use, edit, admin]
+        shared_by_user_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    CreateCredentialShareRequest:
+      type: object
+      required:
+        - permission
+      properties:
+        shared_with_user_id:
+          type: string
+          format: uuid
+        shared_with_project_id:
+          type: string
+          format: uuid
+        permission:
+          type: string
+          enum: [use, edit, admin]
+        note:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    UpdateCredentialShareRequest:
+      type: object
+      properties:
+        permission:
+          type: string
+          enum: [use, edit, admin]
+        note:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
 
   responses:
     NotFound:

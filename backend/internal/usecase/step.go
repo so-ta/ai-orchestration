@@ -14,6 +14,7 @@ type StepUsecase struct {
 	projectRepo     repository.ProjectRepository
 	stepRepo        repository.StepRepository
 	blockDefRepo    repository.BlockDefinitionRepository
+	credentialRepo  repository.CredentialRepository
 	projectChecker  *ProjectChecker
 }
 
@@ -22,13 +23,42 @@ func NewStepUsecase(
 	projectRepo repository.ProjectRepository,
 	stepRepo repository.StepRepository,
 	blockDefRepo repository.BlockDefinitionRepository,
+	credentialRepo repository.CredentialRepository,
 ) *StepUsecase {
 	return &StepUsecase{
 		projectRepo:    projectRepo,
 		stepRepo:       stepRepo,
 		blockDefRepo:   blockDefRepo,
+		credentialRepo: credentialRepo,
 		projectChecker: NewProjectChecker(projectRepo),
 	}
+}
+
+// validateCredentialBindingsTenant validates that all credential IDs in bindings belong to the tenant
+func (u *StepUsecase) validateCredentialBindingsTenant(ctx context.Context, tenantID uuid.UUID, bindings json.RawMessage) error {
+	if len(bindings) == 0 || string(bindings) == "null" {
+		return nil
+	}
+
+	var parsed map[string]string
+	if err := json.Unmarshal(bindings, &parsed); err != nil {
+		return domain.ErrValidation
+	}
+
+	for _, credIDStr := range parsed {
+		if credIDStr == "" {
+			continue
+		}
+		credID, err := uuid.Parse(credIDStr)
+		if err != nil {
+			return domain.ErrValidation
+		}
+		// Verify credential belongs to the tenant
+		if _, err := u.credentialRepo.GetByID(ctx, tenantID, credID); err != nil {
+			return domain.ErrCredentialNotFound
+		}
+	}
+	return nil
 }
 
 // CreateStepInput represents input for creating a step
@@ -89,6 +119,10 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 
 	// Set credential bindings (skip if null or empty)
 	if len(input.CredentialBindings) > 0 && string(input.CredentialBindings) != "null" {
+		// Validate that all credential IDs belong to the tenant
+		if err := u.validateCredentialBindingsTenant(ctx, input.TenantID, input.CredentialBindings); err != nil {
+			return nil, err
+		}
 		step.CredentialBindings = input.CredentialBindings
 	}
 
@@ -169,8 +203,11 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 	}
 
 	// Update credential bindings (skip if null or empty)
-	// Note: Tenant authorization for credential IDs is enforced at runtime by CredentialResolver
 	if len(input.CredentialBindings) > 0 && string(input.CredentialBindings) != "null" {
+		// Validate that all credential IDs belong to the tenant
+		if err := u.validateCredentialBindingsTenant(ctx, input.TenantID, input.CredentialBindings); err != nil {
+			return nil, err
+		}
 		step.CredentialBindings = input.CredentialBindings
 	}
 

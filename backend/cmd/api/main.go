@@ -113,7 +113,7 @@ func main() {
 	// Initialize usecases
 	projectUsecase := usecase.NewProjectUsecase(projectRepo, stepRepo, edgeRepo, versionRepo, blockRepo).
 		WithBlockGroupRepo(blockGroupRepo)
-	stepUsecase := usecase.NewStepUsecase(projectRepo, stepRepo, blockRepo)
+	stepUsecase := usecase.NewStepUsecase(projectRepo, stepRepo, blockRepo, credentialRepo)
 	edgeUsecase := usecase.NewEdgeUsecase(projectRepo, stepRepo, edgeRepo).
 		WithBlockGroupRepo(blockGroupRepo).
 		WithBlockDefinitionRepo(blockRepo)
