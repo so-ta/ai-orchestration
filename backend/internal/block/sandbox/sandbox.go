@@ -880,7 +880,9 @@ func (s *Sandbox) llmChat(vm *goja.Runtime, service LLMService, call goja.Functi
 
 	result, err := service.Chat(provider, model, request)
 	if err != nil {
-		panic(vm.ToValue(fmt.Sprintf("LLM chat failed: %v", err)))
+		// Sanitize error to prevent leaking internal implementation details
+		sanitized := sanitizeError(err)
+		panic(vm.ToValue(fmt.Sprintf("LLM chat failed: %v", sanitized)))
 	}
 
 	return vm.ToValue(result)

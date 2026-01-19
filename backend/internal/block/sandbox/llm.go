@@ -59,10 +59,13 @@ type ToolCall struct {
 	Function ToolCallFunction  `json:"function"`
 }
 
-// ToolCallFunction represents the function part of a tool call
+// ToolCallFunction represents the function part of a tool call.
+// Note: Arguments is a JSON string as per OpenAI API specification.
+// The API returns function arguments as a stringified JSON object, not a parsed object.
+// See: https://platform.openai.com/docs/api-reference/chat/object#chat/object-choices
 type ToolCallFunction struct {
 	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	Arguments string `json:"arguments"` // JSON string, e.g. "{\"location\": \"Boston\"}"
 }
 
 // chatOpenAI calls OpenAI's chat completion API
