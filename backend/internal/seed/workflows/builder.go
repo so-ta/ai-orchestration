@@ -196,15 +196,22 @@ func BuilderWorkflow() *SystemWorkflowDefinition {
 		},
 	}
 
-	// Convert schemas to JSON
-	analysisSchemaJSON, _ := json.Marshal(analysisOutputSchema)
-	proposalSchemaJSON, _ := json.Marshal(proposalOutputSchema)
-	constructSchemaJSON, _ := json.Marshal(constructOutputSchema)
-	refineSchemaJSON, _ := json.Marshal(refineOutputSchema)
-	agentRequirementSchemaJSON, _ := json.Marshal(agentRequirementSchema)
-	agentStructureSchemaJSON, _ := json.Marshal(agentStructureSchema)
-	agentConfigSchemaJSON, _ := json.Marshal(agentConfigSchema)
-	agentValidationSchemaJSON, _ := json.Marshal(agentValidationSchema)
+	// Convert schemas to JSON - mustMarshal panics on error for seed data consistency
+	mustMarshal := func(v interface{}) []byte {
+		data, err := json.Marshal(v)
+		if err != nil {
+			panic("failed to marshal schema: " + err.Error())
+		}
+		return data
+	}
+	analysisSchemaJSON := mustMarshal(analysisOutputSchema)
+	proposalSchemaJSON := mustMarshal(proposalOutputSchema)
+	constructSchemaJSON := mustMarshal(constructOutputSchema)
+	refineSchemaJSON := mustMarshal(refineOutputSchema)
+	agentRequirementSchemaJSON := mustMarshal(agentRequirementSchema)
+	agentStructureSchemaJSON := mustMarshal(agentStructureSchema)
+	agentConfigSchemaJSON := mustMarshal(agentConfigSchema)
+	agentValidationSchemaJSON := mustMarshal(agentValidationSchema)
 
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000002",
