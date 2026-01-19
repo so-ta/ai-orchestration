@@ -18,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const toast = useToast()
 const { credentials, loading, fetchCredentials } = useCredentials()
 
 // Parse required credentials from block definition
@@ -69,8 +70,12 @@ function handleCreateNew() {
 }
 
 // Fetch credentials on mount
-onMounted(() => {
-  fetchCredentials()
+onMounted(async () => {
+  try {
+    await fetchCredentials()
+  } catch {
+    toast.error(t('credentialBindings.fetchError'))
+  }
 })
 
 // Check if section should be shown

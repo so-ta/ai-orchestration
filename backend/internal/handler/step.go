@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/souta/ai-orchestration/internal/usecase"
 )
@@ -32,6 +33,28 @@ type CreateStepRequest struct {
 	} `json:"position"`
 }
 
+// validateCredentialBindings validates the credential_bindings JSON structure
+// Expected format: {"credential_name": "credential_uuid", ...}
+func validateCredentialBindings(data json.RawMessage) error {
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+	var bindings map[string]string
+	if err := json.Unmarshal(data, &bindings); err != nil {
+		return domain.ErrValidation
+	}
+	// Validate UUID format for each credential ID
+	for _, credID := range bindings {
+		if credID == "" {
+			continue
+		}
+		if _, err := uuid.Parse(credID); err != nil {
+			return domain.ErrValidation
+		}
+	}
+	return nil
+}
+
 // Create handles POST /api/v1/projects/{id}/steps
 func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
@@ -42,6 +65,12 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateStepRequest
 	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	// Validate credential_bindings format
+	if err := validateCredentialBindings(req.CredentialBindings); err != nil {
+		HandleError(w, err)
 		return
 	}
 
@@ -110,6 +139,12 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var req UpdateStepRequest
 	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	// Validate credential_bindings format
+	if err := validateCredentialBindings(req.CredentialBindings); err != nil {
+		HandleError(w, err)
 		return
 	}
 

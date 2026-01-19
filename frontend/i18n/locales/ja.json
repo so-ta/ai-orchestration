@@ -1787,6 +1787,7 @@
     "selectCredential": "認証情報を選択...",
     "noCredentials": "利用可能な認証情報がありません",
     "createNew": "新規作成",
+    "fetchError": "認証情報の取得に失敗しました",
     "scope": {
       "organization": "組織",
       "project": "プロジェクト",

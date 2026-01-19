@@ -1808,6 +1808,7 @@
     "selectCredential": "Select credential...",
     "noCredentials": "No credentials available",
     "createNew": "Create New",
+    "fetchError": "Failed to load credentials",
     "scope": {
       "organization": "Organization",
       "project": "Project",
