@@ -11,7 +11,7 @@ func (r *Registry) registerAIBlocks() {
 	r.register(LLMJSONBlock())
 	r.register(LLMStructuredBlock())
 	r.register(RouterBlock())
-	r.register(AgentBlock())
+	r.register(AgentBlock()) // Legacy block for system workflows; new users should use agent-group (BlockGroup)
 	r.register(MemoryBufferBlock())
 }
 
@@ -372,12 +372,15 @@ return input;
 }
 
 // AgentBlock provides an AI agent with ReAct loop and tool calling capabilities
+// Note: For new workflows, prefer using agent-group (BlockGroup) which allows
+// child steps to automatically become tools. This block is kept for backward
+// compatibility with existing system workflows.
 func AgentBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "agent",
 		Version:     1,
-		Name:        "AI Agent",
-		Description: "Autonomous AI agent with ReAct loop, tool calling, and memory management",
+		Name:        "AI Agent (Legacy)",
+		Description: "Autonomous AI agent with ReAct loop, tool calling, and memory management. For new workflows, use Agent group instead.",
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryChat,
 		Icon:        "bot",
@@ -388,31 +391,31 @@ func AgentBlock() *SystemBlockDefinition {
 				"provider": {
 					"enum": ["openai", "anthropic"],
 					"type": "string",
-					"title": "プロバイダー",
+					"title": "Provider",
 					"default": "anthropic"
 				},
 				"model": {
 					"type": "string",
-					"title": "モデル",
+					"title": "Model",
 					"default": "claude-sonnet-4-20250514"
 				},
 				"system_prompt": {
 					"type": "string",
-					"title": "システムプロンプト",
+					"title": "System Prompt",
 					"maxLength": 20000,
-					"description": "エージェントの役割と振る舞いを定義"
+					"description": "Defines agent behavior and capabilities"
 				},
 				"max_iterations": {
 					"type": "integer",
-					"title": "最大イテレーション",
+					"title": "Max Iterations",
 					"default": 10,
 					"minimum": 1,
 					"maximum": 50,
-					"description": "ReActループの最大反復回数"
+					"description": "Maximum ReAct loop iterations"
 				},
 				"tools": {
 					"type": "array",
-					"title": "利用可能なツール",
+					"title": "Available Tools",
 					"items": {
 						"type": "object",
 						"properties": {
@@ -421,34 +424,34 @@ func AgentBlock() *SystemBlockDefinition {
 							"parameters": {"type": "object"}
 						}
 					},
-					"description": "エージェントが使用できるツール定義"
+					"description": "Tool definitions the agent can use"
 				},
 				"tool_choice": {
 					"enum": ["auto", "none", "required"],
 					"type": "string",
-					"title": "ツール選択",
+					"title": "Tool Choice",
 					"default": "auto"
 				},
 				"temperature": {
 					"type": "number",
-					"title": "温度",
+					"title": "Temperature",
 					"default": 0.7,
 					"minimum": 0,
 					"maximum": 2
 				},
 				"memory_window": {
 					"type": "integer",
-					"title": "メモリウィンドウ",
+					"title": "Memory Window",
 					"default": 20,
 					"minimum": 1,
 					"maximum": 100,
-					"description": "保持する会話履歴の最大数"
+					"description": "Number of messages to keep in history"
 				},
 				"enable_memory": {
 					"type": "boolean",
-					"title": "メモリ有効化",
+					"title": "Enable Memory",
 					"default": true,
-					"description": "会話履歴を保持する"
+					"description": "Keep conversation history"
 				}
 			}
 		}`),
@@ -577,10 +580,10 @@ return {
 			"icon": "bot",
 			"color": "#10B981",
 			"groups": [
-				{"id": "model", "icon": "robot", "title": "モデル設定"},
-				{"id": "agent", "icon": "bot", "title": "エージェント設定"},
-				{"id": "memory", "icon": "database", "title": "メモリ設定"},
-				{"id": "tools", "icon": "wrench", "title": "ツール設定"}
+				{"id": "model", "icon": "robot", "title": "Model Settings"},
+				{"id": "agent", "icon": "bot", "title": "Agent Settings"},
+				{"id": "memory", "icon": "database", "title": "Memory Settings"},
+				{"id": "tools", "icon": "wrench", "title": "Tool Settings"}
 			],
 			"fieldGroups": {
 				"model": "model",

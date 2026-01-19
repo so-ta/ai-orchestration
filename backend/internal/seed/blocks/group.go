@@ -12,6 +12,7 @@ func (r *Registry) registerGroupBlocks() {
 	r.register(tryCatchBlock())
 	r.register(foreachBlock())
 	r.register(whileBlock())
+	r.register(agentGroupBlock())
 }
 
 // parallelBlock defines the parallel group block
@@ -230,5 +231,123 @@ return input;`,
 		Enabled:     true,
 		GroupKind:   domain.BlockGroupKindWhile,
 		IsContainer: true,
+	}
+}
+
+// agentGroupBlock defines the agent group block
+// Child steps become tools that the AI agent can call
+func agentGroupBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:        "agent-group",
+		Version:     1,
+		Name:        "Agent",
+		Description: "AI agent with ReAct loop - child steps become callable tools",
+		Category:    domain.BlockCategoryAI,
+		Subcategory: domain.BlockSubcategoryAgent,
+		Icon:        "bot",
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"required": ["provider", "model", "system_prompt"],
+			"properties": {
+				"provider": {
+					"type": "string",
+					"title": "Provider",
+					"enum": ["openai", "anthropic"],
+					"default": "anthropic",
+					"description": "LLM provider"
+				},
+				"model": {
+					"type": "string",
+					"title": "Model",
+					"default": "claude-sonnet-4-20250514",
+					"description": "Model ID (e.g., claude-sonnet-4-20250514, gpt-4)"
+				},
+				"system_prompt": {
+					"type": "string",
+					"title": "System Prompt",
+					"maxLength": 50000,
+					"description": "System prompt defining the agent's behavior and capabilities"
+				},
+				"max_iterations": {
+					"type": "integer",
+					"title": "Max Iterations",
+					"default": 10,
+					"minimum": 1,
+					"maximum": 50,
+					"description": "Maximum ReAct loop iterations"
+				},
+				"temperature": {
+					"type": "number",
+					"title": "Temperature",
+					"default": 0.7,
+					"minimum": 0,
+					"maximum": 2,
+					"description": "LLM temperature (0-2)"
+				},
+				"tool_choice": {
+					"type": "string",
+					"title": "Tool Choice",
+					"enum": ["auto", "none", "required"],
+					"default": "auto",
+					"description": "How the agent should use tools"
+				},
+				"enable_memory": {
+					"type": "boolean",
+					"title": "Enable Memory",
+					"default": false,
+					"description": "Enable conversation memory across runs"
+				},
+				"memory_window": {
+					"type": "integer",
+					"title": "Memory Window",
+					"default": 20,
+					"minimum": 1,
+					"maximum": 100,
+					"description": "Number of messages to keep in memory"
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{
+			{Name: "in", Label: "Input", Required: true, Description: "User message or task input"},
+		},
+		OutputPorts: []domain.OutputPort{
+			{Name: "out", Label: "Response", IsDefault: true, Description: "Agent's final response"},
+			{Name: "error", Label: "Error", IsDefault: false, Description: "Error output"},
+		},
+		Code: `// Agent execution is handled by the engine's executeAgent()
+// Child steps become tools that the agent can call
+return input;`,
+		UIConfig: json.RawMessage(`{
+			"icon": "bot",
+			"color": "#10B981",
+			"isContainer": true,
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "Model Settings"},
+				{"id": "agent", "icon": "bot", "title": "Agent Settings"},
+				{"id": "memory", "icon": "database", "title": "Memory Settings"}
+			],
+			"fieldGroups": {
+				"provider": "model",
+				"model": "model",
+				"system_prompt": "agent",
+				"max_iterations": "agent",
+				"temperature": "agent",
+				"tool_choice": "agent",
+				"enable_memory": "memory",
+				"memory_window": "memory"
+			},
+			"fieldOverrides": {
+				"system_prompt": {"rows": 8, "widget": "textarea"}
+			}
+		}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "AGENT_001", Name: "MAX_ITERATIONS", Description: "Agent reached maximum iterations", Retryable: false},
+			{Code: "AGENT_002", Name: "TOOL_ERROR", Description: "Tool execution failed", Retryable: true},
+			{Code: "AGENT_003", Name: "LLM_ERROR", Description: "LLM API error", Retryable: true},
+		},
+		RequiredCredentials: json.RawMessage(`[{"name": "llm_api_key", "type": "api_key", "scope": "system", "required": true, "description": "LLM Provider API Key"}]`),
+		Enabled:             true,
+		GroupKind:           domain.BlockGroupKindAgent,
+		IsContainer:         true,
 	}
 }

@@ -1164,6 +1164,10 @@ const GROUP_OUTPUT_PORTS_FOR_LAYOUT: Record<BlockGroupType, OutputPort[]> = {
   while: [
     { name: 'out', label: 'Output', is_default: true },
   ],
+  agent: [
+    { name: 'out', label: 'Response', is_default: true },
+    { name: 'error', label: 'Error', is_default: false },
+  ],
 }
 
 function getGroupOutputPortsForLayout(groupType: BlockGroupType): OutputPort[] {
