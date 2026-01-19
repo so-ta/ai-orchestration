@@ -446,9 +446,10 @@ const highlightedCode = computed(() => {
         <div class="line-numbers">
           <span v-for="i in (modelValue || '').split('\n').length" :key="i">{{ i }}</span>
         </div>
+        <!-- eslint-disable vue/html-self-closing -->
         <div class="code-area">
           <!-- Highlighted code display (read-only visual layer) -->
-          <pre class="code-highlight" v-html="highlightedCode"/>
+          <pre class="code-highlight" v-html="highlightedCode"></pre>
           <!-- Actual textarea for input -->
           <textarea
             :id="name"
@@ -461,8 +462,9 @@ const highlightedCode = computed(() => {
             spellcheck="false"
             @input="handleInput"
             @blur="handleBlur"
-          />
+          ></textarea>
         </div>
+        <!-- eslint-enable vue/html-self-closing -->
       </div>
       <div class="code-footer">
         <button
