@@ -13,7 +13,6 @@ const props = defineProps<{
 }>()
 
 // Refs for auto-height calculation
-const codeAreaRef = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const calculatedHeight = ref<number>(150)
 
@@ -357,13 +356,15 @@ function formatJavaScript(code: string): string {
   return result
 }
 
-// Simple syntax highlighting keywords for JavaScript
-// Uses placeholders to avoid replacement conflicts
+// Syntax highlighting for JavaScript
+// SECURITY: HTML is escaped FIRST to prevent XSS, then syntax highlighting spans are added.
+// The v-html directive is safe here because user input is always escaped before processing.
 const highlightedCode = computed(() => {
   const code = props.modelValue || ''
   if (!code) return ''
 
-  // Escape HTML first
+  // IMPORTANT: Escape HTML first to prevent XSS attacks
+  // All user input (<, >, &, etc.) is converted to HTML entities
   let html = code
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -428,7 +429,7 @@ const highlightedCode = computed(() => {
         <div class="line-numbers">
           <span v-for="i in (modelValue || '').split('\n').length" :key="i">{{ i }}</span>
         </div>
-        <div ref="codeAreaRef" class="code-area">
+        <div class="code-area">
           <!-- Highlighted code display (read-only visual layer) -->
           <pre class="code-highlight" v-html="highlightedCode"/>
           <!-- Actual textarea for input -->
