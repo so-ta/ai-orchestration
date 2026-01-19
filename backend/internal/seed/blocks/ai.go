@@ -178,7 +178,7 @@ return input;
 			"    }\n" +
 			"    return {\n" +
 			"        error: 'JSON parse failed: ' + e.message,\n" +
-			"        raw_content: input.content,\n" +
+			"        __raw: input.content,\n" +
 			"        __usage: input.usage\n" +
 			"    };\n" +
 			"}\n",
@@ -289,7 +289,9 @@ if (config.output_schema && config.output_schema.properties) {
         schemaInstruction = schemaInstruction + '\n\nExample:\n' + JSON.stringify(example, null, 2);
     }
 
+    // Update both json_instruction and system_prompt to ensure schema is visible to LLM
     config.json_instruction = (config.json_instruction || 'Always respond with valid JSON only. No markdown, no explanation.') + schemaInstruction;
+    config.system_prompt = (config.system_prompt || '') + schemaInstruction;
 }
 return input;
 `,
