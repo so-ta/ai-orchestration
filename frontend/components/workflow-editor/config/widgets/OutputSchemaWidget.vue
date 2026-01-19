@@ -17,7 +17,7 @@ const emit = defineEmits<{
   (e: 'blur'): void
 }>()
 
-// Field types
+// Field types with display labels
 const fieldTypes = [
   { value: 'string', label: '文字列' },
   { value: 'number', label: '数値' },
@@ -26,7 +26,15 @@ const fieldTypes = [
   { value: 'array', label: '配列' },
 ]
 
-// Schema field interface
+// Array item types (excludes nested array for simplicity)
+const arrayItemTypes = [
+  { value: 'string', label: '文字列' },
+  { value: 'number', label: '数値' },
+  { value: 'boolean', label: '真偽値' },
+  { value: 'object', label: 'オブジェクト' },
+]
+
+// Recursive schema field interface with children support
 interface SchemaField {
   id: string
   name: string
@@ -34,6 +42,13 @@ interface SchemaField {
   title: string
   description: string
   required: boolean
+  // For nested objects
+  children?: SchemaField[]
+  // For arrays
+  itemType?: string
+  itemChildren?: SchemaField[] // For array of objects
+  // UI state
+  expanded?: boolean
 }
 
 // JSON Schema structure for output schema
@@ -41,12 +56,16 @@ interface OutputSchemaObject {
   type?: string
   properties?: Record<string, SchemaProperty>
   required?: string[]
+  items?: SchemaProperty
 }
 
 interface SchemaProperty {
   type?: string
   title?: string
   description?: string
+  properties?: Record<string, SchemaProperty>
+  required?: string[]
+  items?: SchemaProperty
 }
 
 // Internal state
@@ -66,25 +85,46 @@ const description = computed(() => {
   return props.property.description
 })
 
-// Parse schema to fields
-function parseSchemaToFields(schema: unknown): SchemaField[] {
+// Parse schema to fields (recursive)
+function parseSchemaToFields(schema: unknown, depth = 0): SchemaField[] {
+  if (depth > 5) return [] // Prevent infinite recursion
+
   const schemaObj = schema as OutputSchemaObject | null | undefined
   if (!schemaObj || schemaObj.type !== 'object' || !schemaObj.properties) {
     return []
   }
 
   const required = schemaObj.required || []
-  return Object.entries(schemaObj.properties).map(([name, prop]) => ({
-    id: crypto.randomUUID(),
-    name,
-    type: prop.type || 'string',
-    title: prop.title || '',
-    description: prop.description || '',
-    required: required.includes(name)
-  }))
+  return Object.entries(schemaObj.properties).map(([name, prop]) => {
+    const field: SchemaField = {
+      id: crypto.randomUUID(),
+      name,
+      type: prop.type || 'string',
+      title: prop.title || '',
+      description: prop.description || '',
+      required: required.includes(name),
+      expanded: true
+    }
+
+    // Handle nested objects
+    if (prop.type === 'object' && prop.properties) {
+      field.children = parseSchemaToFields(prop, depth + 1)
+    }
+
+    // Handle arrays
+    if (prop.type === 'array' && prop.items) {
+      field.itemType = prop.items.type || 'string'
+      // Handle array of objects
+      if (prop.items.type === 'object' && prop.items.properties) {
+        field.itemChildren = parseSchemaToFields(prop.items, depth + 1)
+      }
+    }
+
+    return field
+  })
 }
 
-// Convert fields to schema
+// Convert fields to schema (recursive)
 function fieldsToSchema(fields: SchemaField[]): OutputSchemaObject {
   if (fields.length === 0) {
     return {}
@@ -96,11 +136,41 @@ function fieldsToSchema(fields: SchemaField[]): OutputSchemaObject {
   for (const field of fields) {
     if (!field.name.trim()) continue
 
-    properties[field.name] = {
+    const prop: SchemaProperty = {
       type: field.type,
       ...(field.title && { title: field.title }),
       ...(field.description && { description: field.description })
     }
+
+    // Handle nested objects
+    if (field.type === 'object' && field.children && field.children.length > 0) {
+      const nestedSchema = fieldsToSchema(field.children)
+      if (nestedSchema.properties) {
+        prop.properties = nestedSchema.properties
+        if (nestedSchema.required && nestedSchema.required.length > 0) {
+          prop.required = nestedSchema.required
+        }
+      }
+    }
+
+    // Handle arrays
+    if (field.type === 'array') {
+      const itemType = field.itemType || 'string'
+      prop.items = { type: itemType }
+
+      // Handle array of objects
+      if (itemType === 'object' && field.itemChildren && field.itemChildren.length > 0) {
+        const nestedSchema = fieldsToSchema(field.itemChildren)
+        if (nestedSchema.properties) {
+          prop.items.properties = nestedSchema.properties
+          if (nestedSchema.required && nestedSchema.required.length > 0) {
+            prop.items.required = nestedSchema.required
+          }
+        }
+      }
+    }
+
+    properties[field.name] = prop
 
     if (field.required) {
       required.push(field.name)
@@ -145,7 +215,7 @@ function emitChanges() {
   emit('update:modelValue', schema)
 }
 
-// Add new field
+// Add new field at root level
 function addField() {
   fields.value.push({
     id: crypto.randomUUID(),
@@ -153,24 +223,89 @@ function addField() {
     type: 'string',
     title: '',
     description: '',
-    required: false
+    required: false,
+    expanded: true
   })
 }
 
-// Remove field
-function removeField(index: number) {
-  fields.value.splice(index, 1)
+// Add child field to a parent (for nested objects)
+function addChildField(parentField: SchemaField) {
+  if (!parentField.children) {
+    parentField.children = []
+  }
+  parentField.children.push({
+    id: crypto.randomUUID(),
+    name: '',
+    type: 'string',
+    title: '',
+    description: '',
+    required: false,
+    expanded: true
+  })
+  emitChanges()
+}
+
+// Add item child field (for array of objects)
+function addItemChildField(parentField: SchemaField) {
+  if (!parentField.itemChildren) {
+    parentField.itemChildren = []
+  }
+  parentField.itemChildren.push({
+    id: crypto.randomUUID(),
+    name: '',
+    type: 'string',
+    title: '',
+    description: '',
+    required: false,
+    expanded: true
+  })
+  emitChanges()
+}
+
+// Remove field from array
+function removeFieldFromArray(array: SchemaField[], index: number) {
+  array.splice(index, 1)
   emitChanges()
 }
 
 // Update field
-function updateField(index: number, key: keyof SchemaField, value: SchemaField[keyof SchemaField]) {
-  if (fields.value[index]) {
-    // Type-safe field update using a new object spread
-    const field = fields.value[index]
-    fields.value[index] = { ...field, [key]: value }
-    emitChanges()
+function updateField(field: SchemaField, key: keyof SchemaField, value: SchemaField[keyof SchemaField]) {
+  // Handle type change - reset children/itemChildren appropriately
+  if (key === 'type') {
+    if (value === 'object') {
+      field.children = field.children || []
+      field.itemType = undefined
+      field.itemChildren = undefined
+    } else if (value === 'array') {
+      field.itemType = field.itemType || 'string'
+      field.children = undefined
+      if (field.itemType === 'object') {
+        field.itemChildren = field.itemChildren || []
+      }
+    } else {
+      field.children = undefined
+      field.itemType = undefined
+      field.itemChildren = undefined
+    }
   }
+
+  // Handle itemType change
+  if (key === 'itemType') {
+    if (value === 'object') {
+      field.itemChildren = field.itemChildren || []
+    } else {
+      field.itemChildren = undefined
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (field as any)[key] = value
+  emitChanges()
+}
+
+// Toggle field expansion
+function toggleExpand(field: SchemaField) {
+  field.expanded = !field.expanded
 }
 
 // Handle JSON text change
@@ -210,6 +345,11 @@ function toggleJsonEditor() {
 // Handle blur
 function handleBlur() {
   emit('blur')
+}
+
+// Get depth class for styling
+function getDepthClass(depth: number): string {
+  return `depth-${Math.min(depth, 3)}`
 }
 </script>
 
@@ -258,95 +398,381 @@ function handleBlur() {
         <p class="empty-hint">フィールドを追加すると、定義されたフィールドのみが次のステップに渡されます</p>
       </div>
 
-      <div v-else class="fields-list">
-        <div v-for="(field, index) in fields" :key="field.id" class="field-item">
-          <div class="field-header">
-            <span class="field-index">#{{ index + 1 }}</span>
-            <button
-              type="button"
-              class="remove-button"
-              :disabled="disabled"
-              title="フィールドを削除"
-              @click="removeField(index)"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-
-          <div class="field-row">
-            <div class="field-group name-group">
-              <label class="field-label">フィールド名 *</label>
-              <input
-                type="text"
-                class="field-input"
-                :value="field.name"
-                :disabled="disabled"
-                placeholder="field_name"
-                @input="updateField(index, 'name', ($event.target as HTMLInputElement).value)"
-                @blur="handleBlur"
-              >
-            </div>
-            <div class="field-group type-group">
-              <label class="field-label">型</label>
-              <select
-                class="field-select"
-                :value="field.type"
-                :disabled="disabled"
-                @change="updateField(index, 'type', ($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="t in fieldTypes" :key="t.value" :value="t.value">
-                  {{ t.label }}
-                </option>
-              </select>
-            </div>
-            <div class="field-group required-group">
-              <label class="field-label">必須</label>
-              <label class="checkbox-wrapper">
-                <input
-                  type="checkbox"
-                  :checked="field.required"
+      <!-- Recursive field renderer component -->
+      <template v-else>
+        <div class="fields-list">
+          <!-- Root level fields -->
+          <template v-for="(field, index) in fields" :key="field.id">
+            <div class="field-item" :class="getDepthClass(0)">
+              <div class="field-header">
+                <div class="field-header-left">
+                  <!-- Expand/collapse button for object/array types -->
+                  <button
+                    v-if="field.type === 'object' || (field.type === 'array' && field.itemType === 'object')"
+                    type="button"
+                    class="expand-button"
+                    @click="toggleExpand(field)"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      :class="{ rotated: field.expanded }"
+                    >
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </button>
+                  <span class="field-index">#{{ index + 1 }}</span>
+                  <span v-if="field.type === 'object'" class="type-badge object-badge">{ }</span>
+                  <span v-else-if="field.type === 'array'" class="type-badge array-badge">[ ]</span>
+                </div>
+                <button
+                  type="button"
+                  class="remove-button"
                   :disabled="disabled"
-                  @change="updateField(index, 'required', ($event.target as HTMLInputElement).checked)"
+                  title="フィールドを削除"
+                  @click="removeFieldFromArray(fields, index)"
                 >
-                <span class="checkbox-mark"/>
-              </label>
-            </div>
-          </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
 
-          <div class="field-row">
-            <div class="field-group">
-              <label class="field-label">表示名</label>
-              <input
-                type="text"
-                class="field-input"
-                :value="field.title"
-                :disabled="disabled"
-                placeholder="日本語の表示名"
-                @input="updateField(index, 'title', ($event.target as HTMLInputElement).value)"
-                @blur="handleBlur"
-              >
-            </div>
-          </div>
+              <div class="field-row">
+                <div class="field-group name-group">
+                  <label class="field-label">フィールド名 *</label>
+                  <input
+                    type="text"
+                    class="field-input"
+                    :value="field.name"
+                    :disabled="disabled"
+                    placeholder="field_name"
+                    @input="updateField(field, 'name', ($event.target as HTMLInputElement).value)"
+                    @blur="handleBlur"
+                  >
+                </div>
+                <div class="field-group type-group">
+                  <label class="field-label">型</label>
+                  <select
+                    class="field-select"
+                    :value="field.type"
+                    :disabled="disabled"
+                    @change="updateField(field, 'type', ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="t in fieldTypes" :key="t.value" :value="t.value">
+                      {{ t.label }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field-group required-group">
+                  <label class="field-label">必須</label>
+                  <label class="checkbox-wrapper">
+                    <input
+                      type="checkbox"
+                      :checked="field.required"
+                      :disabled="disabled"
+                      @change="updateField(field, 'required', ($event.target as HTMLInputElement).checked)"
+                    >
+                    <span class="checkbox-mark"/>
+                  </label>
+                </div>
+              </div>
 
-          <div class="field-row">
-            <div class="field-group">
-              <label class="field-label">説明</label>
-              <input
-                type="text"
-                class="field-input"
-                :value="field.description"
-                :disabled="disabled"
-                placeholder="このフィールドの説明"
-                @input="updateField(index, 'description', ($event.target as HTMLInputElement).value)"
-                @blur="handleBlur"
-              >
+              <!-- Array item type selector -->
+              <div v-if="field.type === 'array'" class="field-row">
+                <div class="field-group">
+                  <label class="field-label">配列の要素型</label>
+                  <select
+                    class="field-select"
+                    :value="field.itemType || 'string'"
+                    :disabled="disabled"
+                    @change="updateField(field, 'itemType', ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-for="t in arrayItemTypes" :key="t.value" :value="t.value">
+                      {{ t.label }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field-group">
+                  <label class="field-label">表示名</label>
+                  <input
+                    type="text"
+                    class="field-input"
+                    :value="field.title"
+                    :disabled="disabled"
+                    placeholder="日本語の表示名"
+                    @input="updateField(field, 'title', ($event.target as HTMLInputElement).value)"
+                    @blur="handleBlur"
+                  >
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field-group">
+                  <label class="field-label">説明</label>
+                  <input
+                    type="text"
+                    class="field-input"
+                    :value="field.description"
+                    :disabled="disabled"
+                    placeholder="このフィールドの説明"
+                    @input="updateField(field, 'description', ($event.target as HTMLInputElement).value)"
+                    @blur="handleBlur"
+                  >
+                </div>
+              </div>
+
+              <!-- Nested children for object type -->
+              <div v-if="field.type === 'object' && field.expanded" class="nested-fields">
+                <div class="nested-header">
+                  <span class="nested-label">プロパティ</span>
+                </div>
+                <div v-if="!field.children || field.children.length === 0" class="nested-empty">
+                  <p>プロパティが定義されていません</p>
+                </div>
+                <template v-else>
+                  <div
+                    v-for="(child, childIndex) in field.children"
+                    :key="child.id"
+                    class="field-item nested"
+                    :class="getDepthClass(1)"
+                  >
+                    <div class="field-header">
+                      <div class="field-header-left">
+                        <button
+                          v-if="child.type === 'object' || (child.type === 'array' && child.itemType === 'object')"
+                          type="button"
+                          class="expand-button"
+                          @click="toggleExpand(child)"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            :class="{ rotated: child.expanded }"
+                          >
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </button>
+                        <span class="field-index">#{{ childIndex + 1 }}</span>
+                        <span v-if="child.type === 'object'" class="type-badge object-badge">{ }</span>
+                        <span v-else-if="child.type === 'array'" class="type-badge array-badge">[ ]</span>
+                      </div>
+                      <button
+                        type="button"
+                        class="remove-button"
+                        :disabled="disabled"
+                        @click="removeFieldFromArray(field.children!, childIndex)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="field-row">
+                      <div class="field-group name-group">
+                        <label class="field-label">フィールド名 *</label>
+                        <input
+                          type="text"
+                          class="field-input"
+                          :value="child.name"
+                          :disabled="disabled"
+                          placeholder="field_name"
+                          @input="updateField(child, 'name', ($event.target as HTMLInputElement).value)"
+                          @blur="handleBlur"
+                        >
+                      </div>
+                      <div class="field-group type-group">
+                        <label class="field-label">型</label>
+                        <select
+                          class="field-select"
+                          :value="child.type"
+                          :disabled="disabled"
+                          @change="updateField(child, 'type', ($event.target as HTMLSelectElement).value)"
+                        >
+                          <option v-for="t in fieldTypes" :key="t.value" :value="t.value">
+                            {{ t.label }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="field-group required-group">
+                        <label class="field-label">必須</label>
+                        <label class="checkbox-wrapper">
+                          <input
+                            type="checkbox"
+                            :checked="child.required"
+                            :disabled="disabled"
+                            @change="updateField(child, 'required', ($event.target as HTMLInputElement).checked)"
+                          >
+                          <span class="checkbox-mark"/>
+                        </label>
+                      </div>
+                    </div>
+                    <!-- Array item type for nested -->
+                    <div v-if="child.type === 'array'" class="field-row">
+                      <div class="field-group">
+                        <label class="field-label">配列の要素型</label>
+                        <select
+                          class="field-select"
+                          :value="child.itemType || 'string'"
+                          :disabled="disabled"
+                          @change="updateField(child, 'itemType', ($event.target as HTMLSelectElement).value)"
+                        >
+                          <option v-for="t in arrayItemTypes" :key="t.value" :value="t.value">
+                            {{ t.label }}
+                          </option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div class="field-group">
+                        <label class="field-label">表示名</label>
+                        <input
+                          type="text"
+                          class="field-input"
+                          :value="child.title"
+                          :disabled="disabled"
+                          placeholder="日本語の表示名"
+                          @input="updateField(child, 'title', ($event.target as HTMLInputElement).value)"
+                          @blur="handleBlur"
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <button
+                  type="button"
+                  class="add-nested-button"
+                  :disabled="disabled"
+                  @click="addChildField(field)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  プロパティを追加
+                </button>
+              </div>
+
+              <!-- Nested children for array of objects -->
+              <div v-if="field.type === 'array' && field.itemType === 'object' && field.expanded" class="nested-fields">
+                <div class="nested-header">
+                  <span class="nested-label">配列要素のプロパティ</span>
+                </div>
+                <div v-if="!field.itemChildren || field.itemChildren.length === 0" class="nested-empty">
+                  <p>プロパティが定義されていません</p>
+                </div>
+                <template v-else>
+                  <div
+                    v-for="(child, childIndex) in field.itemChildren"
+                    :key="child.id"
+                    class="field-item nested"
+                    :class="getDepthClass(1)"
+                  >
+                    <div class="field-header">
+                      <div class="field-header-left">
+                        <span class="field-index">#{{ childIndex + 1 }}</span>
+                        <span v-if="child.type === 'object'" class="type-badge object-badge">{ }</span>
+                        <span v-else-if="child.type === 'array'" class="type-badge array-badge">[ ]</span>
+                      </div>
+                      <button
+                        type="button"
+                        class="remove-button"
+                        :disabled="disabled"
+                        @click="removeFieldFromArray(field.itemChildren!, childIndex)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="field-row">
+                      <div class="field-group name-group">
+                        <label class="field-label">フィールド名 *</label>
+                        <input
+                          type="text"
+                          class="field-input"
+                          :value="child.name"
+                          :disabled="disabled"
+                          placeholder="field_name"
+                          @input="updateField(child, 'name', ($event.target as HTMLInputElement).value)"
+                          @blur="handleBlur"
+                        >
+                      </div>
+                      <div class="field-group type-group">
+                        <label class="field-label">型</label>
+                        <select
+                          class="field-select"
+                          :value="child.type"
+                          :disabled="disabled"
+                          @change="updateField(child, 'type', ($event.target as HTMLSelectElement).value)"
+                        >
+                          <option v-for="t in arrayItemTypes" :key="t.value" :value="t.value">
+                            {{ t.label }}
+                          </option>
+                        </select>
+                      </div>
+                      <div class="field-group required-group">
+                        <label class="field-label">必須</label>
+                        <label class="checkbox-wrapper">
+                          <input
+                            type="checkbox"
+                            :checked="child.required"
+                            :disabled="disabled"
+                            @change="updateField(child, 'required', ($event.target as HTMLInputElement).checked)"
+                          >
+                          <span class="checkbox-mark"/>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div class="field-group">
+                        <label class="field-label">表示名</label>
+                        <input
+                          type="text"
+                          class="field-input"
+                          :value="child.title"
+                          :disabled="disabled"
+                          placeholder="日本語の表示名"
+                          @input="updateField(child, 'title', ($event.target as HTMLInputElement).value)"
+                          @blur="handleBlur"
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <button
+                  type="button"
+                  class="add-nested-button"
+                  :disabled="disabled"
+                  @click="addItemChildField(field)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                  </svg>
+                  プロパティを追加
+                </button>
+              </div>
             </div>
-          </div>
+          </template>
         </div>
-      </div>
+      </template>
 
       <button
         type="button"
@@ -508,6 +934,28 @@ function handleBlur() {
   border-radius: 6px;
 }
 
+.field-item.nested {
+  margin-left: 0;
+  background: var(--color-surface);
+}
+
+/* Depth-based styling */
+.field-item.depth-0 {
+  border-left: 3px solid var(--color-primary);
+}
+
+.field-item.depth-1 {
+  border-left: 3px solid #10b981;
+}
+
+.field-item.depth-2 {
+  border-left: 3px solid #f59e0b;
+}
+
+.field-item.depth-3 {
+  border-left: 3px solid #8b5cf6;
+}
+
 .field-header {
   display: flex;
   justify-content: space-between;
@@ -515,10 +963,59 @@ function handleBlur() {
   margin-bottom: 0.5rem;
 }
 
+.field-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.expand-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.expand-button:hover {
+  color: var(--color-text);
+}
+
+.expand-button svg {
+  transition: transform 0.15s ease;
+}
+
+.expand-button svg.rotated {
+  transform: rotate(90deg);
+}
+
 .field-index {
   font-size: 0.625rem;
   font-weight: 600;
   color: var(--color-text-secondary);
+}
+
+.type-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+}
+
+.object-badge {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.array-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
 }
 
 .remove-button {
@@ -652,6 +1149,72 @@ function handleBlur() {
 }
 
 .checkbox-wrapper input:disabled ~ .checkbox-mark {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Nested fields */
+.nested-fields {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.nested-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.nested-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nested-empty {
+  padding: 0.75rem;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.nested-empty p {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+.add-nested-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 0.5rem;
+}
+
+.add-nested-button:hover:not(:disabled) {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.add-nested-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
