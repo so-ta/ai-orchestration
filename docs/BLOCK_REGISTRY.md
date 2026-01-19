@@ -68,7 +68,7 @@ Block Registry はワークフローのステップタイプを管理するシ�
 │  │  ctx = {                                                          │ │
 │  │    http:     { get, post, put, delete, request }                 │ │
 │  │    llm:      { chat, complete }                                   │ │
-│  │    workflow: { run }                                              │ │
+│  │    workflow: { run, executeStep }                                  │ │
 │  │    human:    { requestApproval }                                  │ │
 │  │    adapter:  { call, list }                                       │ │
 │  │    secrets:  Record<string, string>                               │ │

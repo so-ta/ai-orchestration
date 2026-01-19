@@ -17,12 +17,11 @@ func TestRegistry_AllWorkflowsValid(t *testing.T) {
 func TestRegistry_WorkflowCount(t *testing.T) {
 	registry := NewRegistry()
 
-	// Expect exactly 4 workflows:
-	// 1. copilot - Unified Copilot workflow with 4 entry points
-	// 2. rag - Unified RAG workflow with 3 entry points
-	// 3. demo - Unified demo workflow with 3 entry points (block_demo, data_pipeline, block_group)
-	// 4. ai-builder - AI Workflow Builder with 3 entry points (hearing, construct, refine)
-	expected := 4
+	// Expect exactly 3 workflows:
+	// 1. rag - Unified RAG workflow with 3 entry points
+	// 2. demo - Unified demo workflow with 3 entry points (block_demo, data_pipeline, block_group)
+	// 3. copilot - Copilot AI assistant workflow with agent-based implementation
+	expected := 3
 	actual := registry.Count()
 	if actual != expected {
 		t.Errorf("Expected %d workflows, got %d", expected, actual)
@@ -33,12 +32,10 @@ func TestRegistry_GetBySlug(t *testing.T) {
 	registry := NewRegistry()
 
 	// Test known workflows exist
-	// All workflows are now unified into multi-entry-point workflows
 	knownSlugs := []string{
-		"copilot",    // Unified Copilot workflow with 4 entry points
-		"rag",        // Unified RAG workflow with 3 entry points
-		"demo",       // Unified demo workflow with 3 entry points
-		"ai-builder", // AI Workflow Builder with 3 entry points (hearing, construct, refine)
+		"rag",     // Unified RAG workflow with 3 entry points
+		"demo",    // Unified demo workflow with 3 entry points
+		"copilot", // Copilot AI assistant workflow
 	}
 
 	for _, slug := range knownSlugs {

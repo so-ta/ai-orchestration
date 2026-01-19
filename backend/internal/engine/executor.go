@@ -2864,8 +2864,11 @@ func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionC
 	embeddingService := sandbox.NewEmbeddingService(ctx)
 	sandboxCtx.Embedding = embeddingService
 
-	// Initialize stub services (return errors if used, but prevent undefined errors)
-	sandboxCtx.Workflow = sandbox.NewWorkflowService()
+	// Create step executor function for agent blocks to call other steps as tools
+	stepExecutor := e.createStepExecutor(ctx, execCtx, stepID)
+
+	// Initialize workflow service with step execution capability
+	sandboxCtx.Workflow = sandbox.NewWorkflowServiceWithExecutor(stepExecutor)
 	sandboxCtx.Human = sandbox.NewHumanService()
 	sandboxCtx.Adapter = sandbox.NewAdapterService()
 
@@ -2883,6 +2886,71 @@ func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionC
 	}
 
 	return sandboxCtx
+}
+
+// createStepExecutor creates a function that executes a step by name within the current workflow.
+// This enables agent blocks to call other steps as tools.
+func (e *Executor) createStepExecutor(ctx context.Context, execCtx *ExecutionContext, callerStepID uuid.UUID) sandbox.StepExecutor {
+	return func(stepName string, input map[string]interface{}) (map[string]interface{}, error) {
+		if execCtx == nil || execCtx.Definition == nil {
+			return nil, fmt.Errorf("execution context not available for step execution")
+		}
+
+		// Find the step by name
+		var targetStep *domain.Step
+		for i := range execCtx.Definition.Steps {
+			if execCtx.Definition.Steps[i].Name == stepName {
+				targetStep = &execCtx.Definition.Steps[i]
+				break
+			}
+		}
+
+		if targetStep == nil {
+			return nil, fmt.Errorf("step not found: %s", stepName)
+		}
+
+		// Prevent recursive calls to the same step
+		if targetStep.ID == callerStepID {
+			return nil, fmt.Errorf("recursive step execution not allowed: %s", stepName)
+		}
+
+		e.logger.Info("Executing step via executeStep",
+			"caller_step_id", callerStepID,
+			"target_step_name", stepName,
+			"target_step_id", targetStep.ID,
+		)
+
+		// Convert input to JSON
+		inputJSON, err := json.Marshal(input)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal step input: %w", err)
+		}
+
+		// Execute the step using the existing execution logic
+		var outputJSON json.RawMessage
+		if targetStep.BlockDefinitionID != nil {
+			// Custom block step
+			outputJSON, err = e.executeCustomBlockStep(ctx, execCtx, *targetStep, inputJSON)
+		} else {
+			// Built-in step type - use dispatch
+			outputJSON, err = e.dispatchStepExecution(ctx, execCtx, *targetStep, nil, inputJSON)
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("step execution failed: %w", err)
+		}
+
+		// Convert output to map
+		var output map[string]interface{}
+		if err := json.Unmarshal(outputJSON, &output); err != nil {
+			// If not a map, wrap in a result object
+			output = map[string]interface{}{
+				"result": string(outputJSON),
+			}
+		}
+
+		return output, nil
+	}
 }
 
 // runHookCode executes preProcess or postProcess JavaScript code

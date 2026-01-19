@@ -6,366 +6,525 @@ func (r *Registry) registerCopilotWorkflows() {
 	r.register(CopilotWorkflow())
 }
 
-// CopilotWorkflow is a unified Copilot workflow with 4 entry points:
-// - generate: Generates workflow structures from natural language
-// - suggest: Suggests next steps for a workflow
-// - diagnose: Diagnoses workflow execution errors
-// - optimize: Suggests optimizations for workflow performance
+// CopilotWorkflow is the system workflow for the Copilot AI assistant.
+// It uses the agent block with tools to help users:
+// - Build and modify workflows
+// - Understand platform features
+// - Get help with block configuration
+//
+// This workflow serves as a dogfooding example - it's built using
+// the same blocks available to all users, demonstrating that
+// sophisticated AI agents can be created with the platform.
 func CopilotWorkflow() *SystemWorkflowDefinition {
 	return &SystemWorkflowDefinition{
-		ID:          "a0000000-0000-0000-0000-000000000001",
+		ID:          "a0000000-0000-0000-0000-000000000201",
 		SystemSlug:  "copilot",
-		Name:        "Copilot Workflows",
-		Description: "AI-assisted workflow building with multiple entry points: generate, suggest, diagnose, optimize",
+		Name:        "Copilot AI Assistant",
+		Description: "AI assistant for workflow building and platform guidance",
 		Version:     1,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
-			// Generate Entry Point (横並び: Y=40固定, X増加)
+			// Start - Main Entry Point
 			// ============================
 			{
-				TempID:      "start_generate",
-				Name:        "Start: Generate",
+				TempID:      "start",
+				Name:        "Start",
 				Type:        "start",
 				TriggerType: "internal",
 				TriggerConfig: json.RawMessage(`{
-					"entry_point": "generate",
-					"description": "Generate workflow from natural language"
+					"entry_point": "chat",
+					"description": "Copilot chat entry point"
 				}`),
 				PositionX: 40,
-				PositionY: 40,
+				PositionY: 200,
 				Config: json.RawMessage(`{
 					"input_schema": {
 						"type": "object",
-						"required": ["prompt"],
+						"required": ["message"],
 						"properties": {
-							"prompt": {
-								"type": "string",
-								"title": "説明",
-								"description": "生成したいワークフローの説明を入力してください"
-							}
-						}
-					}
-				}`),
-			},
-			{
-				TempID:    "generate_get_blocks",
-				Name:      "Get Available Blocks",
-				Type:      "function",
-				PositionX: 160,
-				PositionY: 40,
-				Config: json.RawMessage(`{
-					"code": "const blocks = ctx.blocks.list(); return { prompt: input.prompt, blocks: blocks.map(b => ({ slug: b.slug, name: b.name, description: b.description, category: b.category })) };",
-					"language": "javascript",
-					"output_schema": {
-						"type": "object",
-						"properties": {
-							"prompt": {"type": "string", "title": "プロンプト"},
-							"blocks": {"type": "array", "title": "ブロック一覧", "description": "利用可能なブロックの配列"}
-						},
-						"required": ["prompt", "blocks"]
-					}
-				}`),
-			},
-			{
-				TempID:    "generate_build_prompt",
-				Name:      "Build Prompt",
-				Type:      "function",
-				PositionX: 280,
-				PositionY: 40,
-				Config: json.RawMessage(`{
-					"code": "const blocksInfo = input.blocks.map(b => ` + "`" + `- ${b.slug}: ${b.name} (${b.category}) - ${b.description || \"\"}` + "`" + `).join(\"\\n\");\nconst prompt = ` + "`" + `You are an AI workflow generator. Generate a workflow based on the user description.\n\n## Available Blocks\n${blocksInfo}\n\n## Available Step Types\n- start: Entry point (required)\n- llm: AI/LLM call\n- tool: External adapter\n- condition: Binary branch (true/false)\n- switch: Multi-way branch\n- map: Parallel array processing\n- loop: Iteration\n- wait: Delay\n- function: Custom JavaScript\n- log: Debug logging\n\n## User Request\n${input.prompt}\n\n## Output Format (JSON)\n{\n  \"response\": \"Explanation\",\n  \"steps\": [{\"temp_id\": \"step_1\", \"name\": \"Step Name\", \"type\": \"start\", \"description\": \"\", \"config\": {}, \"position_x\": 400, \"position_y\": 50}],\n  \"edges\": [{\"source_temp_id\": \"step_1\", \"target_temp_id\": \"step_2\", \"source_port\": \"default\"}],\n  \"start_step_id\": \"step_1\"\n}\n\nGenerate a valid workflow JSON. Always include a start step.` + "`" + `;\nreturn { prompt: prompt };",
-					"language": "javascript",
-					"output_schema": {
-						"type": "object",
-						"properties": {
-							"prompt": {"type": "string", "title": "プロンプト", "description": "LLMに送信するプロンプト"}
-						},
-						"required": ["prompt"]
-					}
-				}`),
-			},
-			{
-				TempID:    "generate_llm",
-				Name:      "Generate with LLM",
-				Type:      "llm",
-				PositionX: 400,
-				PositionY: 40,
-				Config: json.RawMessage(`{
-					"model": "gpt-4o-mini",
-					"provider": "openai",
-					"max_tokens": 4000,
-					"temperature": 0.3,
-					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "You are an AI workflow generator. Always respond with valid JSON."
-				}`),
-			},
-			{
-				TempID:    "generate_parse",
-				Name:      "Parse & Validate",
-				Type:      "function",
-				PositionX: 520,
-				PositionY: 40,
-				Config: json.RawMessage(`{
-					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```json" + `\")) content = content.slice(7); if (content.startsWith(\"` + "```" + `\")) content = content.slice(3); if (content.endsWith(\"` + "```" + `\")) content = content.slice(0, -3); content = content.trim(); const result = JSON.parse(content); if (!result.steps || !Array.isArray(result.steps)) { return { error: \"Invalid workflow: missing steps array\" }; } const validTypes = [\"start\", \"llm\", \"tool\", \"condition\", \"switch\", \"map\", \"join\", \"subflow\", \"loop\", \"wait\", \"function\", \"router\", \"human_in_loop\", \"filter\", \"split\", \"aggregate\", \"error\", \"note\", \"log\"]; result.steps = result.steps.filter(s => validTypes.includes(s.type)); return result; } catch (e) { return { error: \"Failed to parse LLM response: \" + e.message }; }",
-					"language": "javascript",
-					"output_schema": {
-						"type": "object",
-						"properties": {
-							"response": {"type": "string", "title": "レスポンス"},
-							"steps": {"type": "array", "title": "ステップ", "description": "生成されたステップの配列"},
-							"edges": {"type": "array", "title": "エッジ", "description": "ステップ間の接続"},
-							"start_step_id": {"type": "string", "title": "開始ステップID"},
-							"error": {"type": "string", "title": "エラー"}
+							"message": {"type": "string", "description": "User's message"},
+							"mode": {"type": "string", "enum": ["create", "explain", "enhance"], "description": "Copilot mode"},
+							"workflow_id": {"type": "string", "description": "Target workflow ID (for enhance mode)"},
+							"session_id": {"type": "string", "description": "Session ID for memory"}
 						}
 					}
 				}`),
 			},
 
 			// ============================
-			// Suggest Entry Point (横並び: Y=160固定, X増加)
+			// Set Variables - Context injection
 			// ============================
 			{
-				TempID:      "start_suggest",
-				Name:        "Start: Suggest",
-				Type:        "start",
-				TriggerType: "internal",
-				TriggerConfig: json.RawMessage(`{
-					"entry_point": "suggest",
-					"description": "Suggest next steps for a workflow"
-				}`),
-				PositionX: 40,
-				PositionY: 160,
-				Config: json.RawMessage(`{
-					"input_schema": {
-						"type": "object",
-						"required": ["workflow_id"],
-						"properties": {
-							"workflow_id": {"type": "string", "title": "ワークフローID", "description": "ステップを提案するワークフローのID"},
-							"context": {"type": "string", "title": "コンテキスト", "description": "追加のコンテキスト情報（オプション）"}
-						}
-					}
-				}`),
-			},
-			{
-				TempID:    "suggest_get_context",
-				Name:      "Get Workflow Context",
-				Type:      "function",
+				TempID:    "set_context",
+				Name:      "Set Context",
+				Type:      "set-variables",
 				PositionX: 160,
-				PositionY: 160,
+				PositionY: 200,
+				BlockSlug: "set-variables",
 				Config: json.RawMessage(`{
-					"code": "const workflow = ctx.workflows.get(input.workflow_id); const blocks = ctx.blocks.list(); return { workflow: workflow, blocks: blocks, context: input.context };",
-					"language": "javascript"
-				}`),
-			},
-			{
-				TempID:    "suggest_build_prompt",
-				Name:      "Build Suggest Prompt",
-				Type:      "function",
-				PositionX: 280,
-				PositionY: 160,
-				Config: json.RawMessage(`{
-					"code": "const wf = input.workflow; const blocksInfo = input.blocks.slice(0, 20).map(b => ` + "`" + `- ${b.slug}: ${b.name}` + "`" + `).join(\"\\n\"); const stepsInfo = (wf.steps || []).map(s => ` + "`" + `- ${s.name} (${s.type})` + "`" + `).join(\"\\n\"); const prompt = ` + "`" + `Suggest 2-3 next steps for this workflow.\n\n## Current Steps\n${stepsInfo || \"(empty)\"}\n\n## Available Blocks\n${blocksInfo}\n\n## Context\n${input.context || \"\"}\n\nReturn JSON array: [{\"type\": \"...\", \"name\": \"...\", \"description\": \"...\", \"config\": {}, \"reason\": \"...\"}]` + "`" + `; return { prompt: prompt };",
-					"language": "javascript"
-				}`),
-			},
-			{
-				TempID:    "suggest_llm",
-				Name:      "Suggest with LLM",
-				Type:      "llm",
-				PositionX: 400,
-				PositionY: 160,
-				Config: json.RawMessage(`{
-					"model": "gpt-4o-mini",
-					"provider": "openai",
-					"max_tokens": 2000,
-					"temperature": 0.5,
-					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "You are an AI workflow assistant. Return valid JSON array."
-				}`),
-			},
-			{
-				TempID:    "suggest_parse",
-				Name:      "Parse Suggestions",
-				Type:      "function",
-				PositionX: 520,
-				PositionY: 160,
-				Config: json.RawMessage(`{
-					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } const suggestions = JSON.parse(content); return { suggestions: Array.isArray(suggestions) ? suggestions : [] }; } catch (e) { return { suggestions: [] }; }",
-					"language": "javascript"
+					"variables": [
+						{"name": "mode", "value": "{{$.mode}}", "type": "string"},
+						{"name": "workflow_id", "value": "{{$.workflow_id}}", "type": "string"},
+						{"name": "session_id", "value": "{{$.session_id}}", "type": "string"},
+						{"name": "user_message", "value": "{{$.message}}", "type": "string"}
+					],
+					"merge_input": true
 				}`),
 			},
 
 			// ============================
-			// Diagnose Entry Point (横並び: Y=280固定, X増加)
+			// Copilot Agent
 			// ============================
 			{
-				TempID:      "start_diagnose",
-				Name:        "Start: Diagnose",
-				Type:        "start",
-				TriggerType: "internal",
-				TriggerConfig: json.RawMessage(`{
-					"entry_point": "diagnose",
-					"description": "Diagnose workflow execution errors"
-				}`),
-				PositionX: 40,
-				PositionY: 280,
-				Config: json.RawMessage(`{
-					"input_schema": {
-						"type": "object",
-						"required": ["run_id"],
-						"properties": {
-							"run_id": {"type": "string", "title": "実行ID", "description": "診断する実行のID"}
-						}
-					}
-				}`),
-			},
-			{
-				TempID:    "diagnose_get_run",
-				Name:      "Get Run Details",
-				Type:      "function",
-				PositionX: 160,
-				PositionY: 280,
-				Config: json.RawMessage(`{
-					"code": "const run = ctx.runs.get(input.run_id); const stepRuns = ctx.runs.getStepRuns(input.run_id); const failedSteps = stepRuns.filter(sr => sr.status === \"failed\"); return { run: run, stepRuns: stepRuns, failedSteps: failedSteps };",
-					"language": "javascript"
-				}`),
-			},
-			{
-				TempID:    "diagnose_build_prompt",
-				Name:      "Build Diagnose Prompt",
-				Type:      "function",
+				TempID:    "copilot_agent",
+				Name:      "Copilot Agent",
+				Type:      "agent",
 				PositionX: 280,
-				PositionY: 280,
-				Config: json.RawMessage(`{
-					"code": "const failedInfo = input.failedSteps.map(sr => ` + "`" + `Step: ${sr.step_name}\nError: ${sr.error || \"Unknown\"}\nInput: ${JSON.stringify(sr.input || {})}` + "`" + `).join(\"\\n\\n\"); const prompt = ` + "`" + `Diagnose this workflow error.\n\n## Run Status: ${input.run.status}\n\n## Failed Steps\n${failedInfo || \"No failures found\"}\n\nReturn JSON: {\"diagnosis\": {\"root_cause\": \"...\", \"category\": \"config_error|input_error|api_error|logic_error|timeout|unknown\", \"severity\": \"high|medium|low\"}, \"fixes\": [{\"description\": \"...\", \"steps\": [\"...\"]}], \"preventions\": [\"...\"]}` + "`" + `; return { prompt: prompt };",
-					"language": "javascript"
-				}`),
-			},
-			{
-				TempID:    "diagnose_llm",
-				Name:      "Diagnose with LLM",
-				Type:      "llm",
-				PositionX: 400,
-				PositionY: 280,
-				Config: json.RawMessage(`{
-					"model": "gpt-4o-mini",
-					"provider": "openai",
-					"max_tokens": 2000,
-					"temperature": 0.3,
-					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "You are an AI debugging assistant. Return valid JSON."
-				}`),
-			},
-			{
-				TempID:    "diagnose_parse",
-				Name:      "Parse Diagnosis",
-				Type:      "function",
-				PositionX: 520,
-				PositionY: 280,
-				Config: json.RawMessage(`{
-					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } return JSON.parse(content); } catch (e) { return { diagnosis: { root_cause: \"Parse error\", category: \"unknown\", severity: \"low\" }, fixes: [], preventions: [] }; }",
-					"language": "javascript"
-				}`),
+				PositionY: 200,
+				BlockSlug: "agent",
+				Config:    json.RawMessage(copilotAgentConfig()),
 			},
 
 			// ============================
-			// Optimize Entry Point (横並び: Y=400固定, X増加)
+			// Tool Steps
+			// These steps are called by the agent via ctx.workflow.executeStep()
 			// ============================
+
+			// Block Tools
 			{
-				TempID:      "start_optimize",
-				Name:        "Start: Optimize",
-				Type:        "start",
-				TriggerType: "internal",
-				TriggerConfig: json.RawMessage(`{
-					"entry_point": "optimize",
-					"description": "Suggest optimizations for workflow performance"
-				}`),
-				PositionX: 40,
-				PositionY: 400,
-				Config: json.RawMessage(`{
-					"input_schema": {
-						"type": "object",
-						"required": ["workflow_id"],
-						"properties": {
-							"workflow_id": {"type": "string", "title": "ワークフローID", "description": "最適化するワークフローのID"}
-						}
-					}
-				}`),
-			},
-			{
-				TempID:    "optimize_get_workflow",
-				Name:      "Get Workflow Details",
+				TempID:    "list_blocks",
+				Name:      "list_blocks",
 				Type:      "function",
-				PositionX: 160,
-				PositionY: 400,
+				PositionX: 480,
+				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "const workflow = ctx.workflows.get(input.workflow_id); return { workflow: workflow };",
-					"language": "javascript"
+					"code": "const blocks = ctx.blocks.list(); return { blocks: blocks.map(b => ({ slug: b.slug, name: b.name, category: b.category, description: b.description })) };"
 				}`),
 			},
 			{
-				TempID:    "optimize_build_prompt",
-				Name:      "Build Optimize Prompt",
+				TempID:    "get_block_schema",
+				Name:      "get_block_schema",
 				Type:      "function",
-				PositionX: 280,
-				PositionY: 400,
+				PositionX: 600,
+				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "const wf = input.workflow; const stepsInfo = (wf.steps || []).map(s => ` + "`" + `- ${s.name} (${s.type}): ${JSON.stringify(s.config || {})}` + "`" + `).join(\"\\n\"); const prompt = ` + "`" + `Suggest optimizations for this workflow.\n\n## Workflow: ${wf.name}\n## Steps (${(wf.steps || []).length})\n${stepsInfo}\n\nReturn JSON: {\"optimizations\": [{\"category\": \"performance|cost|reliability|maintainability\", \"title\": \"...\", \"description\": \"...\", \"impact\": \"high|medium|low\", \"effort\": \"high|medium|low\"}], \"summary\": \"...\"}` + "`" + `; return { prompt: prompt };",
-					"language": "javascript"
+					"code": "if (!input.slug) return { error: 'slug is required' }; const block = ctx.blocks.getWithSchema(input.slug); if (!block) return { error: 'Block not found: ' + input.slug }; return block;"
 				}`),
 			},
 			{
-				TempID:    "optimize_llm",
-				Name:      "Optimize with LLM",
-				Type:      "llm",
-				PositionX: 400,
-				PositionY: 400,
-				Config: json.RawMessage(`{
-					"model": "gpt-4o-mini",
-					"provider": "openai",
-					"max_tokens": 2000,
-					"temperature": 0.5,
-					"user_prompt": "{{$.prompt}}",
-					"system_prompt": "You are an AI optimization assistant. Return valid JSON."
-				}`),
-			},
-			{
-				TempID:    "optimize_parse",
-				Name:      "Parse Optimizations",
+				TempID:    "search_blocks",
+				Name:      "search_blocks",
 				Type:      "function",
-				PositionX: 520,
-				PositionY: 400,
+				PositionX: 720,
+				PositionY: 40,
 				Config: json.RawMessage(`{
-					"code": "try { let content = input.content || \"\"; if (content.startsWith(\"` + "```" + `\")) { content = content.replace(/` + "```json?\\n?" + `/g, \"\").replace(/` + "```" + `/g, \"\").trim(); } return JSON.parse(content); } catch (e) { return { optimizations: [], summary: \"Parse error\" }; }",
-					"language": "javascript"
+					"code": "const query = (input.query || '').toLowerCase(); const blocks = ctx.blocks.list(); const matched = blocks.filter(b => (b.name && b.name.toLowerCase().includes(query)) || (b.description && b.description.toLowerCase().includes(query)) || (b.slug && b.slug.toLowerCase().includes(query))); return { blocks: matched.map(b => ({ slug: b.slug, name: b.name, category: b.category, description: b.description })), count: matched.length };"
+				}`),
+			},
+
+			// Workflow Tools
+			{
+				TempID:    "list_workflows",
+				Name:      "list_workflows",
+				Type:      "function",
+				PositionX: 480,
+				PositionY: 120,
+				Config: json.RawMessage(`{
+					"code": "const workflows = ctx.workflows.list(); return { workflows: workflows.map(w => ({ id: w.id, name: w.name, description: w.description })), count: workflows.length };"
+				}`),
+			},
+			{
+				TempID:    "get_workflow",
+				Name:      "get_workflow",
+				Type:      "function",
+				PositionX: 600,
+				PositionY: 120,
+				Config: json.RawMessage(`{
+					"code": "if (!input.workflow_id) return { error: 'workflow_id is required' }; const wf = ctx.workflows.get(input.workflow_id); if (!wf) return { error: 'Workflow not found: ' + input.workflow_id }; return wf;"
+				}`),
+			},
+
+			// Step Tools
+			{
+				TempID:    "create_step",
+				Name:      "create_step",
+				Type:      "function",
+				PositionX: 480,
+				PositionY: 200,
+				Config: json.RawMessage(`{
+					"code": "if (!input.project_id || !input.name || !input.type) return { error: 'project_id, name, and type are required' }; const step = ctx.steps.create({ project_id: input.project_id, name: input.name, type: input.type, config: input.config || {}, position_x: input.position_x || 0, position_y: input.position_y || 0, block_definition_id: input.block_definition_id }); return step;"
+				}`),
+			},
+			{
+				TempID:    "update_step",
+				Name:      "update_step",
+				Type:      "function",
+				PositionX: 600,
+				PositionY: 200,
+				Config: json.RawMessage(`{
+					"code": "if (!input.step_id) return { error: 'step_id is required' }; const updates = {}; if (input.name) updates.name = input.name; if (input.config) updates.config = input.config; if (input.position_x !== undefined) updates.position_x = input.position_x; if (input.position_y !== undefined) updates.position_y = input.position_y; const step = ctx.steps.update(input.step_id, updates); return step;"
+				}`),
+			},
+			{
+				TempID:    "delete_step",
+				Name:      "delete_step",
+				Type:      "function",
+				PositionX: 720,
+				PositionY: 200,
+				Config: json.RawMessage(`{
+					"code": "if (!input.step_id) return { error: 'step_id is required' }; ctx.steps.delete(input.step_id); return { success: true, deleted_step_id: input.step_id };"
+				}`),
+			},
+
+			// Edge Tools
+			{
+				TempID:    "create_edge",
+				Name:      "create_edge",
+				Type:      "function",
+				PositionX: 480,
+				PositionY: 280,
+				Config: json.RawMessage(`{
+					"code": "if (!input.project_id || !input.source_step_id || !input.target_step_id) return { error: 'project_id, source_step_id, and target_step_id are required' }; const edge = ctx.edges.create({ project_id: input.project_id, source_step_id: input.source_step_id, target_step_id: input.target_step_id, source_port: input.source_port || 'output', target_port: input.target_port || 'input', condition: input.condition }); return edge;"
+				}`),
+			},
+			{
+				TempID:    "delete_edge",
+				Name:      "delete_edge",
+				Type:      "function",
+				PositionX: 600,
+				PositionY: 280,
+				Config: json.RawMessage(`{
+					"code": "if (!input.edge_id) return { error: 'edge_id is required' }; ctx.edges.delete(input.edge_id); return { success: true, deleted_edge_id: input.edge_id };"
+				}`),
+			},
+
+			// Documentation Search (using RAG if available)
+			{
+				TempID:    "search_documentation",
+				Name:      "search_documentation",
+				Type:      "function",
+				PositionX: 480,
+				PositionY: 360,
+				Config: json.RawMessage(`{
+					"code": "if (!input.query) return { error: 'query is required' }; if (ctx.vector && ctx.embedding) { try { const embedding = ctx.embedding.embed('openai', 'text-embedding-3-small', [input.query]); const results = ctx.vector.query('platform-docs', embedding.vectors[0], { topK: 5 }); return { results: results.matches || [], query: input.query }; } catch(e) { return { error: 'Documentation search not available', query: input.query }; } } return { error: 'Vector service not available', query: input.query };"
+				}`),
+			},
+
+			// Workflow Validation
+			{
+				TempID:    "validate_workflow",
+				Name:      "validate_workflow",
+				Type:      "function",
+				PositionX: 600,
+				PositionY: 360,
+				Config: json.RawMessage(`{
+					"code": "if (!input.workflow_id) return { error: 'workflow_id is required' }; const wf = ctx.workflows.get(input.workflow_id); if (!wf) return { error: 'Workflow not found: ' + input.workflow_id, valid: false }; const errors = []; const steps = wf.steps || []; const startSteps = steps.filter(s => s.type === 'start'); if (startSteps.length === 0) errors.push('No start step found'); const stepIds = new Set(steps.map(s => s.id)); for (const edge of (wf.edges || [])) { if (!stepIds.has(edge.source_step_id)) errors.push('Edge references non-existent source step'); if (!stepIds.has(edge.target_step_id)) errors.push('Edge references non-existent target step'); } return { valid: errors.length === 0, errors: errors, step_count: steps.length, edge_count: (wf.edges || []).length };"
 				}`),
 			},
 		},
 		Edges: []SystemEdgeDefinition{
-			// Generate flow
-			{SourceTempID: "start_generate", TargetTempID: "generate_get_blocks", SourcePort: "output"},
-			{SourceTempID: "generate_get_blocks", TargetTempID: "generate_build_prompt", SourcePort: "output"},
-			{SourceTempID: "generate_build_prompt", TargetTempID: "generate_llm", SourcePort: "output"},
-			{SourceTempID: "generate_llm", TargetTempID: "generate_parse", SourcePort: "output"},
+			// Main flow
+			{SourceTempID: "start", TargetTempID: "set_context"},
+			{SourceTempID: "set_context", TargetTempID: "copilot_agent"},
+		},
+	}
+}
 
-			// Suggest flow
-			{SourceTempID: "start_suggest", TargetTempID: "suggest_get_context", SourcePort: "output"},
-			{SourceTempID: "suggest_get_context", TargetTempID: "suggest_build_prompt", SourcePort: "output"},
-			{SourceTempID: "suggest_build_prompt", TargetTempID: "suggest_llm", SourcePort: "output"},
-			{SourceTempID: "suggest_llm", TargetTempID: "suggest_parse", SourcePort: "output"},
+// copilotAgentConfig returns the configuration for the Copilot agent
+func copilotAgentConfig() string {
+	config := map[string]interface{}{
+		"provider":       "anthropic",
+		"model":          "claude-sonnet-4-20250514",
+		"max_iterations": 15,
+		"temperature":    0.7,
+		"enable_memory":  true,
+		"memory_window":  30,
+		"system_prompt":  copilotSystemPrompt(),
+		"tools":          copilotTools(),
+	}
+	jsonBytes, _ := json.Marshal(config)
+	return string(jsonBytes)
+}
 
-			// Diagnose flow
-			{SourceTempID: "start_diagnose", TargetTempID: "diagnose_get_run", SourcePort: "output"},
-			{SourceTempID: "diagnose_get_run", TargetTempID: "diagnose_build_prompt", SourcePort: "output"},
-			{SourceTempID: "diagnose_build_prompt", TargetTempID: "diagnose_llm", SourcePort: "output"},
-			{SourceTempID: "diagnose_llm", TargetTempID: "diagnose_parse", SourcePort: "output"},
+func copilotSystemPrompt() string {
+	return `You are Copilot, an AI assistant for the AI Orchestration platform. You help users build, understand, and improve their workflows.
 
-			// Optimize flow
-			{SourceTempID: "start_optimize", TargetTempID: "optimize_get_workflow", SourcePort: "output"},
-			{SourceTempID: "optimize_get_workflow", TargetTempID: "optimize_build_prompt", SourcePort: "output"},
-			{SourceTempID: "optimize_build_prompt", TargetTempID: "optimize_llm", SourcePort: "output"},
-			{SourceTempID: "optimize_llm", TargetTempID: "optimize_parse", SourcePort: "output"},
+## Your Capabilities
+
+### Workflow Building (create mode)
+When users want to create new workflows:
+1. Ask clarifying questions about their use case
+2. Suggest appropriate blocks from the available catalog
+3. Create steps with proper configuration
+4. Connect steps with edges
+5. Validate the final workflow
+
+### Platform Guidance (explain mode)
+When users ask about the platform:
+1. Search documentation for relevant information
+2. Explain block functionality and configuration
+3. Provide examples and best practices
+4. Guide users through complex features
+
+### Workflow Enhancement (enhance mode)
+When users want to improve existing workflows:
+1. Analyze the current workflow structure
+2. Identify potential improvements
+3. Suggest optimizations (performance, reliability, cost)
+4. Implement changes with user approval
+
+## Available Tools
+
+- list_blocks: Get all available blocks
+- get_block_schema: Get detailed schema for a specific block
+- search_blocks: Search blocks by keyword
+- list_workflows: List user's workflows
+- get_workflow: Get workflow details
+- create_step: Create a new step in a workflow
+- update_step: Update an existing step
+- delete_step: Delete a step
+- create_edge: Connect two steps
+- delete_edge: Remove a connection
+- search_documentation: Search platform documentation
+- validate_workflow: Validate workflow structure
+
+## Guidelines
+
+1. Always ask for confirmation before making changes
+2. Explain your reasoning and suggestions
+3. Provide step-by-step guidance for complex tasks
+4. Use Japanese when the user writes in Japanese
+5. Be concise but thorough in explanations
+
+## Block Categories
+
+- ai: LLM, Agent, RAG blocks
+- integration: External service integrations (Slack, Discord, GitHub, etc.)
+- data: Data transformation and processing
+- control: Flow control (conditions, loops, parallel execution)
+- utility: Helper blocks (code, function, log, etc.)
+- rag: Vector database and retrieval blocks
+`
+}
+
+func copilotTools() []map[string]interface{} {
+	return []map[string]interface{}{
+		{
+			"name":        "list_blocks",
+			"description": "Get a list of all available blocks with their basic information (slug, name, category, description)",
+			"parameters": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			"name":        "get_block_schema",
+			"description": "Get the detailed configuration schema for a specific block, including all configurable options",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"slug"},
+				"properties": map[string]interface{}{
+					"slug": map[string]interface{}{
+						"type":        "string",
+						"description": "The block's slug identifier (e.g., 'llm', 'http', 'slack')",
+					},
+				},
+			},
+		},
+		{
+			"name":        "search_blocks",
+			"description": "Search for blocks by keyword in name, description, or slug",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"query"},
+				"properties": map[string]interface{}{
+					"query": map[string]interface{}{
+						"type":        "string",
+						"description": "Search keyword",
+					},
+				},
+			},
+		},
+		{
+			"name":        "list_workflows",
+			"description": "Get a list of all workflows accessible to the user",
+			"parameters": map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			"name":        "get_workflow",
+			"description": "Get detailed information about a specific workflow, including its steps and edges",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"workflow_id"},
+				"properties": map[string]interface{}{
+					"workflow_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The workflow's UUID",
+					},
+				},
+			},
+		},
+		{
+			"name":        "create_step",
+			"description": "Create a new step in a workflow",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"project_id", "name", "type"},
+				"properties": map[string]interface{}{
+					"project_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The workflow/project ID where the step will be created",
+					},
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "Name of the step",
+					},
+					"type": map[string]interface{}{
+						"type":        "string",
+						"description": "Step type (e.g., 'llm', 'http', 'function')",
+					},
+					"config": map[string]interface{}{
+						"type":        "object",
+						"description": "Step configuration options",
+					},
+					"position_x": map[string]interface{}{
+						"type":        "integer",
+						"description": "X position on canvas",
+					},
+					"position_y": map[string]interface{}{
+						"type":        "integer",
+						"description": "Y position on canvas",
+					},
+					"block_definition_id": map[string]interface{}{
+						"type":        "string",
+						"description": "UUID of the block definition to use",
+					},
+				},
+			},
+		},
+		{
+			"name":        "update_step",
+			"description": "Update an existing step's configuration or position",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"step_id"},
+				"properties": map[string]interface{}{
+					"step_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The step's UUID",
+					},
+					"name": map[string]interface{}{
+						"type":        "string",
+						"description": "New name for the step",
+					},
+					"config": map[string]interface{}{
+						"type":        "object",
+						"description": "Updated configuration",
+					},
+					"position_x": map[string]interface{}{
+						"type":        "integer",
+						"description": "New X position",
+					},
+					"position_y": map[string]interface{}{
+						"type":        "integer",
+						"description": "New Y position",
+					},
+				},
+			},
+		},
+		{
+			"name":        "delete_step",
+			"description": "Delete a step from the workflow",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"step_id"},
+				"properties": map[string]interface{}{
+					"step_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The step's UUID to delete",
+					},
+				},
+			},
+		},
+		{
+			"name":        "create_edge",
+			"description": "Create a connection between two steps",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"project_id", "source_step_id", "target_step_id"},
+				"properties": map[string]interface{}{
+					"project_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The workflow/project ID",
+					},
+					"source_step_id": map[string]interface{}{
+						"type":        "string",
+						"description": "UUID of the source step",
+					},
+					"target_step_id": map[string]interface{}{
+						"type":        "string",
+						"description": "UUID of the target step",
+					},
+					"source_port": map[string]interface{}{
+						"type":        "string",
+						"description": "Output port name (default: 'output')",
+					},
+					"target_port": map[string]interface{}{
+						"type":        "string",
+						"description": "Input port name (default: 'input')",
+					},
+					"condition": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional condition expression",
+					},
+				},
+			},
+		},
+		{
+			"name":        "delete_edge",
+			"description": "Delete a connection between steps",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"edge_id"},
+				"properties": map[string]interface{}{
+					"edge_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The edge's UUID to delete",
+					},
+				},
+			},
+		},
+		{
+			"name":        "search_documentation",
+			"description": "Search platform documentation for relevant information",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"query"},
+				"properties": map[string]interface{}{
+					"query": map[string]interface{}{
+						"type":        "string",
+						"description": "Search query for documentation",
+					},
+				},
+			},
+		},
+		{
+			"name":        "validate_workflow",
+			"description": "Validate a workflow's structure and identify potential issues",
+			"parameters": map[string]interface{}{
+				"type":     "object",
+				"required": []string{"workflow_id"},
+				"properties": map[string]interface{}{
+					"workflow_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The workflow's UUID to validate",
+					},
+				},
+			},
 		},
 	}
 }

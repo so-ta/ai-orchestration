@@ -84,10 +84,19 @@ type LLMService interface {
 	Chat(provider, model string, request map[string]interface{}) (map[string]interface{}, error)
 }
 
-// WorkflowService provides subflow execution capability
+// WorkflowService provides subflow execution capability.
+//
+// Note: Methods do not take context.Context as a parameter because this interface
+// is called from JavaScript code via goja, which cannot pass Go contexts.
+// The context is captured in closures at service creation time (see WorkflowServiceImpl)
+// and is properly used for execution, cancellation, timeout, and tenant isolation.
 type WorkflowService interface {
 	// Run executes a subflow and returns its output
 	Run(workflowID string, input map[string]interface{}) (map[string]interface{}, error)
+	// ExecuteStep executes a step within the current workflow by name and returns its output.
+	// This enables agent blocks to call other steps as tools.
+	// Context for execution is captured when the service is created via NewWorkflowServiceWithExecutor.
+	ExecuteStep(stepName string, input map[string]interface{}) (map[string]interface{}, error)
 }
 
 // HumanService provides human-in-the-loop functionality
@@ -364,6 +373,11 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		workflowObj := vm.NewObject()
 		if err := workflowObj.Set("run", func(call goja.FunctionCall) goja.Value {
 			return s.workflowRun(vm, execCtx.Workflow, call)
+		}); err != nil {
+			return err
+		}
+		if err := workflowObj.Set("executeStep", func(call goja.FunctionCall) goja.Value {
+			return s.workflowExecuteStep(vm, execCtx.Workflow, call)
 		}); err != nil {
 			return err
 		}
@@ -866,7 +880,9 @@ func (s *Sandbox) llmChat(vm *goja.Runtime, service LLMService, call goja.Functi
 
 	result, err := service.Chat(provider, model, request)
 	if err != nil {
-		panic(vm.ToValue(fmt.Sprintf("LLM chat failed: %v", err)))
+		// Sanitize error to prevent leaking internal implementation details
+		sanitized := sanitizeError(err)
+		panic(vm.ToValue(fmt.Sprintf("LLM chat failed: %v", sanitized)))
 	}
 
 	return vm.ToValue(result)
@@ -888,7 +904,34 @@ func (s *Sandbox) workflowRun(vm *goja.Runtime, service WorkflowService, call go
 
 	result, err := service.Run(workflowID, input)
 	if err != nil {
-		panic(vm.ToValue(fmt.Sprintf("Workflow run failed: %v", err)))
+		// Sanitize error to prevent leaking internal implementation details
+		sanitized := sanitizeError(err)
+		panic(vm.ToValue(fmt.Sprintf("Workflow run failed: %v", sanitized)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// workflowExecuteStep handles ctx.workflow.executeStep(stepName, input) calls
+// This enables agent blocks to call other steps as tools within the current workflow
+func (s *Sandbox) workflowExecuteStep(vm *goja.Runtime, service WorkflowService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.workflow.executeStep requires stepName and input arguments"))
+	}
+
+	stepName := call.Arguments[0].String()
+
+	inputArg := call.Arguments[1].Export()
+	input, ok := inputArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.workflow.executeStep input must be an object"))
+	}
+
+	result, err := service.ExecuteStep(stepName, input)
+	if err != nil {
+		// Sanitize error to prevent leaking internal implementation details
+		sanitized := sanitizeError(err)
+		panic(vm.ToValue(fmt.Sprintf("Step execution failed: %v", sanitized)))
 	}
 
 	return vm.ToValue(result)

@@ -31,6 +31,7 @@ const blockGroupTypes: Array<{
   { type: 'try_catch', name: 'Try-Catch', description: 'Error handling block', icon: '⚡', color: '#ef4444' },
   { type: 'foreach', name: 'ForEach', description: 'Loop over items', icon: '∀', color: '#22c55e' },
   { type: 'while', name: 'While', description: 'Repeat while condition', icon: '↻', color: '#14b8a6' },
+  { type: 'agent', name: 'Agent', description: 'AI Agent with tool calling', icon: '🤖', color: '#10b981' },
 ]
 
 // Fetch blocks from API

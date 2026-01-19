@@ -446,13 +446,22 @@ func (m *ProjectMigrator) validateSourcePort(ctx context.Context, sourcePort, bl
 		return err
 	}
 
+	// Check current block's output ports
 	for _, port := range blockDef.OutputPorts {
 		if port.Name == sourcePort {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("source port '%s' not found in block '%s' output ports (available: %v)", sourcePort, blockSlug, getPortNames(blockDef.OutputPorts))
+	// Check inherited ports from parent blocks
+	allPorts := m.getInheritedOutputPorts(ctx, blockDef)
+	for _, port := range allPorts {
+		if port.Name == sourcePort {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("source port '%s' not found in block '%s' output ports (available: %v)", sourcePort, blockSlug, getPortNames(allPorts))
 }
 
 // validateTargetPort validates that the target port exists in the block definition
@@ -466,13 +475,84 @@ func (m *ProjectMigrator) validateTargetPort(ctx context.Context, targetPort, bl
 		return err
 	}
 
+	// Check current block's input ports
 	for _, port := range blockDef.InputPorts {
 		if port.Name == targetPort {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("target port '%s' not found in block '%s' input ports (available: %v)", targetPort, blockSlug, getInputPortNames(blockDef.InputPorts))
+	// Check inherited ports from parent blocks
+	allPorts := m.getInheritedInputPorts(ctx, blockDef)
+	for _, port := range allPorts {
+		if port.Name == targetPort {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("target port '%s' not found in block '%s' input ports (available: %v)", targetPort, blockSlug, getInputPortNames(allPorts))
+}
+
+// getInheritedOutputPorts recursively collects output ports from parent blocks
+func (m *ProjectMigrator) getInheritedOutputPorts(ctx context.Context, blockDef *domain.BlockDefinition) []domain.OutputPort {
+	var allPorts []domain.OutputPort
+
+	// Start with current block's ports
+	allPorts = append(allPorts, blockDef.OutputPorts...)
+
+	// Recursively get parent block's ports
+	if blockDef.ParentBlockID != nil {
+		parentBlock, err := m.blockRepo.GetByID(ctx, *blockDef.ParentBlockID)
+		if err == nil && parentBlock != nil {
+			parentPorts := m.getInheritedOutputPorts(ctx, parentBlock)
+			// Add parent ports that don't exist in current block
+			for _, pp := range parentPorts {
+				found := false
+				for _, cp := range allPorts {
+					if cp.Name == pp.Name {
+						found = true
+						break
+					}
+				}
+				if !found {
+					allPorts = append(allPorts, pp)
+				}
+			}
+		}
+	}
+
+	return allPorts
+}
+
+// getInheritedInputPorts recursively collects input ports from parent blocks
+func (m *ProjectMigrator) getInheritedInputPorts(ctx context.Context, blockDef *domain.BlockDefinition) []domain.InputPort {
+	var allPorts []domain.InputPort
+
+	// Start with current block's ports
+	allPorts = append(allPorts, blockDef.InputPorts...)
+
+	// Recursively get parent block's ports
+	if blockDef.ParentBlockID != nil {
+		parentBlock, err := m.blockRepo.GetByID(ctx, *blockDef.ParentBlockID)
+		if err == nil && parentBlock != nil {
+			parentPorts := m.getInheritedInputPorts(ctx, parentBlock)
+			// Add parent ports that don't exist in current block
+			for _, pp := range parentPorts {
+				found := false
+				for _, cp := range allPorts {
+					if cp.Name == pp.Name {
+						found = true
+						break
+					}
+				}
+				if !found {
+					allPorts = append(allPorts, pp)
+				}
+			}
+		}
+	}
+
+	return allPorts
 }
 
 // getPortNames extracts port names from output ports for error messages
