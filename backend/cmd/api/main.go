@@ -130,6 +130,13 @@ func main() {
 	oauth2AppRepo := postgres.NewOAuth2AppRepository(pool)
 	oauth2ConnectionRepo := postgres.NewOAuth2ConnectionRepository(pool)
 	credentialShareRepo := postgres.NewCredentialShareRepository(pool)
+	// N8N-style feature repositories
+	_ = postgres.NewAgentMemoryRepository(pool) // Used in sandbox execution
+	_ = postgres.NewAgentChatSessionRepository(pool)
+	templateRepo := postgres.NewProjectTemplateRepository(pool)
+	templateReviewRepo := postgres.NewTemplateReviewRepository(pool)
+	gitSyncRepo := postgres.NewProjectGitSyncRepository(pool)
+	blockPackageRepo := postgres.NewCustomBlockPackageRepository(pool)
 
 	// Initialize usecases
 	projectUsecase := usecase.NewProjectUsecase(projectRepo, stepRepo, edgeRepo, versionRepo, blockRepo).
@@ -164,6 +171,11 @@ func main() {
 	)
 	credentialShareService := usecase.NewCredentialShareService(credentialShareRepo, credentialRepo)
 
+	// N8N-style feature usecases
+	templateUsecase := usecase.NewTemplateUsecase(templateRepo, templateReviewRepo, projectRepo, stepRepo, edgeRepo)
+	gitSyncUsecase := usecase.NewGitSyncUsecase(gitSyncRepo, projectRepo)
+	blockPackageUsecase := usecase.NewBlockPackageUsecase(blockPackageRepo, blockRepo)
+
 	// Initialize handlers
 	projectHandler := handler.NewProjectHandler(projectUsecase, auditService)
 	stepHandler := handler.NewStepHandler(stepUsecase)
@@ -181,6 +193,11 @@ func main() {
 	oauth2Handler := handler.NewOAuth2Handler(oauth2Service, auditService)
 	credentialShareHandler := handler.NewCredentialShareHandler(credentialShareService, auditService)
 	copilotAgentHandler := handler.NewCopilotAgentHandler(agentUsecase)
+
+	// N8N-style feature handlers
+	templateHandler := handler.NewTemplateHandler(templateUsecase, auditService)
+	gitSyncHandler := handler.NewGitSyncHandler(gitSyncUsecase, auditService)
+	blockPackageHandler := handler.NewBlockPackageHandler(blockPackageUsecase, auditService)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -280,11 +297,25 @@ func main() {
 					// Inline step testing (without existing run)
 					r.Post("/{step_id}/test", runHandler.TestStepInline)
 
+					// Retry configuration (N8N-style)
+					r.Get("/{step_id}/retry-config", stepHandler.GetRetryConfig)
+					r.Put("/{step_id}/retry-config", stepHandler.UpdateRetryConfig)
+					r.Delete("/{step_id}/retry-config", stepHandler.DeleteRetryConfig)
+
 					// Step-specific Copilot
 					r.Route("/{step_id}/copilot", func(r chi.Router) {
 						r.Post("/suggest", copilotHandler.SuggestForStep)
 						r.Post("/explain", copilotHandler.ExplainStep)
 					})
+				})
+
+				// Git Sync (N8N-style)
+				r.Route("/git-sync", func(r chi.Router) {
+					r.Get("/", gitSyncHandler.GetByProject)
+					r.Post("/", gitSyncHandler.Create)
+					r.Put("/", gitSyncHandler.Update)
+					r.Delete("/", gitSyncHandler.Delete)
+					r.Post("/sync", gitSyncHandler.TriggerSync)
 				})
 
 				// Workflow-level Copilot (with session management)
@@ -500,6 +531,55 @@ func main() {
 		r.Route("/user/variables", func(r chi.Router) {
 			r.Get("/", variablesHandler.GetUserVariables)
 			r.Put("/", variablesHandler.UpdateUserVariables)
+		})
+
+		// ============================================================================
+		// N8N-Style Features (Phase 2-4)
+		// ============================================================================
+
+		// Templates (N8N-style workflow templates)
+		r.Route("/templates", func(r chi.Router) {
+			r.Get("/", templateHandler.List)
+			r.Post("/", templateHandler.Create)
+			r.Post("/from-project", templateHandler.CreateFromProject)
+			r.Get("/categories", templateHandler.GetCategories)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", templateHandler.Get)
+				r.Put("/", templateHandler.Update)
+				r.Delete("/", templateHandler.Delete)
+				r.Post("/use", templateHandler.Use)
+				r.Get("/reviews", templateHandler.GetReviews)
+				r.Post("/reviews", templateHandler.AddReview)
+			})
+		})
+
+		// Template Marketplace
+		r.Route("/marketplace", func(r chi.Router) {
+			r.Get("/templates", templateHandler.ListPublic)
+		})
+
+		// Git Sync (global list)
+		r.Route("/git-sync", func(r chi.Router) {
+			r.Get("/", gitSyncHandler.List)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", gitSyncHandler.Get)
+				r.Put("/", gitSyncHandler.Update)
+				r.Delete("/", gitSyncHandler.Delete)
+				r.Post("/sync", gitSyncHandler.TriggerSync)
+			})
+		})
+
+		// Custom Block Packages (Block SDK)
+		r.Route("/block-packages", func(r chi.Router) {
+			r.Get("/", blockPackageHandler.List)
+			r.Post("/", blockPackageHandler.Create)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", blockPackageHandler.Get)
+				r.Put("/", blockPackageHandler.Update)
+				r.Delete("/", blockPackageHandler.Delete)
+				r.Post("/publish", blockPackageHandler.Publish)
+				r.Post("/deprecate", blockPackageHandler.Deprecate)
+			})
 		})
 
 		// Admin routes for system block management

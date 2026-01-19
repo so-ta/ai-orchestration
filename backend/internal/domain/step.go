@@ -120,6 +120,9 @@ type Step struct {
 	// Format: {"credential_name": "uuid-of-tenant-credential", ...}
 	CredentialBindings json.RawMessage `json:"credential_bindings,omitempty"`
 
+	// Retry configuration for error handling
+	RetryConfig json.RawMessage `json:"retry_config,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -385,4 +388,106 @@ type LogStepConfig struct {
 	Message string `json:"message"`          // Log message (supports template variables like {{$.input.field}})
 	Level   string `json:"level,omitempty"`  // Log level: debug, info, warn, error (default: info)
 	Data    string `json:"data,omitempty"`   // JSON path to data to include in log (e.g., "$.input" or "$.steps.step1.output")
+}
+
+// RetryConfig represents the retry configuration for a step
+type RetryConfig struct {
+	MaxRetries         int      `json:"max_retries"`          // Maximum number of retries (default: 0)
+	DelayMs            int      `json:"delay_ms"`             // Initial delay between retries in ms (default: 1000)
+	ExponentialBackoff bool     `json:"exponential_backoff"`  // Use exponential backoff (default: false)
+	MaxDelayMs         int      `json:"max_delay_ms"`         // Maximum delay for exponential backoff (default: 30000)
+	RetryOnErrors      []string `json:"retry_on_errors"`      // Error codes to retry on (empty = retry on all errors)
+}
+
+// DefaultRetryConfig returns the default retry configuration
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxRetries:         0,
+		DelayMs:            1000,
+		ExponentialBackoff: false,
+		MaxDelayMs:         30000,
+		RetryOnErrors:      nil,
+	}
+}
+
+// ParseRetryConfig parses retry configuration from JSON
+func ParseRetryConfig(data json.RawMessage) (*RetryConfig, error) {
+	if len(data) == 0 || string(data) == "{}" || string(data) == "null" {
+		config := DefaultRetryConfig()
+		return &config, nil
+	}
+
+	var config RetryConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	// Apply defaults for missing values
+	if config.DelayMs <= 0 {
+		config.DelayMs = 1000
+	}
+	if config.MaxDelayMs <= 0 {
+		config.MaxDelayMs = 30000
+	}
+
+	return &config, nil
+}
+
+// GetRetryConfig returns the parsed retry configuration for a step
+func (s *Step) GetRetryConfig() (*RetryConfig, error) {
+	return ParseRetryConfig(s.RetryConfig)
+}
+
+// SetRetryConfig sets the retry configuration for a step
+func (s *Step) SetRetryConfig(config *RetryConfig) error {
+	if config == nil {
+		s.RetryConfig = nil
+		return nil
+	}
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	s.RetryConfig = data
+	return nil
+}
+
+// ShouldRetryError checks if an error should be retried based on the config
+func (c *RetryConfig) ShouldRetryError(errorCode string, attempt int) bool {
+	if c.MaxRetries <= 0 || attempt >= c.MaxRetries {
+		return false
+	}
+
+	// If no specific error codes defined, retry on all errors
+	if len(c.RetryOnErrors) == 0 {
+		return true
+	}
+
+	// Check if the error code is in the list
+	for _, code := range c.RetryOnErrors {
+		if code == errorCode || code == "*" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetDelayForAttempt calculates the delay for a given retry attempt
+func (c *RetryConfig) GetDelayForAttempt(attempt int) int {
+	if !c.ExponentialBackoff {
+		return c.DelayMs
+	}
+
+	// Exponential backoff: delay * 2^attempt
+	delay := c.DelayMs
+	for i := 0; i < attempt; i++ {
+		delay *= 2
+		if delay > c.MaxDelayMs {
+			delay = c.MaxDelayMs
+			break
+		}
+	}
+
+	return delay
 }

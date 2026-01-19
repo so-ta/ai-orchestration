@@ -1947,5 +1947,156 @@
       "message": "メッセージを入力...",
       "feedback": "フィードバックを入力..."
     }
+  },
+  "retryConfig": {
+    "title": "リトライ設定",
+    "maxRetries": "最大リトライ回数",
+    "maxRetriesHint": "ステップが失敗した場合の最大リトライ回数（0-10）",
+    "delayMs": "初期遅延 (ms)",
+    "delayMsHint": "最初のリトライまでの待機時間（ミリ秒）",
+    "exponentialBackoff": "指数バックオフを使用",
+    "exponentialBackoffHint": "リトライごとに遅延時間を2倍に増加させます",
+    "maxDelayMs": "最大遅延 (ms)",
+    "maxDelayMsHint": "指数バックオフ時の最大遅延時間",
+    "retryOnErrors": "リトライ対象エラーコード",
+    "retryOnErrorsPlaceholder": "例: TIMEOUT, RATE_LIMIT",
+    "retryOnErrorsHint": "空欄の場合はすべてのエラーでリトライします",
+    "backoffPreview": "リトライタイミングプレビュー",
+    "retryNumber": "リトライ {n}",
+    "moreRetries": "他 {n} 回..."
+  },
+  "templates": {
+    "title": "テンプレート",
+    "subtitle": "プロジェクトテンプレートの管理とマーケットプレイス",
+    "myTemplates": "マイテンプレート",
+    "marketplace": "マーケットプレイス",
+    "createTemplate": "テンプレートを作成",
+    "createFromProject": "プロジェクトからテンプレート作成",
+    "useTemplate": "このテンプレートを使用",
+    "noTemplates": "テンプレートがありません",
+    "noTemplatesDesc": "プロジェクトからテンプレートを作成できます",
+    "searchPlaceholder": "テンプレートを検索...",
+    "category": "カテゴリ",
+    "tags": "タグ",
+    "visibility": {
+      "title": "公開範囲",
+      "private": "非公開",
+      "tenant": "テナント内",
+      "public": "公開"
+    },
+    "downloads": "ダウンロード数",
+    "rating": "評価",
+    "reviews": "レビュー",
+    "author": "作成者",
+    "featured": "おすすめ",
+    "filters": {
+      "all": "すべて",
+      "featured": "おすすめ",
+      "topRated": "高評価"
+    },
+    "form": {
+      "name": "テンプレート名",
+      "namePlaceholder": "テンプレート名を入力",
+      "description": "説明",
+      "descriptionPlaceholder": "テンプレートの説明を入力",
+      "category": "カテゴリ",
+      "categoryPlaceholder": "カテゴリを選択",
+      "tags": "タグ",
+      "tagsPlaceholder": "タグをカンマ区切りで入力",
+      "visibility": "公開範囲"
+    },
+    "review": {
+      "title": "レビューを書く",
+      "rating": "評価",
+      "comment": "コメント",
+      "commentPlaceholder": "テンプレートへのフィードバックを入力",
+      "submit": "レビューを投稿"
+    },
+    "messages": {
+      "createSuccess": "テンプレートを作成しました",
+      "createFailed": "テンプレートの作成に失敗しました",
+      "useSuccess": "テンプレートからプロジェクトを作成しました",
+      "useFailed": "テンプレートの適用に失敗しました",
+      "reviewSuccess": "レビューを投稿しました"
+    },
+    "categories": {
+      "automation": "自動化",
+      "ai": "AI/ML",
+      "integration": "連携",
+      "data": "データ処理",
+      "notification": "通知",
+      "other": "その他"
+    }
+  },
+  "gitSync": {
+    "title": "Git連携",
+    "subtitle": "ワークフローをGitリポジトリと同期",
+    "enable": "Git連携を有効化",
+    "disable": "Git連携を無効化",
+    "syncNow": "今すぐ同期",
+    "syncing": "同期中...",
+    "lastSync": "最終同期",
+    "commitSha": "コミットSHA",
+    "noSync": "Git連携が設定されていません",
+    "noSyncDesc": "リポジトリと接続してワークフローをバージョン管理しましょう",
+    "form": {
+      "repositoryUrl": "リポジトリURL",
+      "repositoryUrlPlaceholder": "https://github.com/user/repo.git",
+      "branch": "ブランチ",
+      "branchPlaceholder": "main",
+      "filePath": "ファイルパス",
+      "filePathPlaceholder": "workflows/my-workflow.json",
+      "syncDirection": "同期方向",
+      "autoSync": "自動同期",
+      "autoSyncHint": "変更時に自動的にGitと同期します",
+      "credentials": "認証情報"
+    },
+    "direction": {
+      "push": "Push (ローカル → Git)",
+      "pull": "Pull (Git → ローカル)",
+      "bidirectional": "双方向"
+    },
+    "messages": {
+      "configured": "Git連携を設定しました",
+      "configFailed": "Git連携の設定に失敗しました",
+      "syncSuccess": "同期が完了しました",
+      "syncFailed": "同期に失敗しました",
+      "deleted": "Git連携を解除しました"
+    }
+  },
+  "blockPackages": {
+    "title": "カスタムブロックパッケージ",
+    "subtitle": "独自のブロックを作成・管理",
+    "createPackage": "パッケージを作成",
+    "uploadPackage": "パッケージをアップロード",
+    "noPackages": "パッケージがありません",
+    "noPackagesDesc": "カスタムブロックを作成してパッケージ化できます",
+    "searchPlaceholder": "パッケージを検索...",
+    "status": {
+      "draft": "下書き",
+      "published": "公開済み",
+      "deprecated": "非推奨"
+    },
+    "blocks": "ブロック数",
+    "dependencies": "依存関係",
+    "version": "バージョン",
+    "publish": "公開",
+    "deprecate": "非推奨にする",
+    "form": {
+      "name": "パッケージ名",
+      "namePlaceholder": "my-custom-blocks",
+      "version": "バージョン",
+      "versionPlaceholder": "1.0.0",
+      "description": "説明",
+      "descriptionPlaceholder": "パッケージの説明を入力"
+    },
+    "messages": {
+      "createSuccess": "パッケージを作成しました",
+      "createFailed": "パッケージの作成に失敗しました",
+      "publishSuccess": "パッケージを公開しました",
+      "publishFailed": "パッケージの公開に失敗しました",
+      "deprecateSuccess": "パッケージを非推奨にしました",
+      "deleteSuccess": "パッケージを削除しました"
+    }
   }
 }

@@ -47,6 +47,10 @@ type Project struct {
 	IsSystem   bool    `json:"is_system"`             // True for system projects (e.g., Copilot)
 	SystemSlug *string `json:"system_slug,omitempty"` // Unique slug for system projects (e.g., "copilot-generate")
 
+	// Error Workflow configuration
+	ErrorWorkflowID     *uuid.UUID      `json:"error_workflow_id,omitempty"`     // Project to execute on failure
+	ErrorWorkflowConfig json.RawMessage `json:"error_workflow_config,omitempty"` // Error workflow configuration
+
 	// Loaded relations
 	Steps       []Step       `json:"steps,omitempty"`
 	Edges       []Edge       `json:"edges,omitempty"`

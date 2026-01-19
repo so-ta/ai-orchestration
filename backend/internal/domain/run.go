@@ -51,6 +51,10 @@ type Run struct {
 	TriggerSource   *string         `json:"trigger_source,omitempty"`   // e.g., "copilot", "audit-system"
 	TriggerMetadata json.RawMessage `json:"trigger_metadata,omitempty"` // e.g., {"feature": "generate", "user_id": "..."}
 
+	// Error Workflow tracking
+	ParentRunID        *uuid.UUID      `json:"parent_run_id,omitempty"`        // Parent run that triggered this error workflow
+	ErrorTriggerSource json.RawMessage `json:"error_trigger_source,omitempty"` // Error info from parent run
+
 	// Loaded relations
 	StepRuns []StepRun `json:"step_runs,omitempty"`
 }
@@ -136,4 +140,42 @@ func (r *Run) SetInternalTrigger(source string, metadata map[string]interface{})
 		r.TriggerMetadata = metaJSON
 	}
 	return nil
+}
+
+// ErrorTriggerInfo contains information about the error that triggered an error workflow
+type ErrorTriggerInfo struct {
+	OriginalRunID   uuid.UUID `json:"original_run_id"`
+	OriginalProject string    `json:"original_project"`
+	ErrorStepID     uuid.UUID `json:"error_step_id"`
+	ErrorStepName   string    `json:"error_step_name"`
+	ErrorMessage    string    `json:"error_message"`
+	TriggeredAt     time.Time `json:"triggered_at"`
+}
+
+// SetErrorTrigger sets this run as an error workflow run triggered by a parent run
+func (r *Run) SetErrorTrigger(parentRunID uuid.UUID, info ErrorTriggerInfo) error {
+	r.ParentRunID = &parentRunID
+	infoJSON, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	r.ErrorTriggerSource = infoJSON
+	return nil
+}
+
+// GetErrorTriggerInfo returns the error trigger info if this is an error workflow run
+func (r *Run) GetErrorTriggerInfo() (*ErrorTriggerInfo, error) {
+	if r.ErrorTriggerSource == nil || len(r.ErrorTriggerSource) == 0 {
+		return nil, nil
+	}
+	var info ErrorTriggerInfo
+	if err := json.Unmarshal(r.ErrorTriggerSource, &info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+// IsErrorWorkflowRun returns true if this run was triggered by an error workflow
+func (r *Run) IsErrorWorkflowRun() bool {
+	return r.ParentRunID != nil
 }

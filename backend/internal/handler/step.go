@@ -192,3 +192,96 @@ func (h *StepHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// UpdateRetryConfigRequest represents a retry config update request
+type UpdateRetryConfigRequest struct {
+	MaxRetries         int      `json:"max_retries"`
+	DelayMs            int      `json:"delay_ms"`
+	MaxDelayMs         int      `json:"max_delay_ms"`
+	ExponentialBackoff bool     `json:"exponential_backoff"`
+	RetryOnErrors      []string `json:"retry_on_errors"`
+}
+
+// UpdateRetryConfig handles PUT /api/v1/projects/{project_id}/steps/{step_id}/retry-config
+func (h *StepHandler) UpdateRetryConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	projectID, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
+		return
+	}
+
+	var req UpdateRetryConfigRequest
+	if !decodeJSONBody(w, r, &req) {
+		return
+	}
+
+	step, err := h.stepUsecase.UpdateRetryConfig(r.Context(), usecase.UpdateRetryConfigInput{
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		StepID:    stepID,
+		RetryConfig: &domain.RetryConfig{
+			MaxRetries:         req.MaxRetries,
+			DelayMs:            req.DelayMs,
+			MaxDelayMs:         req.MaxDelayMs,
+			ExponentialBackoff: req.ExponentialBackoff,
+			RetryOnErrors:      req.RetryOnErrors,
+		},
+	})
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, step)
+}
+
+// GetRetryConfig handles GET /api/v1/projects/{project_id}/steps/{step_id}/retry-config
+func (h *StepHandler) GetRetryConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	projectID, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
+		return
+	}
+
+	config, err := h.stepUsecase.GetRetryConfig(r.Context(), tenantID, projectID, stepID)
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, config)
+}
+
+// DeleteRetryConfig handles DELETE /api/v1/projects/{project_id}/steps/{step_id}/retry-config
+func (h *StepHandler) DeleteRetryConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	projectID, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
+		return
+	}
+
+	_, err := h.stepUsecase.UpdateRetryConfig(r.Context(), usecase.UpdateRetryConfigInput{
+		TenantID:    tenantID,
+		ProjectID:   projectID,
+		StepID:      stepID,
+		RetryConfig: nil,
+	})
+	if err != nil {
+		HandleError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

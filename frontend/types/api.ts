@@ -649,3 +649,284 @@ export interface AuditLog {
   user_agent?: string
   created_at: string
 }
+
+// ============================================================================
+// N8N-style Features: Error Workflow, Retry, Templates, etc.
+// ============================================================================
+
+// Error Workflow Configuration
+export interface ErrorWorkflowConfig {
+  trigger_on: ('failed' | 'cancelled' | 'timeout')[]
+  input_mapping?: Record<string, string>
+  enabled: boolean
+}
+
+// Retry Configuration for Steps
+export interface RetryConfig {
+  max_retries: number           // Maximum retries (default: 0)
+  delay_ms: number              // Initial delay (default: 1000)
+  exponential_backoff: boolean  // Use exponential backoff
+  max_delay_ms: number          // Max delay for backoff (default: 30000)
+  retry_on_errors?: string[]    // Error codes to retry on (empty = all)
+}
+
+// Streaming Output Chunk
+export interface StreamingChunk {
+  chunk: string
+  timestamp: string
+  type: 'text' | 'json' | 'error'
+}
+
+// Extended Step with retry config
+export interface StepWithRetry extends Step {
+  retry_config?: RetryConfig
+}
+
+// Extended StepRun with debug features
+export interface StepRunWithDebug extends StepRun {
+  pinned_input?: object
+  streaming_output?: StreamingChunk[]
+}
+
+// Extended Run with error workflow tracking
+export interface RunWithErrorWorkflow extends Run {
+  parent_run_id?: string
+  error_trigger_source?: {
+    original_run_id: string
+    original_project: string
+    error_step_id?: string
+    error_step_name?: string
+    error_message: string
+    triggered_at: string
+  }
+}
+
+// Extended Project with error workflow
+export interface ProjectWithErrorWorkflow extends Project {
+  error_workflow_id?: string
+  error_workflow_config?: ErrorWorkflowConfig
+}
+
+// ============================================================================
+// Project Templates
+// ============================================================================
+
+export type TemplateVisibility = 'private' | 'tenant' | 'public'
+export type TemplateReviewStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ProjectTemplate {
+  id: string
+  tenant_id?: string
+  name: string
+  description?: string
+  category?: string
+  tags?: string[]
+  definition: ProjectDefinition
+  variables?: object
+  thumbnail_url?: string
+  author_name?: string
+  download_count: number
+  is_featured: boolean
+  visibility: TemplateVisibility
+  review_status?: TemplateReviewStatus
+  price_usd: number
+  rating?: number
+  review_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateTemplateRequest {
+  name: string
+  description?: string
+  category?: string
+  tags?: string[]
+  definition: ProjectDefinition
+  variables?: object
+}
+
+export interface InstantiateTemplateRequest {
+  name: string
+  variables?: object
+}
+
+export interface TemplateReview {
+  id: string
+  template_id: string
+  user_id: string
+  rating: number
+  comment?: string
+  created_at: string
+}
+
+export interface CreateTemplateReviewRequest {
+  rating: number
+  comment?: string
+}
+
+export interface TemplateCategory {
+  slug: string
+  name: string
+  description?: string
+  icon?: string
+}
+
+// ============================================================================
+// Agent Chat Sessions
+// ============================================================================
+
+export type AgentChatSessionStatus = 'active' | 'closed'
+
+export interface AgentChatSession {
+  id: string
+  tenant_id: string
+  project_id: string
+  start_step_id: string
+  user_id: string
+  status: AgentChatSessionStatus
+  metadata?: object
+  created_at: string
+  updated_at: string
+  runs?: Run[]
+}
+
+export interface CreateAgentChatSessionRequest {
+  project_id: string
+  start_step_id: string
+}
+
+export interface AgentChatMessage {
+  id: string
+  session_id: string
+  run_id?: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  metadata?: object
+  created_at: string
+}
+
+export interface SendAgentChatMessageRequest {
+  content: string
+  metadata?: object
+}
+
+// ============================================================================
+// Git Sync
+// ============================================================================
+
+export type GitSyncDirection = 'push' | 'pull' | 'bidirectional'
+
+export interface ProjectGitSync {
+  id: string
+  tenant_id: string
+  project_id: string
+  repository_url: string
+  branch: string
+  file_path: string
+  sync_direction: GitSyncDirection
+  auto_sync: boolean
+  last_sync_at?: string
+  last_commit_sha?: string
+  credentials_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateGitSyncRequest {
+  repository_url: string
+  branch?: string
+  file_path?: string
+  sync_direction?: GitSyncDirection
+  credentials_id?: string
+}
+
+export interface UpdateGitSyncRequest {
+  branch?: string
+  file_path?: string
+  sync_direction?: GitSyncDirection
+  auto_sync?: boolean
+  credentials_id?: string
+}
+
+// ============================================================================
+// Custom Block Packages (SDK)
+// ============================================================================
+
+export type BlockPackageStatus = 'draft' | 'published' | 'deprecated'
+
+export interface PackageBlockDefinition {
+  slug: string
+  name: string
+  description?: string
+  category: string
+  icon?: string
+  config_schema: object
+  output_schema?: object
+  code: string
+  ui_config?: object
+}
+
+export interface PackageDependency {
+  name: string
+  version: string
+}
+
+export interface CustomBlockPackage {
+  id: string
+  tenant_id: string
+  name: string
+  version: string
+  description?: string
+  bundle_url?: string
+  blocks: PackageBlockDefinition[]
+  dependencies: PackageDependency[]
+  status: BlockPackageStatus
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateBlockPackageRequest {
+  name: string
+  version: string
+  description?: string
+  blocks: PackageBlockDefinition[]
+  dependencies?: PackageDependency[]
+}
+
+export interface UpdateBlockPackageRequest {
+  description?: string
+  blocks?: PackageBlockDefinition[]
+  dependencies?: PackageDependency[]
+}
+
+// ============================================================================
+// Expression Debugger
+// ============================================================================
+
+export interface ExpressionDebugRequest {
+  expression: string
+  context: object
+}
+
+export interface ExpressionDebugResponse {
+  result: unknown
+  resolved_variables: Array<{
+    path: string
+    value: unknown
+  }>
+  errors: string[]
+}
+
+// ============================================================================
+// Input Pinning
+// ============================================================================
+
+export interface PinInputRequest {
+  input: object
+}
+
+export interface SingleStepExecuteRequest {
+  input?: object
+  use_pinned_input?: boolean
+}
