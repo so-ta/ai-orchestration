@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
-import DOMPurify from 'dompurify'
+import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
+
+// DOMPurify is loaded dynamically for SSR compatibility
+const purify = ref<typeof import('dompurify')['default'] | null>(null)
+
+onMounted(async () => {
+  const DOMPurify = (await import('dompurify')).default
+  purify.value = DOMPurify
+})
 
 const props = defineProps<{
   name: string
@@ -412,10 +419,14 @@ const highlightedCode = computed(() => {
 
   // Additional sanitization with DOMPurify for defense in depth
   // Only allow span tags with class attribute for syntax highlighting
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['span'],
-    ALLOWED_ATTR: ['class'],
-  })
+  if (purify.value) {
+    return purify.value.sanitize(html, {
+      ALLOWED_TAGS: ['span'],
+      ALLOWED_ATTR: ['class'],
+    })
+  }
+  // Fallback: return HTML-escaped content (safe but without syntax highlighting spans)
+  return html
 })
 </script>
 
