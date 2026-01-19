@@ -87,8 +87,8 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 		step.TriggerConfig = input.TriggerConfig
 	}
 
-	// Set credential bindings
-	if len(input.CredentialBindings) > 0 {
+	// Set credential bindings (skip if null or empty)
+	if len(input.CredentialBindings) > 0 && string(input.CredentialBindings) != "null" {
 		step.CredentialBindings = input.CredentialBindings
 	}
 
@@ -168,8 +168,9 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 		step.TriggerConfig = input.TriggerConfig
 	}
 
-	// Update credential bindings
-	if len(input.CredentialBindings) > 0 {
+	// Update credential bindings (skip if null or empty)
+	// Note: Tenant authorization for credential IDs is enforced at runtime by CredentialResolver
+	if len(input.CredentialBindings) > 0 && string(input.CredentialBindings) != "null" {
 		step.CredentialBindings = input.CredentialBindings
 	}
 
