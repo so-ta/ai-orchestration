@@ -144,6 +144,7 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 	}
 
 	// Parse response with tool calls support
+	// Response struct includes: ID, Choices (with Message, FinishReason), and Usage (with token counts)
 	var respData struct {
 		ID      string `json:"id"`
 		Choices []struct {
