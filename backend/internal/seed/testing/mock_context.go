@@ -49,8 +49,9 @@ func (m *MockLLMService) Chat(provider, model string, request map[string]interfa
 
 // MockWorkflowService mocks the Workflow service
 type MockWorkflowService struct {
-	Response map[string]interface{}
-	Error    error
+	Response            map[string]interface{}
+	ExecuteStepResponse map[string]interface{}
+	Error               error
 }
 
 func (m *MockWorkflowService) Run(workflowID string, input map[string]interface{}) (map[string]interface{}, error) {
@@ -62,6 +63,19 @@ func (m *MockWorkflowService) Run(workflowID string, input map[string]interface{
 	}
 	return map[string]interface{}{
 		"result": "Mock workflow result",
+	}, nil
+}
+
+func (m *MockWorkflowService) ExecuteStep(stepName string, input map[string]interface{}) (map[string]interface{}, error) {
+	if m.Error != nil {
+		return nil, m.Error
+	}
+	if m.ExecuteStepResponse != nil {
+		return m.ExecuteStepResponse, nil
+	}
+	return map[string]interface{}{
+		"result":    "Mock step result",
+		"step_name": stepName,
 	}, nil
 }
 

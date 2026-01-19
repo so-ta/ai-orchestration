@@ -26,6 +26,7 @@ const (
 	BlockSubcategoryChat    BlockSubcategory = "chat"    // Chat/LLM blocks
 	BlockSubcategoryRAG     BlockSubcategory = "rag"     // RAG-related blocks
 	BlockSubcategoryRouting BlockSubcategory = "routing" // AI routing blocks
+	BlockSubcategoryAgent   BlockSubcategory = "agent"   // AI agent blocks (group containers with tools)
 
 	// Flow subcategories
 	BlockSubcategoryBranching BlockSubcategory = "branching" // Condition, switch
@@ -53,6 +54,7 @@ const (
 	BlockGroupKindTryCatch BlockGroupKind = "try_catch" // Error handling with retry
 	BlockGroupKindForeach  BlockGroupKind = "foreach"   // Array iteration
 	BlockGroupKindWhile    BlockGroupKind = "while"     // Condition loop
+	BlockGroupKindAgent    BlockGroupKind = "agent"     // AI Agent with tool calling
 )
 
 // ValidBlockCategories returns all valid block categories
@@ -72,6 +74,7 @@ func ValidBlockGroupKinds() []BlockGroupKind {
 		BlockGroupKindTryCatch,
 		BlockGroupKindForeach,
 		BlockGroupKindWhile,
+		BlockGroupKindAgent,
 	}
 }
 

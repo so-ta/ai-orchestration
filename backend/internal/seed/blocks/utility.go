@@ -11,6 +11,7 @@ func (r *Registry) registerUtilityBlocks() {
 	r.register(CodeBlock())
 	r.register(FunctionBlock())
 	r.register(LogBlock())
+	r.register(SetVariablesBlock())
 }
 
 func NoteBlock() *SystemBlockDefinition {
@@ -202,5 +203,124 @@ return input;
 		UIConfig:   json.RawMessage(`{"icon": "terminal", "color": "#6B7280"}`),
 		ErrorCodes: []domain.ErrorCodeDef{},
 		Enabled:    true,
+	}
+}
+
+// SetVariablesBlock creates a block for setting/transforming variables within a workflow.
+// This is useful for:
+// - Injecting context (tenant_id, project_id, etc.) into workflow execution
+// - Transforming input data before passing to subsequent steps
+// - Setting default values
+// - Type conversion (string to number, JSON parsing, etc.)
+func SetVariablesBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:        "set-variables",
+		Version:     1,
+		Name:        "Set Variables",
+		Description: "Set or transform variables for use in subsequent steps",
+		Category:    domain.BlockCategoryFlow,
+		Subcategory: domain.BlockSubcategoryUtility,
+		Icon:        "variable",
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"variables": {
+					"type": "array",
+					"title": "変数",
+					"description": "設定する変数の配列",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string",
+								"title": "変数名",
+								"description": "出力データに追加される変数名"
+							},
+							"value": {
+								"type": "string",
+								"title": "値",
+								"description": "変数の値（テンプレート式 {{$.field}} に対応）"
+							},
+							"type": {
+								"type": "string",
+								"title": "型",
+								"enum": ["string", "number", "boolean", "json"],
+								"default": "string",
+								"description": "変数の型"
+							}
+						},
+						"required": ["name", "value"]
+					}
+				},
+				"merge_input": {
+					"type": "boolean",
+					"title": "入力をマージ",
+					"description": "trueの場合、設定した変数を入力データにマージして出力（デフォルト: true）",
+					"default": true
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{
+			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data to merge with variables"},
+		},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Input merged with set variables"},
+		},
+		Code: `
+// Set Variables block: sets/transforms variables for subsequent steps
+const variables = config.variables || [];
+const mergeInput = config.merge_input !== false; // default true
+
+// Helper function to render template expressions
+function renderTemplate(template, data) {
+    if (typeof template !== 'string') return template;
+    return template.replace(/\{\{\s*\$\.([^}]+)\s*\}\}/g, function(match, path) {
+        const parts = path.split('.');
+        let value = data;
+        for (const part of parts) {
+            if (value == null) return '';
+            value = value[part];
+        }
+        return value != null ? String(value) : '';
+    });
+}
+
+// Process each variable
+const result = {};
+for (const v of variables) {
+    if (!v.name) continue;
+
+    const renderedValue = renderTemplate(v.value, input);
+
+    switch (v.type) {
+        case 'number':
+            result[v.name] = Number(renderedValue);
+            break;
+        case 'boolean':
+            result[v.name] = renderedValue === 'true' || renderedValue === true;
+            break;
+        case 'json':
+            try {
+                result[v.name] = JSON.parse(renderedValue);
+            } catch (e) {
+                result[v.name] = renderedValue;
+            }
+            break;
+        default:
+            result[v.name] = renderedValue;
+    }
+}
+
+// Return merged or new variables
+if (mergeInput) {
+    return { ...input, ...result };
+}
+return result;
+`,
+		UIConfig:   json.RawMessage(`{"icon": "variable", "color": "#10B981"}`),
+		ErrorCodes: []domain.ErrorCodeDef{
+			{Code: "VAR_001", Name: "PARSE_ERROR", Description: "Failed to parse JSON value", Retryable: false},
+		},
+		Enabled: true,
 	}
 }

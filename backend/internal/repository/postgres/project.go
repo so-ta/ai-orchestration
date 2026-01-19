@@ -47,12 +47,14 @@ func (r *ProjectRepository) Create(ctx context.Context, p *domain.Project) error
 }
 
 // GetByID retrieves a project by ID
+// This also supports retrieving system projects (is_system = TRUE) regardless of tenant
 func (r *ProjectRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error) {
 	query := `
 		SELECT id, tenant_id, name, description, status, version, variables, draft,
 		       created_by, published_at, created_at, updated_at, deleted_at, is_system, system_slug
 		FROM projects
-		WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+		WHERE id = $1 AND deleted_at IS NULL
+		  AND (tenant_id = $2 OR is_system = TRUE)
 	`
 	var p domain.Project
 	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(

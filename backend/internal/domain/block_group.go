@@ -17,15 +17,17 @@ const (
 	BlockGroupTypeTryCatch BlockGroupType = "try_catch" // Error handling with retry support
 	BlockGroupTypeForeach  BlockGroupType = "foreach"   // Array iteration (same process for each element)
 	BlockGroupTypeWhile    BlockGroupType = "while"     // Condition-based loop
+	BlockGroupTypeAgent    BlockGroupType = "agent"     // AI Agent with tool calling (child steps = tools)
 )
 
-// ValidBlockGroupTypes returns all valid block group types (4 types only)
+// ValidBlockGroupTypes returns all valid block group types (5 types: parallel, try_catch, foreach, while, agent)
 func ValidBlockGroupTypes() []BlockGroupType {
 	return []BlockGroupType{
 		BlockGroupTypeParallel,
 		BlockGroupTypeTryCatch,
 		BlockGroupTypeForeach,
 		BlockGroupTypeWhile,
+		BlockGroupTypeAgent,
 	}
 }
 
@@ -152,4 +154,17 @@ type WhileConfig struct {
 	Condition     string `json:"condition"`                // Condition expression (e.g., "$.counter < $.target")
 	MaxIterations int    `json:"max_iterations,omitempty"` // Safety limit (default: 100)
 	DoWhile       bool   `json:"do_while,omitempty"`       // Execute at least once before checking condition
+}
+
+// AgentConfig represents configuration for agent block group
+// Implements ReAct loop where child steps become callable tools
+type AgentConfig struct {
+	Provider      string  `json:"provider"`                   // LLM provider: "openai", "anthropic"
+	Model         string  `json:"model"`                      // Model ID (e.g., "claude-sonnet-4-20250514")
+	SystemPrompt  string  `json:"system_prompt"`              // System prompt defining agent behavior
+	MaxIterations int     `json:"max_iterations,omitempty"`   // ReAct loop max iterations (default: 10)
+	Temperature   float64 `json:"temperature,omitempty"`      // LLM temperature (default: 0.7)
+	ToolChoice    string  `json:"tool_choice,omitempty"`      // "auto", "none", "required" (default: "auto")
+	EnableMemory  bool    `json:"enable_memory,omitempty"`    // Enable conversation memory
+	MemoryWindow  int     `json:"memory_window,omitempty"`    // Number of messages to keep in memory (default: 20)
 }

@@ -171,7 +171,7 @@ CREATE TABLE public.block_groups (
     post_process text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT valid_block_group_type CHECK (((type)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])))
+    CONSTRAINT valid_block_group_type CHECK (((type)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying, 'agent'::character varying])::text[])))
 );
 
 COMMENT ON TABLE public.block_groups IS 'Control flow constructs that group multiple steps';
@@ -276,8 +276,8 @@ CREATE TABLE public.block_definitions (
     request jsonb,
     response jsonb,
     CONSTRAINT valid_block_category CHECK (((category)::text = ANY ((ARRAY['ai'::character varying, 'flow'::character varying, 'apps'::character varying, 'custom'::character varying])::text[]))),
-    CONSTRAINT valid_block_subcategory CHECK (subcategory IS NULL OR (subcategory)::text = ANY ((ARRAY['chat'::character varying, 'rag'::character varying, 'routing'::character varying, 'branching'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'slack'::character varying, 'discord'::character varying, 'notion'::character varying, 'github'::character varying, 'google'::character varying, 'linear'::character varying, 'email'::character varying, 'web'::character varying])::text[])),
-    CONSTRAINT valid_group_kind CHECK (group_kind IS NULL OR (group_kind)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying])::text[])),
+    CONSTRAINT valid_block_subcategory CHECK (subcategory IS NULL OR (subcategory)::text = ANY ((ARRAY['chat'::character varying, 'rag'::character varying, 'routing'::character varying, 'branching'::character varying, 'data'::character varying, 'control'::character varying, 'utility'::character varying, 'slack'::character varying, 'discord'::character varying, 'notion'::character varying, 'github'::character varying, 'google'::character varying, 'linear'::character varying, 'email'::character varying, 'web'::character varying, 'agent'::character varying])::text[])),
+    CONSTRAINT valid_group_kind CHECK (group_kind IS NULL OR (group_kind)::text = ANY ((ARRAY['parallel'::character varying, 'try_catch'::character varying, 'foreach'::character varying, 'while'::character varying, 'agent'::character varying])::text[])),
     CONSTRAINT no_self_reference CHECK (parent_block_id IS NULL OR parent_block_id != id)
 );
 

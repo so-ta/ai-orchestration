@@ -427,6 +427,14 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		argNum++
 	}
 
+	if filter.Search != nil && *filter.Search != "" {
+		// Search in name, description, and slug (case-insensitive)
+		searchPattern := "%" + *filter.Search + "%"
+		conditions = append(conditions, fmt.Sprintf("(name ILIKE $%d OR description ILIKE $%d OR slug ILIKE $%d)", argNum, argNum, argNum))
+		args = append(args, searchPattern)
+		argNum++
+	}
+
 	whereClause := ""
 	if len(conditions) > 0 {
 		whereClause = "WHERE " + strings.Join(conditions, " AND ")

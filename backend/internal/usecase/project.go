@@ -171,7 +171,19 @@ func (u *ProjectUsecase) Update(ctx context.Context, input UpdateProjectInput) (
 }
 
 // Delete deletes a project
+// System projects cannot be deleted
 func (u *ProjectUsecase) Delete(ctx context.Context, tenantID, id uuid.UUID) error {
+	// First, check if the project exists and is a system project
+	project, err := u.projectRepo.GetByID(ctx, tenantID, id)
+	if err != nil {
+		return err
+	}
+
+	// Prevent deletion of system projects
+	if project.IsSystem {
+		return domain.ErrForbidden
+	}
+
 	return u.projectRepo.Delete(ctx, tenantID, id)
 }
 
