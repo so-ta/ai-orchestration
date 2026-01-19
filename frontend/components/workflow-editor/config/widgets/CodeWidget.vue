@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue'
+import DOMPurify from 'dompurify'
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
 
 const props = defineProps<{
@@ -409,7 +410,12 @@ const highlightedCode = computed(() => {
     }
   }
 
-  return html
+  // Additional sanitization with DOMPurify for defense in depth
+  // Only allow span tags with class attribute for syntax highlighting
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['span'],
+    ALLOWED_ATTR: ['class'],
+  })
 })
 </script>
 
