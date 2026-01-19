@@ -35,8 +35,14 @@ func NewWorkflowServiceWithExecutor(stepExecutor StepExecutor) *WorkflowServiceI
 	}
 }
 
-// Run executes a subflow and returns its output
-// Currently returns an error as subflow execution is not yet implemented
+// Run executes a subflow and returns its output.
+//
+// NOTE: This method is intentionally not implemented in the current version.
+// Subflow execution requires additional infrastructure (workflow loading, execution context sharing,
+// cycle detection, etc.) which is planned for a future release.
+//
+// When called, it returns an error indicating the feature is not available.
+// JavaScript code calling ctx.workflow.run() will receive this error.
 func (s *WorkflowServiceImpl) Run(workflowID string, input map[string]interface{}) (map[string]interface{}, error) {
 	return nil, fmt.Errorf("subflow execution (ctx.workflow.run) is not yet implemented. WorkflowID: %s", workflowID)
 }

@@ -165,11 +165,13 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Extract content and tool calls
+	// Extract content, finish_reason and tool calls
 	content := ""
+	finishReason := ""
 	var toolCalls []map[string]interface{}
 	if len(respData.Choices) > 0 {
 		content = respData.Choices[0].Message.Content
+		finishReason = respData.Choices[0].FinishReason
 		// Convert tool calls to generic map format
 		for _, tc := range respData.Choices[0].Message.ToolCalls {
 			toolCalls = append(toolCalls, map[string]interface{}{
@@ -184,7 +186,8 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 	}
 
 	result := map[string]interface{}{
-		"content": content,
+		"content":       content,
+		"finish_reason": finishReason,
 		"usage": map[string]interface{}{
 			"input_tokens":  respData.Usage.PromptTokens,
 			"output_tokens": respData.Usage.CompletionTokens,
@@ -425,7 +428,8 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 	}
 
 	result := map[string]interface{}{
-		"content": content,
+		"content":     content,
+		"stop_reason": respData.StopReason,
 		"usage": map[string]interface{}{
 			"input_tokens":  respData.Usage.InputTokens,
 			"output_tokens": respData.Usage.OutputTokens,
