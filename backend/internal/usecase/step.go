@@ -14,6 +14,7 @@ type StepUsecase struct {
 	projectRepo     repository.ProjectRepository
 	stepRepo        repository.StepRepository
 	blockDefRepo    repository.BlockDefinitionRepository
+	credentialRepo  repository.CredentialRepository
 	projectChecker  *ProjectChecker
 }
 
@@ -22,26 +23,56 @@ func NewStepUsecase(
 	projectRepo repository.ProjectRepository,
 	stepRepo repository.StepRepository,
 	blockDefRepo repository.BlockDefinitionRepository,
+	credentialRepo repository.CredentialRepository,
 ) *StepUsecase {
 	return &StepUsecase{
 		projectRepo:    projectRepo,
 		stepRepo:       stepRepo,
 		blockDefRepo:   blockDefRepo,
+		credentialRepo: credentialRepo,
 		projectChecker: NewProjectChecker(projectRepo),
 	}
 }
 
+// validateCredentialBindingsTenant validates that all credential IDs in bindings belong to the tenant
+func (u *StepUsecase) validateCredentialBindingsTenant(ctx context.Context, tenantID uuid.UUID, bindings json.RawMessage) error {
+	if len(bindings) == 0 || string(bindings) == "null" {
+		return nil
+	}
+
+	var parsed map[string]string
+	if err := json.Unmarshal(bindings, &parsed); err != nil {
+		return domain.ErrValidation
+	}
+
+	for _, credIDStr := range parsed {
+		if credIDStr == "" {
+			continue
+		}
+		credID, err := uuid.Parse(credIDStr)
+		if err != nil {
+			return domain.ErrValidation
+		}
+		// Verify credential belongs to the tenant
+		if _, err := u.credentialRepo.GetByID(ctx, tenantID, credID); err != nil {
+			return domain.ErrCredentialNotFound
+		}
+	}
+	return nil
+}
+
 // CreateStepInput represents input for creating a step
 type CreateStepInput struct {
-	TenantID      uuid.UUID
-	ProjectID     uuid.UUID
-	Name          string
-	Type          domain.StepType
-	Config        json.RawMessage
-	TriggerType   string          // For start blocks: manual, webhook, schedule, etc.
-	TriggerConfig json.RawMessage // Configuration for the trigger
-	PositionX     int
-	PositionY     int
+	TenantID           uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	Type               domain.StepType
+	Config             json.RawMessage
+	TriggerType        string          // For start blocks: manual, webhook, schedule, etc.
+	TriggerConfig      json.RawMessage // Configuration for the trigger
+	CredentialBindings json.RawMessage // Mapping of credential names to credential IDs
+	PositionX          int
+	PositionY          int
 }
 
 // Create creates a new step
@@ -86,6 +117,15 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 		step.TriggerConfig = input.TriggerConfig
 	}
 
+	// Set credential bindings (skip if null or empty)
+	if len(input.CredentialBindings) > 0 && string(input.CredentialBindings) != "null" {
+		// Validate that all credential IDs belong to the tenant
+		if err := u.validateCredentialBindingsTenant(ctx, input.TenantID, input.CredentialBindings); err != nil {
+			return nil, err
+		}
+		step.CredentialBindings = input.CredentialBindings
+	}
+
 	if err := u.stepRepo.Create(ctx, step); err != nil {
 		return nil, err
 	}
@@ -113,16 +153,17 @@ func (u *StepUsecase) List(ctx context.Context, tenantID, projectID uuid.UUID) (
 
 // UpdateStepInput represents input for updating a step
 type UpdateStepInput struct {
-	TenantID      uuid.UUID
-	ProjectID     uuid.UUID
-	StepID        uuid.UUID
-	Name          string
-	Type          domain.StepType
-	Config        json.RawMessage
-	TriggerType   string          // For start blocks: manual, webhook, schedule, etc.
-	TriggerConfig json.RawMessage // Configuration for the trigger
-	PositionX     *int
-	PositionY     *int
+	TenantID           uuid.UUID
+	ProjectID          uuid.UUID
+	StepID             uuid.UUID
+	Name               string
+	Type               domain.StepType
+	Config             json.RawMessage
+	TriggerType        string          // For start blocks: manual, webhook, schedule, etc.
+	TriggerConfig      json.RawMessage // Configuration for the trigger
+	CredentialBindings json.RawMessage // Mapping of credential names to credential IDs
+	PositionX          *int
+	PositionY          *int
 }
 
 // Update updates a step
@@ -159,6 +200,15 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 	}
 	if len(input.TriggerConfig) > 0 {
 		step.TriggerConfig = input.TriggerConfig
+	}
+
+	// Update credential bindings (skip if null or empty)
+	if len(input.CredentialBindings) > 0 && string(input.CredentialBindings) != "null" {
+		// Validate that all credential IDs belong to the tenant
+		if err := u.validateCredentialBindingsTenant(ctx, input.TenantID, input.CredentialBindings); err != nil {
+			return nil, err
+		}
+		step.CredentialBindings = input.CredentialBindings
 	}
 
 	if err := u.stepRepo.Update(ctx, step); err != nil {

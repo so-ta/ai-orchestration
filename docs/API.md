@@ -1128,6 +1128,173 @@ GET /adapters
 
 ---
 
+## OAuth2 外部サービス連携
+
+### プロバイダー一覧
+```
+GET /oauth2/providers
+```
+
+対応するOAuth2プロバイダー一覧を取得します。
+
+レスポンス：
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "slug": "google",
+      "name": "Google",
+      "icon_url": "https://...",
+      "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth",
+      "token_url": "https://oauth2.googleapis.com/token",
+      "pkce_required": true,
+      "default_scopes": ["openid", "email"],
+      "available_scopes": ["openid", "email", "profile", "calendar"],
+      "app_configured": true
+    }
+  ]
+}
+```
+
+### 認可開始
+```
+POST /oauth2/authorize/start
+```
+
+OAuth2認可フローを開始します。
+
+リクエスト：
+```json
+{
+  "provider_slug": "google",
+  "name": "My Google Account",
+  "scope": "personal",
+  "project_id": "uuid (optional)",
+  "scopes": ["openid", "email", "calendar"]
+}
+```
+
+レスポンス：
+```json
+{
+  "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?...",
+  "state": "random_state_string",
+  "credential_id": "uuid"
+}
+```
+
+### コールバック処理
+```
+GET /oauth2/callback
+```
+
+OAuth2プロバイダーからのコールバックを処理します。
+
+クエリパラメータ：
+| パラメータ | 型 | 説明 |
+|-------|------|-------------|
+| `code` | string | 認可コード |
+| `state` | string | State値 |
+| `error` | string | エラーコード（失敗時） |
+
+### コネクション一覧
+```
+GET /oauth2/connections
+```
+
+テナント内のOAuth2コネクション一覧を取得します。
+
+### コネクション取得
+```
+GET /oauth2/connections/{id}
+```
+
+### コネクション削除（トークン無効化）
+```
+DELETE /oauth2/connections/{id}
+```
+
+### トークンリフレッシュ
+```
+POST /oauth2/connections/{id}/refresh
+```
+
+---
+
+## 認証情報共有
+
+### 共有一覧
+```
+GET /credentials/{credential_id}/shares
+```
+
+認証情報の共有設定一覧を取得します。
+
+レスポンス：
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "credential_id": "uuid",
+      "target_user_id": "uuid",
+      "target_user_email": "user@example.com",
+      "permission": "use",
+      "shared_by_user_id": "uuid",
+      "created_at": "ISO8601"
+    }
+  ]
+}
+```
+
+### ユーザーと共有
+```
+POST /credentials/{credential_id}/shares/user
+```
+
+リクエスト：
+```json
+{
+  "target_user_email": "user@example.com",
+  "permission": "use"
+}
+```
+
+`permission`: `use` | `edit` | `admin`
+
+### プロジェクトと共有
+```
+POST /credentials/{credential_id}/shares/project
+```
+
+リクエスト：
+```json
+{
+  "target_project_id": "uuid",
+  "permission": "use"
+}
+```
+
+### 共有設定更新
+```
+PATCH /credentials/{credential_id}/shares/{share_id}
+```
+
+リクエスト：
+```json
+{
+  "permission": "edit"
+}
+```
+
+### 共有解除
+```
+DELETE /credentials/{credential_id}/shares/{share_id}
+```
+
+---
+
 ## Audit Logs
 
 ### 一覧取得

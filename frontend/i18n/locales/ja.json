@@ -1325,6 +1325,33 @@
         "rolledBack": "バージョン {version} にロールバックしました",
         "rollbackFailed": "ロールバックに失敗しました"
       }
+    },
+    "oauth2Apps": {
+      "title": "OAuth2アプリ設定",
+      "subtitle": "外部サービス連携のためのOAuth2クライアント設定を管理",
+      "configured": "設定済み",
+      "notConfigured": "未設定",
+      "configure": "設定",
+      "addAnother": "追加",
+      "clientId": "クライアントID",
+      "clientIdPlaceholder": "OAuthクライアントIDを入力",
+      "clientSecret": "クライアントシークレット",
+      "clientSecretPlaceholder": "OAuthクライアントシークレットを入力",
+      "scopesLabel": "スコープ",
+      "scopes": "スコープ",
+      "customAuthUrl": "カスタム認可URL",
+      "customTokenUrl": "カスタムトークンURL",
+      "customUrlHint": "空欄の場合はデフォルトのURLを使用",
+      "createTitle": "OAuth2アプリを設定",
+      "createSuccess": "OAuth2アプリを設定しました",
+      "createError": "OAuth2アプリの設定に失敗しました",
+      "deleteTitle": "OAuth2アプリを削除",
+      "deleteMessage": "{provider}のOAuth2設定を削除しますか？関連する認証情報も無効になります。",
+      "deleteSuccess": "OAuth2アプリを削除しました",
+      "deleteError": "OAuth2アプリの削除に失敗しました",
+      "validation": {
+        "required": "クライアントIDとシークレットは必須です"
+      }
     }
   },
   "tenantBlocks": {
@@ -1662,6 +1689,144 @@
       "activateFailed": "クレデンシャルの有効化に失敗しました"
     },
     "securityNote": "認証情報は暗号化されて安全に保存されます。APIキーやパスワードは保存後に表示することはできません。"
+  },
+  "oauth": {
+    "title": "OAuth2接続",
+    "subtitle": "外部サービスとの認証連携を管理",
+    "connectService": "サービスを接続",
+    "connectionSuccess": "接続が完了しました",
+    "connectionSuccessMessage": "外部サービスとの認証連携が正常に完了しました。",
+    "connectionFailed": "接続に失敗しました",
+    "processing": "認証を処理中...",
+    "redirectingIn": "{seconds}秒後に設定画面に移動します...",
+    "goToSettings": "設定画面へ",
+    "selectProvider": "接続するサービスを選択",
+    "configureApp": "OAuth2アプリの設定",
+    "configureAppDesc": "このプロバイダーを使用するには、まずOAuth2クライアントを設定してください。",
+    "configured": "設定済み",
+    "notConfigured": "未設定",
+    "providers": {
+      "google": "Google",
+      "github": "GitHub",
+      "slack": "Slack",
+      "notion": "Notion",
+      "linear": "Linear",
+      "microsoft": "Microsoft",
+      "discord": "Discord",
+      "atlassian": "Atlassian"
+    },
+    "scope": {
+      "organization": "組織",
+      "organizationDesc": "組織全体で利用可能",
+      "project": "プロジェクト",
+      "projectDesc": "選択したプロジェクト内で利用可能",
+      "personal": "個人",
+      "personalDesc": "あなたのみが利用可能"
+    },
+    "form": {
+      "credentialName": "認証情報の名前",
+      "credentialNamePlaceholder": "例: GitHub - 開発チーム",
+      "selectScope": "スコープを選択",
+      "selectProject": "プロジェクトを選択",
+      "selectPermissions": "権限を選択",
+      "connect": "接続"
+    },
+    "connection": {
+      "connectedAs": "接続アカウント",
+      "expiresAt": "有効期限",
+      "lastUsed": "最終使用",
+      "refresh": "トークンを更新",
+      "disconnect": "接続を解除",
+      "expired": "期限切れ",
+      "error": "エラー"
+    },
+    "errors": {
+      "authorizationFailed": "認証に失敗しました。もう一度お試しください。",
+      "accessDenied": "アクセスが拒否されました。必要な権限が付与されていることを確認してください。",
+      "invalidState": "無効なセッションです。もう一度最初からやり直してください。",
+      "tokenExchangeFailed": "トークンの取得に失敗しました。もう一度お試しください。",
+      "unknown": "不明なエラーが発生しました。"
+    },
+    "app": {
+      "title": "OAuth2アプリ設定",
+      "subtitle": "外部サービスのOAuth2クライアント設定",
+      "addApp": "アプリを追加",
+      "clientId": "Client ID",
+      "clientIdPlaceholder": "OAuth2クライアントIDを入力",
+      "clientSecret": "Client Secret",
+      "clientSecretPlaceholder": "OAuth2クライアントシークレットを入力",
+      "customScopes": "カスタムスコープ",
+      "customScopesPlaceholder": "スペース区切りで入力",
+      "deleteConfirm": "このOAuth2アプリ設定を削除しますか？関連するすべての接続も無効になります。"
+    },
+    "share": {
+      "title": "認証情報の共有",
+      "shareWith": "共有先",
+      "user": "ユーザー",
+      "project": "プロジェクト",
+      "permission": "権限",
+      "permissions": {
+        "use": "使用のみ",
+        "useDesc": "認証情報を使用できますが、詳細は表示されません",
+        "edit": "編集可能",
+        "editDesc": "認証情報の詳細を表示・編集できます",
+        "admin": "管理者",
+        "adminDesc": "削除や再共有が可能です"
+      },
+      "expiresAt": "有効期限",
+      "note": "メモ",
+      "notePlaceholder": "共有の理由などを記入",
+      "sharedBy": "共有者",
+      "revoke": "共有を取り消し"
+    }
+  },
+  "credentialBindings": {
+    "title": "認証情報",
+    "subtitle": "このブロックで使用する認証情報を選択",
+    "required": "必須",
+    "optional": "オプション",
+    "selectCredential": "認証情報を選択...",
+    "noCredentials": "利用可能な認証情報がありません",
+    "createNew": "新規作成",
+    "fetchError": "認証情報の取得に失敗しました",
+    "scope": {
+      "organization": "組織",
+      "project": "プロジェクト",
+      "personal": "個人",
+      "shared": "共有"
+    }
+  },
+  "credentialShares": {
+    "title": "認証情報の共有",
+    "addShare": "共有を追加",
+    "shareWithUser": "ユーザーと共有",
+    "shareWithProject": "プロジェクトと共有",
+    "userEmail": "ユーザーメールアドレス",
+    "userEmailPlaceholder": "user{'@'}example.com",
+    "projectId": "プロジェクトID",
+    "projectIdPlaceholder": "プロジェクトIDを入力",
+    "permission": "権限",
+    "permissions": {
+      "use": "使用のみ",
+      "edit": "編集可能",
+      "admin": "管理者"
+    },
+    "share": "共有",
+    "existingShares": "現在の共有",
+    "noShares": "まだ共有されていません",
+    "unknownUser": "不明なユーザー",
+    "unknownProject": "不明なプロジェクト",
+    "unknown": "不明",
+    "shareSuccess": "共有しました",
+    "shareError": "共有に失敗しました",
+    "updateSuccess": "権限を更新しました",
+    "updateError": "権限の更新に失敗しました",
+    "revokeSuccess": "共有を取り消しました",
+    "revokeError": "共有の取り消しに失敗しました",
+    "validation": {
+      "emailRequired": "メールアドレスを入力してください",
+      "projectRequired": "プロジェクトIDを入力してください"
+    }
   },
   "builder": {
     "title": "AI Workflow Builder",
