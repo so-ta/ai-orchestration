@@ -1673,6 +1673,19 @@ components:
           enum: [llm, tool, condition, map, join, subflow]
         config:
           type: object
+        trigger_type:
+          type: string
+          enum: [manual, webhook, schedule, slack, email]
+          description: スタートブロックのトリガー種別
+        trigger_config:
+          type: object
+          description: トリガー設定
+        credential_bindings:
+          type: object
+          additionalProperties:
+            type: string
+            format: uuid
+          description: 認証情報バインディング（キー：認証情報名、値：認証情報ID）
         position:
           type: object
           properties:
@@ -1688,6 +1701,19 @@ components:
           type: string
         config:
           type: object
+        trigger_type:
+          type: string
+          enum: [manual, webhook, schedule, slack, email]
+          description: スタートブロックのトリガー種別
+        trigger_config:
+          type: object
+          description: トリガー設定
+        credential_bindings:
+          type: object
+          additionalProperties:
+            type: string
+            format: uuid
+          description: 認証情報バインディング（キー：認証情報名、値：認証情報ID）
         position:
           type: object
           properties:
