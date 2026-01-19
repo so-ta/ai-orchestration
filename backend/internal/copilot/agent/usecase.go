@@ -217,6 +217,17 @@ type StartAgentSessionOutput struct {
 
 // StartAgentSession starts a new agent session and processes the initial prompt
 func (u *AgentUsecase) StartAgentSession(ctx context.Context, input StartAgentSessionInput) (*StartAgentSessionOutput, error) {
+	// Verify project exists if specified
+	if input.ContextProjectID != nil {
+		project, err := u.projectRepo.GetByID(ctx, input.TenantID, *input.ContextProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("get project: %w", err)
+		}
+		if project == nil {
+			return nil, domain.ErrProjectNotFound
+		}
+	}
+
 	// Set default mode if not specified
 	mode := input.Mode
 	if mode == "" {

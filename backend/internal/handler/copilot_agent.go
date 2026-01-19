@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -113,6 +114,10 @@ func (h *CopilotAgentHandler) StartAgentSession(w http.ResponseWriter, r *http.R
 		InitialPrompt:    req.InitialPrompt,
 	})
 	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			Error(w, http.StatusNotFound, "PROJECT_NOT_FOUND", "Project not found", nil)
+			return
+		}
 		Error(w, http.StatusInternalServerError, "START_SESSION_FAILED", err.Error(), nil)
 		return
 	}
