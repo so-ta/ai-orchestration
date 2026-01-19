@@ -195,6 +195,7 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 		"usage": map[string]interface{}{
 			"input_tokens":  respData.Usage.PromptTokens,
 			"output_tokens": respData.Usage.CompletionTokens,
+			"total_tokens":  respData.Usage.TotalTokens,
 		},
 	}
 
@@ -436,11 +437,12 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 	}
 
 	result := map[string]interface{}{
-		"content":     content,
-		"stop_reason": respData.StopReason,
+		"content":       content,
+		"finish_reason": respData.StopReason, // Use unified key name across providers
 		"usage": map[string]interface{}{
 			"input_tokens":  respData.Usage.InputTokens,
 			"output_tokens": respData.Usage.OutputTokens,
+			"total_tokens":  respData.Usage.InputTokens + respData.Usage.OutputTokens,
 		},
 	}
 
