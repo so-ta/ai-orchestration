@@ -33,15 +33,16 @@ func NewStepUsecase(
 
 // CreateStepInput represents input for creating a step
 type CreateStepInput struct {
-	TenantID      uuid.UUID
-	ProjectID     uuid.UUID
-	Name          string
-	Type          domain.StepType
-	Config        json.RawMessage
-	TriggerType   string          // For start blocks: manual, webhook, schedule, etc.
-	TriggerConfig json.RawMessage // Configuration for the trigger
-	PositionX     int
-	PositionY     int
+	TenantID           uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	Type               domain.StepType
+	Config             json.RawMessage
+	TriggerType        string          // For start blocks: manual, webhook, schedule, etc.
+	TriggerConfig      json.RawMessage // Configuration for the trigger
+	CredentialBindings json.RawMessage // Mapping of credential names to credential IDs
+	PositionX          int
+	PositionY          int
 }
 
 // Create creates a new step
@@ -86,6 +87,11 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 		step.TriggerConfig = input.TriggerConfig
 	}
 
+	// Set credential bindings
+	if len(input.CredentialBindings) > 0 {
+		step.CredentialBindings = input.CredentialBindings
+	}
+
 	if err := u.stepRepo.Create(ctx, step); err != nil {
 		return nil, err
 	}
@@ -113,16 +119,17 @@ func (u *StepUsecase) List(ctx context.Context, tenantID, projectID uuid.UUID) (
 
 // UpdateStepInput represents input for updating a step
 type UpdateStepInput struct {
-	TenantID      uuid.UUID
-	ProjectID     uuid.UUID
-	StepID        uuid.UUID
-	Name          string
-	Type          domain.StepType
-	Config        json.RawMessage
-	TriggerType   string          // For start blocks: manual, webhook, schedule, etc.
-	TriggerConfig json.RawMessage // Configuration for the trigger
-	PositionX     *int
-	PositionY     *int
+	TenantID           uuid.UUID
+	ProjectID          uuid.UUID
+	StepID             uuid.UUID
+	Name               string
+	Type               domain.StepType
+	Config             json.RawMessage
+	TriggerType        string          // For start blocks: manual, webhook, schedule, etc.
+	TriggerConfig      json.RawMessage // Configuration for the trigger
+	CredentialBindings json.RawMessage // Mapping of credential names to credential IDs
+	PositionX          *int
+	PositionY          *int
 }
 
 // Update updates a step
@@ -159,6 +166,11 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 	}
 	if len(input.TriggerConfig) > 0 {
 		step.TriggerConfig = input.TriggerConfig
+	}
+
+	// Update credential bindings
+	if len(input.CredentialBindings) > 0 {
+		step.CredentialBindings = input.CredentialBindings
 	}
 
 	if err := u.stepRepo.Update(ctx, step); err != nil {

@@ -20,12 +20,13 @@ func NewStepHandler(stepUsecase *usecase.StepUsecase) *StepHandler {
 
 // CreateStepRequest represents a create step request
 type CreateStepRequest struct {
-	Name          string          `json:"name"`
-	Type          string          `json:"type"`
-	Config        json.RawMessage `json:"config"`
-	TriggerType   string          `json:"trigger_type,omitempty"`   // For start blocks: manual, webhook, schedule
-	TriggerConfig json.RawMessage `json:"trigger_config,omitempty"` // Configuration for the trigger
-	Position      struct {
+	Name               string          `json:"name"`
+	Type               string          `json:"type"`
+	Config             json.RawMessage `json:"config"`
+	TriggerType        string          `json:"trigger_type,omitempty"`        // For start blocks: manual, webhook, schedule
+	TriggerConfig      json.RawMessage `json:"trigger_config,omitempty"`      // Configuration for the trigger
+	CredentialBindings json.RawMessage `json:"credential_bindings,omitempty"` // Mapping of credential names to credential IDs
+	Position           struct {
 		X int `json:"x"`
 		Y int `json:"y"`
 	} `json:"position"`
@@ -45,15 +46,16 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	step, err := h.stepUsecase.Create(r.Context(), usecase.CreateStepInput{
-		TenantID:      tenantID,
-		ProjectID:     projectID,
-		Name:          req.Name,
-		Type:          domain.StepType(req.Type),
-		Config:        req.Config,
-		TriggerType:   req.TriggerType,
-		TriggerConfig: req.TriggerConfig,
-		PositionX:     req.Position.X,
-		PositionY:     req.Position.Y,
+		TenantID:           tenantID,
+		ProjectID:          projectID,
+		Name:               req.Name,
+		Type:               domain.StepType(req.Type),
+		Config:             req.Config,
+		TriggerType:        req.TriggerType,
+		TriggerConfig:      req.TriggerConfig,
+		CredentialBindings: req.CredentialBindings,
+		PositionX:          req.Position.X,
+		PositionY:          req.Position.Y,
 	})
 	if err != nil {
 		HandleError(w, err)
@@ -82,12 +84,13 @@ func (h *StepHandler) List(w http.ResponseWriter, r *http.Request) {
 
 // UpdateStepRequest represents an update step request
 type UpdateStepRequest struct {
-	Name          string          `json:"name"`
-	Type          string          `json:"type"`
-	Config        json.RawMessage `json:"config"`
-	TriggerType   string          `json:"trigger_type,omitempty"`   // For start blocks: manual, webhook, schedule
-	TriggerConfig json.RawMessage `json:"trigger_config,omitempty"` // Configuration for the trigger
-	Position      *struct {
+	Name               string          `json:"name"`
+	Type               string          `json:"type"`
+	Config             json.RawMessage `json:"config"`
+	TriggerType        string          `json:"trigger_type,omitempty"`        // For start blocks: manual, webhook, schedule
+	TriggerConfig      json.RawMessage `json:"trigger_config,omitempty"`      // Configuration for the trigger
+	CredentialBindings json.RawMessage `json:"credential_bindings,omitempty"` // Mapping of credential names to credential IDs
+	Position           *struct {
 		X int `json:"x"`
 		Y int `json:"y"`
 	} `json:"position"`
@@ -111,14 +114,15 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input := usecase.UpdateStepInput{
-		TenantID:      tenantID,
-		ProjectID:     projectID,
-		StepID:        stepID,
-		Name:          req.Name,
-		Type:          domain.StepType(req.Type),
-		Config:        req.Config,
-		TriggerType:   req.TriggerType,
-		TriggerConfig: req.TriggerConfig,
+		TenantID:           tenantID,
+		ProjectID:          projectID,
+		StepID:             stepID,
+		Name:               req.Name,
+		Type:               domain.StepType(req.Type),
+		Config:             req.Config,
+		TriggerType:        req.TriggerType,
+		TriggerConfig:      req.TriggerConfig,
+		CredentialBindings: req.CredentialBindings,
 	}
 	if req.Position != nil {
 		input.PositionX = &req.Position.X

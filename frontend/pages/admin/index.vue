@@ -19,6 +19,12 @@ const adminLinks = [
     href: '/admin/blocks',
     icon: 'block',
   },
+  {
+    title: 'admin.oauth2Apps.title',
+    description: 'admin.oauth2Apps.subtitle',
+    href: '/admin/oauth2-apps',
+    icon: 'oauth',
+  },
 ]
 </script>
 
@@ -49,6 +55,7 @@ const adminLinks = [
         <div class="admin-card-icon">
           <span v-if="link.icon === 'tenant'" class="icon-tenant">🏢</span>
           <span v-if="link.icon === 'block'" class="icon-block">🧩</span>
+          <span v-if="link.icon === 'oauth'" class="icon-oauth">🔐</span>
         </div>
         <div class="admin-card-content">
           <h3>{{ $t(link.title) }}</h3>

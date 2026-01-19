@@ -47,6 +47,7 @@ export interface Step {
   group_role?: GroupRole       // Role within block group
   trigger_type?: 'manual' | 'webhook' | 'schedule' | 'slack' | 'email' // Start block trigger type
   trigger_config?: object      // Start block trigger configuration
+  credential_bindings?: Record<string, string> // Mapping of credential names to credential IDs
   position_x: number
   position_y: number
   created_at: string
