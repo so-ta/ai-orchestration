@@ -68,6 +68,10 @@ install-tools:
 
 # Start API with hot reload (foreground)
 dev-api:
+	@echo "Stopping existing API if running..."
+	@pkill -f "air.*\.air\.toml" 2>/dev/null || true
+	@pkill -f "tmp/api" 2>/dev/null || true
+	@sleep 1
 	@echo "Starting API with hot reload..."
 	cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
@@ -79,6 +83,10 @@ dev-api:
 
 # Start Worker with hot reload (foreground)
 dev-worker:
+	@echo "Stopping existing worker if running..."
+	@pkill -f "air.*\.air\.worker\.toml" 2>/dev/null || true
+	@pkill -f "tmp/worker" 2>/dev/null || true
+	@sleep 1
 	@echo "Starting Worker with hot reload..."
 	cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
@@ -88,11 +96,24 @@ dev-worker:
 
 # Start Frontend with hot reload (foreground)
 dev-frontend:
+	@echo "Stopping existing Frontend if running..."
+	@pkill -f "nuxt" 2>/dev/null || true
+	@pkill -f "node.*frontend" 2>/dev/null || true
+	@sleep 1
 	@echo "Starting Frontend with hot reload..."
 	cd frontend && npm run dev
 
 # Start all services with tmux (includes middleware)
 dev:
+	@echo "Stopping existing services if running..."
+	@tmux kill-session -t aio 2>/dev/null || true
+	@pkill -f "air.*\.air\.toml" 2>/dev/null || true
+	@pkill -f "air.*\.air\.worker\.toml" 2>/dev/null || true
+	@pkill -f "tmp/api" 2>/dev/null || true
+	@pkill -f "tmp/worker" 2>/dev/null || true
+	@pkill -f "nuxt" 2>/dev/null || true
+	@pkill -f "node.*frontend" 2>/dev/null || true
+	@sleep 1
 	@echo "Starting middleware (docker compose)..."
 	@docker compose -f docker-compose.middleware.yml up -d
 	@sleep 3

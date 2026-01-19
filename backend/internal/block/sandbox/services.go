@@ -152,6 +152,174 @@ func (s *BlocksServiceImpl) Get(slug string) (map[string]interface{}, error) {
 	return block, nil
 }
 
+// GetWithSchema retrieves a block definition with full schema information
+// This is essential for AI agents to understand how to configure blocks
+func (s *BlocksServiceImpl) GetWithSchema(slug string) (map[string]interface{}, error) {
+	// Get the block with all schema-related fields
+	query := `
+		SELECT id, slug, name, description, category, config_schema, config_defaults,
+		       output_schema, required_credentials, input_ports, output_ports, parent_block_id
+		FROM block_definitions
+		WHERE slug = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		LIMIT 1
+	`
+
+	var (
+		id                  uuid.UUID
+		blockSlug           string
+		name                string
+		description         *string
+		category            string
+		configSchema        []byte
+		configDefaults      []byte
+		outputSchema        []byte
+		requiredCredentials []byte
+		inputPorts          []byte
+		outputPorts         []byte
+		parentBlockID       *uuid.UUID
+	)
+
+	err := s.pool.QueryRow(s.ctx, query, slug, s.tenantID).Scan(
+		&id, &blockSlug, &name, &description, &category, &configSchema, &configDefaults,
+		&outputSchema, &requiredCredentials, &inputPorts, &outputPorts, &parentBlockID,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("block not found: %s", slug)
+		}
+		return nil, fmt.Errorf("failed to get block definition: %w", err)
+	}
+
+	block := map[string]interface{}{
+		"slug":     blockSlug,
+		"name":     name,
+		"category": category,
+	}
+
+	if description != nil {
+		block["description"] = *description
+	}
+
+	// Parse config_schema
+	if len(configSchema) > 0 {
+		var schema interface{}
+		if err := json.Unmarshal(configSchema, &schema); err == nil {
+			block["config_schema"] = schema
+		}
+	}
+
+	// Parse config_defaults and resolve inheritance chain
+	resolvedDefaults := s.resolveInheritedDefaults(parentBlockID, configDefaults)
+	if resolvedDefaults != nil {
+		block["resolved_config_defaults"] = resolvedDefaults
+	}
+
+	// Parse output_schema
+	if len(outputSchema) > 0 {
+		var schema interface{}
+		if err := json.Unmarshal(outputSchema, &schema); err == nil {
+			block["output_schema"] = schema
+		}
+	}
+
+	// Parse required_credentials
+	if len(requiredCredentials) > 0 {
+		var creds interface{}
+		if err := json.Unmarshal(requiredCredentials, &creds); err == nil {
+			block["required_credentials"] = creds
+		}
+	}
+
+	// Parse input_ports
+	if len(inputPorts) > 0 {
+		var ports interface{}
+		if err := json.Unmarshal(inputPorts, &ports); err == nil {
+			block["input_ports"] = ports
+		}
+	}
+
+	// Parse output_ports
+	if len(outputPorts) > 0 {
+		var ports interface{}
+		if err := json.Unmarshal(outputPorts, &ports); err == nil {
+			block["output_ports"] = ports
+		}
+	}
+
+	// Extract required fields from config_schema
+	requiredFields := s.extractRequiredFields(configSchema)
+	if len(requiredFields) > 0 {
+		block["required_fields"] = requiredFields
+	}
+
+	return block, nil
+}
+
+// resolveInheritedDefaults resolves config defaults through the inheritance chain
+func (s *BlocksServiceImpl) resolveInheritedDefaults(parentBlockID *uuid.UUID, currentDefaults []byte) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	// If there's a parent block, get its defaults first
+	if parentBlockID != nil {
+		query := `
+			SELECT config_defaults, parent_block_id
+			FROM block_definitions
+			WHERE id = $1
+		`
+		var parentDefaults []byte
+		var grandparentID *uuid.UUID
+		err := s.pool.QueryRow(s.ctx, query, *parentBlockID).Scan(&parentDefaults, &grandparentID)
+		if err == nil {
+			// Recursively resolve parent defaults
+			parentResult := s.resolveInheritedDefaults(grandparentID, parentDefaults)
+			for k, v := range parentResult {
+				result[k] = v
+			}
+		}
+	}
+
+	// Override with current block's defaults
+	if len(currentDefaults) > 0 {
+		var defaults map[string]interface{}
+		if err := json.Unmarshal(currentDefaults, &defaults); err == nil {
+			for k, v := range defaults {
+				result[k] = v
+			}
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// extractRequiredFields extracts required field names from a JSON schema
+func (s *BlocksServiceImpl) extractRequiredFields(schemaBytes []byte) []string {
+	if len(schemaBytes) == 0 {
+		return nil
+	}
+
+	var schema map[string]interface{}
+	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+		return nil
+	}
+
+	// Extract "required" array from JSON schema
+	required, ok := schema["required"].([]interface{})
+	if !ok {
+		return nil
+	}
+
+	result := make([]string, 0, len(required))
+	for _, r := range required {
+		if s, ok := r.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
 // ============================================================================
 // WorkflowsServiceImpl - Implementation of WorkflowsService
 // ============================================================================
@@ -1118,8 +1286,8 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	name, _ := data["name"].(string)
 	stepType, _ := data["type"].(string)
 	config := data["config"]
-	positionX, _ := data["position_x"].(float64)
-	positionY, _ := data["position_y"].(float64)
+	positionX := toFloat64(data["position_x"])
+	positionY := toFloat64(data["position_y"])
 	blockSlug, _ := data["block_slug"].(string)
 
 	if projectID == "" || name == "" || stepType == "" {
@@ -1378,4 +1546,22 @@ func (s *EdgesServiceImpl) Delete(edgeID string) error {
 	}
 
 	return nil
+}
+
+// toFloat64 converts various numeric types to float64
+func toFloat64(v interface{}) float64 {
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case int32:
+		return float64(n)
+	default:
+		return 0
+	}
 }

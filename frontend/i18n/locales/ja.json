@@ -1510,6 +1510,7 @@
       "webhook": {
         "secret": "Webhookシークレット",
         "secretPlaceholder": "自動生成されるか、カスタム値を入力",
+        "secretHint": "Webhookリクエストの検証に使用されるシークレットキー",
         "inputMapping": "入力マッピング",
         "inputMappingPlaceholder": "$.body.data",
         "inputMappingHint": "リクエストボディからワークフロー入力へのJSONパス",
@@ -1661,5 +1662,73 @@
       "activateFailed": "クレデンシャルの有効化に失敗しました"
     },
     "securityNote": "認証情報は暗号化されて安全に保存されます。APIキーやパスワードは保存後に表示することはできません。"
+  },
+  "builder": {
+    "title": "AI Workflow Builder",
+    "subtitle": "対話型ワークフロー作成",
+    "phases": {
+      "analysis": "分析中",
+      "proposal": "提案・確認",
+      "completed": "完了"
+    },
+    "assumptionCategories": {
+      "trigger": "トリガー",
+      "actor": "実行者",
+      "step": "ステップ",
+      "integration": "連携",
+      "constraint": "制約"
+    },
+    "confidence": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "welcome": {
+      "title": "ワークフローを作成しましょう",
+      "description": "作りたいワークフローを教えてください。AIが深く考え、仮定条件を提案し、最小限の質問で最適なワークフローを自動生成します。"
+    },
+    "thinking": "熟考中...",
+    "processing": "処理中...",
+    "assumptions": {
+      "title": "AIの仮定条件",
+      "confirm": "OK",
+      "modify": "修正",
+      "confirmed": "確認済み"
+    },
+    "clarifyingPoints": {
+      "title": "確認事項",
+      "selectOption": "選択肢を選んでください",
+      "typeAnswer": "回答を入力してください"
+    },
+    "actions": {
+      "construct": "ワークフローを構築",
+      "preview": "プレビュー",
+      "finalize": "確定"
+    },
+    "messages": {
+      "sessionStartFailed": "セッションの開始に失敗しました",
+      "sessionLoadFailed": "セッションの読み込みに失敗しました",
+      "messageSendFailed": "メッセージの送信に失敗しました",
+      "constructSuccess": "ワークフローを構築しました",
+      "constructFailed": "ワークフローの構築に失敗しました",
+      "refineFailed": "ワークフローの調整に失敗しました",
+      "finalizeSuccess": "ワークフローを確定しました",
+      "finalizeFailed": "ワークフローの確定に失敗しました"
+    },
+    "history": "履歴",
+    "newSession": "新規セッション",
+    "hearingComplete": {
+      "title": "ヒアリング完了！",
+      "subtitle": "要件をもとにワークフローを構築できます"
+    },
+    "reviewingComplete": {
+      "title": "ワークフロー構築完了！",
+      "subtitle": "プレビューを確認するか、フィードバックを入力して調整できます"
+    },
+    "inputPlaceholder": {
+      "initial": "作りたいワークフローを教えてください...",
+      "message": "メッセージを入力...",
+      "feedback": "フィードバックを入力..."
+    }
   }
 }

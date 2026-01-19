@@ -644,7 +644,7 @@ CREATE TABLE public.builder_sessions (
 
     -- Status
     status character varying(50) DEFAULT 'hearing'::character varying NOT NULL,
-    hearing_phase character varying(50) DEFAULT 'purpose'::character varying NOT NULL,
+    hearing_phase character varying(50) DEFAULT 'analysis'::character varying NOT NULL,
     hearing_progress integer DEFAULT 0 NOT NULL,
 
     -- Generated artifacts
@@ -656,13 +656,13 @@ CREATE TABLE public.builder_sessions (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
 
     CONSTRAINT builder_sessions_status_check CHECK (((status)::text = ANY ((ARRAY['hearing'::character varying, 'building'::character varying, 'reviewing'::character varying, 'refining'::character varying, 'completed'::character varying, 'abandoned'::character varying])::text[]))),
-    CONSTRAINT builder_sessions_phase_check CHECK (((hearing_phase)::text = ANY ((ARRAY['purpose'::character varying, 'conditions'::character varying, 'actors'::character varying, 'frequency'::character varying, 'integrations'::character varying, 'pain_points'::character varying, 'confirmation'::character varying, 'completed'::character varying])::text[]))),
+    CONSTRAINT builder_sessions_phase_check CHECK (((hearing_phase)::text = ANY ((ARRAY['analysis'::character varying, 'proposal'::character varying, 'completed'::character varying])::text[]))),
     CONSTRAINT builder_sessions_progress_check CHECK ((hearing_progress >= 0 AND hearing_progress <= 100))
 );
 
 COMMENT ON TABLE public.builder_sessions IS 'AI Workflow Builder sessions for interactive workflow creation';
 COMMENT ON COLUMN public.builder_sessions.status IS 'Session status: hearing, building, reviewing, refining, completed, abandoned';
-COMMENT ON COLUMN public.builder_sessions.hearing_phase IS 'Current hearing phase: purpose, conditions, actors, frequency, integrations, pain_points, confirmation, completed';
+COMMENT ON COLUMN public.builder_sessions.hearing_phase IS 'Current hearing phase: analysis, proposal, completed';
 COMMENT ON COLUMN public.builder_sessions.spec IS 'WorkflowSpec DSL as JSON';
 COMMENT ON COLUMN public.builder_sessions.project_id IS 'Generated project ID after construction';
 

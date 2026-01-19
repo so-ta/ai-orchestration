@@ -144,7 +144,7 @@ func TestSandbox_BuilderSessionsService_Get(t *testing.T) {
 			return map[string]interface{}{
 				"id":              sessionID,
 				"status":          "hearing",
-				"hearing_phase":   "purpose",
+				"hearing_phase":   "analysis",
 				"hearing_progress": 10,
 			}, nil
 		},

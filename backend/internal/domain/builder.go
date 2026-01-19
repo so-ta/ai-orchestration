@@ -20,18 +20,23 @@ const (
 )
 
 // HearingPhase represents the current phase of the hearing process
+// New 3-phase approach: AI thinks first → proposes → confirms
 type HearingPhase string
 
 const (
-	HearingPhasePurpose       HearingPhase = "purpose"
-	HearingPhaseConditions    HearingPhase = "conditions"
-	HearingPhaseActors        HearingPhase = "actors"
-	HearingPhaseFrequency     HearingPhase = "frequency"
-	HearingPhaseIntegrations  HearingPhase = "integrations"
-	HearingPhasePainPoints    HearingPhase = "pain_points"
-	HearingPhaseConfirmation  HearingPhase = "confirmation"
-	HearingPhaseCompleted     HearingPhase = "completed"
+	HearingPhaseAnalysis  HearingPhase = "analysis"  // AI is analyzing and thinking
+	HearingPhaseProposal  HearingPhase = "proposal"  // AI proposes spec and clarifying questions
+	HearingPhaseCompleted HearingPhase = "completed" // Hearing completed
 )
+
+// ClarifyingPoint represents a question that needs user clarification
+type ClarifyingPoint struct {
+	ID       string   `json:"id"`
+	Question string   `json:"question"`
+	Options  []string `json:"options,omitempty"`
+	Required bool     `json:"required"`
+	Answer   string   `json:"answer,omitempty"`
+}
 
 // BuilderSession represents a workflow builder session
 type BuilderSession struct {
@@ -81,7 +86,7 @@ func NewBuilderSession(tenantID uuid.UUID, userID string) *BuilderSession {
 		TenantID:        tenantID,
 		UserID:          userID,
 		Status:          BuilderSessionStatusHearing,
-		HearingPhase:    HearingPhasePurpose,
+		HearingPhase:    HearingPhaseAnalysis,
 		HearingProgress: 0,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -151,22 +156,13 @@ func (s *BuilderSession) IsActive() bool {
 }
 
 // GetPhaseProgress returns the default progress for a phase
+// New 3-phase: analysis (0-50%) → proposal (50-90%) → completed (100%)
 func GetPhaseProgress(phase HearingPhase) int {
 	switch phase {
-	case HearingPhasePurpose:
-		return 10
-	case HearingPhaseConditions:
-		return 25
-	case HearingPhaseActors:
-		return 40
-	case HearingPhaseFrequency:
-		return 55
-	case HearingPhaseIntegrations:
+	case HearingPhaseAnalysis:
+		return 30
+	case HearingPhaseProposal:
 		return 70
-	case HearingPhasePainPoints:
-		return 85
-	case HearingPhaseConfirmation:
-		return 95
 	case HearingPhaseCompleted:
 		return 100
 	default:
@@ -177,19 +173,9 @@ func GetPhaseProgress(phase HearingPhase) int {
 // NextPhase returns the next hearing phase
 func NextPhase(current HearingPhase) HearingPhase {
 	switch current {
-	case HearingPhasePurpose:
-		return HearingPhaseConditions
-	case HearingPhaseConditions:
-		return HearingPhaseActors
-	case HearingPhaseActors:
-		return HearingPhaseFrequency
-	case HearingPhaseFrequency:
-		return HearingPhaseIntegrations
-	case HearingPhaseIntegrations:
-		return HearingPhasePainPoints
-	case HearingPhasePainPoints:
-		return HearingPhaseConfirmation
-	case HearingPhaseConfirmation:
+	case HearingPhaseAnalysis:
+		return HearingPhaseProposal
+	case HearingPhaseProposal:
 		return HearingPhaseCompleted
 	default:
 		return HearingPhaseCompleted
