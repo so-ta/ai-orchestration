@@ -59,8 +59,17 @@ const rows = computed(() => {
   return props.override?.rows || 10
 })
 
+// Debounce utility
+let heightDebounceTimer: ReturnType<typeof setTimeout> | null = null
+function debounce<T extends (...args: Parameters<T>) => void>(fn: T, delay: number): (...args: Parameters<T>) => void {
+  return (...args: Parameters<T>) => {
+    if (heightDebounceTimer) clearTimeout(heightDebounceTimer)
+    heightDebounceTimer = setTimeout(() => fn(...args), delay)
+  }
+}
+
 // Calculate editor height based on content
-function calculateHeight() {
+function calculateHeightImpl() {
   const textarea = textareaRef.value
   if (!textarea) return
 
@@ -74,11 +83,14 @@ function calculateHeight() {
   calculatedHeight.value = newHeight
 }
 
+// Debounced version for input events (100ms delay)
+const calculateHeight = debounce(calculateHeightImpl, 100)
+
 // Watch for content changes and recalculate height
 watch(
   () => props.modelValue,
   () => {
-    nextTick(() => calculateHeight())
+    nextTick(() => calculateHeightImpl())
   },
   { immediate: true }
 )
