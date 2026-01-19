@@ -88,6 +88,9 @@ type LLMService interface {
 type WorkflowService interface {
 	// Run executes a subflow and returns its output
 	Run(workflowID string, input map[string]interface{}) (map[string]interface{}, error)
+	// ExecuteStep executes a step within the current workflow by name and returns its output
+	// This enables agent blocks to call other steps as tools
+	ExecuteStep(stepName string, input map[string]interface{}) (map[string]interface{}, error)
 }
 
 // HumanService provides human-in-the-loop functionality
@@ -364,6 +367,11 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		workflowObj := vm.NewObject()
 		if err := workflowObj.Set("run", func(call goja.FunctionCall) goja.Value {
 			return s.workflowRun(vm, execCtx.Workflow, call)
+		}); err != nil {
+			return err
+		}
+		if err := workflowObj.Set("executeStep", func(call goja.FunctionCall) goja.Value {
+			return s.workflowExecuteStep(vm, execCtx.Workflow, call)
 		}); err != nil {
 			return err
 		}
@@ -889,6 +897,29 @@ func (s *Sandbox) workflowRun(vm *goja.Runtime, service WorkflowService, call go
 	result, err := service.Run(workflowID, input)
 	if err != nil {
 		panic(vm.ToValue(fmt.Sprintf("Workflow run failed: %v", err)))
+	}
+
+	return vm.ToValue(result)
+}
+
+// workflowExecuteStep handles ctx.workflow.executeStep(stepName, input) calls
+// This enables agent blocks to call other steps as tools within the current workflow
+func (s *Sandbox) workflowExecuteStep(vm *goja.Runtime, service WorkflowService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 2 {
+		panic(vm.ToValue("ctx.workflow.executeStep requires stepName and input arguments"))
+	}
+
+	stepName := call.Arguments[0].String()
+
+	inputArg := call.Arguments[1].Export()
+	input, ok := inputArg.(map[string]interface{})
+	if !ok {
+		panic(vm.ToValue("ctx.workflow.executeStep input must be an object"))
+	}
+
+	result, err := service.ExecuteStep(stepName, input)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Step execution failed: %v", err)))
 	}
 
 	return vm.ToValue(result)

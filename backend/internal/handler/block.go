@@ -54,12 +54,17 @@ type CreateBlockRequest struct {
 }
 
 // List handles GET /api/v1/blocks
+// Supports query parameters:
+// - category: filter by category (e.g., "ai", "integration")
+// - enabled: filter by enabled status ("true" for enabled only)
+// - search: search by name or description
 func (h *BlockHandler) List(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 
 	// Parse query parameters
 	categoryStr := r.URL.Query().Get("category")
 	enabledOnly := r.URL.Query().Get("enabled") == "true"
+	searchStr := r.URL.Query().Get("search")
 
 	filter := repository.BlockDefinitionFilter{
 		EnabledOnly: enabledOnly,
@@ -72,6 +77,10 @@ func (h *BlockHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filter.Category = &category
+	}
+
+	if searchStr != "" {
+		filter.Search = &searchStr
 	}
 
 	blocks, err := h.blockRepo.List(r.Context(), &tenantID, filter)
