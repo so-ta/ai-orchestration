@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/souta/ai-orchestration/internal/handler"
 	authmw "github.com/souta/ai-orchestration/internal/middleware"
@@ -28,6 +29,26 @@ import (
 )
 
 func main() {
+	// Load .env file (try multiple locations)
+	// First try parent directory (when running from backend/), then current directory
+	envPaths := []string{
+		"../.env",                                                   // When running from backend/
+		".env",                                                      // Current directory
+		"/Users/souta/Product/ai-orchestration/.env",               // Absolute path (dev)
+	}
+	var loaded bool
+	for _, path := range envPaths {
+		if err := godotenv.Load(path); err == nil {
+			fmt.Printf("Loaded .env from: %s\n", path)
+			loaded = true
+			break
+		}
+	}
+	if !loaded {
+		cwd, _ := os.Getwd()
+		fmt.Printf("Warning: Could not load .env file. CWD: %s\n", cwd)
+	}
+
 	// Initialize structured logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -201,7 +222,7 @@ func main() {
 
 	// CORS
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Tenant-ID", "X-Dev-Role"},
 		ExposedHeaders:   []string{"Link"},

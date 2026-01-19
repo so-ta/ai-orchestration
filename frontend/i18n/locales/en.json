@@ -1559,6 +1559,7 @@
       "webhook": {
         "secret": "Webhook Secret",
         "secretPlaceholder": "Auto-generated or enter custom value",
+        "secretHint": "Secret key used to verify webhook requests",
         "inputMapping": "Input Mapping",
         "inputMappingPlaceholder": "$.body.data",
         "inputMappingHint": "JSON path from request body to workflow input",
@@ -1640,6 +1641,70 @@
     "jsonPlaceholder": "Enter JSON",
     "referenceTitle": "Reference",
     "exampleKey": "variable_name"
+  },
+  "builder": {
+    "title": "AI Workflow Builder",
+    "subtitle": "Create workflows with AI assistance",
+    "phases": {
+      "analysis": "Analyzing",
+      "proposal": "Proposal & Confirmation",
+      "completed": "Completed"
+    },
+    "assumptionCategories": {
+      "trigger": "Trigger",
+      "actor": "Actor",
+      "step": "Step",
+      "integration": "Integration",
+      "constraint": "Constraint"
+    },
+    "confidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "welcome": {
+      "title": "What workflow would you like to create?",
+      "description": "Describe the workflow you want to create. AI will analyze your requirements and propose a solution."
+    },
+    "thinking": {
+      "analyzing": "Analyzing your requirements...",
+      "proposing": "Creating proposal...",
+      "building": "Building workflow..."
+    },
+    "assumptions": {
+      "title": "Assumed Conditions",
+      "description": "AI analyzed your input and made the following assumptions. Please review and modify if needed.",
+      "confirm": "OK",
+      "modify": "Modify",
+      "modifyPlaceholder": "Enter correction..."
+    },
+    "clarifyingPoints": {
+      "title": "Questions to Clarify",
+      "description": "Please answer the following questions to finalize the specification.",
+      "selectOption": "Select an option",
+      "answerPlaceholder": "Enter your answer..."
+    },
+    "actions": {
+      "startSession": "Start",
+      "confirmAndBuild": "Confirm & Build",
+      "regenerate": "Regenerate",
+      "viewWorkflow": "View Workflow",
+      "newSession": "New Session"
+    },
+    "messages": {
+      "sessionStarted": "Session started",
+      "buildStarted": "Workflow building started",
+      "buildCompleted": "Workflow completed",
+      "sessionDeleted": "Session deleted"
+    },
+    "errors": {
+      "sessionFailed": "Failed to start session",
+      "messageFailed": "Failed to send message",
+      "buildFailed": "Failed to build workflow"
+    },
+    "input": {
+      "placeholder": "Example: Automate the weekly report creation process"
+    }
   },
   "credentials": {
     "title": "Credentials",

@@ -64,11 +64,11 @@ watch(() => props.triggerConfig, (newVal) => {
 
 // Trigger type options
 const triggerTypeOptions = [
-  { value: 'manual', label: t('trigger.type.manual'), icon: '👤', description: t('trigger.description.manual') },
-  { value: 'webhook', label: t('trigger.type.webhook'), icon: '↗', description: t('trigger.description.webhook') },
-  { value: 'schedule', label: t('trigger.type.schedule'), icon: '⏰', description: t('trigger.description.schedule') },
-  { value: 'slack', label: t('trigger.type.slack'), icon: '#', description: t('trigger.description.slack') },
-  { value: 'email', label: t('trigger.type.email'), icon: '✉', description: t('trigger.description.email') },
+  { value: 'manual', label: t('trigger.type.manual'), icon: '👤', description: t('trigger.type.manualDesc') },
+  { value: 'webhook', label: t('trigger.type.webhook'), icon: '↗', description: t('trigger.type.webhookDesc') },
+  { value: 'schedule', label: t('trigger.type.schedule'), icon: '⏰', description: t('trigger.type.scheduleDesc') },
+  { value: 'slack', label: t('trigger.type.slack'), icon: '#', description: t('trigger.type.slackDesc') },
+  { value: 'email', label: t('trigger.type.email'), icon: '✉', description: t('trigger.type.emailDesc') },
 ]
 
 // Emit changes
@@ -147,10 +147,9 @@ function updateField(field: string, value: unknown) {
 
 // Slack event type options
 const slackEventOptions = [
-  { value: 'message', label: 'メッセージ' },
-  { value: 'reaction_added', label: 'リアクション追加' },
-  { value: 'app_mention', label: 'アプリメンション' },
-  { value: 'slash_command', label: 'スラッシュコマンド' },
+  { value: 'message', label: t('trigger.config.slack.eventTypes.message') },
+  { value: 'reaction_added', label: t('trigger.config.slack.eventTypes.reaction') },
+  { value: 'app_mention', label: t('trigger.config.slack.eventTypes.mention') },
 ]
 
 // Cron expression examples
@@ -178,7 +177,7 @@ const timezoneOptions = [
     <!-- Trigger Type Selection -->
     <div class="trigger-type-section">
       <label class="trigger-label">
-        {{ t('trigger.selectType') }}
+        {{ t('trigger.type.label') }}
       </label>
       <div class="trigger-options">
         <button
@@ -208,39 +207,39 @@ const timezoneOptions = [
     <div class="trigger-config-form">
       <!-- Manual - No config needed -->
       <div v-if="localTriggerType === 'manual'" class="trigger-manual-hint">
-        <p>{{ t('trigger.manualDescription') }}</p>
+        <p>{{ t('trigger.type.manualDesc') }}</p>
       </div>
 
       <!-- Webhook Config -->
       <div v-else-if="localTriggerType === 'webhook'" class="trigger-form-fields">
         <div class="form-group">
           <label class="form-label">
-            {{ t('trigger.webhook.secret') }}
+            {{ t('trigger.config.webhook.secret') }}
           </label>
           <input
             :value="webhookConfig.secret"
             type="text"
             class="form-input"
-            :placeholder="t('trigger.webhook.secretPlaceholder')"
+            :placeholder="t('trigger.config.webhook.secretPlaceholder')"
             :disabled="readonly"
             @input="updateField('secret', ($event.target as HTMLInputElement).value)"
           >
-          <p class="form-hint">{{ t('trigger.webhook.secretHint') }}</p>
+          <p class="form-hint">{{ t('trigger.config.webhook.secretHint') }}</p>
         </div>
 
         <div class="form-group">
           <label class="form-label">
-            {{ t('trigger.webhook.allowedIps') }}
+            {{ t('trigger.config.webhook.allowedIps') }}
           </label>
           <input
             :value="(webhookConfig.allowed_ips || []).join(', ')"
             type="text"
             class="form-input"
-            :placeholder="t('trigger.webhook.allowedIpsPlaceholder')"
+            :placeholder="t('trigger.config.webhook.allowedIpsPlaceholder')"
             :disabled="readonly"
             @input="updateField('allowed_ips', ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean))"
           >
-          <p class="form-hint">{{ t('trigger.webhook.allowedIpsHint') }}</p>
+          <p class="form-hint">{{ t('trigger.config.webhook.allowedIpsHint') }}</p>
         </div>
       </div>
 
@@ -299,7 +298,7 @@ const timezoneOptions = [
       <div v-else-if="localTriggerType === 'slack'" class="trigger-form-fields">
         <div class="form-group">
           <label class="form-label">
-            {{ t('trigger.slack.eventTypes') }}
+            {{ t('trigger.config.slack.eventType') }}
           </label>
           <div class="checkbox-group">
             <label
@@ -327,17 +326,17 @@ const timezoneOptions = [
 
         <div class="form-group">
           <label class="form-label">
-            {{ t('trigger.slack.channelFilter') }}
+            {{ t('trigger.config.slack.channelFilter') }}
           </label>
           <input
             :value="(slackConfig.channel_filter || []).join(', ')"
             type="text"
             class="form-input"
-            :placeholder="t('trigger.slack.channelFilterPlaceholder')"
+            :placeholder="t('trigger.config.slack.channelFilterPlaceholder')"
             :disabled="readonly"
             @input="updateField('channel_filter', ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean))"
           >
-          <p class="form-hint">{{ t('trigger.slack.channelFilterHint') }}</p>
+          <p class="form-hint">{{ t('trigger.config.slack.channelFilterHint') }}</p>
         </div>
       </div>
 
@@ -345,17 +344,17 @@ const timezoneOptions = [
       <div v-else-if="localTriggerType === 'email'" class="trigger-form-fields">
         <div class="form-group">
           <label class="form-label">
-            {{ t('trigger.email.triggerCondition') }}
+            {{ t('trigger.config.email.triggerCondition') }}
           </label>
           <input
             :value="emailConfig.trigger_condition"
             type="text"
             class="form-input"
-            :placeholder="t('trigger.email.triggerConditionPlaceholder')"
+            :placeholder="t('trigger.config.email.conditionValuePlaceholder')"
             :disabled="readonly"
             @input="updateField('trigger_condition', ($event.target as HTMLInputElement).value)"
           >
-          <p class="form-hint">{{ t('trigger.email.triggerConditionHint') }}</p>
+          <p class="form-hint">{{ t('trigger.config.email.inputMappingHint') }}</p>
         </div>
       </div>
     </div>
@@ -366,20 +365,20 @@ const timezoneOptions = [
 .trigger-config-panel {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
-/* Trigger Type Section */
+/* Trigger Type Section - matches PropertiesPanel .form-group */
 .trigger-type-section {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.875rem;
 }
 
+/* Label - matches PropertiesPanel .form-label */
 .trigger-label {
   display: block;
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--color-text);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .trigger-options {

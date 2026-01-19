@@ -73,7 +73,7 @@ type GetSessionResponse struct {
 
 // ConstructRequest represents the request body for constructing a workflow
 type ConstructRequest struct {
-	// No additional fields - spec is taken from session
+	// Reserved for future options
 }
 
 // RefineRequest represents the request body for refining a workflow
@@ -216,7 +216,10 @@ func (h *BuilderHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		"session_id": sessionID.String(),
 		"message":    req.Content,
 		"tenant_id":  tenantID.String(),
-		"user_id":    userID.String(),
+	}
+	// Only include user_id if it's a valid (non-zero) UUID
+	if userID != uuid.Nil {
+		inputData["user_id"] = userID.String()
 	}
 
 	inputJSON, err := json.Marshal(inputData)
@@ -225,18 +228,20 @@ func (h *BuilderHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
+	execInput := usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "ai-builder",
-		EntryPoint:    "hearing",
+		EntryPoint:    "proposal",
 		Input:         inputJSON,
 		TriggerSource: "builder",
 		TriggerMetadata: map[string]interface{}{
-			"feature":    "hearing",
+			"feature":    "proposal",
 			"session_id": sessionID.String(),
 		},
-		UserID: &userID,
-	})
+	}
+	// Don't set UserID for system project execution - it's optional and causes FK issues
+	// when using development user IDs that don't exist in the database
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, execInput)
 	if err != nil {
 		Error(w, http.StatusInternalServerError, "EXECUTE_FAILED", err.Error(), nil)
 		return
@@ -276,7 +281,10 @@ func (h *BuilderHandler) Construct(w http.ResponseWriter, r *http.Request) {
 	inputData := map[string]interface{}{
 		"session_id": sessionID.String(),
 		"tenant_id":  tenantID.String(),
-		"user_id":    userID.String(),
+	}
+	// Only include user_id if it's a valid (non-zero) UUID
+	if userID != uuid.Nil {
+		inputData["user_id"] = userID.String()
 	}
 
 	inputJSON, err := json.Marshal(inputData)
@@ -285,18 +293,18 @@ func (h *BuilderHandler) Construct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
+	execInput := usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "ai-builder",
-		EntryPoint:    "construct",
+		EntryPoint:    "agent_construct",
 		Input:         inputJSON,
 		TriggerSource: "builder",
 		TriggerMetadata: map[string]interface{}{
 			"feature":    "construct",
 			"session_id": sessionID.String(),
 		},
-		UserID: &userID,
-	})
+	}
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, execInput)
 	if err != nil {
 		Error(w, http.StatusInternalServerError, "EXECUTE_FAILED", err.Error(), nil)
 		return
@@ -349,7 +357,10 @@ func (h *BuilderHandler) Refine(w http.ResponseWriter, r *http.Request) {
 		"project_id": session.ProjectID.String(),
 		"feedback":   req.Feedback,
 		"tenant_id":  tenantID.String(),
-		"user_id":    userID.String(),
+	}
+	// Only include user_id if it's a valid (non-zero) UUID
+	if userID != uuid.Nil {
+		inputData["user_id"] = userID.String()
 	}
 
 	inputJSON, err := json.Marshal(inputData)
@@ -358,7 +369,7 @@ func (h *BuilderHandler) Refine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.runUsecase.ExecuteSystemProject(ctx, usecase.ExecuteSystemProjectInput{
+	execInput := usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
 		SystemSlug:    "ai-builder",
 		EntryPoint:    "refine",
@@ -368,8 +379,8 @@ func (h *BuilderHandler) Refine(w http.ResponseWriter, r *http.Request) {
 			"feature":    "refine",
 			"session_id": sessionID.String(),
 		},
-		UserID: &userID,
-	})
+	}
+	result, err := h.runUsecase.ExecuteSystemProject(ctx, execInput)
 	if err != nil {
 		Error(w, http.StatusInternalServerError, "EXECUTE_FAILED", err.Error(), nil)
 		return

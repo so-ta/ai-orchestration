@@ -204,9 +204,10 @@ func (m *MockVectorService) ListCollections() ([]sandbox.CollectionInfo, error) 
 
 // MockBlocksService mocks the Blocks service
 type MockBlocksService struct {
-	ListResponse []map[string]interface{}
-	GetResponse  map[string]interface{}
-	Error        error
+	ListResponse          []map[string]interface{}
+	GetResponse           map[string]interface{}
+	GetWithSchemaResponse map[string]interface{}
+	Error                 error
 }
 
 func (m *MockBlocksService) List() ([]map[string]interface{}, error) {
@@ -232,6 +233,26 @@ func (m *MockBlocksService) Get(slug string) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"slug": slug,
 		"name": slug,
+	}, nil
+}
+
+func (m *MockBlocksService) GetWithSchema(slug string) (map[string]interface{}, error) {
+	if m.Error != nil {
+		return nil, m.Error
+	}
+	if m.GetWithSchemaResponse != nil {
+		return m.GetWithSchemaResponse, nil
+	}
+	// Return a mock response with config_schema
+	return map[string]interface{}{
+		"slug":     slug,
+		"name":     slug,
+		"category": "custom",
+		"config_schema": map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+		},
+		"required_fields": []string{},
 	}, nil
 }
 

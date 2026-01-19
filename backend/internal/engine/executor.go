@@ -847,23 +847,31 @@ func (e *Executor) findNextNodes(ctx context.Context, execCtx *ExecutionContext,
 			}
 		}
 
-		// Check if all incoming edges' sources are completed (single lock operation)
-		allDependenciesMet := func() bool {
+		// Check if ANY incoming edge's source is completed (OR semantics for multiple inputs)
+		// This allows loop structures and alternative paths to work correctly
+		// Note: Implicit parallel execution is not allowed - use Parallel block explicitly
+		canExecute := func() bool {
 			mu.Lock()
 			defer mu.Unlock()
 
+			// If already completed, don't execute again
+			if completed[targetID] {
+				return false
+			}
+
+			// Check if at least one incoming edge's source is completed
 			for _, inEdge := range graph.InEdges[targetID] {
-				if inEdge.SourceStepID != nil && !completed[*inEdge.SourceStepID] {
-					return false
+				if inEdge.SourceStepID != nil && completed[*inEdge.SourceStepID] {
+					return true
 				}
-				if inEdge.SourceBlockGroupID != nil && !completedGroups[*inEdge.SourceBlockGroupID] {
-					return false
+				if inEdge.SourceBlockGroupID != nil && completedGroups[*inEdge.SourceBlockGroupID] {
+					return true
 				}
 			}
-			return true
+			return false
 		}()
 
-		if allDependenciesMet {
+		if canExecute {
 			nextNodes = append(nextNodes, targetID)
 		}
 	}
@@ -1325,20 +1333,37 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 		return execCtx.Run.Input, nil
 	}
 
-	// Find edges pointing to this step (source edges)
-	var sourceEdges []domain.Edge
+	// Find edges pointing to this step (source edges) that have completed sources
+	// Only count edges whose source has actually produced output
+	var activeSourceEdges []domain.Edge
 	if execCtx.Definition != nil {
 		for _, edge := range execCtx.Definition.Edges {
 			// Consider both step-to-step and group-to-step edges
 			if edge.TargetStepID != nil && *edge.TargetStepID == step.ID {
-				sourceEdges = append(sourceEdges, edge)
+				// Check if the source has completed (has data)
+				hasData := false
+				if edge.SourceStepID != nil {
+					_, hasData = execCtx.StepData[*edge.SourceStepID]
+				}
+				if edge.SourceBlockGroupID != nil {
+					if _, ok := execCtx.GroupData[*edge.SourceBlockGroupID]; ok {
+						hasData = true
+					}
+					// Also check StepData for groups
+					if _, ok := execCtx.StepData[*edge.SourceBlockGroupID]; ok {
+						hasData = true
+					}
+				}
+				if hasData {
+					activeSourceEdges = append(activeSourceEdges, edge)
+				}
 			}
 		}
 	}
 
-	// If exactly one source edge from a step, use that step's output directly (pass-through mode)
-	if len(sourceEdges) == 1 {
-		edge := sourceEdges[0]
+	// If exactly one active source edge from a step, use that step's output directly (pass-through mode)
+	if len(activeSourceEdges) == 1 {
+		edge := activeSourceEdges[0]
 		if edge.SourceStepID != nil {
 			sourceStepID := *edge.SourceStepID
 			if data, ok := execCtx.StepData[sourceStepID]; ok {
@@ -1357,6 +1382,11 @@ func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step)
 			}
 		}
 		// Fallback to project input if source has no data
+		return execCtx.Run.Input, nil
+	}
+
+	// No active sources - use project input
+	if len(activeSourceEdges) == 0 {
 		return execCtx.Run.Input, nil
 	}
 
@@ -1568,15 +1598,28 @@ func (e *Executor) executeConditionStep(ctx context.Context, execCtx *ExecutionC
 		condResult = true
 	}
 
-	result := map[string]interface{}{
-		"result":     condResult,
-		"expression": config.Expression,
+	// Set __port field for routing based on condition result
+	portValue := "false"
+	if condResult {
+		portValue = "true"
 	}
+
+	// Parse input to passthrough all existing fields
+	var inputData map[string]interface{}
+	if err := json.Unmarshal(input, &inputData); err != nil {
+		// If input is not an object, create a new map
+		inputData = make(map[string]interface{})
+	}
+
+	// Add condition result fields to the passthrough data
+	inputData["__condition_result"] = condResult
+	inputData["__condition_expression"] = config.Expression
+	inputData["__port"] = portValue
 
 	// Include evaluation error in result for debugging
 	if evalErr != nil {
-		result["evaluation_error"] = evalErr.Error()
-		result["defaulted"] = true
+		inputData["__condition_evaluation_error"] = evalErr.Error()
+		inputData["__condition_defaulted"] = true
 	}
 
 	e.logger.Info("Condition step evaluated",
@@ -1585,7 +1628,7 @@ func (e *Executor) executeConditionStep(ctx context.Context, execCtx *ExecutionC
 		"result", condResult,
 	)
 
-	return json.Marshal(result)
+	return json.Marshal(inputData)
 }
 
 func (e *Executor) executeMapStep(ctx context.Context, execCtx *ExecutionContext, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
