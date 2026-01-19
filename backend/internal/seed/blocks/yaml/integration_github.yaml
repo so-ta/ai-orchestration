@@ -1,0 +1,214 @@
+# GitHub API基盤ブロックとオペレーションブロック
+---
+slug: github-api
+version: 1
+name: GitHub API
+description: GitHub API基盤ブロック
+category: apps
+subcategory: github
+icon: github
+parent_block_slug: bearer-api
+enabled: true
+
+config_defaults:
+  base_url: https://api.github.com
+  secret_key: GITHUB_TOKEN
+
+config_schema:
+  type: object
+  properties:
+    token:
+      type: string
+      title: アクセストークン
+
+pre_process: |
+  return {
+      ...input,
+      headers: {
+          ...(input.headers || {}),
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+      }
+  };
+
+post_process: |
+  if (input.status === 404) {
+      throw new Error('[GITHUB_003] リソースが見つかりません');
+  }
+  return input;
+
+ui_config:
+  icon: github
+  color: "#24292F"
+
+error_codes:
+  - code: GITHUB_001
+    name: TOKEN_NOT_CONFIGURED
+    description: トークンが設定されていません
+    retryable: false
+  - code: GITHUB_003
+    name: NOT_FOUND
+    description: リソースが見つかりません
+    retryable: false
+
+---
+# GitHub Issue作成 - 宣言的設定を使用した例
+slug: github_create_issue
+version: 3
+name: "GitHub: Issue作成"
+description: GitHubリポジトリにIssueを作成
+category: apps
+subcategory: github
+icon: git-pull-request
+parent_block_slug: github-api
+enabled: true
+
+config_schema:
+  type: object
+  required: [owner, repo, title]
+  properties:
+    owner:
+      type: string
+      title: オーナー
+    repo:
+      type: string
+      title: リポジトリ
+    title:
+      type: string
+      title: タイトル
+    body:
+      type: string
+      title: 本文
+      x-ui-widget: textarea
+    token:
+      type: string
+      title: アクセストークン
+    labels:
+      type: array
+      items:
+        type: string
+      title: ラベル
+    assignees:
+      type: array
+      items:
+        type: string
+      title: アサイン
+
+output_schema:
+  type: object
+  properties:
+    id:
+      type: number
+    number:
+      type: number
+    url:
+      type: string
+    html_url:
+      type: string
+
+# 宣言的設定 - PreProcessの代わり
+request:
+  url: "/repos/{{owner}}/{{repo}}/issues"
+  method: POST
+  body:
+    title: "{{input.title}}"
+    body: "{{input.body}}"
+    labels: "{{labels}}"
+    assignees: "{{assignees}}"
+
+# 宣言的設定 - PostProcessの代わり
+response:
+  success_status: [200, 201]
+  output_mapping:
+    id: body.id
+    number: body.number
+    url: body.url
+    html_url: body.html_url
+
+ui_config:
+  icon: git-pull-request
+  color: "#24292F"
+
+error_codes:
+  - code: GITHUB_001
+    name: TOKEN_NOT_CONFIGURED
+    description: トークンが設定されていません
+    retryable: false
+  - code: GITHUB_002
+    name: CREATE_FAILED
+    description: Issue作成に失敗しました
+    retryable: true
+  - code: GITHUB_003
+    name: REPO_NOT_FOUND
+    description: リポジトリが見つかりません
+    retryable: false
+
+---
+# GitHub コメント追加 - 宣言的設定を使用
+slug: github_add_comment
+version: 3
+name: "GitHub: コメント追加"
+description: GitHub IssueまたはPRにコメントを追加
+category: apps
+subcategory: github
+icon: message-square
+parent_block_slug: github-api
+enabled: true
+
+config_schema:
+  type: object
+  required: [owner, repo, issue_number, body]
+  properties:
+    owner:
+      type: string
+      title: オーナー
+    repo:
+      type: string
+      title: リポジトリ
+    issue_number:
+      type: number
+      title: Issue/PR番号
+    body:
+      type: string
+      title: コメント本文
+      x-ui-widget: textarea
+    token:
+      type: string
+      title: アクセストークン
+
+output_schema:
+  type: object
+  properties:
+    id:
+      type: number
+    url:
+      type: string
+    html_url:
+      type: string
+
+request:
+  url: "/repos/{{owner}}/{{repo}}/issues/{{issue_number}}/comments"
+  method: POST
+  body:
+    body: "{{input.body}}"
+
+response:
+  success_status: [200, 201]
+  output_mapping:
+    id: body.id
+    url: body.url
+    html_url: body.html_url
+
+ui_config:
+  icon: message-square
+  color: "#24292F"
+
+error_codes:
+  - code: GITHUB_001
+    name: TOKEN_NOT_CONFIGURED
+    description: トークンが設定されていません
+    retryable: false
+  - code: GITHUB_004
+    name: COMMENT_FAILED
+    description: コメント追加に失敗しました
+    retryable: true

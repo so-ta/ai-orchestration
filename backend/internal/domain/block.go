@@ -147,6 +147,34 @@ type InternalStep struct {
 	OutputKey string          `json:"output_key"` // Key to store this step's output
 }
 
+// RequestConfig defines declarative HTTP request configuration
+// This allows blocks to define request structure without writing JavaScript
+type RequestConfig struct {
+	// URL template (e.g., "/repos/{{owner}}/{{repo}}/issues")
+	// Template syntax: {{field}} for config values, {{input.field}} for input values
+	URL string `json:"url,omitempty"`
+	// HTTP method (GET, POST, PUT, DELETE, PATCH)
+	Method string `json:"method,omitempty"`
+	// Request body template (supports nested templates)
+	Body map[string]interface{} `json:"body,omitempty"`
+	// Additional headers to merge with inherited headers
+	Headers map[string]string `json:"headers,omitempty"`
+	// Query parameters (appended to URL)
+	QueryParams map[string]string `json:"query_params,omitempty"`
+}
+
+// ResponseConfig defines declarative response processing configuration
+// This allows blocks to extract/transform response without writing JavaScript
+type ResponseConfig struct {
+	// OutputMapping maps output field names to response paths
+	// Example: {"id": "body.id", "url": "body.html_url", "success": "true"}
+	// Paths: "body.field", "status", "headers.field", or literal values
+	OutputMapping map[string]string `json:"output_mapping,omitempty"`
+	// SuccessStatus defines which HTTP status codes are considered successful
+	// Default: 200-299 range
+	SuccessStatus []int `json:"success_status,omitempty"`
+}
+
 // BlockDefinition represents a block type definition
 type BlockDefinition struct {
 	ID          uuid.UUID        `json:"id"`
@@ -201,6 +229,14 @@ type BlockDefinition struct {
 	PostProcess string `json:"post_process,omitempty"`
 	// InternalSteps: Array of steps to execute sequentially inside the block
 	InternalSteps []InternalStep `json:"internal_steps,omitempty"`
+
+	// === Declarative Request/Response Configuration ===
+	// Request: Declarative HTTP request configuration (alternative to PreProcess)
+	// When set, templates are expanded and merged with inherited request config
+	Request *RequestConfig `json:"request,omitempty"`
+	// Response: Declarative response processing configuration (alternative to PostProcess)
+	// When set, output mapping is applied to HTTP response
+	Response *ResponseConfig `json:"response,omitempty"`
 
 	// === Group Block fields (Phase B: unified block model for groups) ===
 	// GroupKind: Type of group block (parallel, try_catch, foreach, while). Empty for non-group blocks.

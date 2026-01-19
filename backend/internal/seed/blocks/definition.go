@@ -64,6 +64,12 @@ type SystemBlockDefinition struct {
 	// InternalSteps: Array of steps to execute sequentially inside the block
 	InternalSteps []domain.InternalStep `json:"internal_steps,omitempty"`
 
+	// === Declarative Request/Response Configuration ===
+	// Request: Declarative HTTP request configuration (alternative to PreProcess)
+	Request *domain.RequestConfig `json:"request,omitempty"`
+	// Response: Declarative response processing configuration (alternative to PostProcess)
+	Response *domain.ResponseConfig `json:"response,omitempty"`
+
 	// Test cases (for testing only, not stored in DB)
 	TestCases []BlockTestCase `json:"-"`
 }

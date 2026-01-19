@@ -62,6 +62,21 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		subcategory = &sc
 	}
 
+	// Marshal request/response configs
+	var requestJSON, responseJSON []byte
+	if block.Request != nil {
+		requestJSON, err = json.Marshal(block.Request)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request config: %w", err)
+		}
+	}
+	if block.Response != nil {
+		responseJSON, err = json.Marshal(block.Response)
+		if err != nil {
+			return fmt.Errorf("failed to marshal response config: %w", err)
+		}
+	}
+
 	query := `
 		INSERT INTO block_definitions (
 			id, tenant_id, slug, name, description, category, subcategory, icon,
@@ -69,9 +84,9 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 			error_codes, required_credentials, is_public,
 			code, ui_config, is_system, version,
 			parent_block_id, config_defaults, pre_process, post_process, internal_steps,
-			group_kind, is_container,
+			group_kind, is_container, request, response,
 			enabled, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
 	`
 
 	_, err = r.pool.Exec(ctx, query,
@@ -101,6 +116,8 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		internalStepsJSON,
 		groupKind,
 		block.IsContainer,
+		requestJSON,
+		responseJSON,
 		block.Enabled,
 		block.CreatedAt,
 		block.UpdatedAt,
@@ -142,7 +159,7 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
-			   group_kind, COALESCE(is_container, false),
+			   group_kind, COALESCE(is_container, false), request, response,
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		WHERE id = $1
@@ -153,6 +170,8 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 	var inputPortsJSON []byte
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
+	var requestJSON []byte
+	var responseJSON []byte
 	var groupKind *string
 	var subcategory *string
 
@@ -183,6 +202,8 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 		&internalStepsJSON,
 		&groupKind,
 		&block.IsContainer,
+		&requestJSON,
+		&responseJSON,
 		&block.Enabled,
 		&block.CreatedAt,
 		&block.UpdatedAt,
@@ -224,6 +245,20 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 		}
 	}
 
+	if len(requestJSON) > 0 {
+		block.Request = &domain.RequestConfig{}
+		if err := json.Unmarshal(requestJSON, block.Request); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal request config: %w", err)
+		}
+	}
+
+	if len(responseJSON) > 0 {
+		block.Response = &domain.ResponseConfig{}
+		if err := json.Unmarshal(responseJSON, block.Response); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response config: %w", err)
+		}
+	}
+
 	return block, nil
 }
 
@@ -254,7 +289,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
-			   group_kind, COALESCE(is_container, false),
+			   group_kind, COALESCE(is_container, false), request, response,
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		WHERE slug = $1 AND ((tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL) OR tenant_id IS NULL)
@@ -267,6 +302,8 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	var inputPortsJSON []byte
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
+	var requestJSON []byte
+	var responseJSON []byte
 	var groupKind *string
 	var subcategory *string
 
@@ -297,6 +334,8 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 		&internalStepsJSON,
 		&groupKind,
 		&block.IsContainer,
+		&requestJSON,
+		&responseJSON,
 		&block.Enabled,
 		&block.CreatedAt,
 		&block.UpdatedAt,
@@ -336,6 +375,20 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	if len(internalStepsJSON) > 0 {
 		if err := json.Unmarshal(internalStepsJSON, &block.InternalSteps); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal internal steps: %w", err)
+		}
+	}
+
+	if len(requestJSON) > 0 {
+		block.Request = &domain.RequestConfig{}
+		if err := json.Unmarshal(requestJSON, block.Request); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal request config: %w", err)
+		}
+	}
+
+	if len(responseJSON) > 0 {
+		block.Response = &domain.ResponseConfig{}
+		if err := json.Unmarshal(responseJSON, block.Response); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response config: %w", err)
 		}
 	}
 
@@ -385,7 +438,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
-			   group_kind, COALESCE(is_container, false),
+			   group_kind, COALESCE(is_container, false), request, response,
 			   enabled, created_at, updated_at
 		FROM block_definitions
 		%s
@@ -405,6 +458,8 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		var inputPortsJSON []byte
 		var outputPortsJSON []byte
 		var internalStepsJSON []byte
+		var requestJSON []byte
+		var responseJSON []byte
 		var groupKind *string
 		var subcategory *string
 
@@ -435,6 +490,8 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			&internalStepsJSON,
 			&groupKind,
 			&block.IsContainer,
+			&requestJSON,
+			&responseJSON,
 			&block.Enabled,
 			&block.CreatedAt,
 			&block.UpdatedAt,
@@ -474,6 +531,20 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			}
 		}
 
+		if len(requestJSON) > 0 {
+			block.Request = &domain.RequestConfig{}
+			if err := json.Unmarshal(requestJSON, block.Request); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal request config: %w", err)
+			}
+		}
+
+		if len(responseJSON) > 0 {
+			block.Response = &domain.ResponseConfig{}
+			if err := json.Unmarshal(responseJSON, block.Response); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal response config: %w", err)
+			}
+		}
+
 		blocks = append(blocks, block)
 	}
 
@@ -505,6 +576,21 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal internal steps: %w", err)
 	}
 
+	// Marshal request/response configs
+	var requestJSON, responseJSON []byte
+	if block.Request != nil {
+		requestJSON, err = json.Marshal(block.Request)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request config: %w", err)
+		}
+	}
+	if block.Response != nil {
+		responseJSON, err = json.Marshal(block.Response)
+		if err != nil {
+			return fmt.Errorf("failed to marshal response config: %w", err)
+		}
+	}
+
 	// Convert empty GroupKind to nil for database
 	var groupKind *string
 	if block.GroupKind != "" {
@@ -526,8 +612,8 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 			error_codes = $11, required_credentials = $12, is_public = $13,
 			code = $14, ui_config = $15, is_system = $16, version = $17,
 			parent_block_id = $18, config_defaults = $19, pre_process = $20, post_process = $21, internal_steps = $22,
-			group_kind = $23, is_container = $24,
-			enabled = $25, updated_at = NOW()
+			group_kind = $23, is_container = $24, request = $25, response = $26,
+			enabled = $27, updated_at = NOW()
 		WHERE id = $1
 	`
 
@@ -556,6 +642,8 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		internalStepsJSON,
 		groupKind,
 		block.IsContainer,
+		requestJSON,
+		responseJSON,
 		block.Enabled,
 	)
 	if err != nil {
@@ -656,6 +744,10 @@ func (r *BlockDefinitionRepository) resolveInheritance(ctx context.Context, bloc
 		PostProcess:    block.PostProcess,
 		InternalSteps:  block.InternalSteps,
 
+		// Declarative request/response from child (merged later)
+		Request:  block.Request,
+		Response: block.Response,
+
 		// Schemas - use child's if set, otherwise inherit from parent chain
 		ConfigSchema: block.ConfigSchema,
 		OutputSchema: block.OutputSchema,
@@ -671,6 +763,12 @@ func (r *BlockDefinitionRepository) resolveInheritance(ctx context.Context, bloc
 		// RequiredCredentials - merge from chain
 		RequiredCredentials: root.RequiredCredentials,
 	}
+
+	// Merge Request configs from chain (root -> child, child overrides)
+	resolved.Request = mergeRequestConfigs(chain)
+
+	// Merge Response configs from chain (root -> child, child overrides)
+	resolved.Response = mergeResponseConfigs(chain)
 
 	// Build PreProcessChain: child -> ... -> root (child's preProcess runs first)
 	preProcessChain := make([]string, 0)
@@ -786,4 +884,91 @@ func (r *BlockDefinitionRepository) ValidateInheritance(ctx context.Context, blo
 	}
 
 	return nil
+}
+
+// mergeRequestConfigs merges request configs from inheritance chain
+// Order: root -> ... -> child (child's values override parent's)
+func mergeRequestConfigs(chain []*domain.BlockDefinition) *domain.RequestConfig {
+	var merged *domain.RequestConfig
+
+	// Process from root to child (child overrides parent)
+	for i := len(chain) - 1; i >= 0; i-- {
+		req := chain[i].Request
+		if req == nil {
+			continue
+		}
+
+		if merged == nil {
+			merged = &domain.RequestConfig{}
+		}
+
+		// Override non-empty fields
+		if req.URL != "" {
+			merged.URL = req.URL
+		}
+		if req.Method != "" {
+			merged.Method = req.Method
+		}
+		if req.Body != nil {
+			if merged.Body == nil {
+				merged.Body = make(map[string]interface{})
+			}
+			for k, v := range req.Body {
+				merged.Body[k] = v
+			}
+		}
+		if req.Headers != nil {
+			if merged.Headers == nil {
+				merged.Headers = make(map[string]string)
+			}
+			for k, v := range req.Headers {
+				merged.Headers[k] = v
+			}
+		}
+		if req.QueryParams != nil {
+			if merged.QueryParams == nil {
+				merged.QueryParams = make(map[string]string)
+			}
+			for k, v := range req.QueryParams {
+				merged.QueryParams[k] = v
+			}
+		}
+	}
+
+	return merged
+}
+
+// mergeResponseConfigs merges response configs from inheritance chain
+// Order: root -> ... -> child (child's values override parent's)
+func mergeResponseConfigs(chain []*domain.BlockDefinition) *domain.ResponseConfig {
+	var merged *domain.ResponseConfig
+
+	// Process from root to child (child overrides parent)
+	for i := len(chain) - 1; i >= 0; i-- {
+		resp := chain[i].Response
+		if resp == nil {
+			continue
+		}
+
+		if merged == nil {
+			merged = &domain.ResponseConfig{}
+		}
+
+		// Override/merge output mapping
+		if resp.OutputMapping != nil {
+			if merged.OutputMapping == nil {
+				merged.OutputMapping = make(map[string]string)
+			}
+			for k, v := range resp.OutputMapping {
+				merged.OutputMapping[k] = v
+			}
+		}
+
+		// Override success status if set
+		if len(resp.SuccessStatus) > 0 {
+			merged.SuccessStatus = resp.SuccessStatus
+		}
+	}
+
+	return merged
 }

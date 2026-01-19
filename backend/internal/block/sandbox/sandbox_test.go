@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/souta/ai-orchestration/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -495,4 +496,296 @@ try {
 	if errStr, ok := result["error"].(string); ok && errStr != "" {
 		assert.Contains(t, errStr, "not yet implemented")
 	}
+}
+
+// ============================================================================
+// Declarative Request/Response Tests
+// ============================================================================
+
+func TestExpandTemplate_Simple(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"owner": "octocat",
+			"repo":  "hello-world",
+		},
+		Input: map[string]interface{}{
+			"title": "Test Issue",
+		},
+		Credentials: map[string]interface{}{
+			"github_token": "ghp_xxxx",
+		},
+	}
+
+	// Config variable
+	result := ExpandTemplate("https://api.github.com/repos/{{owner}}/{{repo}}/issues", ctx)
+	assert.Equal(t, "https://api.github.com/repos/octocat/hello-world/issues", result)
+
+	// Input variable
+	result = ExpandTemplate("Issue: {{input.title}}", ctx)
+	assert.Equal(t, "Issue: Test Issue", result)
+
+	// Secret variable
+	result = ExpandTemplate("Bearer {{secret.github_token}}", ctx)
+	assert.Equal(t, "Bearer ghp_xxxx", result)
+}
+
+func TestExpandTemplate_NestedValues(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"api": map[string]interface{}{
+				"baseUrl": "https://api.example.com",
+				"version": "v1",
+			},
+		},
+		Input: map[string]interface{}{
+			"user": map[string]interface{}{
+				"name":  "John",
+				"email": "john@example.com",
+			},
+		},
+		Credentials: nil,
+	}
+
+	result := ExpandTemplate("{{api.baseUrl}}/{{api.version}}/users", ctx)
+	assert.Equal(t, "https://api.example.com/v1/users", result)
+
+	result = ExpandTemplate("Name: {{input.user.name}}, Email: {{input.user.email}}", ctx)
+	assert.Equal(t, "Name: John, Email: john@example.com", result)
+}
+
+func TestExpandTemplate_MissingValue(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"existing": "value",
+		},
+		Input:       nil,
+		Credentials: nil,
+	}
+
+	// Missing value should return empty string
+	result := ExpandTemplate("{{missing}}", ctx)
+	assert.Equal(t, "", result)
+
+	// Mix of existing and missing
+	result = ExpandTemplate("{{existing}}-{{missing}}", ctx)
+	assert.Equal(t, "value-", result)
+}
+
+func TestExpandTemplateValue_Map(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"title": "My Issue",
+			"body":  "Issue description",
+		},
+		Input:       nil,
+		Credentials: nil,
+	}
+
+	body := map[string]interface{}{
+		"title": "{{title}}",
+		"body":  "{{body}}",
+		"labels": []interface{}{
+			"bug",
+			"{{title}}",
+		},
+	}
+
+	result := ExpandTemplateValue(body, ctx)
+	resultMap := result.(map[string]interface{})
+
+	assert.Equal(t, "My Issue", resultMap["title"])
+	assert.Equal(t, "Issue description", resultMap["body"])
+
+	labels := resultMap["labels"].([]interface{})
+	assert.Equal(t, "bug", labels[0])
+	assert.Equal(t, "My Issue", labels[1])
+}
+
+func TestSandbox_BuildDeclarativeRequest(t *testing.T) {
+	sb := New(DefaultConfig())
+
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"owner": "octocat",
+			"repo":  "hello-world",
+		},
+		Input: map[string]interface{}{
+			"title": "Test Issue",
+			"body":  "This is a test",
+		},
+		Credentials: map[string]interface{}{
+			"token": "ghp_xxxx",
+		},
+	}
+
+	reqConfig := &domain.RequestConfig{
+		URL:    "https://api.github.com/repos/{{owner}}/{{repo}}/issues",
+		Method: "POST",
+		Body: map[string]interface{}{
+			"title": "{{input.title}}",
+			"body":  "{{input.body}}",
+		},
+		Headers: map[string]string{
+			"Authorization": "Bearer {{secret.token}}",
+			"Accept":        "application/vnd.github+json",
+		},
+	}
+
+	req, err := sb.BuildDeclarativeRequest(reqConfig, ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "https://api.github.com/repos/octocat/hello-world/issues", req.URL.String())
+	assert.Equal(t, "POST", req.Method)
+	assert.Equal(t, "Bearer ghp_xxxx", req.Header.Get("Authorization"))
+	assert.Equal(t, "application/vnd.github+json", req.Header.Get("Accept"))
+}
+
+func TestSandbox_ProcessDeclarativeResponse_OutputMapping(t *testing.T) {
+	sb := New(DefaultConfig())
+
+	respConfig := &domain.ResponseConfig{
+		OutputMapping: map[string]string{
+			"issue_id":  "body.id",
+			"issue_url": "body.html_url",
+			"number":    "body.number",
+			"success":   "true",
+		},
+		SuccessStatus: []int{200, 201},
+	}
+
+	// Create mock response
+	resp := &http.Response{
+		StatusCode: 201,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}
+	respBody := []byte(`{"id": 12345, "html_url": "https://github.com/octocat/hello-world/issues/1", "number": 1}`)
+
+	result, err := sb.ProcessDeclarativeResponse(respConfig, resp, respBody)
+	require.NoError(t, err)
+
+	assert.EqualValues(t, float64(12345), result["issue_id"])
+	assert.Equal(t, "https://github.com/octocat/hello-world/issues/1", result["issue_url"])
+	assert.EqualValues(t, float64(1), result["number"])
+	assert.Equal(t, true, result["success"])
+}
+
+func TestSandbox_ProcessDeclarativeResponse_FailedStatus(t *testing.T) {
+	sb := New(DefaultConfig())
+
+	respConfig := &domain.ResponseConfig{
+		SuccessStatus: []int{200, 201},
+	}
+
+	resp := &http.Response{
+		StatusCode: 404,
+		Header:     http.Header{},
+	}
+	respBody := []byte(`{"message": "Not Found"}`)
+
+	_, err := sb.ProcessDeclarativeResponse(respConfig, resp, respBody)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+}
+
+func TestSandbox_ProcessDeclarativeResponse_DefaultSuccessRange(t *testing.T) {
+	sb := New(DefaultConfig())
+
+	// No SuccessStatus defined - should use default 200-299 range
+	respConfig := &domain.ResponseConfig{
+		OutputMapping: map[string]string{
+			"data": "body",
+		},
+	}
+
+	// Test 200
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+	}
+	respBody := []byte(`{"test": "value"}`)
+
+	result, err := sb.ProcessDeclarativeResponse(respConfig, resp, respBody)
+	require.NoError(t, err)
+	assert.NotNil(t, result["data"])
+
+	// Test 204
+	resp.StatusCode = 204
+	_, err = sb.ProcessDeclarativeResponse(respConfig, resp, []byte{})
+	require.NoError(t, err)
+
+	// Test 300 should fail
+	resp.StatusCode = 300
+	_, err = sb.ProcessDeclarativeResponse(respConfig, resp, []byte{})
+	require.Error(t, err)
+}
+
+func TestSandbox_DeclarativeHTTP_Integration(t *testing.T) {
+	// Create test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "/repos/octocat/hello-world/issues", r.URL.Path)
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+
+		var body map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&body)
+		assert.Equal(t, "Test Issue", body["title"])
+		assert.Equal(t, "Issue body", body["body"])
+
+		// Return response
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":       12345,
+			"html_url": "https://github.com/octocat/hello-world/issues/1",
+			"number":   1,
+		})
+	}))
+	defer server.Close()
+
+	sb := New(DefaultConfig())
+
+	reqConfig := &domain.RequestConfig{
+		URL:    server.URL + "/repos/{{owner}}/{{repo}}/issues",
+		Method: "POST",
+		Body: map[string]interface{}{
+			"title": "{{input.title}}",
+			"body":  "{{input.body}}",
+		},
+		Headers: map[string]string{
+			"Authorization": "Bearer {{secret.token}}",
+		},
+	}
+
+	respConfig := &domain.ResponseConfig{
+		OutputMapping: map[string]string{
+			"id":  "body.id",
+			"url": "body.html_url",
+		},
+		SuccessStatus: []int{200, 201},
+	}
+
+	declCtx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"owner": "octocat",
+			"repo":  "hello-world",
+		},
+		Input: map[string]interface{}{
+			"title": "Test Issue",
+			"body":  "Issue body",
+		},
+		Credentials: map[string]interface{}{
+			"token": "test-token",
+		},
+	}
+
+	execCtx := &ExecutionContext{
+		HTTP: NewHTTPClient(10 * time.Second),
+	}
+
+	result, err := sb.executeDeclarativeHTTP(reqConfig, respConfig, declCtx, execCtx)
+	require.NoError(t, err)
+
+	assert.EqualValues(t, float64(12345), result["id"])
+	assert.Equal(t, "https://github.com/octocat/hello-world/issues/1", result["url"])
 }
