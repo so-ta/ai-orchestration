@@ -956,3 +956,153 @@ func TestSandbox_BuildDeclarativeRequest_URLEncoding(t *testing.T) {
 	expectedURL := "https://sheets.googleapis.com/v4/spreadsheets/1abc-def-123/values/Sheet1%21A1:B10"
 	assert.Equal(t, expectedURL, req.URL.String())
 }
+
+func TestExpandTemplateValue_OmitEmpty(t *testing.T) {
+	ctx := &DeclarativeContext{
+		Config: map[string]interface{}{
+			"database_id": "db-123",
+			"page_size":   100,
+		},
+		Input: map[string]interface{}{
+			"filter": map[string]interface{}{
+				"property": "status",
+				"equals":   "done",
+			},
+			"sorts": []interface{}{},
+		},
+		Credentials: map[string]interface{}{},
+	}
+
+	t.Run("omit_empty removes empty string field", func(t *testing.T) {
+		body := map[string]interface{}{
+			"database_id": "{{database_id}}",
+			"filter": map[string]interface{}{
+				"value":      "{{input.missing}}",
+				"omit_empty": true,
+			},
+			"page_size": "{{page_size}}",
+		}
+
+		result := ExpandTemplateValue(body, ctx).(map[string]interface{})
+
+		assert.Equal(t, "db-123", result["database_id"])
+		assert.Equal(t, 100, result["page_size"]) // Numeric values are preserved as-is
+		assert.NotContains(t, result, "filter", "empty filter field should be omitted")
+	})
+
+	t.Run("omit_empty removes empty array field", func(t *testing.T) {
+		body := map[string]interface{}{
+			"database_id": "{{database_id}}",
+			"sorts": map[string]interface{}{
+				"value":      "{{input.sorts}}",
+				"omit_empty": true,
+			},
+		}
+
+		result := ExpandTemplateValue(body, ctx).(map[string]interface{})
+
+		assert.Equal(t, "db-123", result["database_id"])
+		assert.NotContains(t, result, "sorts", "empty sorts array should be omitted")
+	})
+
+	t.Run("omit_empty keeps non-empty object field", func(t *testing.T) {
+		body := map[string]interface{}{
+			"database_id": "{{database_id}}",
+			"filter": map[string]interface{}{
+				"value":      "{{input.filter}}",
+				"omit_empty": true,
+			},
+		}
+
+		result := ExpandTemplateValue(body, ctx).(map[string]interface{})
+
+		assert.Equal(t, "db-123", result["database_id"])
+		assert.Contains(t, result, "filter", "non-empty filter should be kept")
+		filterMap := result["filter"].(map[string]interface{})
+		assert.Equal(t, "status", filterMap["property"])
+	})
+
+	t.Run("without omit_empty keeps empty field", func(t *testing.T) {
+		body := map[string]interface{}{
+			"database_id": "{{database_id}}",
+			"filter":      "{{input.missing}}", // no omit_empty
+		}
+
+		result := ExpandTemplateValue(body, ctx).(map[string]interface{})
+
+		assert.Equal(t, "db-123", result["database_id"])
+		assert.Contains(t, result, "filter", "empty field without omit_empty should be kept")
+		assert.Equal(t, "", result["filter"])
+	})
+
+	t.Run("omit_empty=false keeps empty field", func(t *testing.T) {
+		body := map[string]interface{}{
+			"database_id": "{{database_id}}",
+			"filter": map[string]interface{}{
+				"value":      "{{input.missing}}",
+				"omit_empty": false,
+			},
+		}
+
+		result := ExpandTemplateValue(body, ctx).(map[string]interface{})
+
+		assert.Equal(t, "db-123", result["database_id"])
+		assert.Contains(t, result, "filter", "field with omit_empty=false should be kept")
+		assert.Equal(t, "", result["filter"])
+	})
+
+	t.Run("complex nested structure with omit_empty", func(t *testing.T) {
+		body := map[string]interface{}{
+			"data": map[string]interface{}{
+				"required": "{{database_id}}",
+				"optional_filter": map[string]interface{}{
+					"value":      "{{input.missing}}",
+					"omit_empty": true,
+				},
+				"optional_sorts": map[string]interface{}{
+					"value":      "{{input.sorts}}",
+					"omit_empty": true,
+				},
+				"existing_filter": map[string]interface{}{
+					"value":      "{{input.filter}}",
+					"omit_empty": true,
+				},
+			},
+		}
+
+		result := ExpandTemplateValue(body, ctx).(map[string]interface{})
+		dataMap := result["data"].(map[string]interface{})
+
+		assert.Equal(t, "db-123", dataMap["required"])
+		assert.NotContains(t, dataMap, "optional_filter")
+		assert.NotContains(t, dataMap, "optional_sorts")
+		assert.Contains(t, dataMap, "existing_filter")
+	})
+}
+
+func TestIsEmptyValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    interface{}
+		expected bool
+	}{
+		{"nil", nil, true},
+		{"empty string", "", true},
+		{"non-empty string", "hello", false},
+		{"empty array", []interface{}{}, true},
+		{"non-empty array", []interface{}{"a"}, false},
+		{"empty map", map[string]interface{}{}, true},
+		{"non-empty map", map[string]interface{}{"a": 1}, false},
+		{"boolean true", true, false},
+		{"boolean false", false, false}, // booleans are never empty
+		{"number zero", float64(0), false},
+		{"number non-zero", float64(42), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isEmptyValue(tt.value)
+			assert.Equal(t, tt.expected, result, "isEmptyValue(%v) = %v, want %v", tt.value, result, tt.expected)
+		})
+	}
+}

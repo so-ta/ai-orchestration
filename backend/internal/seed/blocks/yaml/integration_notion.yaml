@@ -44,3 +44,88 @@ error_codes:
     name: API_KEY_NOT_CONFIGURED
     description: API Keyが設定されていません
     retryable: false
+
+# Notion DB検索ブロック - omit_emptyを使用した宣言的設定
+---
+slug: notion_query_db
+version: 3
+name: "Notion: DB検索"
+description: Notionデータベースを検索
+category: apps
+subcategory: notion
+icon: database
+parent_block_slug: notion-api
+enabled: true
+
+config_schema:
+  type: object
+  required: [database_id]
+  properties:
+    database_id:
+      type: string
+      title: データベースID
+    filter:
+      type: object
+      title: フィルター
+      x-ui-widget: output-schema
+    sorts:
+      type: array
+      title: ソート
+      x-ui-widget: output-schema
+    page_size:
+      type: number
+      title: 取得件数
+      default: 100
+      minimum: 1
+      maximum: 100
+    api_key:
+      type: string
+      title: API Key
+
+output_schema:
+  type: object
+  properties:
+    results:
+      type: array
+    has_more:
+      type: boolean
+    next_cursor:
+      type: string
+
+# 宣言的設定 - omit_emptyでオプショナルフィールドを処理
+request:
+  url: "/databases/{{database_id}}/query"
+  method: POST
+  body:
+    filter:
+      value: "{{filter}}"
+      omit_empty: true
+    sorts:
+      value: "{{sorts}}"
+      omit_empty: true
+    page_size: "{{page_size}}"
+
+response:
+  success_status: [200]
+  error_mapping:
+    - condition: status >= 400
+      code: NOTION_004
+      message: "クエリ失敗: {{body.message}}"
+  output_mapping:
+    results: body.results
+    has_more: body.has_more
+    next_cursor: body.next_cursor
+
+ui_config:
+  icon: database
+  color: "#000000"
+
+error_codes:
+  - code: NOTION_001
+    name: API_KEY_NOT_CONFIGURED
+    description: API Keyが設定されていません
+    retryable: false
+  - code: NOTION_004
+    name: QUERY_FAILED
+    description: クエリに失敗しました
+    retryable: true

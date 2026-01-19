@@ -1647,24 +1647,107 @@ func isHexDigit(b byte) bool {
 }
 
 // ExpandTemplateValue recursively expands templates in any value type
+// Supports object format with omit_empty option:
+//
+//	field:
+//	  value: "{{template}}"
+//	  omit_empty: true
 func ExpandTemplateValue(value interface{}, ctx *DeclarativeContext) interface{} {
 	switch v := value.(type) {
 	case string:
+		// Check if this is a pure template variable reference (e.g., "{{input.filter}}")
+		// If so, return the actual value instead of a string representation
+		trimmed := strings.TrimSpace(v)
+		if strings.HasPrefix(trimmed, "{{") && strings.HasSuffix(trimmed, "}}") {
+			// Check if there's only one template variable
+			if strings.Count(trimmed, "{{") == 1 {
+				path := strings.TrimPrefix(strings.TrimSuffix(trimmed, "}}"), "{{")
+				path = strings.TrimSpace(path)
+
+				// Get the actual value (not string representation)
+				actualValue := getNestedValueAny(ctx.Config, path)
+				if strings.HasPrefix(path, "input.") {
+					fieldPath := strings.TrimPrefix(path, "input.")
+					actualValue = getNestedValueAny(ctx.Input, fieldPath)
+				} else if strings.HasPrefix(path, "secret.") {
+					credName := strings.TrimPrefix(path, "secret.")
+					actualValue = getNestedValueAny(ctx.Credentials, credName)
+				}
+
+				// Return actual value (preserves arrays, maps, etc.)
+				if actualValue != nil {
+					return actualValue
+				}
+				// If nil, return empty string (for template compatibility)
+				return ""
+			}
+		}
+		// For mixed strings with templates, use string expansion
 		return ExpandTemplate(v, ctx)
 	case map[string]interface{}:
+		// Check if this is a field with omit_empty option
+		if valueField, hasValue := v["value"]; hasValue {
+			// This is an object format field
+			expanded := ExpandTemplateValue(valueField, ctx)
+
+			// Check omit_empty option
+			if omitEmpty, ok := v["omit_empty"].(bool); ok && omitEmpty {
+				if isEmptyValue(expanded) {
+					// Return special marker to indicate this field should be omitted
+					return omitEmptyMarker{}
+				}
+			}
+			return expanded
+		}
+
+		// Regular map - recursively expand and filter out omit_empty markers
 		result := make(map[string]interface{})
 		for key, val := range v {
-			result[key] = ExpandTemplateValue(val, ctx)
+			expanded := ExpandTemplateValue(val, ctx)
+			// Skip fields marked for omission
+			if _, isMarker := expanded.(omitEmptyMarker); !isMarker {
+				result[key] = expanded
+			}
 		}
 		return result
 	case []interface{}:
-		result := make([]interface{}, len(v))
-		for i, val := range v {
-			result[i] = ExpandTemplateValue(val, ctx)
+		result := make([]interface{}, 0, len(v))
+		for _, val := range v {
+			expanded := ExpandTemplateValue(val, ctx)
+			// Skip items marked for omission
+			if _, isMarker := expanded.(omitEmptyMarker); !isMarker {
+				result = append(result, expanded)
+			}
 		}
 		return result
 	default:
 		return v
+	}
+}
+
+// omitEmptyMarker is used to mark fields that should be omitted from output
+type omitEmptyMarker struct{}
+
+// isEmptyValue checks if a value should be considered "empty" for omit_empty
+func isEmptyValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	switch val := v.(type) {
+	case string:
+		return val == ""
+	case []interface{}:
+		return len(val) == 0
+	case map[string]interface{}:
+		return len(val) == 0
+	case bool:
+		return false // booleans are never "empty"
+	case float64:
+		return false // numbers are never "empty"
+	case int:
+		return false // numbers are never "empty"
+	default:
+		return false
 	}
 }
 

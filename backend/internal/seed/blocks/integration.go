@@ -25,13 +25,12 @@ func (r *Registry) registerIntegrationBlocks() {
 	// github-api is defined in YAML (integration_github.yaml)
 	// notion-api is defined in YAML (integration_notion.yaml)
 	// linear-api is defined in YAML (integration_linear.yaml)
-	r.register(GoogleAPIBlock())
+	// google-api is defined in YAML (integration_google.yaml)
 
 	// === Level 4+: Concrete operation blocks ===
 	// slack, discord are defined in YAML (integration_webhook.yaml)
 	// github_create_issue, github_add_comment are defined in YAML (integration_github.yaml)
-	// Notion
-	r.register(NotionQueryDBBlock())
+	// Notion: notion_query_db is defined in YAML (integration_notion.yaml)
 	r.register(NotionCreatePageBlock())
 	// Google Sheets
 	r.register(GSheetsAppendBlock())
@@ -272,46 +271,8 @@ return input;
 // LinearAPIBlock is defined in YAML files
 // See: yaml/integration_linear.yaml
 
-// GoogleAPIBlock provides Google API base configuration
-func GoogleAPIBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "google-api",
-		Version:         1,
-		Name:            "Google API",
-		Description:     "Google API基盤ブロック",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryGoogle,
-		Icon:            "cloud",
-		ParentBlockSlug: "api-key-query",
-		ConfigDefaults: json.RawMessage(`{
-			"secret_key": "GOOGLE_API_KEY"
-		}`),
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"api_key": {"type": "string", "title": "API Key"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		PostProcess: `
-if (input.status === 404) {
-    throw new Error('[GOOGLE_003] リソースが見つかりません');
-}
-if (input.body?.error) {
-    throw new Error('[GOOGLE_002] ' + (input.body.error.message || 'Unknown error'));
-}
-return input;
-`,
-		UIConfig: json.RawMessage(`{"icon": "cloud", "color": "#4285F4"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "GOOGLE_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
-			{Code: "GOOGLE_002", Name: "API_ERROR", Description: "Google APIエラー", Retryable: true},
-			{Code: "GOOGLE_003", Name: "NOT_FOUND", Description: "リソースが見つかりません", Retryable: false},
-		},
-		Enabled: true,
-	}
-}
+// GoogleAPIBlock is defined in YAML files
+// See: yaml/integration_google.yaml
 
 // =============================================================================
 // Level 4+: Concrete Operation Blocks
@@ -320,69 +281,8 @@ return input;
 // SlackBlock and DiscordBlock are defined in YAML files
 // See: yaml/integration_webhook.yaml
 
-// NotionQueryDBBlock queries a Notion database
-func NotionQueryDBBlock() *SystemBlockDefinition {
-	return &SystemBlockDefinition{
-		Slug:            "notion_query_db",
-		Version:         2, // Incremented for notion-api inheritance
-		Name:            "Notion: DB検索",
-		Description:     "Notionデータベースを検索",
-		Category:        domain.BlockCategoryApps,
-		Subcategory:     domain.BlockSubcategoryNotion,
-		Icon:            "database",
-		ParentBlockSlug: "notion-api",
-		ConfigSchema: json.RawMessage(`{
-			"type": "object",
-			"required": ["database_id"],
-			"properties": {
-				"sorts": {"type": "array", "title": "ソート", "x-ui-widget": "output-schema"},
-				"filter": {"type": "object", "title": "フィルター", "x-ui-widget": "output-schema"},
-				"api_key": {"type": "string", "title": "API Key"},
-				"page_size": {"type": "number", "title": "取得件数", "default": 100, "maximum": 100, "minimum": 1},
-				"database_id": {"type": "string", "title": "データベースID"}
-			}
-		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
-		OutputSchema: json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"results": {"type": "array"},
-				"has_more": {"type": "boolean"},
-				"next_cursor": {"type": "string"}
-			}
-		}`),
-		PreProcess: `
-const payload = {};
-if (config.filter) payload.filter = config.filter;
-if (config.sorts) payload.sorts = config.sorts;
-if (config.page_size) payload.page_size = config.page_size;
-return {
-    ...input,
-    url: '/databases/' + config.database_id + '/query',
-    method: 'POST',
-    body: payload
-};
-`,
-		PostProcess: `
-if (input.status >= 400) {
-    const errorMsg = input.body?.message || 'Unknown error';
-    throw new Error('[NOTION_004] クエリ失敗: ' + errorMsg);
-}
-return {
-    results: input.body.results,
-    has_more: input.body.has_more,
-    next_cursor: input.body.next_cursor
-};
-`,
-		UIConfig: json.RawMessage(`{"icon": "database", "color": "#000000"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "NOTION_001", Name: "API_KEY_NOT_CONFIGURED", Description: "API Keyが設定されていません", Retryable: false},
-			{Code: "NOTION_004", Name: "QUERY_FAILED", Description: "クエリに失敗しました", Retryable: true},
-		},
-		Enabled: true,
-	}
-}
+// NotionQueryDBBlock is defined in YAML files
+// See: yaml/integration_notion.yaml
 
 // NotionCreatePageBlock creates a page in Notion
 func NotionCreatePageBlock() *SystemBlockDefinition {

@@ -1,3 +1,53 @@
+# Google API基盤ブロック - エラーマッピング付き
+---
+slug: google-api
+version: 2
+name: Google API
+description: Google API基盤ブロック
+category: apps
+subcategory: google
+icon: cloud
+parent_block_slug: api-key-query
+enabled: true
+
+config_defaults:
+  secret_key: GOOGLE_API_KEY
+
+config_schema:
+  type: object
+  properties:
+    api_key:
+      type: string
+      title: API Key
+
+# エラーマッピング - PostProcessの代わり
+response:
+  error_mapping:
+    - status: 404
+      code: GOOGLE_003
+      message: リソースが見つかりません
+    - condition: body.error
+      code: GOOGLE_002
+      message: "{{body.error.message}}"
+
+ui_config:
+  icon: cloud
+  color: "#4285F4"
+
+error_codes:
+  - code: GOOGLE_001
+    name: API_KEY_NOT_CONFIGURED
+    description: API Keyが設定されていません
+    retryable: false
+  - code: GOOGLE_002
+    name: API_ERROR
+    description: Google APIエラー
+    retryable: true
+  - code: GOOGLE_003
+    name: NOT_FOUND
+    description: リソースが見つかりません
+    retryable: false
+
 # Google Sheets読み取りブロック - 宣言的設定を使用
 ---
 slug: gsheets_read
