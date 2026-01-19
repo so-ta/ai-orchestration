@@ -127,7 +127,7 @@ export function useTemplates() {
 
   // Delete a template
   async function deleteTemplate(id: string): Promise<void> {
-    await api.delete<void>(`/api/v1/templates/${id}`)
+    await api.delete(`/api/v1/templates/${id}`)
     templates.value = templates.value.filter(t => t.id !== id)
   }
 

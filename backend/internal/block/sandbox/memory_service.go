@@ -14,10 +14,10 @@ import (
 type MemoryRepository interface {
 	Create(ctx context.Context, memory *domain.AgentMemory) error
 	CreateBatch(ctx context.Context, memories []*domain.AgentMemory) error
-	GetByRunAndStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error)
-	GetLastNByRunAndStep(ctx context.Context, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error)
-	GetNextSequenceNumber(ctx context.Context, runID, stepID uuid.UUID) (int, error)
-	DeleteByRunAndStep(ctx context.Context, runID, stepID uuid.UUID) error
+	GetByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error)
+	GetLastNByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error)
+	GetNextSequenceNumber(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error)
+	DeleteByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) error
 }
 
 // MemoryService provides memory management for agent blocks
@@ -54,14 +54,14 @@ func (s *MemoryService) Initialize() error {
 	}
 
 	// Get next sequence number
-	nextSeq, err := s.repo.GetNextSequenceNumber(s.ctx, s.runID, s.stepID)
+	nextSeq, err := s.repo.GetNextSequenceNumber(s.ctx, s.tenantID, s.runID, s.stepID)
 	if err != nil {
 		return err
 	}
 	s.nextSeq = nextSeq
 
 	// Load existing memory
-	memories, err := s.repo.GetByRunAndStep(s.ctx, s.runID, s.stepID)
+	memories, err := s.repo.GetByRunAndStep(s.ctx, s.tenantID, s.runID, s.stepID)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (s *MemoryService) Clear() error {
 	s.nextSeq = 1
 
 	if s.repo != nil {
-		return s.repo.DeleteByRunAndStep(s.ctx, s.runID, s.stepID)
+		return s.repo.DeleteByRunAndStep(s.ctx, s.tenantID, s.runID, s.stepID)
 	}
 
 	return nil

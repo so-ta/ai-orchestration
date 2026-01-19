@@ -90,7 +90,7 @@ export function useGitSync() {
     loading.value = true
     error.value = null
     try {
-      await api.delete<void>(`/api/v1/workflows/${projectId}/git-sync`)
+      await api.delete(`/api/v1/workflows/${projectId}/git-sync`)
       gitSync.value = null
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Failed to delete git sync'
@@ -105,7 +105,7 @@ export function useGitSync() {
     syncing.value = true
     error.value = null
     try {
-      await api.post<void>(`/api/v1/workflows/${projectId}/git-sync/sync`, { operation })
+      await api.post(`/api/v1/workflows/${projectId}/git-sync/sync`, { operation })
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : 'Sync failed'
       throw e

@@ -466,21 +466,21 @@ type CredentialAccessFilter struct {
 type AgentMemoryRepository interface {
 	Create(ctx context.Context, memory *domain.AgentMemory) error
 	CreateBatch(ctx context.Context, memories []*domain.AgentMemory) error
-	GetByRunAndStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error)
-	GetLastNByRunAndStep(ctx context.Context, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error)
-	GetNextSequenceNumber(ctx context.Context, runID, stepID uuid.UUID) (int, error)
-	DeleteByRunAndStep(ctx context.Context, runID, stepID uuid.UUID) error
-	DeleteByRun(ctx context.Context, runID uuid.UUID) error
+	GetByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error)
+	GetLastNByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error)
+	GetNextSequenceNumber(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error)
+	DeleteByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) error
+	DeleteByRun(ctx context.Context, tenantID, runID uuid.UUID) error
 }
 
 // AgentChatSessionRepository defines the interface for agent chat session persistence
 type AgentChatSessionRepository interface {
 	Create(ctx context.Context, session *domain.AgentChatSession) error
-	GetByID(ctx context.Context, id uuid.UUID) (*domain.AgentChatSession, error)
-	ListByProject(ctx context.Context, projectID uuid.UUID, filter AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error)
-	ListByUser(ctx context.Context, userID string, filter AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error)
+	GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.AgentChatSession, error)
+	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID, filter AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error)
+	ListByUser(ctx context.Context, tenantID uuid.UUID, userID string, filter AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error)
 	Update(ctx context.Context, session *domain.AgentChatSession) error
-	Close(ctx context.Context, id uuid.UUID) error
+	Close(ctx context.Context, tenantID, id uuid.UUID) error
 }
 
 // AgentChatSessionFilter defines filtering options for agent chat session list

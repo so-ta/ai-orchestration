@@ -23,12 +23,12 @@ export function useRetryConfig() {
     stepId: string,
     input: UpdateRetryConfigInput
   ): Promise<void> {
-    return api.put<void>(`/api/v1/workflows/${projectId}/steps/${stepId}/retry-config`, input)
+    await api.put(`/api/v1/workflows/${projectId}/steps/${stepId}/retry-config`, input)
   }
 
   // Delete retry config for a step (reset to defaults)
   async function deleteRetryConfig(projectId: string, stepId: string): Promise<void> {
-    return api.delete<void>(`/api/v1/workflows/${projectId}/steps/${stepId}/retry-config`)
+    await api.delete(`/api/v1/workflows/${projectId}/steps/${stepId}/retry-config`)
   }
 
   // Helper: calculate delay for a specific retry attempt

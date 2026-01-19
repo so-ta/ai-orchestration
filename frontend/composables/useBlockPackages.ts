@@ -79,7 +79,7 @@ export function useBlockPackages() {
 
   // Delete a block package
   async function deletePackage(id: string): Promise<void> {
-    await api.delete<void>(`/api/v1/block-packages/${id}`)
+    await api.delete(`/api/v1/block-packages/${id}`)
     packages.value = packages.value.filter(p => p.id !== id)
   }
 

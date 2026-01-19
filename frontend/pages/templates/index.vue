@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectTemplate, TemplateCategory } from '~/types/api'
+import type { ProjectTemplate } from '~/types/api'
 
 definePageMeta({
   layout: 'default'
@@ -69,7 +69,7 @@ async function handleUseTemplate(template: ProjectTemplate) {
     const project = await useTemplate(template.id, projectName)
     toast.success(t('templates.messages.useSuccess'))
     router.push(`/projects/${project.id}`)
-  } catch (e) {
+  } catch {
     toast.error(t('templates.messages.useFailed'))
   }
 }
@@ -88,7 +88,7 @@ async function handleDeleteTemplate(template: ProjectTemplate) {
       await deleteTemplate(template.id)
       toast.success('テンプレートを削除しました')
       await loadTemplates()
-    } catch (e) {
+    } catch {
       toast.error('削除に失敗しました')
     }
   }

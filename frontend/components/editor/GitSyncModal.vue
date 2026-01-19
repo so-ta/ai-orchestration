@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectGitSync, GitSyncDirection, Credential } from '~/types/api'
+import type { GitSyncDirection, Credential } from '~/types/api'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -10,8 +10,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'close'): void
-  (e: 'updated'): void
+  (e: 'close' | 'updated'): void
 }>()
 
 const {
@@ -121,7 +120,7 @@ async function handleSave() {
     toast.success(t('gitSync.messages.configured'))
     isEditing.value = false
     emit('updated')
-  } catch (e) {
+  } catch {
     toast.error(t('gitSync.messages.configFailed'))
   }
 }
@@ -131,7 +130,7 @@ async function handleSync() {
     await triggerSync(props.projectId)
     toast.success(t('gitSync.messages.syncSuccess'))
     await fetchGitSync(props.projectId)
-  } catch (e) {
+  } catch {
     toast.error(t('gitSync.messages.syncFailed'))
   }
 }
@@ -143,7 +142,7 @@ async function handleDelete() {
     resetForm()
     isEditing.value = true
     emit('updated')
-  } catch (e) {
+  } catch {
     toast.error('削除に失敗しました')
   }
 }

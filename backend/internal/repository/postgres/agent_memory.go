@@ -104,17 +104,17 @@ func (r *AgentMemoryRepository) CreateBatch(ctx context.Context, memories []*dom
 	return tx.Commit(ctx)
 }
 
-// GetByRunAndStep retrieves all memory entries for a run/step combination
-func (r *AgentMemoryRepository) GetByRunAndStep(ctx context.Context, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error) {
+// GetByRunAndStep retrieves all memory entries for a run/step combination with tenant isolation
+func (r *AgentMemoryRepository) GetByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) ([]*domain.AgentMemory, error) {
 	query := `
 		SELECT id, tenant_id, run_id, step_id, role, content,
 		       tool_calls, tool_call_id, metadata, sequence_number, created_at
 		FROM agent_memory
-		WHERE run_id = $1 AND step_id = $2
+		WHERE tenant_id = $1 AND run_id = $2 AND step_id = $3
 		ORDER BY sequence_number ASC
 	`
 
-	rows, err := r.db.Query(ctx, query, runID, stepID)
+	rows, err := r.db.Query(ctx, query, tenantID, runID, stepID)
 	if err != nil {
 		return nil, err
 	}
@@ -154,18 +154,18 @@ func (r *AgentMemoryRepository) GetByRunAndStep(ctx context.Context, runID, step
 	return memories, rows.Err()
 }
 
-// GetLastNByRunAndStep retrieves the last N memory entries for a run/step combination
-func (r *AgentMemoryRepository) GetLastNByRunAndStep(ctx context.Context, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error) {
+// GetLastNByRunAndStep retrieves the last N memory entries for a run/step combination with tenant isolation
+func (r *AgentMemoryRepository) GetLastNByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID, n int) ([]*domain.AgentMemory, error) {
 	query := `
 		SELECT id, tenant_id, run_id, step_id, role, content,
 		       tool_calls, tool_call_id, metadata, sequence_number, created_at
 		FROM agent_memory
-		WHERE run_id = $1 AND step_id = $2
+		WHERE tenant_id = $1 AND run_id = $2 AND step_id = $3
 		ORDER BY sequence_number DESC
-		LIMIT $3
+		LIMIT $4
 	`
 
-	rows, err := r.db.Query(ctx, query, runID, stepID, n)
+	rows, err := r.db.Query(ctx, query, tenantID, runID, stepID, n)
 	if err != nil {
 		return nil, err
 	}
@@ -214,16 +214,16 @@ func (r *AgentMemoryRepository) GetLastNByRunAndStep(ctx context.Context, runID,
 	return memories, nil
 }
 
-// GetNextSequenceNumber returns the next sequence number for a run/step combination
-func (r *AgentMemoryRepository) GetNextSequenceNumber(ctx context.Context, runID, stepID uuid.UUID) (int, error) {
+// GetNextSequenceNumber returns the next sequence number for a run/step combination with tenant isolation
+func (r *AgentMemoryRepository) GetNextSequenceNumber(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error) {
 	query := `
 		SELECT COALESCE(MAX(sequence_number), 0) + 1
 		FROM agent_memory
-		WHERE run_id = $1 AND step_id = $2
+		WHERE tenant_id = $1 AND run_id = $2 AND step_id = $3
 	`
 
 	var nextSeq int
-	err := r.db.QueryRow(ctx, query, runID, stepID).Scan(&nextSeq)
+	err := r.db.QueryRow(ctx, query, tenantID, runID, stepID).Scan(&nextSeq)
 	if err != nil {
 		return 0, err
 	}
@@ -231,26 +231,26 @@ func (r *AgentMemoryRepository) GetNextSequenceNumber(ctx context.Context, runID
 	return nextSeq, nil
 }
 
-// DeleteByRunAndStep deletes all memory entries for a run/step combination
-func (r *AgentMemoryRepository) DeleteByRunAndStep(ctx context.Context, runID, stepID uuid.UUID) error {
-	query := `DELETE FROM agent_memory WHERE run_id = $1 AND step_id = $2`
-	_, err := r.db.Exec(ctx, query, runID, stepID)
+// DeleteByRunAndStep deletes all memory entries for a run/step combination with tenant isolation
+func (r *AgentMemoryRepository) DeleteByRunAndStep(ctx context.Context, tenantID, runID, stepID uuid.UUID) error {
+	query := `DELETE FROM agent_memory WHERE tenant_id = $1 AND run_id = $2 AND step_id = $3`
+	_, err := r.db.Exec(ctx, query, tenantID, runID, stepID)
 	return err
 }
 
-// DeleteByRun deletes all memory entries for a run
-func (r *AgentMemoryRepository) DeleteByRun(ctx context.Context, runID uuid.UUID) error {
-	query := `DELETE FROM agent_memory WHERE run_id = $1`
-	_, err := r.db.Exec(ctx, query, runID)
+// DeleteByRun deletes all memory entries for a run with tenant isolation
+func (r *AgentMemoryRepository) DeleteByRun(ctx context.Context, tenantID, runID uuid.UUID) error {
+	query := `DELETE FROM agent_memory WHERE tenant_id = $1 AND run_id = $2`
+	_, err := r.db.Exec(ctx, query, tenantID, runID)
 	return err
 }
 
-// Count returns the number of memory entries for a run/step combination
-func (r *AgentMemoryRepository) Count(ctx context.Context, runID, stepID uuid.UUID) (int, error) {
-	query := `SELECT COUNT(*) FROM agent_memory WHERE run_id = $1 AND step_id = $2`
+// Count returns the number of memory entries for a run/step combination with tenant isolation
+func (r *AgentMemoryRepository) Count(ctx context.Context, tenantID, runID, stepID uuid.UUID) (int, error) {
+	query := `SELECT COUNT(*) FROM agent_memory WHERE tenant_id = $1 AND run_id = $2 AND step_id = $3`
 
 	var count int
-	err := r.db.QueryRow(ctx, query, runID, stepID).Scan(&count)
+	err := r.db.QueryRow(ctx, query, tenantID, runID, stepID).Scan(&count)
 	if err != nil {
 		return 0, err
 	}

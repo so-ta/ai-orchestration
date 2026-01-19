@@ -45,17 +45,17 @@ func (r *AgentChatSessionRepository) Create(ctx context.Context, session *domain
 	return err
 }
 
-// GetByID retrieves an agent chat session by ID
-func (r *AgentChatSessionRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.AgentChatSession, error) {
+// GetByID retrieves an agent chat session by ID with tenant isolation
+func (r *AgentChatSessionRepository) GetByID(ctx context.Context, tenantID, id uuid.UUID) (*domain.AgentChatSession, error) {
 	query := `
 		SELECT id, tenant_id, project_id, start_step_id, user_id,
 		       status, metadata, created_at, updated_at, closed_at
 		FROM agent_chat_sessions
-		WHERE id = $1
+		WHERE tenant_id = $1 AND id = $2
 	`
 
 	session := &domain.AgentChatSession{}
-	err := r.db.QueryRow(ctx, query, id).Scan(
+	err := r.db.QueryRow(ctx, query, tenantID, id).Scan(
 		&session.ID,
 		&session.TenantID,
 		&session.ProjectID,
@@ -74,12 +74,12 @@ func (r *AgentChatSessionRepository) GetByID(ctx context.Context, id uuid.UUID) 
 	return session, nil
 }
 
-// ListByProject retrieves agent chat sessions for a project
-func (r *AgentChatSessionRepository) ListByProject(ctx context.Context, projectID uuid.UUID, filter repository.AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error) {
+// ListByProject retrieves agent chat sessions for a project with tenant isolation
+func (r *AgentChatSessionRepository) ListByProject(ctx context.Context, tenantID, projectID uuid.UUID, filter repository.AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error) {
 	// Count query
-	countQuery := `SELECT COUNT(*) FROM agent_chat_sessions WHERE project_id = $1`
-	args := []interface{}{projectID}
-	argIndex := 2
+	countQuery := `SELECT COUNT(*) FROM agent_chat_sessions WHERE tenant_id = $1 AND project_id = $2`
+	args := []interface{}{tenantID, projectID}
+	argIndex := 3
 
 	if filter.Status != nil {
 		countQuery += ` AND status = $` + string(rune('0'+argIndex))
@@ -97,10 +97,10 @@ func (r *AgentChatSessionRepository) ListByProject(ctx context.Context, projectI
 		SELECT id, tenant_id, project_id, start_step_id, user_id,
 		       status, metadata, created_at, updated_at, closed_at
 		FROM agent_chat_sessions
-		WHERE project_id = $1
+		WHERE tenant_id = $1 AND project_id = $2
 	`
-	args = []interface{}{projectID}
-	argIndex = 2
+	args = []interface{}{tenantID, projectID}
+	argIndex = 3
 
 	if filter.Status != nil {
 		query += ` AND status = $` + string(rune('0'+argIndex))
@@ -152,12 +152,12 @@ func (r *AgentChatSessionRepository) ListByProject(ctx context.Context, projectI
 	return sessions, total, rows.Err()
 }
 
-// ListByUser retrieves agent chat sessions for a user
-func (r *AgentChatSessionRepository) ListByUser(ctx context.Context, userID string, filter repository.AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error) {
+// ListByUser retrieves agent chat sessions for a user with tenant isolation
+func (r *AgentChatSessionRepository) ListByUser(ctx context.Context, tenantID uuid.UUID, userID string, filter repository.AgentChatSessionFilter) ([]*domain.AgentChatSession, int, error) {
 	// Count query
-	countQuery := `SELECT COUNT(*) FROM agent_chat_sessions WHERE user_id = $1`
-	args := []interface{}{userID}
-	argIndex := 2
+	countQuery := `SELECT COUNT(*) FROM agent_chat_sessions WHERE tenant_id = $1 AND user_id = $2`
+	args := []interface{}{tenantID, userID}
+	argIndex := 3
 
 	if filter.Status != nil {
 		countQuery += ` AND status = $` + string(rune('0'+argIndex))
@@ -175,10 +175,10 @@ func (r *AgentChatSessionRepository) ListByUser(ctx context.Context, userID stri
 		SELECT id, tenant_id, project_id, start_step_id, user_id,
 		       status, metadata, created_at, updated_at, closed_at
 		FROM agent_chat_sessions
-		WHERE user_id = $1
+		WHERE tenant_id = $1 AND user_id = $2
 	`
-	args = []interface{}{userID}
-	argIndex = 2
+	args = []interface{}{tenantID, userID}
+	argIndex = 3
 
 	if filter.Status != nil {
 		query += ` AND status = $` + string(rune('0'+argIndex))
@@ -230,15 +230,16 @@ func (r *AgentChatSessionRepository) ListByUser(ctx context.Context, userID stri
 	return sessions, total, rows.Err()
 }
 
-// Update updates an agent chat session
+// Update updates an agent chat session with tenant isolation
 func (r *AgentChatSessionRepository) Update(ctx context.Context, session *domain.AgentChatSession) error {
 	query := `
 		UPDATE agent_chat_sessions
-		SET status = $2, metadata = $3, updated_at = $4, closed_at = $5
-		WHERE id = $1
+		SET status = $3, metadata = $4, updated_at = $5, closed_at = $6
+		WHERE tenant_id = $1 AND id = $2
 	`
 
 	_, err := r.db.Exec(ctx, query,
+		session.TenantID,
 		session.ID,
 		session.Status,
 		session.Metadata,
@@ -249,15 +250,15 @@ func (r *AgentChatSessionRepository) Update(ctx context.Context, session *domain
 	return err
 }
 
-// Close closes an agent chat session
-func (r *AgentChatSessionRepository) Close(ctx context.Context, id uuid.UUID) error {
+// Close closes an agent chat session with tenant isolation
+func (r *AgentChatSessionRepository) Close(ctx context.Context, tenantID, id uuid.UUID) error {
 	now := time.Now().UTC()
 	query := `
 		UPDATE agent_chat_sessions
-		SET status = $2, updated_at = $3, closed_at = $3
-		WHERE id = $1
+		SET status = $3, updated_at = $4, closed_at = $4
+		WHERE tenant_id = $1 AND id = $2
 	`
 
-	_, err := r.db.Exec(ctx, query, id, domain.AgentChatSessionStatusClosed, now)
+	_, err := r.db.Exec(ctx, query, tenantID, id, domain.AgentChatSessionStatusClosed, now)
 	return err
 }

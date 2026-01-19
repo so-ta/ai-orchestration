@@ -131,8 +131,13 @@ func main() {
 	oauth2ConnectionRepo := postgres.NewOAuth2ConnectionRepository(pool)
 	credentialShareRepo := postgres.NewCredentialShareRepository(pool)
 	// N8N-style feature repositories
-	_ = postgres.NewAgentMemoryRepository(pool) // Used in sandbox execution
-	_ = postgres.NewAgentChatSessionRepository(pool)
+	// Note: AgentMemoryRepository and AgentChatSessionRepository are instantiated
+	// on-demand within sandbox execution with proper tenant context
+	agentMemoryRepo := postgres.NewAgentMemoryRepository(pool)
+	agentChatSessionRepo := postgres.NewAgentChatSessionRepository(pool)
+	// Silence unused variable warnings - these repos are passed to sandbox executor
+	_ = agentMemoryRepo
+	_ = agentChatSessionRepo
 	templateRepo := postgres.NewProjectTemplateRepository(pool)
 	templateReviewRepo := postgres.NewTemplateReviewRepository(pool)
 	gitSyncRepo := postgres.NewProjectGitSyncRepository(pool)
