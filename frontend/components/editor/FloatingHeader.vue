@@ -11,6 +11,7 @@
 
 import type { Project } from '~/types/api'
 import { onClickOutside } from '@vueuse/core'
+import UndoRedoControls from './UndoRedoControls.vue'
 
 const { t } = useI18n()
 
@@ -135,6 +136,12 @@ const saveStatusText = computed(() => {
       </Transition>
     </div>
 
+    <!-- Separator -->
+    <div class="header-separator" />
+
+    <!-- Undo/Redo Controls -->
+    <UndoRedoControls />
+
     <!-- Save Status (gray text) -->
     <span class="save-status">{{ saveStatusText }}</span>
 
@@ -237,6 +244,13 @@ const saveStatusText = computed(() => {
 .menu-divider {
   height: 1px;
   margin: 4px 0;
+  background: #e5e7eb;
+}
+
+/* Header Separator */
+.header-separator {
+  width: 1px;
+  height: 20px;
   background: #e5e7eb;
 }
 

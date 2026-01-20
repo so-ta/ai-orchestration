@@ -10,6 +10,8 @@ interface KeyboardShortcutsOptions {
   onCopy: () => void
   onPaste: (data: { type: StepType; name: string; config: Record<string, unknown> }) => void
   onClearSelection: () => void
+  onUndo?: () => void
+  onRedo?: () => void
 }
 
 interface ClipboardData {
@@ -23,7 +25,13 @@ const stepClipboard = ref<ClipboardData | null>(null)
 
 /**
  * Keyboard shortcuts composable for workflow editor
- * Handles: Delete, Cmd/Ctrl+C (copy), Cmd/Ctrl+V (paste), Escape (deselect)
+ * Handles:
+ * - Cmd/Ctrl+Z: Undo
+ * - Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y: Redo
+ * - Delete/Backspace: Delete selected step or group
+ * - Cmd/Ctrl+C: Copy selected step
+ * - Cmd/Ctrl+V: Paste step
+ * - Escape: Clear selection
  */
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
   const {
@@ -35,6 +43,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
     onCopy,
     onPaste,
     onClearSelection,
+    onUndo,
+    onRedo,
   } = options
 
   // Check if user is typing in an input field
@@ -56,6 +66,25 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions) {
 
     const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
     const modKey = isMac ? event.metaKey : event.ctrlKey
+
+    // Cmd/Ctrl + Z - Undo
+    if (modKey && event.key === 'z' && !event.shiftKey) {
+      if (onUndo) {
+        event.preventDefault()
+        onUndo()
+        return
+      }
+    }
+
+    // Cmd/Ctrl + Shift + Z or Cmd/Ctrl + Y - Redo
+    if ((modKey && event.key === 'z' && event.shiftKey) ||
+        (modKey && event.key === 'y')) {
+      if (onRedo) {
+        event.preventDefault()
+        onRedo()
+        return
+      }
+    }
 
     // Delete or Backspace - delete selected step or group
     if ((event.key === 'Delete' || event.key === 'Backspace') && !isReadonly.value) {

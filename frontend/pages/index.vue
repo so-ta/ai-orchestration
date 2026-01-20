@@ -11,10 +11,23 @@
  * - クイック検索モーダル（⌘K）
  */
 
-import type { Project, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort, StepRun } from '~/types/api'
+import type { Project, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort, StepRun, AgentConfig } from '~/types/api'
 import type DagEditor from '~/components/dag-editor/DagEditor.vue'
 import type { SlideOutPanel } from '~/composables/useEditorState'
 import { calculateLayout, calculateLayoutWithGroups, parseNodeId } from '~/utils/graph-layout'
+import { useCommandHistory } from '~/composables/useCommandHistory'
+import {
+  CreateStepCommand,
+  DeleteStepCommand,
+} from '~/composables/commands/StepCommands'
+import {
+  CreateEdgeCommand,
+  DeleteEdgeCommand,
+} from '~/composables/commands/EdgeCommands'
+import {
+  CreateGroupCommand,
+  DeleteGroupCommand,
+} from '~/composables/commands/GroupCommands'
 
 // Use editor layout (fullscreen, no padding)
 definePageMeta({
@@ -29,6 +42,9 @@ const blocksApi = useBlocks()
 const blockGroupsApi = useBlockGroups()
 const toast = useToast()
 const { confirm: _confirm } = useConfirm()
+
+// Command history for Undo/Redo
+const commandHistory = useCommandHistory()
 
 // URL sync
 const { projectIdFromUrl, setProjectInUrl } = useProjectUrlSync()
@@ -66,8 +82,8 @@ const running = ref(false)
 // Run dialog state
 const showRunDialog = ref(false)
 
-// Right panel mode: 'block' for properties, 'run' for run details
-type RightPanelMode = 'block' | 'run'
+// Right panel mode: 'block' for properties, 'run' for run details, 'group' for group properties
+type RightPanelMode = 'block' | 'run' | 'group'
 
 // Quick search modal
 const showQuickSearch = ref(false)
@@ -92,6 +108,18 @@ const latestRun = ref<Run | null>(null)
 
 // Selected block group
 const selectedGroupId = ref<string | null>(null)
+
+// Selected group computed
+const selectedGroup = computed(() => {
+  if (!selectedGroupId.value) return null
+  return blockGroups.value.find(g => g.id === selectedGroupId.value) || null
+})
+
+// Child steps for selected group
+const childStepsForSelectedGroup = computed(() => {
+  if (!selectedGroupId.value || !project.value?.steps) return []
+  return project.value.steps.filter(s => s.block_group_id === selectedGroupId.value)
+})
 
 // Projects are always editable
 const isReadonly = computed(() => false)
@@ -244,26 +272,32 @@ async function handleStepDrop(data: { type: StepType; name: string; position: { 
   }
 
   try {
-    const response = await projects.createStep(project.value.id, {
-      name: data.name,
-      type: data.type,
-      config: defaultConfigs[data.type] || {},
-      position: data.position,
-    })
+    const cmd = new CreateStepCommand(
+      project.value.id,
+      {
+        name: data.name,
+        type: data.type,
+        config: defaultConfigs[data.type] || {},
+        position: data.position,
+      },
+      projects,
+      project
+    )
+    await commandHistory.execute(cmd)
+
+    const createdStepId = cmd.getCreatedStepId()
 
     // If dropped inside a group, add the step to the group
-    if (data.groupId) {
+    if (data.groupId && createdStepId) {
       await blockGroupsApi.addStep(project.value.id, data.groupId, {
-        step_id: response.data.id,
+        step_id: createdStepId,
         group_role: data.groupRole || 'body',
       })
     }
 
-    // Add step to local state instead of reloading entire project
-    if (project.value) {
-      project.value.steps = [...(project.value.steps || []), response.data]
+    if (createdStepId) {
+      selectStep(createdStepId)
     }
-    selectStep(response.data.id)
   } catch (e) {
     toast.error('Failed to add step', e instanceof Error ? e.message : undefined)
   }
@@ -321,12 +355,14 @@ const stepRunsForDag = computed(() => {
 
 // Right panel visibility and mode
 const showRightPanel = computed(() => {
-  return editorState.selectedStep.value !== null || selectedRun.value !== null
+  return editorState.selectedStep.value !== null || selectedRun.value !== null || selectedGroupId.value !== null
 })
 
 const rightPanelMode = computed<RightPanelMode>(() => {
   // Block editing takes priority
   if (editorState.selectedStep.value !== null) return 'block'
+  // Group editing second
+  if (selectedGroupId.value !== null) return 'group'
   // Otherwise show run details
   return 'run'
 })
@@ -408,6 +444,7 @@ watch(() => selectedRun.value?.id, (newId, oldId) => {
 
 function handleCloseRightPanel() {
   clearSelection()
+  selectedGroupId.value = null
   setSelectedRun(null)
   setSelectedStepRun(null)
 }
@@ -430,33 +467,47 @@ function handleSelectGroup(group: BlockGroup) {
 async function handleDeleteGroup() {
   if (!selectedGroupId.value || isReadonly.value || !project.value) return
 
-  const groupId = selectedGroupId.value
+  const group = blockGroups.value.find(g => g.id === selectedGroupId.value)
+  if (!group) return
 
   try {
     saving.value = true
     selectedGroupId.value = null
 
-    // Remove group from local state immediately (optimistic update)
-    blockGroups.value = blockGroups.value.filter(g => g.id !== groupId)
+    const cmd = new DeleteGroupCommand(
+      project.value.id,
+      group,
+      blockGroupsApi,
+      blockGroups,
+      project
+    )
+    await commandHistory.execute(cmd)
 
-    // Clear block_group_id from steps that were in this group
-    if (project.value?.steps) {
-      for (const step of project.value.steps) {
-        if (step.block_group_id === groupId) {
-          step.block_group_id = undefined
-          step.group_role = undefined
-        }
-      }
-    }
-
-    // Delete from API
-    await blockGroupsApi.remove(project.value.id, groupId)
     toast.success(t('editor.groupDeleted'))
   } catch (e) {
     toast.error(t('editor.groupDeleteFailed'), e instanceof Error ? e.message : undefined)
     await loadProject(project.value.id)
   } finally {
     saving.value = false
+  }
+}
+
+// Update group config (for agent groups)
+async function handleUpdateGroupConfig(config: AgentConfig) {
+  if (!selectedGroupId.value || isReadonly.value || !project.value) return
+
+  try {
+    // Update local state
+    const group = blockGroups.value.find(g => g.id === selectedGroupId.value)
+    if (group) {
+      group.config = config
+    }
+
+    // Save to API
+    await blockGroupsApi.update(project.value.id, selectedGroupId.value, { config })
+  } catch (e) {
+    toast.error('Failed to update group config', e instanceof Error ? e.message : undefined)
+    await loadProject(project.value.id)
   }
 }
 
@@ -484,15 +535,18 @@ async function handleUpdateGroupPosition(groupId: string, updates: { position?: 
 async function handleGroupDrop(data: { type: BlockGroupType; name: string; position: { x: number; y: number } }) {
   if (!project.value || isReadonly.value) return
   try {
-    const response = await blockGroupsApi.create(project.value.id, {
-      name: data.name,
-      type: data.type,
-      position: data.position,
-      size: { width: 400, height: 300 },
-    })
-    if (response?.data) {
-      blockGroups.value = [...blockGroups.value, response.data]
-    }
+    const cmd = new CreateGroupCommand(
+      project.value.id,
+      {
+        name: data.name,
+        type: data.type,
+        position: data.position,
+        size: { width: 400, height: 300 },
+      },
+      blockGroupsApi,
+      blockGroups
+    )
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to create group', e instanceof Error ? e.message : undefined)
   }
@@ -869,27 +923,25 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
   const targetInfo = parseNodeId(target)
 
   try {
-    const edgeRequest: Parameters<typeof projects.createEdge>[1] = {
+    const edgeData: Parameters<typeof projects.createEdge>[1] = {
       source_port: sourcePort,
       target_port: targetPort,
     }
 
     if (sourceInfo.isGroup) {
-      edgeRequest.source_block_group_id = sourceInfo.id
+      edgeData.source_block_group_id = sourceInfo.id
     } else {
-      edgeRequest.source_step_id = sourceInfo.id
+      edgeData.source_step_id = sourceInfo.id
     }
 
     if (targetInfo.isGroup) {
-      edgeRequest.target_block_group_id = targetInfo.id
+      edgeData.target_block_group_id = targetInfo.id
     } else {
-      edgeRequest.target_step_id = targetInfo.id
+      edgeData.target_step_id = targetInfo.id
     }
 
-    const response = await projects.createEdge(project.value.id, edgeRequest as Parameters<typeof projects.createEdge>[1])
-    if (project.value && response?.data) {
-      project.value.edges = [...(project.value.edges || []), response.data]
-    }
+    const cmd = new CreateEdgeCommand(project.value.id, edgeData, projects, project)
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to add edge', e instanceof Error ? e.message : undefined)
   }
@@ -899,11 +951,12 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
 async function handleDeleteEdge(edgeId: string) {
   if (!project.value || isReadonly.value) return
 
+  const edge = project.value.edges?.find(e => e.id === edgeId)
+  if (!edge) return
+
   try {
-    await projects.deleteEdge(project.value.id, edgeId)
-    if (project.value?.edges) {
-      project.value.edges = project.value.edges.filter(e => e.id !== edgeId)
-    }
+    const cmd = new DeleteEdgeCommand(project.value.id, edge, projects, project)
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error(t('editor.edgeDeleteFailed'), e instanceof Error ? e.message : undefined)
   }
@@ -1076,15 +1129,12 @@ async function handleDeleteStep() {
 
   try {
     saving.value = true
-    const stepId = step.id
     clearSelection()
     setSelectedRun(null)
-    await projects.deleteStep(project.value.id, stepId)
 
-    project.value.steps = (project.value.steps || []).filter(s => s.id !== stepId)
-    project.value.edges = (project.value.edges || []).filter(
-      e => e.source_step_id !== stepId && e.target_step_id !== stepId
-    )
+    const cmd = new DeleteStepCommand(project.value.id, step, projects, project)
+    await commandHistory.execute(cmd)
+
     toast.success(t('editor.stepDeleted'))
   } catch (e) {
     toast.error('Failed to delete step', e instanceof Error ? e.message : undefined)
@@ -1292,6 +1342,26 @@ useKeyboardShortcuts({
     selectedGroupId.value = null
     setSelectedRun(null)
   },
+  onUndo: async () => {
+    try {
+      const success = await commandHistory.undo()
+      if (success) {
+        toast.info(t('editor.undone'))
+      }
+    } catch (e) {
+      toast.error(t('editor.undoFailed'), e instanceof Error ? e.message : undefined)
+    }
+  },
+  onRedo: async () => {
+    try {
+      const success = await commandHistory.redo()
+      if (success) {
+        toast.info(t('editor.redone'))
+      }
+    } catch (e) {
+      toast.error(t('editor.redoFailed'), e instanceof Error ? e.message : undefined)
+    }
+  },
 })
 
 // Load block definitions
@@ -1444,6 +1514,16 @@ onMounted(async () => {
           @delete="handleDeleteStep"
           @update:name="handleUpdateStepName"
           @run:created="handleRunCreated"
+        />
+
+        <!-- Agent Group Panel -->
+        <AgentGroupPanel
+          v-else-if="rightPanelMode === 'group' && selectedGroup"
+          :group="selectedGroup"
+          :child-steps="childStepsForSelectedGroup"
+          :readonly="isReadonly"
+          @update:config="handleUpdateGroupConfig"
+          @close="handleCloseRightPanel"
         />
 
         <!-- Run Details Panel -->
