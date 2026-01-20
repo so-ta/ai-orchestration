@@ -103,7 +103,11 @@ func (r *AuditLogRepository) ListByTenant(ctx context.Context, tenantID uuid.UUI
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argIdx, argIdx+1)
 
-	offset := (filter.Page - 1) * filter.Limit
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * filter.Limit
 	args = append(args, filter.Limit, offset)
 
 	rows, err := r.pool.Query(ctx, query, args...)

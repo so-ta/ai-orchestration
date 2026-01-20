@@ -93,7 +93,11 @@ func (r *RunRepository) ListByProject(ctx context.Context, tenantID, projectID u
 	`
 
 	if filter.Limit > 0 {
-		offset := (filter.Page - 1) * filter.Limit
+		page := filter.Page
+		if page < 1 {
+			page = 1
+		}
+		offset := (page - 1) * filter.Limit
 		query += ` LIMIT $3 OFFSET $4`
 		args = append(args, filter.Limit, offset)
 	}
@@ -143,7 +147,11 @@ func (r *RunRepository) ListByStartStep(ctx context.Context, tenantID, projectID
 	`
 
 	if filter.Limit > 0 {
-		offset := (filter.Page - 1) * filter.Limit
+		page := filter.Page
+		if page < 1 {
+			page = 1
+		}
+		offset := (page - 1) * filter.Limit
 		query += ` LIMIT $4 OFFSET $5`
 		args = append(args, filter.Limit, offset)
 	}

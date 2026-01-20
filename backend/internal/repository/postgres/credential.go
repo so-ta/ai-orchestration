@@ -191,7 +191,11 @@ func (r *CredentialRepository) List(ctx context.Context, tenantID uuid.UUID, fil
 		FROM credentials` + whereClause
 
 	query += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argIdx, argIdx+1)
-	offset := (filter.Page - 1) * filter.Limit
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * filter.Limit
 	args = append(args, filter.Limit, offset)
 
 	rows, err := r.pool.Query(ctx, query, args...)
