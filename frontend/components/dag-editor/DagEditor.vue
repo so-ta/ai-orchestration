@@ -2513,6 +2513,12 @@ defineExpose({
             <span class="dag-group-name">{{ data.label }}</span>
           </div>
 
+          <!-- Entry Point Indicator (for single-zone groups) -->
+          <div v-if="!data.hasMultipleZones" class="dag-group-entry" :style="{ color: data.color }">
+            <span class="dag-group-entry-arrow">→</span>
+            <span class="dag-group-entry-label">Start</span>
+          </div>
+
           <!-- Multi-Section Zone Dividers and Labels -->
           <template v-if="data.hasMultipleZones && data.zones">
             <!-- Section Labels and Dividers -->
@@ -3223,6 +3229,29 @@ defineExpose({
 .dag-group-handle-output:hover {
   filter: brightness(1.1);
   transform: scale(1.25) translateY(-50%);
+}
+
+/* Group Entry Point Indicator - Minimal Linear */
+.dag-group-entry {
+  position: absolute;
+  top: 44px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.5;
+}
+
+.dag-group-entry-arrow {
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.dag-group-entry-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /* Group Output Port Labels */
