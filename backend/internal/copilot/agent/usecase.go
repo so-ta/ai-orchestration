@@ -81,11 +81,11 @@ type RunAgentInput struct {
 
 // RunAgentOutput represents output from running the agent
 type RunAgentOutput struct {
-	SessionID      uuid.UUID           `json:"session_id"`
-	Response       string              `json:"response"`
-	ToolsUsed      []string            `json:"tools_used"`
-	Iterations     int                 `json:"iterations"`
-	TotalTokens    int                 `json:"total_tokens"`
+	SessionID      uuid.UUID              `json:"session_id"`
+	Response       string                 `json:"response"`
+	ToolsUsed      []string               `json:"tools_used"`
+	Iterations     int                    `json:"iterations"`
+	TotalTokens    int                    `json:"total_tokens"`
 	UpdatedSession *domain.CopilotSession `json:"updated_session,omitempty"`
 }
 
@@ -215,7 +215,57 @@ type StartAgentSessionOutput struct {
 	ToolsUsed []string               `json:"tools_used"`
 }
 
-// StartAgentSession starts a new agent session and processes the initial prompt
+// CreateAgentSessionOnly creates a new agent session without processing the initial prompt.
+// The initial prompt is stored as a user message, but the agent loop is not run.
+// Use RunAgentWithStreaming to process the message via SSE.
+func (u *AgentUsecase) CreateAgentSessionOnly(ctx context.Context, input StartAgentSessionInput) (*StartAgentSessionOutput, error) {
+	// Verify project exists if specified
+	if input.ContextProjectID != nil {
+		project, err := u.projectRepo.GetByID(ctx, input.TenantID, *input.ContextProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("get project: %w", err)
+		}
+		if project == nil {
+			return nil, domain.ErrProjectNotFound
+		}
+	}
+
+	// Set default mode if not specified
+	mode := input.Mode
+	if mode == "" {
+		mode = domain.CopilotSessionModeCreate
+	}
+
+	// Create new session
+	session := domain.NewCopilotSession(input.TenantID, input.UserID, input.ContextProjectID, mode)
+	if err := u.sessionRepo.Create(ctx, session); err != nil {
+		return nil, fmt.Errorf("create session: %w", err)
+	}
+
+	// Store initial prompt in session title for reference
+	session.Title = truncateString(input.InitialPrompt, 100)
+	if err := u.sessionRepo.Update(ctx, session); err != nil {
+		slog.Warn("failed to update session title", "error", err)
+	}
+
+	return &StartAgentSessionOutput{
+		Session:   session,
+		Response:  "", // Will be populated via SSE stream
+		ToolsUsed: []string{},
+	}, nil
+}
+
+// truncateString truncates a string to the specified length
+func truncateString(s string, maxLen int) string {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	return string(runes[:maxLen-3]) + "..."
+}
+
+// StartAgentSession starts a new agent session and processes the initial prompt (synchronous)
+// Deprecated: Use CreateAgentSessionOnly + RunAgentWithStreaming for better timeout handling
 func (u *AgentUsecase) StartAgentSession(ctx context.Context, input StartAgentSessionInput) (*StartAgentSessionOutput, error) {
 	// Verify project exists if specified
 	if input.ContextProjectID != nil {
@@ -285,6 +335,16 @@ func (u *AgentUsecase) StartAgentSession(ctx context.Context, input StartAgentSe
 		Response:  result.Response,
 		ToolsUsed: result.ToolsUsed,
 	}, nil
+}
+
+// GetSession retrieves a session with its messages
+func (u *AgentUsecase) GetSession(ctx context.Context, tenantID uuid.UUID, sessionID uuid.UUID) (*domain.CopilotSession, error) {
+	return u.sessionRepo.GetWithMessages(ctx, tenantID, sessionID)
+}
+
+// GetActiveSessionByProject retrieves the most recent active session for a user in a project
+func (u *AgentUsecase) GetActiveSessionByProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error) {
+	return u.sessionRepo.GetActiveByUserAndProject(ctx, tenantID, userID, projectID)
 }
 
 // GetAvailableTools returns the list of available tools

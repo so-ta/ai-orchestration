@@ -19,11 +19,39 @@ const copilotDraft = useCopilotDraft()
 
 // State
 const isLoading = ref(false)
+const isLoadingSession = ref(false)
 const chatMessage = ref('')
 const chatHistory = ref<Array<{ role: 'user' | 'assistant' | 'system'; content: string }>>([])
 
 // Agent state
 const agentSessionId = ref<string | null>(null)
+
+// Load active session from DB on mount
+async function loadActiveSession() {
+  if (isLoadingSession.value) return
+  isLoadingSession.value = true
+  try {
+    const result = await copilot.getActiveAgentSession(props.workflowId)
+    if (result.session) {
+      agentSessionId.value = result.session.id
+      // Convert messages to chat history format
+      chatHistory.value = result.session.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }))
+    }
+  } catch (e) {
+    console.warn('Failed to load active session from DB:', e)
+  } finally {
+    isLoadingSession.value = false
+  }
+}
+
+// Load on mount
+onMounted(() => {
+  loadActiveSession()
+})
+
 const agentStreamState = ref<AgentStreamState>({
   isStreaming: false,
   currentThinking: '',

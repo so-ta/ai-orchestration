@@ -121,7 +121,7 @@ func (a *AgentLoop) Run(ctx context.Context, input RunInput, events chan<- Event
 		// Send thinking event
 		a.sendEvent(events, EventTypeThinking, map[string]interface{}{
 			"iteration": iteration,
-			"message":   "推論中...",
+			"content":   "推論中...",
 		})
 
 		// Call LLM with tools
@@ -148,8 +148,8 @@ func (a *AgentLoop) Run(ctx context.Context, input RunInput, events chan<- Event
 			// Send tool call events
 			for _, tc := range toolCalls {
 				a.sendEvent(events, EventTypeToolCall, map[string]interface{}{
-					"tool":  tc.Name,
-					"input": tc.Input,
+					"tool_name": tc.Name,
+					"arguments": tc.Input,
 				})
 				toolsUsed = append(toolsUsed, tc.Name)
 			}
@@ -184,14 +184,17 @@ func (a *AgentLoop) Run(ctx context.Context, input RunInput, events chan<- Event
 		// Send partial text for any text content
 		if responseText != "" {
 			a.sendEvent(events, EventTypePartialText, map[string]interface{}{
-				"text": responseText,
+				"content": responseText,
 			})
 		}
 
 		// Check if we're done
 		if resp.IsEndTurn() {
 			a.sendEvent(events, EventTypeComplete, map[string]interface{}{
-				"response": responseText,
+				"response":     responseText,
+				"tools_used":   toolsUsed,
+				"iterations":   iteration + 1,
+				"total_tokens": totalTokens,
 			})
 
 			return &Result{
@@ -232,9 +235,9 @@ func (a *AgentLoop) executeToolCalls(ctx context.Context, toolCalls []tools.Tool
 			})
 
 			a.sendEvent(events, EventTypeToolResult, map[string]interface{}{
-				"tool":     tc.Name,
-				"is_error": true,
-				"error":    err.Error(),
+				"tool_name": tc.Name,
+				"is_error":  true,
+				"result":    err.Error(),
 			})
 			continue
 		}
@@ -246,8 +249,9 @@ func (a *AgentLoop) executeToolCalls(ctx context.Context, toolCalls []tools.Tool
 		})
 
 		a.sendEvent(events, EventTypeToolResult, map[string]interface{}{
-			"tool":   tc.Name,
-			"result": result,
+			"tool_name": tc.Name,
+			"is_error":  false,
+			"result":    result,
 		})
 	}
 

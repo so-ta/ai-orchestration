@@ -634,6 +634,11 @@
       "cancelled": "キャンセルしました",
       "cancel": "キャンセル"
     },
+    "sidebar": {
+      "title": "Copilot",
+      "expand": "Copilotを開く",
+      "collapse": "Copilotを閉じる"
+    },
     "toolStatus": {
       "calling": "実行中",
       "success": "成功",

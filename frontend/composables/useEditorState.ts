@@ -4,6 +4,11 @@ const STORAGE_KEY = 'project-editor-panel-widths'
 const STORAGE_KEY_COLLAPSED = 'project-editor-panel-collapsed'
 const STORAGE_KEY_LAST_PROJECT = 'project-editor-last-project'
 const STORAGE_KEY_BOTTOM_PANEL = 'project-editor-bottom-panel'
+const STORAGE_KEY_COPILOT_SIDEBAR = 'project-editor-copilot-sidebar'
+
+// Copilot Sidebar constants
+export const COPILOT_SIDEBAR_WIDTH = 320
+export const COPILOT_SIDEBAR_COLLAPSED_WIDTH = 48
 
 // Clipboard data structure
 interface StepClipboard {
@@ -32,6 +37,9 @@ const rightCollapsed = ref(false)
 const activeSlideOut = ref<SlideOutPanel>(null)
 const currentProjectId = ref<string | null>(null)
 const lastProjectId = ref<string | null>(null)
+
+// Copilot Sidebar state
+const copilotSidebarOpen = ref(false)
 
 // Initialize from localStorage (client-side only)
 if (typeof window !== 'undefined') {
@@ -70,6 +78,13 @@ if (typeof window !== 'undefined') {
       if (typeof height === 'number' && height >= 100 && height <= 400) {
         bottomPanelHeight.value = height
       }
+    }
+
+    // Load copilot sidebar state
+    const copilotSidebarStored = localStorage.getItem(STORAGE_KEY_COPILOT_SIDEBAR)
+    if (copilotSidebarStored) {
+      const { open } = JSON.parse(copilotSidebarStored)
+      copilotSidebarOpen.value = !!open
     }
   } catch (e) {
     console.warn('Failed to load editor state from localStorage:', e)
@@ -129,6 +144,19 @@ watch([bottomPanelCollapsed, bottomPanelHeight], () => {
     }
   }
 }, { deep: true })
+
+// Watch and persist copilot sidebar state
+watch(copilotSidebarOpen, () => {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY_COPILOT_SIDEBAR, JSON.stringify({
+        open: copilotSidebarOpen.value
+      }))
+    } catch (e) {
+      console.warn('Failed to save copilot sidebar state to localStorage:', e)
+    }
+  }
+})
 
 /**
  * Editor state management composable
@@ -264,6 +292,19 @@ export function useEditorState(project?: Ref<Project | null>) {
     selectedStepRun.value = null
   }
 
+  // Copilot Sidebar controls
+  function openCopilotSidebar() {
+    copilotSidebarOpen.value = true
+  }
+
+  function closeCopilotSidebar() {
+    copilotSidebarOpen.value = false
+  }
+
+  function toggleCopilotSidebar() {
+    copilotSidebarOpen.value = !copilotSidebarOpen.value
+  }
+
   return {
     // State (readonly where appropriate)
     selectedStepId: readonly(selectedStepId),
@@ -281,6 +322,9 @@ export function useEditorState(project?: Ref<Project | null>) {
     bottomPanelResizing,
     selectedRun,
     selectedStepRun,
+
+    // Copilot Sidebar state
+    copilotSidebarOpen: readonly(copilotSidebarOpen),
 
     // Actions
     selectStep,
@@ -310,5 +354,10 @@ export function useEditorState(project?: Ref<Project | null>) {
     setSelectedRun,
     setSelectedStepRun,
     clearRunSelection,
+
+    // Copilot Sidebar actions
+    openCopilotSidebar,
+    closeCopilotSidebar,
+    toggleCopilotSidebar,
   }
 }
