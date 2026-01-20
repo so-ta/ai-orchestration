@@ -399,7 +399,10 @@
     "releaseDescriptionPlaceholder": "Enter a description for this release...",
     "createReleaseButton": "Create Release",
     "releaseCreated": "Release created",
-    "releaseCreateFailed": "Failed to create release"
+    "releaseCreateFailed": "Failed to create release",
+    "undo": "Undo",
+    "redo": "Redo",
+    "recentActions": "Recent Actions"
   },
   "projectPicker": {
     "title": "Select Project",
@@ -618,11 +621,12 @@
       "refineFailed": "Failed to refine workflow",
       "finalizeFailed": "Failed to finalize session",
       "deleteFailed": "Failed to delete session",
-      "agentFailed": "Agent execution failed"
+      "agentFailed": "Agent execution failed",
+      "networkError": "Failed to connect to server. Please check your network connection.",
+      "timeout": "Request timed out. Please try again."
     },
     "agent": {
       "mode": "Agent Mode",
-      "legacyMode": "Legacy Mode",
       "resetSession": "Reset Session",
       "welcome": "Ask the AI Agent anything",
       "hint": "The agent uses tools to autonomously help build your workflow",
@@ -634,6 +638,18 @@
       "calling": "Running",
       "success": "Success",
       "error": "Error"
+    },
+    "preview": {
+      "title": "Change Preview",
+      "apply": "Apply",
+      "discard": "Cancel",
+      "modify": "Request Changes",
+      "sendModification": "Send",
+      "modifyPlaceholder": "Enter modifications...",
+      "stepDeleted": "Step to be deleted",
+      "connection": "Connection",
+      "autoApplied": "Changes applied",
+      "undoHint": "Press Cmd+Z to undo"
     }
   },
   "stepConfig": {

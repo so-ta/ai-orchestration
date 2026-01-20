@@ -34,6 +34,15 @@ function snapToGrid(value: number): number {
   return Math.round(value / GRID_SIZE) * GRID_SIZE
 }
 
+// Preview state for Copilot changes
+interface PreviewState {
+  addedStepIds: Set<string>
+  modifiedStepIds: Set<string>
+  deletedStepIds: Set<string>
+  addedEdgeIds: Set<string>
+  deletedEdgeIds: Set<string>
+}
+
 const props = defineProps<{
   steps: Step[]
   edges: Edge[]
@@ -44,6 +53,7 @@ const props = defineProps<{
   stepRuns?: StepRun[]  // Optional: for showing step execution status
   blockDefinitions?: BlockDefinition[] // Block definitions for output ports
   showMinimap?: boolean // Show/hide minimap (default: true)
+  previewState?: PreviewState | null // Copilot preview highlighting
 }>()
 
 // Pushed block info for boundary violations (pushed outside)
@@ -101,8 +111,8 @@ const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode
 
 // Right offset for auto-layout button (shift left when properties panel is open)
 const autoLayoutRightOffset = computed(() => {
-  // When a step is selected, the floating right panel (360px width + 12px right + 12px gap) is open
-  return props.selectedStepId ? 360 + 12 + 12 : 12
+  // When a step or group is selected, the floating right panel (360px width + 12px right + 12px gap) is open
+  return (props.selectedStepId || props.selectedGroupId) ? 360 + 12 + 12 : 12
 })
 
 // Selected edge for deletion
@@ -894,6 +904,29 @@ const groupNodes = computed<Node[]>(() => {
   }))
 })
 
+// Get preview class for a step based on Copilot preview state
+function getPreviewClass(stepId: string): string | undefined {
+  if (!props.previewState) return undefined
+  if (props.previewState.addedStepIds?.has(stepId)) return 'preview-added'
+  if (props.previewState.modifiedStepIds?.has(stepId)) return 'preview-modified'
+  if (props.previewState.deletedStepIds?.has(stepId)) return 'preview-deleted'
+  return undefined
+}
+
+// Get preview class for an edge based on Copilot preview state
+function getEdgePreviewClass(edgeId: string, sourceId: string, targetId: string): string | undefined {
+  if (!props.previewState) return undefined
+
+  // Check if edge is marked for deletion by ID
+  if (props.previewState.deletedEdgeIds?.has(edgeId)) return 'preview-edge-deleted'
+
+  // Check if edge is marked as added by source->target composite key
+  const compositeKey = `${sourceId}->${targetId}`
+  if (props.previewState.addedEdgeIds?.has(compositeKey)) return 'preview-edge-added'
+
+  return undefined
+}
+
 // Convert steps to Vue Flow nodes
 const stepNodes = computed<Node[]>(() => {
   return props.steps.map(step => {
@@ -919,11 +952,14 @@ const stepNodes = computed<Node[]>(() => {
       }
     }
 
+    const previewClass = getPreviewClass(step.id)
+
     return {
       id: step.id,
       type: 'custom',
       position,
       parentNode: parentGroupId ? `group_${parentGroupId}` : undefined,
+      class: previewClass || undefined,
       // Note: expandParent is intentionally NOT set - group should not auto-expand
       data: {
         label: step.name,
@@ -934,6 +970,7 @@ const stepNodes = computed<Node[]>(() => {
         inputPorts,   // Include input ports for multiple handles
         outputPorts,  // Include output ports for multiple handles
         icon: getStepIcon(step.type), // Icon for Miro-style display
+        previewClass,  // Preview highlighting for Copilot changes
       },
     }
   })
@@ -1071,6 +1108,9 @@ const flowEdges = computed<FlowEdge[]>(() => {
     // Skip edge labels for edges involving group blocks (both from and to groups)
     const edgeLabel = isGroupEdge ? undefined : getEdgeLabel(edge.source_port, edge.condition)
 
+    // Get preview class for Copilot changes
+    const edgePreviewClass = getEdgePreviewClass(edge.id, source, target)
+
     result.push({
       id: edge.id,
       source,
@@ -1086,6 +1126,7 @@ const flowEdges = computed<FlowEdge[]>(() => {
       style: { stroke: color, strokeWidth },
       markerEnd: { type: MarkerType.ArrowClosed, color },
       interactionWidth: 20, // Make edge easier to click
+      class: edgePreviewClass || undefined,
       data: { isSelected, edgeId: edge.id },
     })
   }
@@ -2486,8 +2527,7 @@ defineExpose({
 
           <!-- Group Header - Minimal Linear -->
           <div class="dag-group-header">
-            <span class="dag-group-indicator" :style="{ backgroundColor: data.color }" />
-            <span class="dag-group-type">{{ data.typeLabel }}</span>
+            <span class="dag-group-icon">{{ data.icon }}</span>
             <span class="dag-group-name">{{ data.label }}</span>
           </div>
 
@@ -3115,7 +3155,7 @@ defineExpose({
 .dag-group {
   width: 100%;
   height: 100%;
-  border: 1px solid #e5e5e5;
+  border: none;
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.01);
   position: relative;
@@ -3123,12 +3163,11 @@ defineExpose({
 }
 
 .dag-group:hover {
-  border-color: #d4d4d4;
+  /* No border change on hover */
 }
 
 .dag-group-selected {
-  border-color: var(--group-color);
-  box-shadow: 0 0 0 1px var(--group-color);
+  box-shadow: 0 0 0 2px var(--group-color);
 }
 
 .dag-group-header {
@@ -3138,8 +3177,8 @@ defineExpose({
   right: 0;
   height: 32px;
   border-radius: 12px 12px 0 0;
-  border-bottom: 1px solid #e5e5e5;
-  background: rgba(0, 0, 0, 0.02);
+  border-bottom: none;
+  background: transparent;
   display: flex;
   align-items: center;
   padding: 0 14px;
@@ -3148,31 +3187,19 @@ defineExpose({
   font-weight: 500;
 }
 
-/* Group Type Indicator (small dot) */
-.dag-group-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+/* Group Icon */
+.dag-group-icon {
+  font-size: 14px;
   flex-shrink: 0;
 }
 
-.dag-group-type {
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 11px;
-  font-weight: 600;
-  color: #737373;
-}
-
 .dag-group-name {
-  margin-left: auto;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: #171717;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 150px;
 }
 
 /* Group Input/Output Handles - Minimal Linear */
@@ -3667,5 +3694,84 @@ defineExpose({
   text-transform: uppercase;
   white-space: nowrap;
   letter-spacing: 0.02em;
+}
+
+/* Copilot Preview Highlighting */
+:deep(.preview-added .dag-node-miro) {
+  outline: 2px dashed #22c55e;
+  outline-offset: 2px;
+  animation: preview-pulse-green 1.5s ease-in-out infinite;
+}
+
+:deep(.preview-modified .dag-node-miro) {
+  outline: 2px dashed #3b82f6;
+  outline-offset: 2px;
+  animation: preview-pulse-blue 1.5s ease-in-out infinite;
+}
+
+:deep(.preview-deleted .dag-node-miro) {
+  outline: 2px dashed #ef4444;
+  outline-offset: 2px;
+  opacity: 0.5;
+  animation: preview-pulse-red 1.5s ease-in-out infinite;
+}
+
+/* Edge Preview Highlighting */
+:deep(.preview-edge-added .vue-flow__edge-path) {
+  stroke: #22c55e !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 8 4;
+  animation: edge-pulse-green 1.5s ease-in-out infinite;
+}
+
+:deep(.preview-edge-deleted .vue-flow__edge-path) {
+  stroke: #ef4444 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 8 4;
+  opacity: 0.5;
+  animation: edge-pulse-red 1.5s ease-in-out infinite;
+}
+
+@keyframes edge-pulse-green {
+  0%, 100% { stroke: #22c55e; }
+  50% { stroke: #16a34a; }
+}
+
+@keyframes edge-pulse-red {
+  0%, 100% { stroke: #ef4444; }
+  50% { stroke: #dc2626; }
+}
+
+@keyframes preview-pulse-green {
+  0%, 100% {
+    outline-color: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    outline-color: #16a34a;
+    box-shadow: 0 0 8px 2px rgba(34, 197, 94, 0.4);
+  }
+}
+
+@keyframes preview-pulse-blue {
+  0%, 100% {
+    outline-color: #3b82f6;
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    outline-color: #2563eb;
+    box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.4);
+  }
+}
+
+@keyframes preview-pulse-red {
+  0%, 100% {
+    outline-color: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    outline-color: #dc2626;
+    box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.4);
+  }
 }
 </style>
