@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Step, StepType, BlockDefinition, Run } from '~/types/api'
-import type { StepSuggestion, GenerateWorkflowResponse } from '~/composables/useCopilot'
+import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 import FlowTab from './FlowTab.vue'
@@ -32,7 +32,6 @@ type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
 const { t } = useI18n()
 const blocks = useBlocks()
-const toast = useToast()
 const { confirm } = useConfirm()
 
 const props = defineProps<{
@@ -188,18 +187,6 @@ async function handleDelete() {
   if (confirmed) {
     emit('delete')
   }
-}
-
-function handleApplySuggestion(suggestion: StepSuggestion) {
-  formType.value = suggestion.type as StepType
-  formName.value = suggestion.name
-  formConfig.value = { ...(suggestion.config || {}) }
-  activeTab.value = 'config'
-  toast.success(t('copilot.suggestionApplied'))
-}
-
-function handleApplyWorkflow(workflow: GenerateWorkflowResponse) {
-  emit('apply-workflow', workflow)
 }
 
 // Credential bindings state
@@ -440,7 +427,7 @@ const showIOPorts = computed(() => {
 
     <!-- Copilot Tab Content -->
     <div v-if="activeTab === 'copilot'" class="properties-body copilot-container">
-      <CopilotTab :step="step" :workflow-id="workflowId" @apply-suggestion="handleApplySuggestion" @apply-workflow="handleApplyWorkflow" />
+      <CopilotTab :workflow-id="workflowId" />
     </div>
 
     <!-- Run Tab Content -->

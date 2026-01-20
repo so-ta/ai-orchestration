@@ -69,14 +69,16 @@ function handleCreateNew() {
   emit('openSettings')
 }
 
-// Fetch credentials on mount
-onMounted(async () => {
-  try {
-    await fetchCredentials()
-  } catch {
-    toast.error(t('credentialBindings.fetchError'))
+// Fetch credentials only when needed
+watch(requiredCredentials, async (required) => {
+  if (required.length > 0) {
+    try {
+      await fetchCredentials()
+    } catch {
+      toast.error(t('credentialBindings.fetchError'))
+    }
   }
-})
+}, { immediate: true })
 
 // Check if section should be shown
 const showSection = computed(() => requiredCredentials.value.length > 0)

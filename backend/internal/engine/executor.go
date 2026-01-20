@@ -454,6 +454,7 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 type Graph struct {
 	Steps       map[uuid.UUID]domain.Step
 	BlockGroups map[uuid.UUID]domain.BlockGroup
+	AllEdges    []domain.Edge               // all edges for chain building
 	InEdges     map[uuid.UUID][]domain.Edge // incoming edges to steps
 	OutEdges    map[uuid.UUID][]domain.Edge // outgoing edges from steps
 	GroupInEdges  map[uuid.UUID][]domain.Edge // incoming edges to groups
@@ -464,6 +465,7 @@ func (e *Executor) buildGraph(def *domain.ProjectDefinition) *Graph {
 	graph := &Graph{
 		Steps:         make(map[uuid.UUID]domain.Step),
 		BlockGroups:   make(map[uuid.UUID]domain.BlockGroup),
+		AllEdges:      make([]domain.Edge, 0, len(def.Edges)),
 		InEdges:       make(map[uuid.UUID][]domain.Edge),
 		OutEdges:      make(map[uuid.UUID][]domain.Edge),
 		GroupInEdges:  make(map[uuid.UUID][]domain.Edge),
@@ -480,6 +482,8 @@ func (e *Executor) buildGraph(def *domain.ProjectDefinition) *Graph {
 
 	// Process all edges including group edges
 	for _, edge := range def.Edges {
+		// Store all edges for chain building
+		graph.AllEdges = append(graph.AllEdges, edge)
 		// Step-to-step edge
 		if edge.SourceStepID != nil && edge.TargetStepID != nil {
 			graph.InEdges[*edge.TargetStepID] = append(graph.InEdges[*edge.TargetStepID], edge)
@@ -676,10 +680,17 @@ func (e *Executor) executeBlockGroup(ctx context.Context, execCtx *ExecutionCont
 	// Create BlockGroupExecutor
 	blockGroupExecutor := NewBlockGroupExecutor(e.registry, e.logger, e)
 
+	// Convert AllEdges to pointer slice for chain building
+	edges := make([]*domain.Edge, len(graph.AllEdges))
+	for i := range graph.AllEdges {
+		edges[i] = &graph.AllEdges[i]
+	}
+
 	// Create context for group execution
 	bgCtx := &BlockGroupContext{
 		Group:   group,
 		Steps:   groupSteps,
+		Edges:   edges,
 		Input:   input,
 		ExecCtx: execCtx,
 		Graph:   graph,

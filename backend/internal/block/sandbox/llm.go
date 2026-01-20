@@ -72,7 +72,7 @@ type ToolCallFunction struct {
 func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}) (map[string]interface{}, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("LLM provider (openai) is not configured")
+		return s.mockChat("openai", model, request)
 	}
 
 	// Default model
@@ -211,7 +211,7 @@ func (s *LLMServiceImpl) chatOpenAI(model string, request map[string]interface{}
 func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interface{}) (map[string]interface{}, error) {
 	apiKey := os.Getenv("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("LLM provider (anthropic) is not configured")
+		return s.mockChat("anthropic", model, request)
 	}
 
 	// Default model: Claude Sonnet 4 (current production model as of 2025-05)
@@ -452,4 +452,62 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 	}
 
 	return result, nil
+}
+
+// mockChat provides mock responses when LLM API keys are not configured
+// This allows testing and development without actual API credentials
+func (s *LLMServiceImpl) mockChat(provider, model string, request map[string]interface{}) (map[string]interface{}, error) {
+	// Extract the last user message for context
+	var lastUserMessage string
+	if messages, ok := request["messages"].([]interface{}); ok {
+		for i := len(messages) - 1; i >= 0; i-- {
+			if msg, ok := messages[i].(map[string]interface{}); ok {
+				if role, _ := msg["role"].(string); role == "user" {
+					if content, ok := msg["content"].(string); ok {
+						lastUserMessage = content
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// Check if tools are available
+	var toolCount int
+	if tools, ok := request["tools"].([]interface{}); ok {
+		toolCount = len(tools)
+	}
+
+	// Determine the environment variable name
+	envVarName := "OPENAI_API_KEY"
+	if provider == "anthropic" {
+		envVarName = "ANTHROPIC_API_KEY"
+	}
+
+	// Generate mock response with clear setup instructions
+	responseText := fmt.Sprintf(
+		"⚠️ **APIキー未設定**\n\n"+
+			"LLMプロバイダー「%s」のAPIキーが設定されていないため、モックレスポンスを返しています。\n\n"+
+			"**設定方法:**\n"+
+			"1. プロジェクトルートに `.env` ファイルを作成\n"+
+			"2. 以下の環境変数を設定:\n"+
+			"   ```\n"+
+			"   %s=your-api-key-here\n"+
+			"   ```\n"+
+			"3. APIサーバーを再起動\n\n"+
+			"---\n"+
+			"**受信したメッセージ:** %s\n"+
+			"**利用可能なツール:** %d個\n"+
+			"**使用モデル:** %s",
+		provider, envVarName, lastUserMessage, toolCount, model)
+
+	return map[string]interface{}{
+		"content":       responseText,
+		"finish_reason": "end_turn",
+		"usage": map[string]interface{}{
+			"input_tokens":  0,
+			"output_tokens": 0,
+			"total_tokens":  0,
+		},
+	}, nil
 }

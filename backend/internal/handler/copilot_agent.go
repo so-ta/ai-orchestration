@@ -68,6 +68,7 @@ type AgentStreamEvent struct {
 // ============================================================================
 
 // StartAgentSession handles POST /api/v1/projects/{project_id}/copilot/agent/sessions
+// This creates a session and returns immediately. Use the stream endpoint to process the initial message.
 func (h *CopilotAgentHandler) StartAgentSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
@@ -106,7 +107,8 @@ func (h *CopilotAgentHandler) StartAgentSession(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	output, err := h.agentUsecase.StartAgentSession(ctx, agent.StartAgentSessionInput{
+	// Create session only (don't run agent yet - that will happen via SSE stream)
+	output, err := h.agentUsecase.CreateAgentSessionOnly(ctx, agent.StartAgentSessionInput{
 		TenantID:         tenantID,
 		UserID:           userID.String(),
 		ContextProjectID: &projectID,
@@ -124,8 +126,8 @@ func (h *CopilotAgentHandler) StartAgentSession(w http.ResponseWriter, r *http.R
 
 	JSON(w, http.StatusCreated, StartAgentSessionResponse{
 		SessionID: output.Session.ID.String(),
-		Response:  output.Response,
-		ToolsUsed: output.ToolsUsed,
+		Response:  "", // Empty - will be populated via SSE stream
+		ToolsUsed: []string{},
 		Status:    string(output.Session.Status),
 		Phase:     string(output.Session.HearingPhase),
 		Progress:  output.Session.HearingProgress,
@@ -178,9 +180,9 @@ func (h *CopilotAgentHandler) SendAgentMessage(w http.ResponseWriter, r *http.Re
 // StreamAgentMessage handles GET /api/v1/projects/{project_id}/copilot/agent/sessions/{session_id}/stream
 // This endpoint establishes an SSE connection for streaming agent responses
 func (h *CopilotAgentHandler) StreamAgentMessage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID := middleware.GetTenantID(ctx)
-	userID := middleware.GetUserID(ctx)
+	reqCtx := r.Context()
+	tenantID := middleware.GetTenantID(reqCtx)
+	userID := middleware.GetUserID(reqCtx)
 
 	sessionID, err := uuid.Parse(chi.URLParam(r, "session_id"))
 	if err != nil {
@@ -201,9 +203,17 @@ func (h *CopilotAgentHandler) StreamAgentMessage(w http.ResponseWriter, r *http.
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
 
-	// Create a cancellable context
-	streamCtx, cancel := context.WithCancel(ctx)
+	// Create a new context that is NOT derived from the request context.
+	// This bypasses the chi Timeout middleware's deadline.
+	// We'll manually watch for client disconnection via reqCtx.Done().
+	streamCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Watch for client disconnection from the original request context
+	go func() {
+		<-reqCtx.Done()
+		cancel() // Cancel our stream context when the client disconnects
+	}()
 
 	// Store cancel function for this stream
 	streamKey := fmt.Sprintf("%s-%s", sessionID.String(), userID.String())
@@ -246,11 +256,19 @@ func (h *CopilotAgentHandler) StreamAgentMessage(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Heartbeat ticker to keep the connection alive during long operations
+	heartbeat := time.NewTicker(10 * time.Second)
+	defer heartbeat.Stop()
+
 	for {
 		select {
 		case <-streamCtx.Done():
 			// Client disconnected or cancelled
 			return
+		case <-heartbeat.C:
+			// Send heartbeat to keep connection alive
+			fmt.Fprintf(w, "event: ping\ndata: {}\n\n")
+			flusher.Flush()
 		case event, ok := <-events:
 			if !ok {
 				// Channel closed, send done event

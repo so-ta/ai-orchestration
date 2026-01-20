@@ -123,6 +123,12 @@ type Step struct {
 	// Retry configuration for error handling
 	RetryConfig json.RawMessage `json:"retry_config,omitempty"`
 
+	// Agent Group tool definition (for entry point steps within Agent groups)
+	// Entry point = step with no incoming edges from within the same group
+	ToolName        *string         `json:"tool_name,omitempty"`
+	ToolDescription *string         `json:"tool_description,omitempty"`
+	ToolInputSchema json.RawMessage `json:"tool_input_schema,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

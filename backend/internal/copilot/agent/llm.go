@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -112,6 +113,7 @@ type Usage struct {
 // ChatWithTools sends a chat request with tool definitions
 func (c *LLMClient) ChatWithTools(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	if c.apiKey == "" {
+		slog.Info("LLM client: no API key, using mock")
 		return c.mockChatWithTools(req)
 	}
 
@@ -122,13 +124,17 @@ func (c *LLMClient) ChatWithTools(ctx context.Context, req ChatRequest) (*ChatRe
 		req.MaxTokens = 4096
 	}
 
+	slog.Info("LLM client: starting API call", "model", req.Model, "tool_count", len(req.Tools))
+
 	reqBody, err := json.Marshal(req)
 	if err != nil {
+		slog.Error("LLM client: failed to marshal request", "error", err)
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/messages", bytes.NewReader(reqBody))
 	if err != nil {
+		slog.Error("LLM client: failed to create request", "error", err)
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
@@ -136,26 +142,34 @@ func (c *LLMClient) ChatWithTools(ctx context.Context, req ChatRequest) (*ChatRe
 	httpReq.Header.Set("x-api-key", c.apiKey)
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 
+	slog.Info("LLM client: sending request to Anthropic API")
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
+		slog.Error("LLM client: request failed", "error", err)
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	slog.Info("LLM client: received response", "status", resp.StatusCode)
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		slog.Error("LLM client: failed to read response body", "error", err)
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		slog.Error("LLM client: API error", "status", resp.StatusCode, "body", string(body))
 		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	var chatResp ChatResponse
 	if err := json.Unmarshal(body, &chatResp); err != nil {
+		slog.Error("LLM client: failed to parse response", "error", err)
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
 
+	slog.Info("LLM client: API call successful", "stop_reason", chatResp.StopReason)
 	return &chatResp, nil
 }
 
@@ -238,12 +252,38 @@ func (c *LLMClient) mockChatWithTools(req ChatRequest) (*ChatResponse, error) {
 		}
 	}
 
-	// Generate mock response based on available tools
+	// Generate mock response with setup instructions
 	var responseText string
 	if len(req.Tools) > 0 {
-		responseText = fmt.Sprintf("【モックモード】\nANTHROPIC_API_KEYが設定されていないため、モックレスポンスを返します。\n\nユーザーメッセージ: %s\n\n利用可能なツール: %d個\n\n本番環境では、エージェントがツールを使用してワークフローを分析・構築します。", lastUserMessage, len(req.Tools))
+		responseText = fmt.Sprintf(
+			"⚠️ **APIキー未設定**\n\n"+
+				"ANTHROPIC_API_KEYが設定されていないため、モックレスポンスを返しています。\n\n"+
+				"**設定方法:**\n"+
+				"1. プロジェクトルートに `.env` ファイルを作成\n"+
+				"2. 以下の環境変数を設定:\n"+
+				"   ```\n"+
+				"   ANTHROPIC_API_KEY=your-api-key-here\n"+
+				"   ```\n"+
+				"3. APIサーバーを再起動\n\n"+
+				"---\n"+
+				"**受信したメッセージ:** %s\n"+
+				"**利用可能なツール:** %d個\n\n"+
+				"本番環境では、エージェントがツールを使用してワークフローを分析・構築します。",
+			lastUserMessage, len(req.Tools))
 	} else {
-		responseText = fmt.Sprintf("【モックモード】\n%s\n\nANTHROPIC_API_KEYを設定すると、AIによる本格的なサポートを受けられます。", lastUserMessage)
+		responseText = fmt.Sprintf(
+			"⚠️ **APIキー未設定**\n\n"+
+				"ANTHROPIC_API_KEYが設定されていないため、モックレスポンスを返しています。\n\n"+
+				"**設定方法:**\n"+
+				"1. プロジェクトルートに `.env` ファイルを作成\n"+
+				"2. 以下の環境変数を設定:\n"+
+				"   ```\n"+
+				"   ANTHROPIC_API_KEY=your-api-key-here\n"+
+				"   ```\n"+
+				"3. APIサーバーを再起動\n\n"+
+				"---\n"+
+				"**受信したメッセージ:** %s",
+			lastUserMessage)
 	}
 
 	return &ChatResponse{

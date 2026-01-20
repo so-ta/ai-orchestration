@@ -39,6 +39,10 @@ type SystemStepDefinition struct {
 	BlockDefID       *string         `json:"block_definition_id"`           // Optional block definition ID reference (deprecated, use BlockSlug)
 	BlockSlug        string          `json:"block_slug,omitempty"`          // Block slug reference (resolved to ID at migration time)
 	BlockGroupTempID string          `json:"block_group_temp_id,omitempty"` // Parent block group temp_id (for steps inside a group)
+	// Agent Group tool definition (for entry point steps within Agent groups)
+	ToolName        string          `json:"tool_name,omitempty"`        // Tool name exposed to the agent
+	ToolDescription string          `json:"tool_description,omitempty"` // Description of what the tool does
+	ToolInputSchema json.RawMessage `json:"tool_input_schema,omitempty"` // JSON Schema for tool parameters
 }
 
 // SystemEdgeDefinition represents an edge (connection) between steps or block groups

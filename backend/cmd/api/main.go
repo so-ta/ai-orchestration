@@ -623,7 +623,7 @@ func main() {
 		Addr:         ":" + port,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // Disabled to support SSE streaming (SSE connections need to stay open indefinitely)
 		IdleTimeout:  60 * time.Second,
 	}
 
