@@ -55,6 +55,7 @@
 |--------|-------------|--------|----------|
 | 統一ブロックモデル | ブロック実行の統一モデル | ✅ 実装済み | [UNIFIED_BLOCK_MODEL.md](./designs/UNIFIED_BLOCK_MODEL.md) |
 | ブロック設定改善 | ブロック設定UI改善 | 📋 設計中 | [BLOCK_CONFIG_IMPROVEMENT.md](./designs/BLOCK_CONFIG_IMPROVEMENT.md) |
+| Copilot Agent SSE | エージェントベースCopilot | ✅ 実装済み | [COPILOT_AGENT_SSE.md](./designs/COPILOT_AGENT_SSE.md) |
 
 ## 実装ステータス（Source of Truth）
 
