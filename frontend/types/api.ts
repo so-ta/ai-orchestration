@@ -48,6 +48,10 @@ export interface Step {
   trigger_type?: 'manual' | 'webhook' | 'schedule' | 'slack' | 'email' // Start block trigger type
   trigger_config?: object      // Start block trigger configuration
   credential_bindings?: Record<string, string> // Mapping of credential names to credential IDs
+  // Agent Group tool definition (for entry point steps within Agent groups)
+  tool_name?: string           // Tool name exposed to the agent
+  tool_description?: string    // Description of what the tool does
+  tool_input_schema?: object   // JSON Schema for tool parameters
   position_x: number
   position_y: number
   created_at: string

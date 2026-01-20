@@ -279,6 +279,15 @@ func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflow
 			triggerType = &tt
 		}
 
+		// Set tool definition fields for Agent Group entry points
+		var toolName, toolDescription *string
+		if seedStep.ToolName != "" {
+			toolName = &seedStep.ToolName
+		}
+		if seedStep.ToolDescription != "" {
+			toolDescription = &seedStep.ToolDescription
+		}
+
 		step := &domain.Step{
 			ID:                 stepID,
 			TenantID:           tenantID,
@@ -294,6 +303,9 @@ func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflow
 			BlockGroupID:       blockGroupID,
 			GroupRole:          "body", // Default role for steps in block groups
 			CredentialBindings: json.RawMessage(`{}`),
+			ToolName:           toolName,
+			ToolDescription:    toolDescription,
+			ToolInputSchema:    seedStep.ToolInputSchema,
 			CreatedAt:          now,
 			UpdatedAt:          now,
 		}

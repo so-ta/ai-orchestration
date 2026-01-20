@@ -942,6 +942,11 @@ export function useCopilot() {
       eventSource.close()
     })
 
+    // Handle heartbeat/ping events (just ignore them - they keep the connection alive)
+    eventSource.addEventListener('ping', () => {
+      // Heartbeat received - connection is alive
+    })
+
     eventSource.onerror = () => {
       if (!cancelled) {
         callbacks.onError?.('Connection error')

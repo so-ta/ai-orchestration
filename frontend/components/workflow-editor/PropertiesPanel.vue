@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Step, StepType, BlockDefinition, Run } from '~/types/api'
+import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 import FlowTab from './FlowTab.vue'
@@ -45,7 +46,7 @@ const props = defineProps<{
 }>()
 
 // Active tab state
-const activeTab = ref<'config' | 'flow' | 'run'>('config')
+const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
 
 // Check if step is a generic start block
 const isGenericStartBlock = computed(() => props.step?.type === 'start')
@@ -53,6 +54,7 @@ const isGenericStartBlock = computed(() => props.step?.type === 'start')
 const emit = defineEmits<{
   (e: 'save', data: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> }): void
   (e: 'delete' | 'open-settings'): void
+  (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
   (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
   (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
   (e: 'update:name', name: string): void
@@ -315,6 +317,13 @@ const showIOPorts = computed(() => {
         </svg>
         {{ t('editor.tabs.flow') }}
       </button>
+      <button class="tab-button" :class="{ active: activeTab === 'copilot' }" @click="activeTab = 'copilot'">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2z"/>
+          <circle cx="8" cy="14" r="2"/><circle cx="16" cy="14" r="2"/>
+        </svg>
+        {{ t('editor.tabs.copilot') }}
+      </button>
       <button class="tab-button" :class="{ active: activeTab === 'run' }" @click="activeTab = 'run'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"/>
@@ -414,6 +423,11 @@ const showIOPorts = computed(() => {
     <!-- Flow Tab Content -->
     <div v-if="activeTab === 'flow'" class="properties-body flow-container">
       <FlowTab :step="step" :block-definitions="blockDefinitions" :readonly-mode="readonlyMode" @update:flow-config="handleFlowConfigUpdate" />
+    </div>
+
+    <!-- Copilot Tab Content -->
+    <div v-if="activeTab === 'copilot'" class="properties-body copilot-container">
+      <CopilotTab :workflow-id="workflowId" />
     </div>
 
     <!-- Run Tab Content -->

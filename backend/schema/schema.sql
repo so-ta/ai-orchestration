@@ -201,6 +201,9 @@ CREATE TABLE public.steps (
     group_role character varying(50),
     credential_bindings jsonb DEFAULT '{}'::jsonb,
     block_definition_id uuid,
+    tool_name character varying(100),
+    tool_description text,
+    tool_input_schema jsonb,
     CONSTRAINT steps_trigger_type_check CHECK ((trigger_type IS NULL OR (trigger_type)::text = ANY ((ARRAY['manual'::character varying, 'webhook'::character varying, 'schedule'::character varying, 'slack'::character varying, 'discord'::character varying, 'email'::character varying, 'internal'::character varying, 'api'::character varying])::text[])))
 );
 
@@ -211,6 +214,9 @@ COMMENT ON COLUMN public.steps.credential_bindings IS 'Mapping of credential nam
 COMMENT ON COLUMN public.steps.block_definition_id IS 'Reference to block_definitions registry';
 COMMENT ON COLUMN public.steps.trigger_type IS 'For Start blocks: manual, webhook, schedule, slack, discord, email, internal, api';
 COMMENT ON COLUMN public.steps.trigger_config IS 'For Start blocks: trigger-specific configuration (secret, cron, input_mapping, etc.)';
+COMMENT ON COLUMN public.steps.tool_name IS 'For Agent Group entry points: tool name exposed to the agent';
+COMMENT ON COLUMN public.steps.tool_description IS 'For Agent Group entry points: description of what the tool does';
+COMMENT ON COLUMN public.steps.tool_input_schema IS 'For Agent Group entry points: JSON Schema for tool parameters';
 
 --
 -- Name: edges; Type: TABLE; Schema: public; Owner: -

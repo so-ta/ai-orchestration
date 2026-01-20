@@ -250,12 +250,12 @@ func (h *CopilotHandler) SendCopilotMessage(w http.ResponseWriter, r *http.Reque
 
 	execInput := usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "ai-builder",
-		EntryPoint:    "proposal",
+		SystemSlug:    "copilot",
+		EntryPoint:    "chat",
 		Input:         inputJSON,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
-			"feature":    "proposal",
+			"feature":    "chat",
 			"session_id": sessionID.String(),
 		},
 	}
@@ -312,8 +312,8 @@ func (h *CopilotHandler) ConstructCopilotWorkflow(w http.ResponseWriter, r *http
 
 	execInput := usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "ai-builder",
-		EntryPoint:    "agent_construct",
+		SystemSlug:    "copilot",
+		EntryPoint:    "chat",
 		Input:         inputJSON,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{
@@ -392,8 +392,8 @@ func (h *CopilotHandler) RefineCopilotWorkflow(w http.ResponseWriter, r *http.Re
 
 	execInput := usecase.ExecuteSystemProjectInput{
 		TenantID:      tenantID,
-		SystemSlug:    "ai-builder",
-		EntryPoint:    "refine",
+		SystemSlug:    "copilot",
+		EntryPoint:    "chat",
 		Input:         inputJSON,
 		TriggerSource: "copilot",
 		TriggerMetadata: map[string]interface{}{

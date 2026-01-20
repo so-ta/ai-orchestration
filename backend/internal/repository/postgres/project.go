@@ -110,7 +110,11 @@ func (r *ProjectRepository) List(ctx context.Context, tenantID uuid.UUID, filter
 	query += ` ORDER BY updated_at DESC`
 
 	if filter.Limit > 0 {
-		offset := (filter.Page - 1) * filter.Limit
+		page := filter.Page
+		if page < 1 {
+			page = 1
+		}
+		offset := (page - 1) * filter.Limit
 		query += fmt.Sprintf(` LIMIT $%d OFFSET $%d`, argIndex, argIndex+1)
 		args = append(args, filter.Limit, offset)
 	}

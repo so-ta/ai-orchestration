@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -239,7 +240,18 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	// Timeout middleware with SSE endpoint exclusion
+	r.Use(func(next http.Handler) http.Handler {
+		timeoutMiddleware := middleware.Timeout(60 * time.Second)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip timeout for SSE streaming endpoints
+			if strings.Contains(r.URL.Path, "/stream") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timeoutMiddleware(next).ServeHTTP(w, r)
+		})
+	})
 
 	// Telemetry middleware (OpenTelemetry tracing)
 	if telemetryProvider != nil && telemetryProvider.IsEnabled() {
@@ -625,7 +637,7 @@ func main() {
 		Addr:         ":" + port,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // Disabled to support SSE streaming (SSE connections need to stay open indefinitely)
 		IdleTimeout:  60 * time.Second,
 	}
 
