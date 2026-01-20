@@ -17,58 +17,41 @@ const copilot = useCopilot()
 const toast = useToast()
 const copilotDraft = useCopilotDraft()
 
-// Storage key for chat history
-const CHAT_HISTORY_KEY_PREFIX = 'copilot-chat-history-'
-const AGENT_SESSION_KEY_PREFIX = 'copilot-agent-session-'
-
 // State
 const isLoading = ref(false)
+const isLoadingSession = ref(false)
 const chatMessage = ref('')
 const chatHistory = ref<Array<{ role: 'user' | 'assistant' | 'system'; content: string }>>([])
 
 // Agent state
 const agentSessionId = ref<string | null>(null)
 
-// Load chat history from localStorage on mount
-function loadChatHistory() {
-  if (typeof window === 'undefined') return
+// Load active session from DB on mount
+async function loadActiveSession() {
+  if (isLoadingSession.value) return
+  isLoadingSession.value = true
   try {
-    const stored = localStorage.getItem(CHAT_HISTORY_KEY_PREFIX + props.workflowId)
-    if (stored) {
-      chatHistory.value = JSON.parse(stored)
-    }
-    const storedSession = localStorage.getItem(AGENT_SESSION_KEY_PREFIX + props.workflowId)
-    if (storedSession) {
-      agentSessionId.value = storedSession
+    const result = await copilot.getActiveAgentSession(props.workflowId)
+    if (result.session) {
+      agentSessionId.value = result.session.id
+      // Convert messages to chat history format
+      chatHistory.value = result.session.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }))
     }
   } catch (e) {
-    console.warn('Failed to load chat history from localStorage:', e)
+    console.warn('Failed to load active session from DB:', e)
+  } finally {
+    isLoadingSession.value = false
   }
 }
-
-// Save chat history to localStorage
-function saveChatHistory() {
-  if (typeof window === 'undefined') return
-  try {
-    localStorage.setItem(CHAT_HISTORY_KEY_PREFIX + props.workflowId, JSON.stringify(chatHistory.value))
-    if (agentSessionId.value) {
-      localStorage.setItem(AGENT_SESSION_KEY_PREFIX + props.workflowId, agentSessionId.value)
-    } else {
-      localStorage.removeItem(AGENT_SESSION_KEY_PREFIX + props.workflowId)
-    }
-  } catch (e) {
-    console.warn('Failed to save chat history to localStorage:', e)
-  }
-}
-
-// Watch chat history changes and save
-watch(chatHistory, saveChatHistory, { deep: true })
-watch(agentSessionId, saveChatHistory)
 
 // Load on mount
 onMounted(() => {
-  loadChatHistory()
+  loadActiveSession()
 })
+
 const agentStreamState = ref<AgentStreamState>({
   isStreaming: false,
   currentThinking: '',
