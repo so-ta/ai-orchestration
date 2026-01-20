@@ -399,7 +399,10 @@
     "releaseDescriptionPlaceholder": "このリリースの説明を入力...",
     "createReleaseButton": "リリースを作成",
     "releaseCreated": "リリースを作成しました",
-    "releaseCreateFailed": "リリースの作成に失敗しました"
+    "releaseCreateFailed": "リリースの作成に失敗しました",
+    "undo": "元に戻す",
+    "redo": "やり直す",
+    "recentActions": "最近の操作"
   },
   "projectPicker": {
     "title": "プロジェクトを選択",
@@ -618,11 +621,12 @@
       "refineFailed": "ワークフローの改善に失敗しました",
       "finalizeFailed": "セッションの完了に失敗しました",
       "deleteFailed": "セッションの削除に失敗しました",
-      "agentFailed": "エージェントの実行に失敗しました"
+      "agentFailed": "エージェントの実行に失敗しました",
+      "networkError": "サーバーへの接続に失敗しました。ネットワーク接続を確認してください。",
+      "timeout": "リクエストがタイムアウトしました。もう一度お試しください。"
     },
     "agent": {
       "mode": "エージェントモード",
-      "legacyMode": "レガシーモード",
       "resetSession": "セッションをリセット",
       "welcome": "AIエージェントにご質問ください",
       "hint": "ツールを使って自律的にワークフロー構築をサポートします",
@@ -634,6 +638,18 @@
       "calling": "実行中",
       "success": "成功",
       "error": "エラー"
+    },
+    "preview": {
+      "title": "変更プレビュー",
+      "apply": "適用する",
+      "discard": "キャンセル",
+      "modify": "修正を依頼",
+      "sendModification": "送信",
+      "modifyPlaceholder": "修正内容を入力...",
+      "stepDeleted": "削除されるステップ",
+      "connection": "接続",
+      "autoApplied": "変更を適用しました",
+      "undoHint": "Cmd+Z で元に戻せます"
     }
   },
   "stepConfig": {
