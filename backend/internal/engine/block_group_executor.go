@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -41,7 +42,8 @@ func NewBlockGroupExecutor(registry *adapter.Registry, logger *slog.Logger, exec
 // BlockGroupContext holds context for block group execution
 type BlockGroupContext struct {
 	Group    *domain.BlockGroup
-	Steps    []*domain.Step // Steps belonging to this group
+	Steps    []*domain.Step  // Steps belonging to this group
+	Edges    []*domain.Edge  // Edges in the project (for chain building)
 	Input    json.RawMessage
 	ExecCtx  *ExecutionContext
 	Graph    *Graph
@@ -671,7 +673,8 @@ func (e *BlockGroupExecutor) executeWhile(ctx context.Context, bgCtx *BlockGroup
 }
 
 // executeAgent executes an AI agent with ReAct loop
-// Child steps become tools that the agent can call
+// Entry point steps (no incoming edges) become tools that the agent can call
+// Each tool executes its chain of connected steps
 func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
 	ctx, span := tracer.Start(ctx, "block_group.agent")
 	defer span.End()
@@ -704,18 +707,29 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 		attribute.Int("max_iterations", config.MaxIterations),
 	)
 
-	// Get child steps (these become tools)
-	var toolSteps []*domain.Step
-	for _, step := range bgCtx.Steps {
-		if step.GroupRole == "" || step.GroupRole == string(domain.GroupRoleBody) {
-			toolSteps = append(toolSteps, step)
-		}
+	// Build tool chains from entry points (steps with no incoming edges)
+	chainBuilder := NewChainBuilder(bgCtx.Steps, bgCtx.Edges)
+
+	// Validate entry point count
+	if errMsg := chainBuilder.ValidateEntryPointCount(bgCtx.Group.ID, bgCtx.Group.Type); errMsg != "" {
+		return nil, fmt.Errorf(errMsg)
 	}
 
-	span.SetAttributes(attribute.Int("tool_count", len(toolSteps)))
+	toolChains := chainBuilder.BuildToolChains(bgCtx.Group.ID)
+	if len(toolChains) == 0 {
+		return nil, fmt.Errorf("agent group requires at least one entry point step")
+	}
 
-	// Build tools from child steps
-	tools := e.buildToolsFromSteps(toolSteps, bgCtx)
+	span.SetAttributes(attribute.Int("tool_count", len(toolChains)))
+
+	// Build tool map for quick lookup
+	toolChainMap := make(map[string]*ToolChain)
+	for _, tc := range toolChains {
+		toolChainMap[tc.ToolName] = tc
+	}
+
+	// Build OpenAI-style tools from tool chains
+	tools := e.buildToolsFromChains(toolChains)
 
 	// Parse input for user message
 	var inputData map[string]interface{}
@@ -733,9 +747,16 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 		userMessage = string(bgCtx.Input)
 	}
 
+	// Build workflow context for enhanced prompting
+	workflowContext := e.buildWorkflowContext(bgCtx)
+	enhancedPrompt := config.SystemPrompt
+	if workflowContext != "" {
+		enhancedPrompt = config.SystemPrompt + "\n\n" + workflowContext
+	}
+
 	// Build initial messages
 	messages := []map[string]interface{}{
-		{"role": "system", "content": config.SystemPrompt},
+		{"role": "system", "content": enhancedPrompt},
 		{"role": "user", "content": userMessage},
 	}
 
@@ -815,28 +836,21 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 				toolArgs = map[string]interface{}{}
 			}
 
-			// Find and execute the corresponding step
+			// Find and execute the corresponding tool chain
 			var toolResult interface{}
-			toolFound := false
-			for _, step := range toolSteps {
-				if step.Name == toolName {
-					toolFound = true
-					toolInput, _ := json.Marshal(toolArgs)
-					output, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, toolInput)
-					if err != nil {
-						toolResult = map[string]interface{}{
-							"error": err.Error(),
-						}
-					} else {
-						if err := json.Unmarshal(output, &toolResult); err != nil {
-							toolResult = string(output)
-						}
+			if toolChain, ok := toolChainMap[toolName]; ok {
+				toolInput, _ := json.Marshal(toolArgs)
+				output, err := e.executeToolChain(ctx, bgCtx, toolChain, toolInput)
+				if err != nil {
+					toolResult = map[string]interface{}{
+						"error": err.Error(),
 					}
-					break
+				} else {
+					if err := json.Unmarshal(output, &toolResult); err != nil {
+						toolResult = string(output)
+					}
 				}
-			}
-
-			if !toolFound {
+			} else {
 				toolResult = map[string]interface{}{
 					"error": fmt.Sprintf("Tool not found: %s", toolName),
 				}
@@ -877,38 +891,182 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 	return json.Marshal(output)
 }
 
-// buildToolsFromSteps builds OpenAI-style tool definitions from child steps
-func (e *BlockGroupExecutor) buildToolsFromSteps(steps []*domain.Step, bgCtx *BlockGroupContext) []interface{} {
+// buildWorkflowContext builds a context string for the agent with current workflow information
+// This helps the agent understand the current state of the workflow being edited
+func (e *BlockGroupExecutor) buildWorkflowContext(bgCtx *BlockGroupContext) string {
+	// Extract project_id from input
+	var inputData map[string]interface{}
+	if err := json.Unmarshal(bgCtx.Input, &inputData); err != nil {
+		return ""
+	}
+
+	projectID, ok := inputData["project_id"].(string)
+	if !ok || projectID == "" {
+		// Also check workflow_id as an alias
+		projectID, ok = inputData["workflow_id"].(string)
+		if !ok || projectID == "" {
+			return ""
+		}
+	}
+
+	var context strings.Builder
+	context.WriteString("## Current Workflow Context\n\n")
+	context.WriteString(fmt.Sprintf("**Project ID:** %s\n\n", projectID))
+
+	// Filter and list steps in this project
+	var projectSteps []domain.Step
+	for _, step := range bgCtx.Graph.Steps {
+		if step.ProjectID.String() == projectID {
+			projectSteps = append(projectSteps, step)
+		}
+	}
+
+	if len(projectSteps) > 0 {
+		context.WriteString("### Existing Steps:\n")
+		for _, step := range projectSteps {
+			context.WriteString(fmt.Sprintf("- **%s** (type: %s, id: %s)\n",
+				step.Name, step.Type, step.ID.String()))
+		}
+		context.WriteString("\n")
+	} else {
+		context.WriteString("### Existing Steps:\nNo steps in this workflow yet.\n\n")
+	}
+
+	// Filter and list edges in this project
+	var projectEdges []domain.Edge
+	for _, edge := range bgCtx.Graph.AllEdges {
+		if edge.ProjectID.String() == projectID {
+			projectEdges = append(projectEdges, edge)
+		}
+	}
+
+	if len(projectEdges) > 0 {
+		context.WriteString("### Existing Connections:\n")
+		// Build step ID to name map for readable edge display
+		stepNameMap := make(map[string]string)
+		for _, step := range projectSteps {
+			stepNameMap[step.ID.String()] = step.Name
+		}
+		for _, edge := range projectEdges {
+			sourceName := stepNameMap[edge.SourceStepID.String()]
+			if sourceName == "" {
+				sourceName = edge.SourceStepID.String()
+			}
+			targetName := stepNameMap[edge.TargetStepID.String()]
+			if targetName == "" {
+				targetName = edge.TargetStepID.String()
+			}
+			context.WriteString(fmt.Sprintf("- %s -> %s\n", sourceName, targetName))
+		}
+		context.WriteString("\n")
+	} else {
+		context.WriteString("### Existing Connections:\nNo connections yet.\n\n")
+	}
+
+	return context.String()
+}
+
+// executeToolChain executes a chain of steps and returns the final output
+func (e *BlockGroupExecutor) executeToolChain(ctx context.Context, bgCtx *BlockGroupContext, toolChain *ToolChain, input json.RawMessage) (json.RawMessage, error) {
+	currentInput := input
+
+	for _, step := range toolChain.Chain {
+		output, err := e.executeStep(ctx, bgCtx.ExecCtx, bgCtx.Graph, step, currentInput)
+		if err != nil {
+			return nil, fmt.Errorf("step %s failed: %w", step.Name, err)
+		}
+		currentInput = output
+	}
+
+	return currentInput, nil
+}
+
+// buildToolsFromChains builds OpenAI-style tool definitions from tool chains
+func (e *BlockGroupExecutor) buildToolsFromChains(toolChains []*ToolChain) []interface{} {
 	var tools []interface{}
 
-	for _, step := range steps {
-		// Try to get tool definition from step config
-		var config map[string]interface{}
-		if step.Config != nil {
-			json.Unmarshal(step.Config, &config)
-		}
-
-		// Get description from config or use step name
-		description := step.Name
-		if desc, ok := config["description"].(string); ok && desc != "" {
-			description = desc
-		}
-
-		// Get parameters schema from config or default to empty object
+	for _, tc := range toolChains {
+		// Get parameters schema from entry point or default to empty object
 		parameters := map[string]interface{}{
 			"type":       "object",
 			"properties": map[string]interface{}{},
 		}
-		if params, ok := config["input_schema"].(map[string]interface{}); ok {
-			parameters = params
-		} else if params, ok := config["parameters"].(map[string]interface{}); ok {
-			parameters = params
+		if tc.InputSchema != nil {
+			if schemaMap, ok := tc.InputSchema.(map[string]interface{}); ok {
+				parameters = schemaMap
+			} else if schemaBytes, ok := tc.InputSchema.(json.RawMessage); ok {
+				var schemaMap map[string]interface{}
+				if err := json.Unmarshal(schemaBytes, &schemaMap); err == nil {
+					parameters = schemaMap
+				}
+			}
 		}
 
 		tool := map[string]interface{}{
 			"type": "function",
 			"function": map[string]interface{}{
-				"name":        step.Name,
+				"name":        tc.ToolName,
+				"description": tc.Description,
+				"parameters":  parameters,
+			},
+		}
+		tools = append(tools, tool)
+	}
+
+	return tools
+}
+
+// buildToolsFromSteps builds OpenAI-style tool definitions from child steps (legacy, kept for compatibility)
+func (e *BlockGroupExecutor) buildToolsFromSteps(steps []*domain.Step, bgCtx *BlockGroupContext) []interface{} {
+	var tools []interface{}
+
+	for _, step := range steps {
+		// Get tool name (prefer ToolName, fallback to step Name)
+		toolName := step.Name
+		if step.ToolName != nil && *step.ToolName != "" {
+			toolName = *step.ToolName
+		}
+
+		// Get description from ToolDescription, step config, or use step name
+		description := step.Name
+		if step.ToolDescription != nil && *step.ToolDescription != "" {
+			description = *step.ToolDescription
+		} else {
+			var config map[string]interface{}
+			if step.Config != nil {
+				json.Unmarshal(step.Config, &config)
+			}
+			if desc, ok := config["description"].(string); ok && desc != "" {
+				description = desc
+			}
+		}
+
+		// Get parameters schema from ToolInputSchema, step config, or default to empty object
+		parameters := map[string]interface{}{
+			"type":       "object",
+			"properties": map[string]interface{}{},
+		}
+		if len(step.ToolInputSchema) > 0 {
+			var schemaMap map[string]interface{}
+			if err := json.Unmarshal(step.ToolInputSchema, &schemaMap); err == nil {
+				parameters = schemaMap
+			}
+		} else {
+			var config map[string]interface{}
+			if step.Config != nil {
+				json.Unmarshal(step.Config, &config)
+			}
+			if params, ok := config["input_schema"].(map[string]interface{}); ok {
+				parameters = params
+			} else if params, ok := config["parameters"].(map[string]interface{}); ok {
+				parameters = params
+			}
+		}
+
+		tool := map[string]interface{}{
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":        toolName,
 				"description": description,
 				"parameters":  parameters,
 			},

@@ -26,7 +26,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "copilot",
 		Name:        "Copilot AI Assistant",
 		Description: "AI assistant for workflow building and platform guidance",
-		Version:     2, // Bumped version for Agent Group migration
+		Version:     3, // Bumped version for batch tools and enhanced context
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -88,8 +88,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "list_blocks",
 				Name:             "list_blocks",
 				Type:             "function",
-				PositionX:        40,
-				PositionY:        40,
+				PositionX:        300,
+				PositionY:        140,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "const blocks = ctx.blocks.list(); return { blocks: blocks.map(b => ({ slug: b.slug, name: b.name, category: b.category, description: b.description })) };",
@@ -100,8 +100,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "get_block_schema",
 				Name:             "get_block_schema",
 				Type:             "function",
-				PositionX:        160,
-				PositionY:        40,
+				PositionX:        460,
+				PositionY:        140,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.slug) return { error: 'slug is required' }; const block = ctx.blocks.getWithSchema(input.slug); if (!block) return { error: 'Block not found: ' + input.slug }; return block;",
@@ -119,8 +119,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "search_blocks",
 				Name:             "search_blocks",
 				Type:             "function",
-				PositionX:        280,
-				PositionY:        40,
+				PositionX:        620,
+				PositionY:        140,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "const query = (input.query || '').toLowerCase(); const blocks = ctx.blocks.list(); const matched = blocks.filter(b => (b.name && b.name.toLowerCase().includes(query)) || (b.description && b.description.toLowerCase().includes(query)) || (b.slug && b.slug.toLowerCase().includes(query))); return { blocks: matched.map(b => ({ slug: b.slug, name: b.name, category: b.category, description: b.description })), count: matched.length };",
@@ -140,8 +140,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "list_workflows",
 				Name:             "list_workflows",
 				Type:             "function",
-				PositionX:        40,
-				PositionY:        120,
+				PositionX:        300,
+				PositionY:        240,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "const workflows = ctx.workflows.list(); return { workflows: workflows.map(w => ({ id: w.id, name: w.name, description: w.description })), count: workflows.length };",
@@ -152,8 +152,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "get_workflow",
 				Name:             "get_workflow",
 				Type:             "function",
-				PositionX:        160,
-				PositionY:        120,
+				PositionX:        460,
+				PositionY:        240,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.workflow_id) return { error: 'workflow_id is required' }; const wf = ctx.workflows.get(input.workflow_id); if (!wf) return { error: 'Workflow not found: ' + input.workflow_id }; return wf;",
@@ -173,8 +173,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "create_step",
 				Name:             "create_step",
 				Type:             "function",
-				PositionX:        40,
-				PositionY:        200,
+				PositionX:        300,
+				PositionY:        340,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.project_id || !input.name || !input.type) return { error: 'project_id, name, and type are required' }; const step = ctx.steps.create({ project_id: input.project_id, name: input.name, type: input.type, config: input.config || {}, position_x: input.position_x || 0, position_y: input.position_y || 0, block_definition_id: input.block_definition_id }); return step;",
@@ -198,8 +198,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "update_step",
 				Name:             "update_step",
 				Type:             "function",
-				PositionX:        160,
-				PositionY:        200,
+				PositionX:        460,
+				PositionY:        340,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.step_id) return { error: 'step_id is required' }; const updates = {}; if (input.name) updates.name = input.name; if (input.config) updates.config = input.config; if (input.position_x !== undefined) updates.position_x = input.position_x; if (input.position_y !== undefined) updates.position_y = input.position_y; const step = ctx.steps.update(input.step_id, updates); return step;",
@@ -221,8 +221,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "delete_step",
 				Name:             "delete_step",
 				Type:             "function",
-				PositionX:        280,
-				PositionY:        200,
+				PositionX:        620,
+				PositionY:        340,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.step_id) return { error: 'step_id is required' }; ctx.steps.delete(input.step_id); return { success: true, deleted_step_id: input.step_id };",
@@ -242,8 +242,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "create_edge",
 				Name:             "create_edge",
 				Type:             "function",
-				PositionX:        40,
-				PositionY:        280,
+				PositionX:        300,
+				PositionY:        440,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.project_id || !input.source_step_id || !input.target_step_id) return { error: 'project_id, source_step_id, and target_step_id are required' }; const edge = ctx.edges.create({ project_id: input.project_id, source_step_id: input.source_step_id, target_step_id: input.target_step_id, source_port: input.source_port || 'output', target_port: input.target_port || 'input', condition: input.condition }); return edge;",
@@ -266,8 +266,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "delete_edge",
 				Name:             "delete_edge",
 				Type:             "function",
-				PositionX:        160,
-				PositionY:        280,
+				PositionX:        460,
+				PositionY:        440,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.edge_id) return { error: 'edge_id is required' }; ctx.edges.delete(input.edge_id); return { success: true, deleted_edge_id: input.edge_id };",
@@ -282,13 +282,84 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 
+			// Batch Tools - Efficient for creating multiple steps/edges at once
+			{
+				TempID:           "create_batch_steps",
+				Name:             "create_batch_steps",
+				Type:             "function",
+				PositionX:        620,
+				PositionY:        340,
+				BlockGroupTempID: "copilot_agent_group",
+				Config: json.RawMessage(`{
+					"code": "if (!input.project_id || !input.steps || !Array.isArray(input.steps)) return { error: 'project_id and steps array are required' }; const results = []; for (const stepConfig of input.steps) { if (!stepConfig.name || !stepConfig.type) { return { error: 'Each step requires name and type', partial_results: results }; } const step = ctx.steps.create({ project_id: input.project_id, name: stepConfig.name, type: stepConfig.type, config: stepConfig.config || {}, position_x: stepConfig.position_x || 0, position_y: stepConfig.position_y || 0, block_definition_id: stepConfig.block_definition_id }); if (!step || step.error) { return { error: 'Failed to create step: ' + stepConfig.name, partial_results: results }; } results.push({ id: step.id, name: step.name, type: step.type }); } return { success: true, steps_created: results.length, steps: results };",
+					"description": "Create multiple steps at once. More efficient than calling create_step multiple times. Returns the created steps with their IDs for edge creation.",
+					"input_schema": {
+						"type": "object",
+						"required": ["project_id", "steps"],
+						"properties": {
+							"project_id": {"type": "string", "description": "The workflow/project ID"},
+							"steps": {
+								"type": "array",
+								"description": "Array of step configurations to create",
+								"items": {
+									"type": "object",
+									"required": ["name", "type"],
+									"properties": {
+										"name": {"type": "string", "description": "Step name"},
+										"type": {"type": "string", "description": "Step type (llm, http, function, etc.)"},
+										"config": {"type": "object", "description": "Step configuration"},
+										"position_x": {"type": "integer", "description": "X position on canvas"},
+										"position_y": {"type": "integer", "description": "Y position on canvas"},
+										"block_definition_id": {"type": "string", "description": "Block definition UUID (optional)"}
+									}
+								}
+							}
+						}
+					}
+				}`),
+			},
+			{
+				TempID:           "create_batch_edges",
+				Name:             "create_batch_edges",
+				Type:             "function",
+				PositionX:        620,
+				PositionY:        440,
+				BlockGroupTempID: "copilot_agent_group",
+				Config: json.RawMessage(`{
+					"code": "if (!input.project_id || !input.edges || !Array.isArray(input.edges)) return { error: 'project_id and edges array are required' }; const results = []; for (const edgeConfig of input.edges) { if (!edgeConfig.source_step_id || !edgeConfig.target_step_id) { return { error: 'Each edge requires source_step_id and target_step_id', partial_results: results }; } const edge = ctx.edges.create({ project_id: input.project_id, source_step_id: edgeConfig.source_step_id, target_step_id: edgeConfig.target_step_id, source_port: edgeConfig.source_port || 'output', target_port: edgeConfig.target_port || 'input', condition: edgeConfig.condition }); if (!edge || edge.error) { return { error: 'Failed to create edge from ' + edgeConfig.source_step_id + ' to ' + edgeConfig.target_step_id, partial_results: results }; } results.push({ id: edge.id, source: edgeConfig.source_step_id, target: edgeConfig.target_step_id }); } return { success: true, edges_created: results.length, edges: results };",
+					"description": "Create multiple edges (connections) at once. Use after creating multiple steps to connect them efficiently.",
+					"input_schema": {
+						"type": "object",
+						"required": ["project_id", "edges"],
+						"properties": {
+							"project_id": {"type": "string", "description": "The workflow/project ID"},
+							"edges": {
+								"type": "array",
+								"description": "Array of edge configurations to create",
+								"items": {
+									"type": "object",
+									"required": ["source_step_id", "target_step_id"],
+									"properties": {
+										"source_step_id": {"type": "string", "description": "Source step ID"},
+										"target_step_id": {"type": "string", "description": "Target step ID"},
+										"source_port": {"type": "string", "description": "Source port name (default: 'output')"},
+										"target_port": {"type": "string", "description": "Target port name (default: 'input')"},
+										"condition": {"type": "string", "description": "Optional condition expression for conditional edges"}
+									}
+								}
+							}
+						}
+					}
+				}`),
+			},
+
 			// Documentation Search (using RAG if available)
 			{
 				TempID:           "search_documentation",
 				Name:             "search_documentation",
 				Type:             "function",
-				PositionX:        40,
-				PositionY:        360,
+				PositionX:        300,
+				PositionY:        540,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.query) return { error: 'query is required' }; if (ctx.vector && ctx.embedding) { try { const embedding = ctx.embedding.embed('openai', 'text-embedding-3-small', [input.query]); const results = ctx.vector.query('platform-docs', embedding.vectors[0], { topK: 5 }); return { results: results.matches || [], query: input.query }; } catch(e) { return { error: 'Documentation search not available', query: input.query }; } } return { error: 'Vector service not available', query: input.query };",
@@ -308,8 +379,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				TempID:           "validate_workflow",
 				Name:             "validate_workflow",
 				Type:             "function",
-				PositionX:        160,
-				PositionY:        360,
+				PositionX:        460,
+				PositionY:        540,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
 					"code": "if (!input.workflow_id) return { error: 'workflow_id is required' }; const wf = ctx.workflows.get(input.workflow_id); if (!wf) return { error: 'Workflow not found: ' + input.workflow_id, valid: false }; const errors = []; const steps = wf.steps || []; const startSteps = steps.filter(s => s.type === 'start'); if (startSteps.length === 0) errors.push('No start step found'); const stepIds = new Set(steps.map(s => s.id)); for (const edge of (wf.edges || [])) { if (!stepIds.has(edge.source_step_id)) errors.push('Edge references non-existent source step'); if (!stepIds.has(edge.target_step_id)) errors.push('Edge references non-existent target step'); } return { valid: errors.length === 0, errors: errors, step_count: steps.length, edge_count: (wf.edges || []).length };",
@@ -341,8 +412,8 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				Type:      "agent",
 				PositionX: 280,
 				PositionY: 80,
-				Width:     450,
-				Height:    450,
+				Width:     500,
+				Height:    580,
 				Config:    json.RawMessage(copilotAgentGroupConfig()),
 			},
 		},
@@ -393,20 +464,66 @@ When users want to improve existing workflows:
 3. Suggest optimizations (performance, reliability, cost)
 4. Implement changes with user approval
 
+## Common Blocks Quick Reference
+
+Use this reference for fast access to common blocks. For detailed configuration, always call get_block_schema.
+
+### AI/LLM Blocks
+- **llm** (slug: llm): Text generation with AI models. Supports OpenAI, Anthropic, Google, etc.
+- **llm-chat** (slug: llm-chat): Conversational AI with message history support.
+- **llm-structured** (slug: llm-structured): AI with structured JSON output.
+
+### Tool/Integration Blocks
+- **http** (slug: http): Make HTTP requests to external APIs.
+- **slack** (slug: slack): Send messages to Slack channels.
+- **discord** (slug: discord): Send messages to Discord channels.
+- **email** (slug: email): Send emails via SMTP.
+- **notion** (slug: notion): Interact with Notion databases and pages.
+
+### Control Flow Blocks
+- **condition** (slug: condition): If/else branching based on expressions.
+- **switch** (slug: switch): Multi-way branching with multiple cases.
+- **loop** (slug: loop): Iterate with count or condition.
+- **map** (slug: map): Transform each item in an array.
+- **filter** (slug: filter): Filter array items by condition.
+
+### Data Processing Blocks
+- **function** (slug: function): Execute custom JavaScript code.
+- **set-variables** (slug: set-variables): Set and transform variables.
+- **template** (slug: template): Generate text from templates.
+- **json-path** (slug: json-path): Extract data using JSONPath expressions.
+
+### Utility Blocks
+- **start** (slug: start): Workflow entry point (required for every workflow).
+- **log** (slug: log): Log messages for debugging.
+- **delay** (slug: delay): Wait for a specified time.
+
 ## Available Tools
 
-- list_blocks: Get all available blocks
-- get_block_schema: Get detailed schema for a specific block
-- search_blocks: Search blocks by keyword
-- list_workflows: List user's workflows
-- get_workflow: Get workflow details
-- create_step: Create a new step in a workflow
-- update_step: Update an existing step
-- delete_step: Delete a step
-- create_edge: Connect two steps
-- delete_edge: Remove a connection
-- search_documentation: Search platform documentation
-- validate_workflow: Validate workflow structure
+- **list_blocks**: Get all available blocks with basic info
+- **get_block_schema**: Get detailed configuration schema for a specific block
+- **search_blocks**: Search blocks by keyword
+- **list_workflows**: List user's workflows
+- **get_workflow**: Get workflow details including steps and edges
+- **create_step**: Create a new step in a workflow
+- **update_step**: Update an existing step's config or position
+- **delete_step**: Delete a step
+- **create_edge**: Connect two steps
+- **delete_edge**: Remove a connection
+- **create_batch_steps**: Create multiple steps at once (efficient for complex workflows)
+- **create_batch_edges**: Create multiple edges at once (use after batch step creation)
+- **search_documentation**: Search platform documentation
+- **validate_workflow**: Validate workflow structure
+
+## Workflow Building Guidelines
+
+1. Always use list_blocks or get_block_schema to verify block configurations
+2. Create steps with meaningful, descriptive names
+3. Position steps logically on the canvas (increment position_x/position_y by ~150-200)
+4. Connect steps with edges to define the execution flow
+5. Validate the workflow after major changes
+6. For multiple steps, prefer create_batch_steps for efficiency
+7. Always connect the start step to the first processing step
 
 ## Guidelines
 
@@ -415,15 +532,7 @@ When users want to improve existing workflows:
 3. Provide step-by-step guidance for complex tasks
 4. Use Japanese when the user writes in Japanese
 5. Be concise but thorough in explanations
-
-## Block Categories
-
-- ai: LLM, Agent, RAG blocks
-- integration: External service integrations (Slack, Discord, GitHub, etc.)
-- data: Data transformation and processing
-- control: Flow control (conditions, loops, parallel execution)
-- utility: Helper blocks (code, function, log, etc.)
-- rag: Vector database and retrieval blocks
+6. When workflow context is provided, use it to understand the current state
 `
 }
 
