@@ -10,6 +10,7 @@
  */
 
 import type { ComputedRef, Ref } from 'vue'
+import { COPILOT_SIDEBAR_WIDTH, COPILOT_SIDEBAR_COLLAPSED_WIDTH } from './useEditorState'
 
 /**
  * 下部フローティング要素のbottom位置とアニメーション状態を計算するヘルパー
@@ -51,3 +52,23 @@ export function useRightOffset(baseOffset = 12, panelOpen?: Ref<boolean>): Compu
     return baseOffset
   })
 }
+
+/**
+ * Copilot Sidebar のオフセットを計算するヘルパー
+ * Copilot Sidebar が開いているときは、他のフローティング要素を左にシフトする
+ * @param baseOffset ベースのオフセット（px）
+ * @returns 計算されたオフセット値（px）
+ */
+export function useCopilotOffset(baseOffset = 12): ComputedRef<number> {
+  const { copilotSidebarOpen } = useEditorState()
+
+  return computed(() => {
+    if (copilotSidebarOpen.value) {
+      return COPILOT_SIDEBAR_WIDTH + baseOffset
+    }
+    return baseOffset
+  })
+}
+
+// Re-export constants for convenience
+export { COPILOT_SIDEBAR_WIDTH, COPILOT_SIDEBAR_COLLAPSED_WIDTH }

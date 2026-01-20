@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
-import { useBottomOffset } from '~/composables/useFloatingLayout'
+import { useBottomOffset, useCopilotOffset } from '~/composables/useFloatingLayout'
 
 const { t } = useI18n()
 
@@ -11,6 +11,19 @@ const props = defineProps<{
 
 // ボトムパネルを考慮した下端オフセット（リサイズ中はアニメーション無効）
 const { offset: bottomOffset, isResizing } = useBottomOffset(16)
+
+// Copilot Sidebar を考慮した右端オフセット
+const copilotOffset = useCopilotOffset(16)
+
+// パネル開閉時の right 計算（Copilot Sidebar + FloatingRightPanel を考慮）
+const rightOffset = computed(() => {
+  // 基本: copilotOffset (CopilotSidebar開時は 320+16=336, 閉時は 16)
+  // panelOpen時: さらに 360px (FloatingRightPanel幅) + 12px (gap) を追加
+  if (props.panelOpen) {
+    return copilotOffset.value + 360 + 12
+  }
+  return copilotOffset.value
+})
 
 const emit = defineEmits<{
   zoomIn: []
@@ -39,7 +52,7 @@ function selectZoomPreset(preset: number) {
 </script>
 
 <template>
-  <div class="floating-zoom" :class="{ 'panel-open': panelOpen, 'no-transition': isResizing }" :style="{ bottom: bottomOffset + 'px' }">
+  <div class="floating-zoom" :class="{ 'no-transition': isResizing }" :style="{ bottom: bottomOffset + 'px', right: rightOffset + 'px' }">
     <!-- Zoom Controls -->
     <div class="zoom-controls">
       <!-- Zoom Out -->
@@ -103,10 +116,6 @@ function selectZoomPreset(preset: number) {
   align-items: flex-end;
   gap: 8px;
   transition: right 0.3s ease, bottom 0.2s ease;
-}
-
-.floating-zoom.panel-open {
-  right: 384px; /* 12px (panel right) + 360px (panel width) + 12px (gap) */
 }
 
 .floating-zoom.no-transition {
