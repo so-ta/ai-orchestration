@@ -81,11 +81,11 @@ type RunAgentInput struct {
 
 // RunAgentOutput represents output from running the agent
 type RunAgentOutput struct {
-	SessionID      uuid.UUID           `json:"session_id"`
-	Response       string              `json:"response"`
-	ToolsUsed      []string            `json:"tools_used"`
-	Iterations     int                 `json:"iterations"`
-	TotalTokens    int                 `json:"total_tokens"`
+	SessionID      uuid.UUID              `json:"session_id"`
+	Response       string                 `json:"response"`
+	ToolsUsed      []string               `json:"tools_used"`
+	Iterations     int                    `json:"iterations"`
+	TotalTokens    int                    `json:"total_tokens"`
 	UpdatedSession *domain.CopilotSession `json:"updated_session,omitempty"`
 }
 
@@ -285,6 +285,16 @@ func (u *AgentUsecase) StartAgentSession(ctx context.Context, input StartAgentSe
 		Response:  result.Response,
 		ToolsUsed: result.ToolsUsed,
 	}, nil
+}
+
+// GetSession retrieves a session with its messages
+func (u *AgentUsecase) GetSession(ctx context.Context, tenantID uuid.UUID, sessionID uuid.UUID) (*domain.CopilotSession, error) {
+	return u.sessionRepo.GetWithMessages(ctx, tenantID, sessionID)
+}
+
+// GetActiveSessionByProject retrieves the most recent active session for a user in a project
+func (u *AgentUsecase) GetActiveSessionByProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error) {
+	return u.sessionRepo.GetActiveByUserAndProject(ctx, tenantID, userID, projectID)
 }
 
 // GetAvailableTools returns the list of available tools

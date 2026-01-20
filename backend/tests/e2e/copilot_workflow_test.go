@@ -70,8 +70,11 @@ func TestCopilotWorkflowStructure(t *testing.T) {
 	err := json.Unmarshal(body, &getResp)
 	require.NoError(t, err)
 
-	// Verify step count (15 steps: start, set_context, copilot_agent, and 12 tool steps)
-	assert.Equal(t, 15, len(getResp.Data.Steps), "Copilot workflow should have 15 steps")
+	// Verify step count (16 steps: start, set_context, and 14 tool steps)
+	// Tool steps: list_blocks, get_block_schema, search_blocks, list_workflows, get_workflow,
+	//             create_step, update_step, delete_step, create_edge, delete_edge,
+	//             create_batch_steps, create_batch_edges, search_documentation, validate_workflow
+	assert.Equal(t, 16, len(getResp.Data.Steps), "Copilot workflow should have 16 steps")
 
 	// Verify required steps exist
 	stepNames := make(map[string]bool)
@@ -84,14 +87,13 @@ func TestCopilotWorkflowStructure(t *testing.T) {
 	// Check main flow steps
 	assert.True(t, stepNames["Start"], "Should have Start step")
 	assert.True(t, stepNames["Set Context"], "Should have Set Context step")
-	assert.True(t, stepNames["Copilot Agent"], "Should have Copilot Agent step")
+	// Note: Copilot Agent is now a BlockGroup, not a step
 
 	// Check step types
 	assert.Equal(t, "start", stepTypes["Start"])
 	assert.Equal(t, "set-variables", stepTypes["Set Context"])
-	assert.Equal(t, "agent", stepTypes["Copilot Agent"])
 
-	// Check tool steps exist
+	// Check tool steps exist (14 tools including batch operations)
 	toolSteps := []string{
 		"list_blocks",
 		"get_block_schema",
@@ -103,6 +105,8 @@ func TestCopilotWorkflowStructure(t *testing.T) {
 		"delete_step",
 		"create_edge",
 		"delete_edge",
+		"create_batch_steps",
+		"create_batch_edges",
 		"search_documentation",
 		"validate_workflow",
 	}
@@ -215,7 +219,7 @@ func TestCopilotWorkflowToolStepExecution(t *testing.T) {
 	}
 }
 
-// TestCopilotAgentConfigurationValid tests that the Copilot agent has valid configuration
+// TestCopilotAgentConfigurationValid tests that the Copilot agent BlockGroup has valid configuration
 func TestCopilotAgentConfigurationValid(t *testing.T) {
 	resp, body := makeRequest(t, "GET", "/api/v1/workflows/"+CopilotWorkflowID, nil)
 
@@ -227,46 +231,45 @@ func TestCopilotAgentConfigurationValid(t *testing.T) {
 
 	var getResp struct {
 		Data struct {
-			Steps []struct {
+			BlockGroups []struct {
 				ID     string          `json:"id"`
 				Name   string          `json:"name"`
 				Type   string          `json:"type"`
 				Config json.RawMessage `json:"config"`
+			} `json:"block_groups"`
+			Steps []struct {
+				ID               string `json:"id"`
+				Name             string `json:"name"`
+				Type             string `json:"type"`
+				BlockGroupID     string `json:"block_group_id"`
 			} `json:"steps"`
 		} `json:"data"`
 	}
 	err := json.Unmarshal(body, &getResp)
 	require.NoError(t, err)
 
-	// Find the Copilot Agent step
+	// Find the Copilot Agent BlockGroup
 	var agentConfig map[string]interface{}
-	for _, step := range getResp.Data.Steps {
-		if step.Name == "Copilot Agent" {
-			err = json.Unmarshal(step.Config, &agentConfig)
+	var agentGroupID string
+	for _, group := range getResp.Data.BlockGroups {
+		if group.Name == "Copilot Agent" {
+			err = json.Unmarshal(group.Config, &agentConfig)
 			require.NoError(t, err)
+			agentGroupID = group.ID
 			break
 		}
 	}
 
-	require.NotNil(t, agentConfig, "Should find Copilot Agent step config")
+	require.NotNil(t, agentConfig, "Should find Copilot Agent BlockGroup config")
+	require.NotEmpty(t, agentGroupID, "Should have BlockGroup ID")
 
 	// Verify agent configuration
 	assert.Equal(t, "anthropic", agentConfig["provider"])
 	assert.Equal(t, "claude-sonnet-4-20250514", agentConfig["model"])
 	assert.NotEmpty(t, agentConfig["system_prompt"], "Should have system prompt")
 
-	// Verify tools are configured
-	tools, ok := agentConfig["tools"].([]interface{})
-	require.True(t, ok, "Should have tools array")
-	assert.Equal(t, 12, len(tools), "Should have 12 tools configured")
-
-	// Verify tool names match step names
-	toolNames := make(map[string]bool)
-	for _, tool := range tools {
-		toolMap := tool.(map[string]interface{})
-		toolNames[toolMap["name"].(string)] = true
-	}
-
+	// In Agent BlockGroup architecture, tools are derived from child steps
+	// Verify that all expected tool steps belong to the agent group
 	expectedTools := []string{
 		"list_blocks",
 		"get_block_schema",
@@ -278,12 +281,26 @@ func TestCopilotAgentConfigurationValid(t *testing.T) {
 		"delete_step",
 		"create_edge",
 		"delete_edge",
+		"create_batch_steps",
+		"create_batch_edges",
 		"search_documentation",
 		"validate_workflow",
 	}
-	for _, toolName := range expectedTools {
-		assert.True(t, toolNames[toolName], "Should have %s tool in agent config", toolName)
+
+	// Build map of step names that belong to the agent group
+	agentStepNames := make(map[string]bool)
+	for _, step := range getResp.Data.Steps {
+		if step.BlockGroupID == agentGroupID {
+			agentStepNames[step.Name] = true
+		}
 	}
+
+	for _, toolName := range expectedTools {
+		assert.True(t, agentStepNames[toolName], "Should have %s as child step of agent group", toolName)
+	}
+
+	// Verify 14 tool steps belong to the agent group
+	assert.Equal(t, 14, len(agentStepNames), "Should have 14 tool steps in agent group")
 }
 
 // TestCopilotWorkflowCannotBeDeleted tests that system workflows cannot be deleted

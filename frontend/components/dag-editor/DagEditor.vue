@@ -9,6 +9,7 @@ import '@vue-flow/node-resizer/dist/style.css'
 import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputPort, BlockGroup, BlockGroupType, GroupRole } from '~/types/api'
 import NodeIcon from './NodeIcon.vue'
 import { getBlockIcon } from '~/composables/useBlockIcons'
+import { useCopilotOffset } from '~/composables/useFloatingLayout'
 
 // Constants for group node ID prefix
 const GROUP_NODE_PREFIX = 'group_'
@@ -109,10 +110,17 @@ const emit = defineEmits<{
 
 const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, viewport, zoomIn, zoomOut, zoomTo } = useVueFlow()
 
+// Copilot Sidebar を考慮した右端オフセット
+const copilotOffset = useCopilotOffset(12)
+
 // Right offset for auto-layout button (shift left when properties panel is open)
 const autoLayoutRightOffset = computed(() => {
-  // When a step or group is selected, the floating right panel (360px width + 12px right + 12px gap) is open
-  return (props.selectedStepId || props.selectedGroupId) ? 360 + 12 + 12 : 12
+  // 基本: copilotOffset (CopilotSidebar開時は 320+12=332, 閉時は 12)
+  // パネル開時: さらに 360px (FloatingRightPanel幅) + 12px (gap) を追加
+  if (props.selectedStepId || props.selectedGroupId) {
+    return copilotOffset.value + 360 + 12
+  }
+  return copilotOffset.value
 })
 
 // Selected edge for deletion
