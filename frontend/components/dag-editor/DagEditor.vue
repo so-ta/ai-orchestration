@@ -3149,7 +3149,7 @@ defineExpose({
 }
 
 .dag-group-selected {
-  /* Selection is shown via parent dashed border */
+  box-shadow: 0 0 0 2px var(--group-color);
 }
 
 .dag-group-header {
