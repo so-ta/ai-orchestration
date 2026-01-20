@@ -67,6 +67,113 @@ type AgentStreamEvent struct {
 // Handlers
 // ============================================================================
 
+// GetAgentSession handles GET /api/v1/projects/{project_id}/copilot/agent/sessions/{session_id}
+func (h *CopilotAgentHandler) GetAgentSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
+		return
+	}
+
+	sessionID, err := uuid.Parse(chi.URLParam(r, "session_id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_SESSION_ID", "Invalid session ID", nil)
+		return
+	}
+
+	session, err := h.agentUsecase.GetSession(ctx, tenantID, sessionID)
+	if err != nil {
+		if errors.Is(err, domain.ErrCopilotSessionNotFound) {
+			Error(w, http.StatusNotFound, "SESSION_NOT_FOUND", "Session not found", nil)
+			return
+		}
+		Error(w, http.StatusInternalServerError, "GET_SESSION_FAILED", err.Error(), nil)
+		return
+	}
+
+	// Verify session belongs to this project
+	if session.ContextProjectID == nil || *session.ContextProjectID != projectID {
+		Error(w, http.StatusNotFound, "SESSION_NOT_FOUND", "Session not found in this project", nil)
+		return
+	}
+
+	// Convert messages to DTO
+	messages := make([]map[string]interface{}, 0, len(session.Messages))
+	for _, msg := range session.Messages {
+		messages = append(messages, map[string]interface{}{
+			"id":         msg.ID.String(),
+			"role":       msg.Role,
+			"content":    msg.Content,
+			"created_at": msg.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	JSON(w, http.StatusOK, map[string]interface{}{
+		"id":         session.ID.String(),
+		"status":     string(session.Status),
+		"phase":      string(session.HearingPhase),
+		"progress":   session.HearingProgress,
+		"mode":       string(session.Mode),
+		"messages":   messages,
+		"created_at": session.CreatedAt.Format(time.RFC3339),
+		"updated_at": session.UpdatedAt.Format(time.RFC3339),
+	})
+}
+
+// GetActiveAgentSession handles GET /api/v1/projects/{project_id}/copilot/agent/sessions/active
+func (h *CopilotAgentHandler) GetActiveAgentSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+	userID := middleware.GetUserID(ctx)
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
+		return
+	}
+
+	session, err := h.agentUsecase.GetActiveSessionByProject(ctx, tenantID, userID.String(), projectID)
+	if err != nil {
+		// NotFound means no active session - return null
+		if errors.Is(err, domain.ErrCopilotSessionNotFound) {
+			JSON(w, http.StatusOK, map[string]interface{}{
+				"session": nil,
+			})
+			return
+		}
+		// Other errors are internal server errors
+		Error(w, http.StatusInternalServerError, "GET_ACTIVE_SESSION_FAILED", err.Error(), nil)
+		return
+	}
+
+	// Convert messages to DTO
+	messages := make([]map[string]interface{}, 0, len(session.Messages))
+	for _, msg := range session.Messages {
+		messages = append(messages, map[string]interface{}{
+			"id":         msg.ID.String(),
+			"role":       msg.Role,
+			"content":    msg.Content,
+			"created_at": msg.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	JSON(w, http.StatusOK, map[string]interface{}{
+		"session": map[string]interface{}{
+			"id":         session.ID.String(),
+			"status":     string(session.Status),
+			"phase":      string(session.HearingPhase),
+			"progress":   session.HearingProgress,
+			"mode":       string(session.Mode),
+			"messages":   messages,
+			"created_at": session.CreatedAt.Format(time.RFC3339),
+			"updated_at": session.UpdatedAt.Format(time.RFC3339),
+		},
+	})
+}
+
 // StartAgentSession handles POST /api/v1/projects/{project_id}/copilot/agent/sessions
 // This creates a session and returns immediately. Use the stream endpoint to process the initial message.
 func (h *CopilotAgentHandler) StartAgentSession(w http.ResponseWriter, r *http.Request) {
@@ -169,10 +276,10 @@ func (h *CopilotAgentHandler) SendAgentMessage(w http.ResponseWriter, r *http.Re
 	}
 
 	JSON(w, http.StatusOK, map[string]interface{}{
-		"session_id":  output.SessionID.String(),
-		"response":    output.Response,
-		"tools_used":  output.ToolsUsed,
-		"iterations":  output.Iterations,
+		"session_id":   output.SessionID.String(),
+		"response":     output.Response,
+		"tools_used":   output.ToolsUsed,
+		"iterations":   output.Iterations,
 		"total_tokens": output.TotalTokens,
 	})
 }

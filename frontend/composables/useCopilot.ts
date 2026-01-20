@@ -298,6 +298,24 @@ export interface AgentToolDefinition {
   input_schema: Record<string, unknown>
 }
 
+export interface AgentSessionMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  created_at: string
+}
+
+export interface AgentSessionWithMessages {
+  id: string
+  status: string
+  phase: string
+  progress: number
+  mode: string
+  messages: AgentSessionMessage[]
+  created_at: string
+  updated_at: string
+}
+
 // Streaming state for the agent
 export interface AgentStreamState {
   isStreaming: boolean
@@ -970,6 +988,29 @@ export function useCopilot() {
     return api.get<{ tools: AgentToolDefinition[]; count: number }>('/copilot/agent/tools')
   }
 
+  /**
+   * Get agent session by ID (with messages)
+   */
+  async function getAgentSession(
+    projectId: string,
+    sessionId: string
+  ): Promise<AgentSessionWithMessages> {
+    return api.get<AgentSessionWithMessages>(
+      `/workflows/${projectId}/copilot/agent/sessions/${sessionId}`
+    )
+  }
+
+  /**
+   * Get active agent session for a project (returns null if no active session)
+   */
+  async function getActiveAgentSession(
+    projectId: string
+  ): Promise<{ session: AgentSessionWithMessages | null }> {
+    return api.get<{ session: AgentSessionWithMessages | null }>(
+      `/workflows/${projectId}/copilot/agent/sessions/active`
+    )
+  }
+
   return {
     // Legacy sync functions (global copilot)
     suggest,
@@ -1024,6 +1065,8 @@ export function useCopilot() {
     streamAgentMessage,
     cancelAgentStream,
     getAgentTools,
+    getAgentSession,
+    getActiveAgentSession,
 
     // Constants
     HEARING_PHASE_LABELS,

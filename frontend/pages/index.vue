@@ -1328,6 +1328,20 @@ function handleOpenSettings() {
   console.log('Open settings')
 }
 
+// Handle Copilot changes applied
+async function handleCopilotChangesApplied() {
+  // Refresh project data after Copilot applies changes
+  if (project.value) {
+    await loadProject(project.value.id)
+  }
+}
+
+// Handle Copilot changes preview
+function handleCopilotChangesPreview() {
+  // Optional: highlight preview in DAG editor
+  // useCopilotDraft().previewState already provides this
+}
+
 // Keyboard shortcuts
 useKeyboardShortcuts({
   selectedStep: editorState.selectedStep,
@@ -1582,6 +1596,13 @@ onMounted(async () => {
           :steps="project.steps || []"
         />
       </SlideOutPanel>
+
+      <!-- Copilot Sidebar (Fixed Right Panel) -->
+      <CopilotSidebar
+        :workflow-id="project.id"
+        @changes:applied="handleCopilotChangesApplied"
+        @changes:preview="handleCopilotChangesPreview"
+      />
 
       <!-- Environment Variables Modal -->
       <EnvironmentVariablesModal

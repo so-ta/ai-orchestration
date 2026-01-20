@@ -7,7 +7,7 @@
  * - 共通の位置、スタイル、アニメーション
  * - ボトムパネルのリサイズに追従
  */
-import { useBottomOffset } from '~/composables/useFloatingLayout'
+import { useBottomOffset, useCopilotOffset } from '~/composables/useFloatingLayout'
 
 defineProps<{
   /** パネルを表示するか */
@@ -29,6 +29,9 @@ const { t } = useI18n()
 // ボトムパネルを考慮した下端オフセット
 const { offset: bottomOffset, isResizing } = useBottomOffset(12)
 
+// Copilot Sidebar を考慮した右端オフセット
+const copilotOffset = useCopilotOffset(12)
+
 // 閉じるボタン
 function handleClose() {
   emit('close')
@@ -45,7 +48,7 @@ function handleClose() {
     }"
     :style="{
       bottom: bottomOffset + 'px',
-      right: `${12 + (shiftLeft || 0)}px`
+      right: `${copilotOffset + (shiftLeft || 0)}px`
     }"
   >
     <!-- Header -->

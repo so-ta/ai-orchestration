@@ -359,7 +359,9 @@ func main() {
 					// Agent-based copilot (NEW: autonomous tool-calling agent)
 					r.Route("/agent", func(r chi.Router) {
 						r.Post("/sessions", copilotAgentHandler.StartAgentSession)
+						r.Get("/sessions/active", copilotAgentHandler.GetActiveAgentSession)
 						r.Route("/sessions/{session_id}", func(r chi.Router) {
+							r.Get("/", copilotAgentHandler.GetAgentSession)
 							r.Post("/messages", copilotAgentHandler.SendAgentMessage)
 							r.Get("/stream", copilotAgentHandler.StreamAgentMessage)
 							r.Post("/cancel", copilotAgentHandler.CancelAgentStream)
