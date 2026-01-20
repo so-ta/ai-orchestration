@@ -72,6 +72,12 @@ func (h *CopilotAgentHandler) GetAgentSession(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	tenantID := middleware.GetTenantID(ctx)
 
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
+		return
+	}
+
 	sessionID, err := uuid.Parse(chi.URLParam(r, "session_id"))
 	if err != nil {
 		Error(w, http.StatusBadRequest, "INVALID_SESSION_ID", "Invalid session ID", nil)
@@ -85,6 +91,12 @@ func (h *CopilotAgentHandler) GetAgentSession(w http.ResponseWriter, r *http.Req
 			return
 		}
 		Error(w, http.StatusInternalServerError, "GET_SESSION_FAILED", err.Error(), nil)
+		return
+	}
+
+	// Verify session belongs to this project
+	if session.ContextProjectID == nil || *session.ContextProjectID != projectID {
+		Error(w, http.StatusNotFound, "SESSION_NOT_FOUND", "Session not found in this project", nil)
 		return
 	}
 
@@ -125,10 +137,15 @@ func (h *CopilotAgentHandler) GetActiveAgentSession(w http.ResponseWriter, r *ht
 
 	session, err := h.agentUsecase.GetActiveSessionByProject(ctx, tenantID, userID.String(), projectID)
 	if err != nil {
-		// No active session is not an error, just return null
-		JSON(w, http.StatusOK, map[string]interface{}{
-			"session": nil,
-		})
+		// NotFound means no active session - return null
+		if errors.Is(err, domain.ErrCopilotSessionNotFound) {
+			JSON(w, http.StatusOK, map[string]interface{}{
+				"session": nil,
+			})
+			return
+		}
+		// Other errors are internal server errors
+		Error(w, http.StatusInternalServerError, "GET_ACTIVE_SESSION_FAILED", err.Error(), nil)
 		return
 	}
 

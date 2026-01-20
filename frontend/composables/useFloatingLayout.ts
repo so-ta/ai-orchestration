@@ -9,8 +9,8 @@
  * provide/injectなしでグローバル状態にアクセスする。
  */
 
-import type { ComputedRef, Ref } from 'vue'
-import { COPILOT_SIDEBAR_WIDTH, COPILOT_SIDEBAR_COLLAPSED_WIDTH } from './useEditorState'
+import { computed, type ComputedRef, type Ref } from 'vue'
+import { COPILOT_SIDEBAR_WIDTH, COPILOT_SIDEBAR_COLLAPSED_WIDTH, useEditorState } from './useEditorState'
 
 /**
  * 下部フローティング要素のbottom位置とアニメーション状態を計算するヘルパー
