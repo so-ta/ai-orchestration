@@ -913,6 +913,20 @@ function getPreviewClass(stepId: string): string | undefined {
   return undefined
 }
 
+// Get preview class for an edge based on Copilot preview state
+function getEdgePreviewClass(edgeId: string, sourceId: string, targetId: string): string | undefined {
+  if (!props.previewState) return undefined
+
+  // Check if edge is marked for deletion by ID
+  if (props.previewState.deletedEdgeIds?.has(edgeId)) return 'preview-edge-deleted'
+
+  // Check if edge is marked as added by source->target composite key
+  const compositeKey = `${sourceId}->${targetId}`
+  if (props.previewState.addedEdgeIds?.has(compositeKey)) return 'preview-edge-added'
+
+  return undefined
+}
+
 // Convert steps to Vue Flow nodes
 const stepNodes = computed<Node[]>(() => {
   return props.steps.map(step => {
@@ -1094,6 +1108,9 @@ const flowEdges = computed<FlowEdge[]>(() => {
     // Skip edge labels for edges involving group blocks (both from and to groups)
     const edgeLabel = isGroupEdge ? undefined : getEdgeLabel(edge.source_port, edge.condition)
 
+    // Get preview class for Copilot changes
+    const edgePreviewClass = getEdgePreviewClass(edge.id, source, target)
+
     result.push({
       id: edge.id,
       source,
@@ -1109,6 +1126,7 @@ const flowEdges = computed<FlowEdge[]>(() => {
       style: { stroke: color, strokeWidth },
       markerEnd: { type: MarkerType.ArrowClosed, color },
       interactionWidth: 20, // Make edge easier to click
+      class: edgePreviewClass || undefined,
       data: { isSelected, edgeId: edge.id },
     })
   }
@@ -3696,6 +3714,32 @@ defineExpose({
   outline-offset: 2px;
   opacity: 0.5;
   animation: preview-pulse-red 1.5s ease-in-out infinite;
+}
+
+/* Edge Preview Highlighting */
+:deep(.preview-edge-added .vue-flow__edge-path) {
+  stroke: #22c55e !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 8 4;
+  animation: edge-pulse-green 1.5s ease-in-out infinite;
+}
+
+:deep(.preview-edge-deleted .vue-flow__edge-path) {
+  stroke: #ef4444 !important;
+  stroke-width: 3 !important;
+  stroke-dasharray: 8 4;
+  opacity: 0.5;
+  animation: edge-pulse-red 1.5s ease-in-out infinite;
+}
+
+@keyframes edge-pulse-green {
+  0%, 100% { stroke: #22c55e; }
+  50% { stroke: #16a34a; }
+}
+
+@keyframes edge-pulse-red {
+  0%, 100% { stroke: #ef4444; }
+  50% { stroke: #dc2626; }
 }
 
 @keyframes preview-pulse-green {
