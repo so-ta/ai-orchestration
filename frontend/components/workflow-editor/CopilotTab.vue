@@ -328,7 +328,14 @@ async function sendAgentMessage() {
           if (toolStep) {
             toolStep.status = isError ? 'error' : 'success'
             toolStep.result = result
-            if (isError) toolStep.error = String(result)
+            if (isError) {
+              if (typeof result === 'object' && result !== null) {
+                const errorObj = result as Record<string, unknown>
+                toolStep.error = errorObj.error ? String(errorObj.error) : JSON.stringify(result)
+              } else {
+                toolStep.error = String(result)
+              }
+            }
           }
         },
         onPartialText: (content) => {
