@@ -1,14 +1,33 @@
 <script setup lang="ts">
+import { nextTick } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { AgentStreamState } from '~/composables/useCopilot'
 import { useCopilotDraft, type DraftChange } from '~/composables/useCopilotDraft'
-import CopilotPreviewPanel from './CopilotPreviewPanel.vue'
+import CopilotProposalCard, { type Proposal, type ProposalChange } from './CopilotProposalCard.vue'
+
+// Configure marked for safe rendering
+marked.setOptions({
+  breaks: true, // Convert \n to <br>
+  gfm: true, // GitHub Flavored Markdown
+})
+
+// Render markdown to HTML with XSS sanitization
+function renderMarkdown(content: string): string {
+  try {
+    const raw = marked.parse(content) as string
+    return DOMPurify.sanitize(raw)
+  } catch {
+    return DOMPurify.sanitize(content)
+  }
+}
 
 const props = defineProps<{
   workflowId: string
 }>()
 
 const emit = defineEmits<{
-  'changes:applied': []
+  'changes:applied': [changes: ProposalChange[]]
   'changes:preview': []
 }>()
 
@@ -17,41 +36,35 @@ const copilot = useCopilot()
 const toast = useToast()
 const copilotDraft = useCopilotDraft()
 
+// Tool execution type from extracted_data
+interface ToolExecution {
+  tool_name: string
+  arguments: Record<string, unknown>
+  result: Record<string, unknown>
+  is_error: boolean
+  timestamp: string
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  toolExecutions?: ToolExecution[]
+  proposal?: Proposal
+  messageId?: string // For tracking proposal status
+}
+
 // State
 const isLoading = ref(false)
 const isLoadingSession = ref(false)
 const chatMessage = ref('')
-const chatHistory = ref<Array<{ role: 'user' | 'assistant' | 'system'; content: string }>>([])
+const chatHistory = ref<ChatMessage[]>([])
+
+// Scroll tracking
+const chatMessagesRef = ref<HTMLElement | null>(null)
+const isUserScrolledUp = ref(false)
 
 // Agent state
 const agentSessionId = ref<string | null>(null)
-
-// Load active session from DB on mount
-async function loadActiveSession() {
-  if (isLoadingSession.value) return
-  isLoadingSession.value = true
-  try {
-    const result = await copilot.getActiveAgentSession(props.workflowId)
-    if (result.session) {
-      agentSessionId.value = result.session.id
-      // Convert messages to chat history format
-      chatHistory.value = result.session.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-      }))
-    }
-  } catch (e) {
-    console.warn('Failed to load active session from DB:', e)
-  } finally {
-    isLoadingSession.value = false
-  }
-}
-
-// Load on mount
-onMounted(() => {
-  loadActiveSession()
-})
-
 const agentStreamState = ref<AgentStreamState>({
   isStreaming: false,
   currentThinking: '',
@@ -61,6 +74,143 @@ const agentStreamState = ref<AgentStreamState>({
   error: null,
 })
 const currentCancelFn = ref<(() => void) | null>(null)
+
+// Proposal status storage (persisted via useCopilotDraft)
+const proposalStatuses = ref<Map<string, 'pending' | 'applied' | 'discarded'>>(new Map())
+
+// Load proposal statuses from localStorage
+function loadProposalStatuses() {
+  try {
+    const stored = localStorage.getItem(`copilot-proposal-statuses-${props.workflowId}`)
+    if (stored) {
+      const parsed = JSON.parse(stored) as Record<string, 'pending' | 'applied' | 'discarded'>
+      proposalStatuses.value = new Map(Object.entries(parsed))
+    }
+  } catch (e) {
+    console.warn('Failed to load proposal statuses:', e)
+  }
+}
+
+// Save proposal statuses to localStorage
+function saveProposalStatuses() {
+  try {
+    const obj = Object.fromEntries(proposalStatuses.value)
+    localStorage.setItem(`copilot-proposal-statuses-${props.workflowId}`, JSON.stringify(obj))
+  } catch (e) {
+    console.warn('Failed to save proposal statuses:', e)
+  }
+}
+
+// Get proposal with local status applied
+function getProposalWithStatus(proposal: Proposal): Proposal {
+  const localStatus = proposalStatuses.value.get(proposal.id)
+  if (localStatus && localStatus !== proposal.status) {
+    return { ...proposal, status: localStatus }
+  }
+  return proposal
+}
+
+// Load active session from DB on mount
+async function loadActiveSession() {
+  if (isLoadingSession.value) return
+  isLoadingSession.value = true
+
+  // Load proposal statuses first
+  loadProposalStatuses()
+
+  try {
+    const result = await copilot.getActiveAgentSession(props.workflowId)
+    if (result.session) {
+      agentSessionId.value = result.session.id
+      // Convert messages to chat history format with extracted_data
+      chatHistory.value = result.session.messages.map((msg, idx) => {
+        const chatMsg: ChatMessage = {
+          role: msg.role,
+          content: msg.content,
+          messageId: msg.id || `msg-${idx}`,
+        }
+        // Extract tool executions and proposal from extracted_data if present
+        if (msg.extracted_data && typeof msg.extracted_data === 'object') {
+          const data = msg.extracted_data as {
+            tool_executions?: ToolExecution[]
+            proposal?: Proposal
+          }
+          if (data.tool_executions && Array.isArray(data.tool_executions)) {
+            chatMsg.toolExecutions = data.tool_executions
+          }
+          if (data.proposal) {
+            // Apply local status if available
+            chatMsg.proposal = getProposalWithStatus(data.proposal)
+          }
+        }
+        return chatMsg
+      })
+    }
+  } catch (e) {
+    console.warn('Failed to load active session from DB:', e)
+  } finally {
+    isLoadingSession.value = false
+    // Scroll to bottom after session is loaded
+    nextTick(() => scrollToBottom(false))
+  }
+}
+
+// ==========================================================================
+// Auto-scroll functionality
+// ==========================================================================
+
+// Check if user is near bottom (within threshold)
+function isNearBottom(threshold = 100): boolean {
+  const el = chatMessagesRef.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+}
+
+// Scroll to bottom smoothly
+function scrollToBottom(smooth = true) {
+  const el = chatMessagesRef.value
+  if (!el) return
+  el.scrollTo({
+    top: el.scrollHeight,
+    behavior: smooth ? 'smooth' : 'instant',
+  })
+}
+
+// Handle scroll event to track user position
+function handleChatScroll() {
+  isUserScrolledUp.value = !isNearBottom()
+}
+
+// Auto-scroll when chat history changes (new messages)
+watch(
+  () => chatHistory.value.length,
+  () => {
+    if (!isUserScrolledUp.value) {
+      nextTick(() => scrollToBottom())
+    }
+  }
+)
+
+// Load on mount
+onMounted(() => {
+  loadActiveSession()
+  // Scroll to bottom after session is loaded
+  nextTick(() => scrollToBottom(false))
+})
+
+// Auto-scroll during streaming (partial response, thinking, tool steps)
+watch(
+  [
+    () => agentStreamState.value.partialResponse,
+    () => agentStreamState.value.currentThinking,
+    () => agentStreamState.value.toolSteps.length,
+  ],
+  () => {
+    if (!isUserScrolledUp.value && agentStreamState.value.isStreaming) {
+      nextTick(() => scrollToBottom(false)) // instant scroll during streaming
+    }
+  }
+)
 
 // ==========================================================================
 // Agent Functions (autonomous tool-calling agent with SSE streaming)
@@ -130,6 +280,9 @@ async function sendAgentMessage() {
   const message = chatMessage.value.trim()
   chatMessage.value = ''
 
+  // Reset scroll state when user sends a message (resume auto-scroll)
+  isUserScrolledUp.value = false
+
   // Add user message to chat
   chatHistory.value.push({ role: 'user', content: message })
 
@@ -178,7 +331,14 @@ async function sendAgentMessage() {
           if (toolStep) {
             toolStep.status = isError ? 'error' : 'success'
             toolStep.result = result
-            if (isError) toolStep.error = String(result)
+            if (isError) {
+              if (typeof result === 'object' && result !== null) {
+                const errorObj = result as Record<string, unknown>
+                toolStep.error = errorObj.error ? String(errorObj.error) : JSON.stringify(result)
+              } else {
+                toolStep.error = String(result)
+              }
+            }
           }
         },
         onPartialText: (content) => {
@@ -191,19 +351,32 @@ async function sendAgentMessage() {
           agentStreamState.value.partialResponse = ''
           currentCancelFn.value = null
 
-          // Add assistant response to chat
-          chatHistory.value.push({ role: 'assistant', content: response })
-
-          // Finalize draft and determine if preview is needed
+          // Finalize draft to get proposal data
           const { needsPreview } = copilotDraft.finalizeDraft()
 
-          if (needsPreview) {
-            // Show preview panel
-            showPreviewPanel.value = true
-            emit('changes:preview')
-          } else if (copilotDraft.changeSummary.value.total > 0) {
-            // Auto-apply small changes
-            handleApplyDraft()
+          // Build proposal from draft if available
+          let proposal: Proposal | undefined
+          const draft = copilotDraft.getDraft()
+          if (draft && draft.changes.length > 0) {
+            proposal = {
+              id: draft.id,
+              status: 'pending',
+              changes: draft.changes.map(draftChangeToProposalChange),
+            }
+          }
+
+          // Add assistant response to chat with proposal (inline display)
+          const messageId = `msg-${Date.now()}`
+          chatHistory.value.push({
+            role: 'assistant',
+            content: response,
+            proposal,
+            messageId,
+          })
+
+          // Auto-apply small changes (no step creates/deletes)
+          if (!needsPreview && copilotDraft.changeSummary.value.total > 0) {
+            handleApplyProposal(proposal?.id || '')
             toast.info(t('copilot.preview.autoApplied'))
           }
 
@@ -268,9 +441,6 @@ async function handleSend() {
   await sendAgentMessage()
 }
 
-// Preview panel state
-const showPreviewPanel = ref(false)
-
 // Computed for showing agent streaming UI
 const showAgentStreaming = computed(() => {
   return agentStreamState.value.isStreaming ||
@@ -279,26 +449,92 @@ const showAgentStreaming = computed(() => {
     agentStreamState.value.error
 })
 
-// Handle apply draft
-function handleApplyDraft() {
-  // Emit event - the parent component will handle actual command execution
-  // This is because the parent has access to the project state and API instances
-  emit('changes:applied')
-  showPreviewPanel.value = false
-  copilotDraft.discardDraft() // Clear after apply
+// Convert DraftChange to ProposalChange format
+function draftChangeToProposalChange(change: DraftChange): ProposalChange {
+  switch (change.type) {
+    case 'step:create':
+      return {
+        type: 'step:create',
+        temp_id: change.tempId,
+        name: change.name,
+        step_type: change.stepType,
+        config: change.config as Record<string, unknown>,
+        position: change.position,
+      }
+    case 'step:update':
+      return {
+        type: 'step:update',
+        step_id: change.stepId,
+        patch: change.patch as Record<string, unknown>,
+      }
+    case 'step:delete':
+      return {
+        type: 'step:delete',
+        step_id: change.stepId,
+      }
+    case 'edge:create':
+      return {
+        type: 'edge:create',
+        source_id: change.sourceId,
+        target_id: change.targetId,
+        source_port: change.sourcePort,
+        target_port: change.targetPort,
+      }
+    case 'edge:delete':
+      return {
+        type: 'edge:delete',
+        edge_id: change.edgeId,
+      }
+  }
 }
 
-// Handle discard draft
-function handleDiscardDraft() {
-  copilotDraft.discardDraft()
-  showPreviewPanel.value = false
+// Update proposal status in chat history
+function updateProposalStatus(proposalId: string, status: 'applied' | 'discarded') {
+  for (const msg of chatHistory.value) {
+    if (msg.proposal && msg.proposal.id === proposalId) {
+      msg.proposal = { ...msg.proposal, status }
+      break
+    }
+  }
+  // Persist status
+  proposalStatuses.value.set(proposalId, status)
+  saveProposalStatuses()
 }
 
-// Handle modify request
-async function handleModifyDraft(feedback: string) {
-  showPreviewPanel.value = false
-  copilotDraft.discardDraft()
+// Get proposal changes by ID from chat history
+function getProposalChanges(proposalId: string): ProposalChange[] {
+  for (const msg of chatHistory.value) {
+    if (msg.proposal && msg.proposal.id === proposalId) {
+      return msg.proposal.changes
+    }
+  }
+  return []
+}
 
+// Handle apply proposal (from inline card)
+function handleApplyProposal(proposalId: string) {
+  // Get the proposal changes before updating status
+  const changes = getProposalChanges(proposalId)
+
+  updateProposalStatus(proposalId, 'applied')
+
+  // Emit event with changes - parent component handles actual command execution
+  if (changes.length > 0) {
+    emit('changes:applied', changes)
+  }
+
+  copilotDraft.discardDraft()
+}
+
+// Handle discard proposal (from inline card)
+function handleDiscardProposal(proposalId: string) {
+  updateProposalStatus(proposalId, 'discarded')
+  copilotDraft.discardDraft()
+}
+
+// Handle modify proposal (from inline card)
+async function handleModifyProposal(_proposalId: string, feedback: string) {
+  copilotDraft.discardDraft()
   // Send the modification request as a new message
   chatMessage.value = feedback
   await sendAgentMessage()
@@ -307,18 +543,9 @@ async function handleModifyDraft(feedback: string) {
 
 <template>
   <div class="copilot-tab">
-    <!-- Preview Panel (shown when changes need review) -->
-    <CopilotPreviewPanel
-      v-if="showPreviewPanel && copilotDraft.currentDraft.value"
-      :draft="copilotDraft.currentDraft.value"
-      @apply="handleApplyDraft"
-      @discard="handleDiscardDraft"
-      @modify="handleModifyDraft"
-    />
-
     <!-- Chat Section -->
     <div class="chat-section">
-      <div class="chat-messages">
+      <div ref="chatMessagesRef" class="chat-messages" @scroll="handleChatScroll">
         <div v-if="chatHistory.length === 0" class="chat-empty">
           <p>{{ t('copilot.agent.welcome') }}</p>
           <p class="chat-hint">{{ t('copilot.agent.hint') }}</p>
@@ -329,7 +556,47 @@ async function handleModifyDraft(feedback: string) {
           class="chat-message"
           :class="msg.role"
         >
-          <div class="message-content">{{ msg.content }}</div>
+          <!-- Show tool executions before assistant message content -->
+          <div v-if="msg.toolExecutions && msg.toolExecutions.length > 0" class="saved-tool-executions">
+            <div
+              v-for="(exec, execIdx) in msg.toolExecutions"
+              :key="execIdx"
+              class="tool-step"
+              :class="exec.is_error ? 'error' : 'success'"
+            >
+              <div class="tool-header">
+                <span class="tool-icon">
+                  <svg v-if="exec.is_error" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                  <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </span>
+                <span class="tool-name">{{ exec.tool_name }}</span>
+                <span class="tool-status">{{ exec.is_error ? t('copilot.toolStatus.error') : t('copilot.toolStatus.success') }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- User messages: plain text, Assistant messages: markdown -->
+          <div
+            v-if="msg.role === 'assistant'"
+            class="message-content markdown-content"
+            v-html="renderMarkdown(msg.content)"
+          />
+          <div v-else class="message-content">{{ msg.content }}</div>
+
+          <!-- Inline Proposal Card (Claude Code style) -->
+          <CopilotProposalCard
+            v-if="msg.proposal"
+            :proposal="msg.proposal"
+            :message-id="msg.messageId"
+            @apply="handleApplyProposal"
+            @discard="handleDiscardProposal"
+            @modify="handleModifyProposal"
+          />
         </div>
 
         <!-- Agent Streaming UI -->
@@ -719,6 +986,136 @@ async function handleModifyDraft(feedback: string) {
   text-align: center;
   font-size: 0.75rem;
   font-style: italic;
+}
+
+.message-content {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Markdown content styles */
+.markdown-content {
+  white-space: normal;
+}
+
+.markdown-content :deep(p) {
+  margin: 0 0 0.5em 0;
+}
+
+.markdown-content :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-content :deep(li) {
+  margin: 0.25em 0;
+}
+
+.markdown-content :deep(code) {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.125em 0.375em;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+}
+
+.markdown-content :deep(pre) {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 0.75em;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.markdown-content :deep(pre code) {
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+}
+
+.markdown-content :deep(strong) {
+  font-weight: 600;
+}
+
+.markdown-content :deep(em) {
+  font-style: italic;
+}
+
+.markdown-content :deep(a) {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.markdown-content :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.markdown-content :deep(blockquote) {
+  margin: 0.5em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.markdown-content :deep(h1),
+.markdown-content :deep(h2),
+.markdown-content :deep(h3),
+.markdown-content :deep(h4) {
+  margin: 0.75em 0 0.5em 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.markdown-content :deep(h1) {
+  font-size: 1.25em;
+}
+
+.markdown-content :deep(h2) {
+  font-size: 1.125em;
+}
+
+.markdown-content :deep(h3) {
+  font-size: 1em;
+}
+
+.markdown-content :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 0.75em 0;
+}
+
+.markdown-content :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  font-size: 0.875em;
+}
+
+.markdown-content :deep(th),
+.markdown-content :deep(td) {
+  border: 1px solid var(--color-border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.markdown-content :deep(th) {
+  background: var(--color-background);
+  font-weight: 600;
+}
+
+/* Saved tool executions in chat history */
+.saved-tool-executions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--color-border);
 }
 
 .chat-input-container {
