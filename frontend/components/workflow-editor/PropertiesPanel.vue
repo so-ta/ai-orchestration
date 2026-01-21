@@ -46,10 +46,16 @@ const props = defineProps<{
 }>()
 
 // Active tab state
-const activeTab = ref<'config' | 'flow' | 'copilot' | 'run'>('config')
+const activeTab = ref<'config' | 'flow' | 'run'>('config')
 
-// Check if step is a generic start block
-const isGenericStartBlock = computed(() => props.step?.type === 'start')
+// Trigger block types
+const TRIGGER_BLOCK_TYPES = ['start', 'manual_trigger', 'schedule_trigger', 'webhook_trigger']
+
+// Check if step is a trigger block (start or any trigger variant)
+const isTriggerBlock = computed(() => {
+  const stepType = props.step?.type
+  return stepType ? TRIGGER_BLOCK_TYPES.includes(stepType) : false
+})
 
 const emit = defineEmits<{
   (e: 'save', data: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> }): void
@@ -124,8 +130,11 @@ watch(formName, (newName) => {
 })
 
 // Step type colors
-const stepTypeColors: Record<StepType, string> = {
+const stepTypeColors: Record<string, string> = {
   start: '#10b981',
+  manual_trigger: '#10b981',
+  schedule_trigger: '#22c55e',
+  webhook_trigger: '#3b82f6',
   llm: '#3b82f6',
   tool: '#22c55e',
   condition: '#f59e0b',
@@ -145,7 +154,10 @@ const stepTypeColors: Record<StepType, string> = {
   log: '#10b981'
 }
 
-const isStartNode = computed(() => props.step?.type === 'start')
+const isStartNode = computed(() => {
+  const stepType = props.step?.type
+  return stepType ? TRIGGER_BLOCK_TYPES.includes(stepType) : false
+})
 
 // Flow config
 const flowConfig = ref<{
@@ -311,18 +323,11 @@ const showIOPorts = computed(() => {
         </svg>
         {{ t('editor.tabs.config') }}
       </button>
-      <button v-if="!isGenericStartBlock" class="tab-button" :class="{ active: activeTab === 'flow' }" @click="activeTab = 'flow'">
+      <button v-if="!isTriggerBlock" class="tab-button" :class="{ active: activeTab === 'flow' }" @click="activeTab = 'flow'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M5 3l-1 9"/><path d="M19 3l1 9"/><polyline points="8 14 12 18 16 14"/>
         </svg>
         {{ t('editor.tabs.flow') }}
-      </button>
-      <button class="tab-button" :class="{ active: activeTab === 'copilot' }" @click="activeTab = 'copilot'">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2z"/>
-          <circle cx="8" cy="14" r="2"/><circle cx="16" cy="14" r="2"/>
-        </svg>
-        {{ t('editor.tabs.copilot') }}
       </button>
       <button class="tab-button" :class="{ active: activeTab === 'run' }" @click="activeTab = 'run'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -347,7 +352,7 @@ const showIOPorts = computed(() => {
         </div>
 
         <!-- Dynamic Config Form -->
-        <div v-if="hasConfigSchema && !['start', 'join', 'note'].includes(formType)" class="form-section">
+        <div v-if="hasConfigSchema && !['join', 'note', ...TRIGGER_BLOCK_TYPES].includes(formType)" class="form-section">
           <h4 class="section-title">{{ currentBlockDef?.name || formType }} 設定</h4>
           <DynamicConfigForm v-model="formConfig" :schema="configSchema" :ui-config="uiConfig" :disabled="readonlyMode" />
         </div>
@@ -363,7 +368,7 @@ const showIOPorts = computed(() => {
         />
 
         <!-- Trigger Configuration -->
-        <div v-if="isGenericStartBlock" class="form-section trigger-section">
+        <div v-if="isTriggerBlock" class="form-section trigger-section">
           <h4 class="section-title">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
@@ -423,11 +428,6 @@ const showIOPorts = computed(() => {
     <!-- Flow Tab Content -->
     <div v-if="activeTab === 'flow'" class="properties-body flow-container">
       <FlowTab :step="step" :block-definitions="blockDefinitions" :readonly-mode="readonlyMode" @update:flow-config="handleFlowConfigUpdate" />
-    </div>
-
-    <!-- Copilot Tab Content -->
-    <div v-if="activeTab === 'copilot'" class="properties-body copilot-container">
-      <CopilotTab :workflow-id="workflowId" />
     </div>
 
     <!-- Run Tab Content -->
@@ -555,7 +555,6 @@ const showIOPorts = computed(() => {
   padding: 1rem;
 }
 
-.properties-body.copilot-container,
 .properties-body.execution-container {
   padding: 0.75rem 1rem;
   overflow: hidden;

@@ -117,6 +117,8 @@ export function useProjects() {
     type: string
     config?: object
     position?: { x: number; y: number }
+    trigger_type?: 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
+    trigger_config?: object
   }) {
     return api.post<ApiResponse<Step>>(`/workflows/${projectId}/steps`, data)
   }

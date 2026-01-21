@@ -28,6 +28,14 @@ import {
   CreateGroupCommand,
   DeleteGroupCommand,
 } from '~/composables/commands/GroupCommands'
+import {
+  WorkflowChangeCommand,
+  type WorkflowChanges,
+  type StepChange,
+  type GroupChange,
+  type EdgeChange,
+} from '~/composables/commands/WorkflowChangeCommand'
+import type { ProposalChange } from '~/components/workflow-editor/CopilotProposalCard.vue'
 
 // Use editor layout (fullscreen, no padding)
 definePageMeta({
@@ -215,7 +223,6 @@ async function createNewProject() {
     blockGroups.value = []
     setCurrentProjectId(response.data.id)
     setProjectInUrl(response.data.id)
-    toast.success(t('editor.projectCreated'))
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to create project'
     throw e
@@ -253,6 +260,27 @@ async function handleCreateProject() {
   }
 }
 
+// Trigger block mapping: block slug -> trigger_type
+const triggerBlockMap: Record<string, 'manual' | 'webhook' | 'schedule'> = {
+  'manual_trigger': 'manual',
+  'schedule_trigger': 'schedule',
+  'webhook_trigger': 'webhook',
+  'start': 'manual',
+}
+
+// Default trigger configs by trigger type
+function getDefaultTriggerConfig(triggerType: string): object {
+  switch (triggerType) {
+    case 'schedule':
+      return { cron_expression: '0 9 * * *', timezone: 'Asia/Tokyo', enabled: true }
+    case 'webhook':
+      return { secret: '', allowed_ips: [] }
+    case 'manual':
+    default:
+      return {}
+  }
+}
+
 // Add step from palette drop
 async function handleStepDrop(data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: GroupRole }) {
   if (!project.value || isReadonly.value) return
@@ -271,6 +299,9 @@ async function handleStepDrop(data: { type: StepType; name: string; position: { 
     human_in_loop: { instructions: '', timeout_hours: 24 },
   }
 
+  // Check if this is a trigger block
+  const triggerType = triggerBlockMap[data.type]
+
   try {
     const cmd = new CreateStepCommand(
       project.value.id,
@@ -279,9 +310,11 @@ async function handleStepDrop(data: { type: StepType; name: string; position: { 
         type: data.type,
         config: defaultConfigs[data.type] || {},
         position: data.position,
+        trigger_type: triggerType,
+        trigger_config: triggerType ? getDefaultTriggerConfig(triggerType) : undefined,
       },
       projects,
-      project
+      () => project.value
     )
     await commandHistory.execute(cmd)
 
@@ -478,12 +511,11 @@ async function handleDeleteGroup() {
       project.value.id,
       group,
       blockGroupsApi,
-      blockGroups,
-      project
+      () => blockGroups.value,
+      (groups) => { blockGroups.value = groups },
+      () => project.value
     )
     await commandHistory.execute(cmd)
-
-    toast.success(t('editor.groupDeleted'))
   } catch (e) {
     toast.error(t('editor.groupDeleteFailed'), e instanceof Error ? e.message : undefined)
     await loadProject(project.value.id)
@@ -513,19 +545,53 @@ async function handleUpdateGroupConfig(config: AgentConfig) {
 
 async function handleUpdateGroupPosition(groupId: string, updates: { position?: { x: number; y: number }; size?: { width: number; height: number } }) {
   if (isReadonly.value || !project.value) return
+
+  const group = blockGroups.value.find(g => g.id === groupId)
+  if (!group) return
+
+  // Capture before state
+  const beforeState: GroupChange['before'] = {
+    position_x: group.position_x,
+    position_y: group.position_y,
+    width: group.width,
+    height: group.height,
+  }
+
+  // Compute after state
+  const afterState: GroupChange['after'] = {
+    position_x: updates.position?.x ?? group.position_x,
+    position_y: updates.position?.y ?? group.position_y,
+    width: updates.size?.width ?? group.width,
+    height: updates.size?.height ?? group.height,
+  }
+
+  // Skip if nothing changed
+  if (beforeState.position_x === afterState.position_x &&
+      beforeState.position_y === afterState.position_y &&
+      beforeState.width === afterState.width &&
+      beforeState.height === afterState.height) {
+    return
+  }
+
+  const changes: WorkflowChanges = {
+    groups: [{
+      id: groupId,
+      before: beforeState,
+      after: afterState,
+    }],
+  }
+
   try {
-    const group = blockGroups.value.find(g => g.id === groupId)
-    if (group) {
-      if (updates.position) {
-        group.position_x = updates.position.x
-        group.position_y = updates.position.y
-      }
-      if (updates.size) {
-        group.width = updates.size.width
-        group.height = updates.size.height
-      }
-    }
-    await blockGroupsApi.update(project.value.id, groupId, updates)
+    const cmd = new WorkflowChangeCommand(
+      project.value.id,
+      changes,
+      `Update group: ${group.name}`,
+      projects,
+      blockGroupsApi,
+      () => project.value,
+      () => blockGroups.value
+    )
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to update group', e instanceof Error ? e.message : undefined)
     await loadProject(project.value.id)
@@ -544,7 +610,8 @@ async function handleGroupDrop(data: { type: BlockGroupType; name: string; posit
         size: { width: 400, height: 300 },
       },
       blockGroupsApi,
-      blockGroups
+      () => blockGroups.value,
+      (groups) => { blockGroups.value = groups }
     )
     await commandHistory.execute(cmd)
   } catch (e) {
@@ -565,108 +632,146 @@ async function handleGroupMoveComplete(
 ) {
   if (!project.value || isReadonly.value) return
 
-  try {
-    const group = blockGroups.value.find(g => g.id === groupId)
-    if (group) {
-      group.position_x = data.position.x
-      group.position_y = data.position.y
-    }
+  const group = blockGroups.value.find(g => g.id === groupId)
+  if (!group) return
 
-    const stepsInGroup = project.value.steps?.filter(s => s.block_group_id === groupId) || []
-    for (const step of stepsInGroup) {
-      step.position_x += data.delta.x
-      step.position_y += data.delta.y
-    }
+  // Build changes for undo/redo
+  const stepChanges: StepChange[] = []
+  const groupChanges: GroupChange[] = []
+  const edgeChanges: EdgeChange[] = []
 
-    for (const pushed of data.pushedBlocks) {
-      const step = project.value.steps?.find(s => s.id === pushed.stepId)
-      if (step) {
-        step.position_x = pushed.position.x
-        step.position_y = pushed.position.y
+  // 1. Main group position change
+  groupChanges.push({
+    id: groupId,
+    before: {
+      position_x: data.position.x - data.delta.x,
+      position_y: data.position.y - data.delta.y,
+    },
+    after: {
+      position_x: data.position.x,
+      position_y: data.position.y,
+    },
+  })
+
+  // 2. Steps inside the main group (move with delta)
+  const stepsInGroup = project.value.steps?.filter(s => s.block_group_id === groupId) || []
+  for (const step of stepsInGroup) {
+    stepChanges.push({
+      id: step.id,
+      before: {
+        position_x: step.position_x,
+        position_y: step.position_y,
+      },
+      after: {
+        position_x: step.position_x + data.delta.x,
+        position_y: step.position_y + data.delta.y,
+      },
+    })
+  }
+
+  // 3. Pushed blocks (steps pushed out of group's way)
+  for (const pushed of data.pushedBlocks) {
+    const step = project.value.steps?.find(s => s.id === pushed.stepId)
+    if (step) {
+      stepChanges.push({
+        id: pushed.stepId,
+        before: {
+          position_x: step.position_x,
+          position_y: step.position_y,
+        },
+        after: {
+          position_x: pushed.position.x,
+          position_y: pushed.position.y,
+        },
+      })
+    }
+  }
+
+  // 4. Added blocks (steps added to the group)
+  for (const added of data.addedBlocks) {
+    const step = project.value.steps?.find(s => s.id === added.stepId)
+    if (step) {
+      // Record edges to delete
+      const connectedEdges = project.value.edges?.filter(e =>
+        e.source_step_id === added.stepId || e.target_step_id === added.stepId
+      ) || []
+      for (const edge of connectedEdges) {
+        edgeChanges.push({
+          id: edge.id,
+          action: 'delete',
+          data: { ...edge },
+        })
       }
-    }
 
-    const edgesToDelete: string[] = []
-    for (const added of data.addedBlocks) {
-      const step = project.value.steps?.find(s => s.id === added.stepId)
-      if (step) {
-        const connectedEdges = project.value.edges?.filter(e =>
-          e.source_step_id === added.stepId || e.target_step_id === added.stepId
-        ) || []
-        for (const edge of connectedEdges) {
-          edgesToDelete.push(edge.id)
-        }
-        step.block_group_id = groupId
-        step.group_role = added.role
-        step.position_x = added.position.x
-        step.position_y = added.position.y
-      }
+      stepChanges.push({
+        id: added.stepId,
+        before: {
+          position_x: step.position_x,
+          position_y: step.position_y,
+          block_group_id: step.block_group_id ?? null,
+          group_role: step.group_role ?? null,
+        },
+        after: {
+          position_x: added.position.x,
+          position_y: added.position.y,
+          block_group_id: groupId,
+          group_role: added.role,
+        },
+      })
     }
+  }
 
-    if (edgesToDelete.length > 0 && project.value.edges) {
-      project.value.edges = project.value.edges.filter(e => !edgesToDelete.includes(e.id))
-    }
+  // 5. Moved groups (linked groups that moved together)
+  for (const movedGroup of data.movedGroups) {
+    const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
+    if (targetGroup) {
+      groupChanges.push({
+        id: movedGroup.groupId,
+        before: {
+          position_x: movedGroup.position.x - movedGroup.delta.x,
+          position_y: movedGroup.position.y - movedGroup.delta.y,
+        },
+        after: {
+          position_x: movedGroup.position.x,
+          position_y: movedGroup.position.y,
+        },
+      })
 
-    const stepsInMovedGroups: Array<{ step: Step; delta: { x: number; y: number } }> = []
-    for (const movedGroup of data.movedGroups) {
-      const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
-      if (targetGroup) {
-        targetGroup.position_x = movedGroup.position.x
-        targetGroup.position_y = movedGroup.position.y
-      }
+      // Steps in moved groups
       const stepsInThisGroup = project.value.steps?.filter(s => s.block_group_id === movedGroup.groupId) || []
       for (const step of stepsInThisGroup) {
-        step.position_x += movedGroup.delta.x
-        step.position_y += movedGroup.delta.y
-        stepsInMovedGroups.push({ step, delta: movedGroup.delta })
+        stepChanges.push({
+          id: step.id,
+          before: {
+            position_x: step.position_x,
+            position_y: step.position_y,
+          },
+          after: {
+            position_x: step.position_x + movedGroup.delta.x,
+            position_y: step.position_y + movedGroup.delta.y,
+          },
+        })
       }
     }
+  }
 
-    const updatePromises: Promise<unknown>[] = []
-    updatePromises.push(blockGroupsApi.update(project.value.id, groupId, { position: data.position }))
+  const changes: WorkflowChanges = {
+    steps: stepChanges.length > 0 ? stepChanges : undefined,
+    groups: groupChanges.length > 0 ? groupChanges : undefined,
+    edges: edgeChanges.length > 0 ? edgeChanges : undefined,
+  }
 
-    for (const step of stepsInGroup) {
-      updatePromises.push(projects.updateStep(project.value.id, step.id, {
-        position: { x: step.position_x, y: step.position_y },
-      }))
-    }
-
-    for (const pushed of data.pushedBlocks) {
-      updatePromises.push(projects.updateStep(project.value.id, pushed.stepId, {
-        position: pushed.position,
-      }))
-    }
-
-    for (const edgeId of edgesToDelete) {
-      updatePromises.push(projects.deleteEdge(project.value.id, edgeId).catch(() => {}))
-    }
-
-    for (const added of data.addedBlocks) {
-      updatePromises.push(
-        blockGroupsApi.addStep(project.value.id, groupId, {
-          step_id: added.stepId,
-          group_role: added.role,
-        }).then(() => {
-          return projects.updateStep(project.value!.id, added.stepId, {
-            position: added.position,
-          })
-        })
-      )
-    }
-
-    for (const movedGroup of data.movedGroups) {
-      updatePromises.push(blockGroupsApi.update(project.value.id, movedGroup.groupId, {
-        position: movedGroup.position,
-      }))
-    }
-
-    for (const { step } of stepsInMovedGroups) {
-      updatePromises.push(projects.updateStep(project.value.id, step.id, {
-        position: { x: step.position_x, y: step.position_y },
-      }))
-    }
-
-    await Promise.all(updatePromises)
+  try {
+    const cmd = new WorkflowChangeCommand(
+      project.value.id,
+      changes,
+      `Move group: ${group.name}`,
+      projects,
+      blockGroupsApi,
+      () => project.value,
+      () => blockGroups.value
+    )
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to update group', e instanceof Error ? e.message : undefined)
     await loadProject(project.value.id)
@@ -686,95 +791,143 @@ async function handleGroupResizeComplete(
 ) {
   if (!project.value || isReadonly.value) return
 
-  try {
-    for (const pushed of data.pushedBlocks) {
-      const step = project.value.steps?.find(s => s.id === pushed.stepId)
-      if (step) {
-        step.block_group_id = undefined
-        step.group_role = undefined
-        step.position_x = pushed.position.x
-        step.position_y = pushed.position.y
-      }
-    }
+  const group = blockGroups.value.find(g => g.id === groupId)
+  if (!group) return
 
-    const edgesToDelete: string[] = []
-    for (const added of data.addedBlocks) {
-      const step = project.value.steps?.find(s => s.id === added.stepId)
-      if (step) {
-        const connectedEdges = project.value.edges?.filter(e =>
-          e.source_step_id === added.stepId || e.target_step_id === added.stepId
-        ) || []
-        for (const edge of connectedEdges) {
-          edgesToDelete.push(edge.id)
-        }
-        step.block_group_id = groupId
-        step.group_role = added.role
-        step.position_x = added.position.x
-        step.position_y = added.position.y
-      }
-    }
+  // Build changes for undo/redo
+  const stepChanges: StepChange[] = []
+  const groupChanges: GroupChange[] = []
+  const edgeChanges: EdgeChange[] = []
 
-    if (edgesToDelete.length > 0 && project.value.edges) {
-      project.value.edges = project.value.edges.filter(e => !edgesToDelete.includes(e.id))
-    }
+  // 1. Main group position/size change
+  groupChanges.push({
+    id: groupId,
+    before: {
+      position_x: group.position_x,
+      position_y: group.position_y,
+      width: group.width,
+      height: group.height,
+    },
+    after: {
+      position_x: data.position.x,
+      position_y: data.position.y,
+      width: data.size.width,
+      height: data.size.height,
+    },
+  })
 
-    const stepsInMovedGroups: Array<{ step: Step; delta: { x: number; y: number } }> = []
-    for (const movedGroup of data.movedGroups) {
-      const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
-      if (targetGroup) {
-        targetGroup.position_x = movedGroup.position.x
-        targetGroup.position_y = movedGroup.position.y
+  // 2. Pushed blocks (steps removed from group due to resize)
+  for (const pushed of data.pushedBlocks) {
+    const step = project.value.steps?.find(s => s.id === pushed.stepId)
+    if (step) {
+      stepChanges.push({
+        id: pushed.stepId,
+        before: {
+          position_x: step.position_x,
+          position_y: step.position_y,
+          block_group_id: step.block_group_id ?? null,
+          group_role: step.group_role ?? null,
+        },
+        after: {
+          position_x: pushed.position.x,
+          position_y: pushed.position.y,
+          block_group_id: null,
+          group_role: null,
+        },
+      })
+    }
+  }
+
+  // 3. Added blocks (steps added to group due to resize)
+  for (const added of data.addedBlocks) {
+    const step = project.value.steps?.find(s => s.id === added.stepId)
+    if (step) {
+      // Record edges to delete
+      const connectedEdges = project.value.edges?.filter(e =>
+        e.source_step_id === added.stepId || e.target_step_id === added.stepId
+      ) || []
+      for (const edge of connectedEdges) {
+        edgeChanges.push({
+          id: edge.id,
+          action: 'delete',
+          data: { ...edge },
+        })
       }
+
+      stepChanges.push({
+        id: added.stepId,
+        before: {
+          position_x: step.position_x,
+          position_y: step.position_y,
+          block_group_id: step.block_group_id ?? null,
+          group_role: step.group_role ?? null,
+        },
+        after: {
+          position_x: added.position.x,
+          position_y: added.position.y,
+          block_group_id: groupId,
+          group_role: added.role,
+        },
+      })
+    }
+  }
+
+  // 4. Moved groups (linked groups that moved during resize)
+  for (const movedGroup of data.movedGroups) {
+    const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
+    if (targetGroup) {
+      groupChanges.push({
+        id: movedGroup.groupId,
+        before: {
+          position_x: movedGroup.position.x - movedGroup.delta.x,
+          position_y: movedGroup.position.y - movedGroup.delta.y,
+        },
+        after: {
+          position_x: movedGroup.position.x,
+          position_y: movedGroup.position.y,
+        },
+      })
+
+      // Steps in moved groups
       const stepsInThisGroup = project.value.steps?.filter(s => s.block_group_id === movedGroup.groupId) || []
       for (const step of stepsInThisGroup) {
-        step.position_x += movedGroup.delta.x
-        step.position_y += movedGroup.delta.y
-        stepsInMovedGroups.push({ step, delta: movedGroup.delta })
+        stepChanges.push({
+          id: step.id,
+          before: {
+            position_x: step.position_x,
+            position_y: step.position_y,
+          },
+          after: {
+            position_x: step.position_x + movedGroup.delta.x,
+            position_y: step.position_y + movedGroup.delta.y,
+          },
+        })
       }
     }
+  }
 
-    const updatePromises: Promise<unknown>[] = []
+  // Skip if no meaningful changes
+  if (stepChanges.length === 0 && groupChanges.length === 0 && edgeChanges.length === 0) {
+    return
+  }
 
-    for (const pushed of data.pushedBlocks) {
-      updatePromises.push(
-        blockGroupsApi.removeStep(project.value.id, groupId, pushed.stepId).catch(() => {}).then(() => {
-          return projects.updateStep(project.value!.id, pushed.stepId, {
-            position: pushed.position,
-          })
-        })
-      )
-    }
+  const changes: WorkflowChanges = {
+    steps: stepChanges.length > 0 ? stepChanges : undefined,
+    groups: groupChanges.length > 0 ? groupChanges : undefined,
+    edges: edgeChanges.length > 0 ? edgeChanges : undefined,
+  }
 
-    for (const edgeId of edgesToDelete) {
-      updatePromises.push(projects.deleteEdge(project.value.id, edgeId).catch(() => {}))
-    }
-
-    for (const added of data.addedBlocks) {
-      updatePromises.push(
-        blockGroupsApi.addStep(project.value.id, groupId, {
-          step_id: added.stepId,
-          group_role: added.role,
-        }).then(() => {
-          return projects.updateStep(project.value!.id, added.stepId, {
-            position: added.position,
-          })
-        })
-      )
-    }
-
-    for (const movedGroup of data.movedGroups) {
-      updatePromises.push(blockGroupsApi.update(project.value.id, movedGroup.groupId, {
-        position: movedGroup.position,
-      }))
-    }
-
-    for (const { step } of stepsInMovedGroups) {
-      updatePromises.push(projects.updateStep(project.value.id, step.id, {
-        position: { x: step.position_x, y: step.position_y },
-      }))
-    }
-
-    await Promise.all(updatePromises)
+  try {
+    const cmd = new WorkflowChangeCommand(
+      project.value.id,
+      changes,
+      `Resize group: ${group.name}`,
+      projects,
+      blockGroupsApi,
+      () => project.value,
+      () => blockGroups.value
+    )
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to update after resize', e instanceof Error ? e.message : undefined)
     await loadProject(project.value.id)
@@ -876,40 +1029,78 @@ async function handleUpdateStepPosition(
 ) {
   if (!project.value || isReadonly.value) return
 
-  try {
-    const step = project.value.steps?.find(s => s.id === stepId)
-    if (step) {
-      step.position_x = position.x
-      step.position_y = position.y
-    }
+  const step = project.value.steps?.find(s => s.id === stepId)
+  if (!step) return
 
-    const updatePromises: Promise<unknown>[] = []
-    updatePromises.push(projects.updateStep(project.value.id, stepId, { position }))
+  // Build changes for undo/redo
+  const stepChanges: StepChange[] = []
+  const groupChanges: GroupChange[] = []
 
-    if (movedGroups && movedGroups.length > 0) {
-      for (const movedGroup of movedGroups) {
-        const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
-        if (targetGroup) {
-          targetGroup.position_x = movedGroup.position.x
-          targetGroup.position_y = movedGroup.position.y
-        }
+  // 1. Main step position change
+  stepChanges.push({
+    id: stepId,
+    before: {
+      position_x: step.position_x,
+      position_y: step.position_y,
+    },
+    after: {
+      position_x: position.x,
+      position_y: position.y,
+    },
+  })
 
+  // 2. Moved groups (linked groups that moved due to step collision)
+  if (movedGroups && movedGroups.length > 0) {
+    for (const movedGroup of movedGroups) {
+      const targetGroup = blockGroups.value.find(g => g.id === movedGroup.groupId)
+      if (targetGroup) {
+        groupChanges.push({
+          id: movedGroup.groupId,
+          before: {
+            position_x: movedGroup.position.x - movedGroup.delta.x,
+            position_y: movedGroup.position.y - movedGroup.delta.y,
+          },
+          after: {
+            position_x: movedGroup.position.x,
+            position_y: movedGroup.position.y,
+          },
+        })
+
+        // Steps in moved groups
         const stepsInThisGroup = project.value.steps?.filter(s => s.block_group_id === movedGroup.groupId) || []
         for (const groupStep of stepsInThisGroup) {
-          groupStep.position_x += movedGroup.delta.x
-          groupStep.position_y += movedGroup.delta.y
-          updatePromises.push(projects.updateStep(project.value.id, groupStep.id, {
-            position: { x: groupStep.position_x, y: groupStep.position_y },
-          }))
+          stepChanges.push({
+            id: groupStep.id,
+            before: {
+              position_x: groupStep.position_x,
+              position_y: groupStep.position_y,
+            },
+            after: {
+              position_x: groupStep.position_x + movedGroup.delta.x,
+              position_y: groupStep.position_y + movedGroup.delta.y,
+            },
+          })
         }
-
-        updatePromises.push(blockGroupsApi.update(project.value.id, movedGroup.groupId, {
-          position: movedGroup.position,
-        }))
       }
     }
+  }
 
-    await Promise.all(updatePromises)
+  const changes: WorkflowChanges = {
+    steps: stepChanges.length > 0 ? stepChanges : undefined,
+    groups: groupChanges.length > 0 ? groupChanges : undefined,
+  }
+
+  try {
+    const cmd = new WorkflowChangeCommand(
+      project.value.id,
+      changes,
+      `Move step: ${step.name}`,
+      projects,
+      blockGroupsApi,
+      () => project.value,
+      () => blockGroups.value
+    )
+    await commandHistory.execute(cmd)
   } catch (e) {
     console.error('Failed to update step position:', e)
   }
@@ -940,7 +1131,7 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
       edgeData.target_step_id = targetInfo.id
     }
 
-    const cmd = new CreateEdgeCommand(project.value.id, edgeData, projects, project)
+    const cmd = new CreateEdgeCommand(project.value.id, edgeData, projects, () => project.value)
     await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to add edge', e instanceof Error ? e.message : undefined)
@@ -955,7 +1146,7 @@ async function handleDeleteEdge(edgeId: string) {
   if (!edge) return
 
   try {
-    const cmd = new DeleteEdgeCommand(project.value.id, edge, projects, project)
+    const cmd = new DeleteEdgeCommand(project.value.id, edge, projects, () => project.value)
     await commandHistory.execute(cmd)
   } catch (e) {
     toast.error(t('editor.edgeDeleteFailed'), e instanceof Error ? e.message : undefined)
@@ -1038,7 +1229,6 @@ async function handleCreateRelease(_name: string, _description: string) {
     }
 
     showReleaseModal.value = false
-    toast.success(t('editor.releaseCreated'))
   } catch (e) {
     toast.error(t('editor.releaseCreateFailed'), e instanceof Error ? e.message : undefined)
   } finally {
@@ -1060,7 +1250,6 @@ async function handleRunFromDialog(input: Record<string, unknown>, startStepId: 
     running.value = true
     const response = await runs.create(project.value.id, { triggered_by: 'manual', input, start_step_id: startStepId })
     showRunDialog.value = false
-    toast.success(t('projects.runStarted'))
     window.open(`/runs/${response.data.id}`, '_blank')
   } catch (e) {
     toast.error(t('projects.runFailed'), e instanceof Error ? e.message : undefined)
@@ -1101,19 +1290,44 @@ async function handleSaveStep(formData: { name: string; type: string; config: Re
   const step = editorState.selectedStep.value
   if (!step || !project.value) return
 
+  // Capture before state
+  const beforeState: StepChange['before'] = {
+    name: step.name,
+    config: step.config,
+  }
+
+  // Compute after state
+  const afterState: StepChange['after'] = {
+    name: formData.name,
+    config: formData.config as object,
+  }
+
+  // Skip if nothing changed
+  if (beforeState.name === afterState.name &&
+      JSON.stringify(beforeState.config) === JSON.stringify(afterState.config)) {
+    return
+  }
+
+  const changes: WorkflowChanges = {
+    steps: [{
+      id: step.id,
+      before: beforeState,
+      after: afterState,
+    }],
+  }
+
   try {
     saving.value = true
-    const stepId = step.id
-    const stepIndex = project.value.steps?.findIndex(s => s.id === stepId)
-    if (stepIndex !== undefined && stepIndex >= 0 && project.value.steps) {
-      project.value.steps[stepIndex] = {
-        ...project.value.steps[stepIndex],
-        name: formData.name,
-        config: formData.config as object,
-      }
-    }
-    await projects.updateStep(project.value.id, stepId, formData)
-    toast.success(t('editor.stepSaved'))
+    const cmd = new WorkflowChangeCommand(
+      project.value.id,
+      changes,
+      `Update step: ${step.name}`,
+      projects,
+      blockGroupsApi,
+      () => project.value,
+      () => blockGroups.value
+    )
+    await commandHistory.execute(cmd)
   } catch (e) {
     toast.error('Failed to save step', e instanceof Error ? e.message : undefined)
     await loadProject(project.value.id)
@@ -1132,10 +1346,8 @@ async function handleDeleteStep() {
     clearSelection()
     setSelectedRun(null)
 
-    const cmd = new DeleteStepCommand(project.value.id, step, projects, project)
+    const cmd = new DeleteStepCommand(project.value.id, step, projects, () => project.value)
     await commandHistory.execute(cmd)
-
-    toast.success(t('editor.stepDeleted'))
   } catch (e) {
     toast.error('Failed to delete step', e instanceof Error ? e.message : undefined)
   } finally {
@@ -1292,7 +1504,6 @@ async function handleAutoLayout() {
 
       await Promise.all(updatePromises)
     }
-    toast.success(t('editor.layoutApplied'))
   } catch (e) {
     toast.error('Failed to auto-layout', e instanceof Error ? e.message : undefined)
   } finally {
@@ -1329,10 +1540,117 @@ function handleOpenSettings() {
 }
 
 // Handle Copilot changes applied
-async function handleCopilotChangesApplied() {
-  // Refresh project data after Copilot applies changes
-  if (project.value) {
-    await loadProject(project.value.id)
+async function handleCopilotChangesApplied(changes: ProposalChange[]) {
+  if (!project.value) return
+
+  const projectId = project.value.id
+  const tempIdToRealId = new Map<string, string>()
+
+  try {
+    // Process changes in order: creates first, then updates, then edges, then deletes
+    const creates = changes.filter(c => c.type === 'step:create')
+    const updates = changes.filter(c => c.type === 'step:update')
+    const edgeCreates = changes.filter(c => c.type === 'edge:create')
+    const edgeDeletes = changes.filter(c => c.type === 'edge:delete')
+    const stepDeletes = changes.filter(c => c.type === 'step:delete')
+
+    // 1. Create steps
+    for (const change of creates) {
+      const response = await projects.createStep(projectId, {
+        name: change.name || 'New Step',
+        type: change.step_type as StepType,
+        config: change.config as Record<string, unknown>,
+        position: change.position || { x: 200, y: 200 },
+      })
+
+      // Map temp ID to real ID for edge creation
+      if (change.temp_id) {
+        tempIdToRealId.set(change.temp_id, response.data.id)
+      }
+
+      // Update local state
+      project.value.steps = [...(project.value.steps || []), response.data]
+    }
+
+    // 2. Update steps
+    for (const change of updates) {
+      if (!change.step_id || !change.patch) continue
+
+      const patch = change.patch as Record<string, unknown>
+      const updateData: Parameters<typeof projects.updateStep>[2] = {}
+
+      if (patch.name !== undefined) updateData.name = patch.name as string
+      if (patch.config !== undefined) updateData.config = patch.config as Record<string, unknown>
+      if (patch.position !== undefined) updateData.position = patch.position as { x: number; y: number }
+
+      await projects.updateStep(projectId, change.step_id, updateData)
+
+      // Update local state
+      const step = project.value.steps?.find(s => s.id === change.step_id)
+      if (step) {
+        if (patch.name !== undefined) step.name = patch.name as string
+        if (patch.config !== undefined && patch.config !== null) step.config = patch.config as object
+        if (patch.position !== undefined) {
+          const pos = patch.position as { x: number; y: number }
+          step.position_x = pos.x
+          step.position_y = pos.y
+        }
+      }
+    }
+
+    // 3. Create edges (resolve temp IDs)
+    for (const change of edgeCreates) {
+      let sourceId = change.source_id || ''
+      let targetId = change.target_id || ''
+
+      // Resolve temp IDs
+      if (sourceId && tempIdToRealId.has(sourceId)) {
+        sourceId = tempIdToRealId.get(sourceId)!
+      }
+      if (targetId && tempIdToRealId.has(targetId)) {
+        targetId = tempIdToRealId.get(targetId)!
+      }
+
+      const response = await projects.createEdge(projectId, {
+        source_step_id: sourceId,
+        target_step_id: targetId,
+        source_port: change.source_port,
+        target_port: change.target_port,
+      })
+
+      // Update local state
+      project.value.edges = [...(project.value.edges || []), response.data]
+    }
+
+    // 4. Delete edges
+    for (const change of edgeDeletes) {
+      if (!change.edge_id) continue
+
+      await projects.deleteEdge(projectId, change.edge_id)
+
+      // Update local state
+      if (project.value.edges) {
+        project.value.edges = project.value.edges.filter(e => e.id !== change.edge_id)
+      }
+    }
+
+    // 5. Delete steps
+    for (const change of stepDeletes) {
+      if (!change.step_id) continue
+
+      await projects.deleteStep(projectId, change.step_id)
+
+      // Update local state
+      if (project.value.steps) {
+        project.value.steps = project.value.steps.filter(s => s.id !== change.step_id)
+      }
+    }
+
+  } catch (e) {
+    console.error('Failed to apply Copilot changes:', e)
+    toast.error('変更の適用に失敗しました')
+    // Reload to restore consistent state
+    await loadProject(projectId)
   }
 }
 
@@ -1358,20 +1676,14 @@ useKeyboardShortcuts({
   },
   onUndo: async () => {
     try {
-      const success = await commandHistory.undo()
-      if (success) {
-        toast.info(t('editor.undone'))
-      }
+      await commandHistory.undo()
     } catch (e) {
       toast.error(t('editor.undoFailed'), e instanceof Error ? e.message : undefined)
     }
   },
   onRedo: async () => {
     try {
-      const success = await commandHistory.redo()
-      if (success) {
-        toast.info(t('editor.redone'))
-      }
+      await commandHistory.redo()
     } catch (e) {
       toast.error(t('editor.redoFailed'), e instanceof Error ? e.message : undefined)
     }

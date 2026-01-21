@@ -6,9 +6,9 @@
 
 import type { Command, CommandType } from '../useCommandHistory'
 import type { Step, StepType, Edge, Project } from '~/types/api'
-import type { Ref } from 'vue'
 
 type ProjectsApi = ReturnType<typeof useProjects>
+type ProjectGetter = () => Project | null
 
 function generateCommandId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -33,9 +33,11 @@ export class CreateStepCommand implements Command {
       type: StepType
       config: object
       position: { x: number; y: number }
+      trigger_type?: 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
+      trigger_config?: object
     },
     private projectsApi: ProjectsApi,
-    private project: Ref<Project | null>
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -48,8 +50,9 @@ export class CreateStepCommand implements Command {
     this.createdStep = response.data
 
     // Update local state
-    if (this.project.value) {
-      this.project.value.steps = [...(this.project.value.steps || []), response.data]
+    const project = this.getProject()
+    if (project) {
+      project.steps = [...(project.steps || []), response.data]
     }
   }
 
@@ -61,8 +64,9 @@ export class CreateStepCommand implements Command {
     await this.projectsApi.deleteStep(this.projectId, this.createdStepId)
 
     // Update local state
-    if (this.project.value?.steps) {
-      this.project.value.steps = this.project.value.steps.filter(s => s.id !== this.createdStepId)
+    const project = this.getProject()
+    if (project?.steps) {
+      project.steps = project.steps.filter(s => s.id !== this.createdStepId)
     }
   }
 
@@ -92,7 +96,7 @@ export class UpdateStepCommand implements Command {
     private beforeState: Partial<Step>,
     private afterState: Partial<Step>,
     private projectsApi: ProjectsApi,
-    private project: Ref<Project | null>
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -103,11 +107,12 @@ export class UpdateStepCommand implements Command {
     await this.projectsApi.updateStep(this.projectId, this.stepId, this.afterState)
 
     // Update local state
-    if (this.project.value?.steps) {
-      const stepIndex = this.project.value.steps.findIndex(s => s.id === this.stepId)
+    const project = this.getProject()
+    if (project?.steps) {
+      const stepIndex = project.steps.findIndex(s => s.id === this.stepId)
       if (stepIndex >= 0) {
-        this.project.value.steps[stepIndex] = {
-          ...this.project.value.steps[stepIndex],
+        project.steps[stepIndex] = {
+          ...project.steps[stepIndex],
           ...this.afterState,
         }
       }
@@ -118,11 +123,12 @@ export class UpdateStepCommand implements Command {
     await this.projectsApi.updateStep(this.projectId, this.stepId, this.beforeState)
 
     // Update local state
-    if (this.project.value?.steps) {
-      const stepIndex = this.project.value.steps.findIndex(s => s.id === this.stepId)
+    const project = this.getProject()
+    if (project?.steps) {
+      const stepIndex = project.steps.findIndex(s => s.id === this.stepId)
       if (stepIndex >= 0) {
-        this.project.value.steps[stepIndex] = {
-          ...this.project.value.steps[stepIndex],
+        project.steps[stepIndex] = {
+          ...project.steps[stepIndex],
           ...this.beforeState,
         }
       }
@@ -146,7 +152,7 @@ export class MoveStepCommand implements Command {
     private beforePosition: { x: number; y: number },
     private afterPosition: { x: number; y: number },
     private projectsApi: ProjectsApi,
-    private project: Ref<Project | null>
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -159,8 +165,9 @@ export class MoveStepCommand implements Command {
     })
 
     // Update local state
-    if (this.project.value?.steps) {
-      const step = this.project.value.steps.find(s => s.id === this.stepId)
+    const project = this.getProject()
+    if (project?.steps) {
+      const step = project.steps.find(s => s.id === this.stepId)
       if (step) {
         step.position_x = this.afterPosition.x
         step.position_y = this.afterPosition.y
@@ -174,8 +181,9 @@ export class MoveStepCommand implements Command {
     })
 
     // Update local state
-    if (this.project.value?.steps) {
-      const step = this.project.value.steps.find(s => s.id === this.stepId)
+    const project = this.getProject()
+    if (project?.steps) {
+      const step = project.steps.find(s => s.id === this.stepId)
       if (step) {
         step.position_x = this.beforePosition.x
         step.position_y = this.beforePosition.y
@@ -201,15 +209,16 @@ export class DeleteStepCommand implements Command {
     private projectId: string,
     private deletedStep: Step,
     private projectsApi: ProjectsApi,
-    private project: Ref<Project | null>
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
     this.description = `Delete step: ${deletedStep.name}`
 
-    // Store connected edges for restoration
-    if (this.project.value?.edges) {
-      this.connectedEdges = this.project.value.edges.filter(
+    // Store connected edges for restoration (capture at construction time)
+    const project = this.getProject()
+    if (project?.edges) {
+      this.connectedEdges = project.edges.filter(
         e => e.source_step_id === deletedStep.id || e.target_step_id === deletedStep.id
       )
     }
@@ -219,11 +228,12 @@ export class DeleteStepCommand implements Command {
     await this.projectsApi.deleteStep(this.projectId, this.deletedStep.id)
 
     // Update local state
-    if (this.project.value) {
-      this.project.value.steps = (this.project.value.steps || []).filter(
+    const project = this.getProject()
+    if (project) {
+      project.steps = (project.steps || []).filter(
         s => s.id !== this.deletedStep.id
       )
-      this.project.value.edges = (this.project.value.edges || []).filter(
+      project.edges = (project.edges || []).filter(
         e => e.source_step_id !== this.deletedStep.id && e.target_step_id !== this.deletedStep.id
       )
     }
@@ -241,8 +251,9 @@ export class DeleteStepCommand implements Command {
     this.recreatedStepId = response.data.id
 
     // Update local state with the new step
-    if (this.project.value) {
-      this.project.value.steps = [...(this.project.value.steps || []), response.data]
+    const project = this.getProject()
+    if (project) {
+      project.steps = [...(project.steps || []), response.data]
     }
 
     // Note: Edges cannot be fully restored because the step has a new ID

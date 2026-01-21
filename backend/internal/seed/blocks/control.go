@@ -7,7 +7,8 @@ import (
 )
 
 func (r *Registry) registerControlBlocks() {
-	r.register(StartBlock())
+	r.register(StartBlock())           // 継承用（UI非表示）
+	r.register(ManualTriggerBlock())   // 手動実行トリガー
 	r.register(ScheduleTriggerBlock())
 	r.register(WebhookTriggerBlock())
 	r.register(WaitBlock())
@@ -42,6 +43,52 @@ func StartBlock() *SystemBlockDefinition {
 		InputPorts: []domain.InputPort{},
 		OutputPorts: []domain.OutputPort{
 			{Name: "output", Label: "Output", IsDefault: true, Description: "Workflow input data"},
+		},
+		Code:       `return input;`,
+		UIConfig:   json.RawMessage(`{"icon": "play", "color": "#10B981"}`),
+		ErrorCodes: []domain.ErrorCodeDef{},
+		Enabled:    false, // UI非表示化（ManualTriggerBlock等の抽象基底ブロック）
+		TestCases: []BlockTestCase{
+			{
+				Name:           "passthrough input",
+				Input:          map[string]interface{}{"message": "hello"},
+				Config:         map[string]interface{}{},
+				ExpectedOutput: map[string]interface{}{"message": "hello"},
+			},
+		},
+	}
+}
+
+// ManualTriggerBlock defines a manual workflow trigger
+func ManualTriggerBlock() *SystemBlockDefinition {
+	return &SystemBlockDefinition{
+		Slug:            "manual_trigger",
+		Version:         1,
+		Name:            "Manual Trigger",
+		Description:     "ワークフローを手動で実行するトリガー",
+		Category:        domain.BlockCategoryFlow,
+		Subcategory:     domain.BlockSubcategoryControl,
+		Icon:            "play",
+		ParentBlockSlug: "start",
+		ConfigDefaults:  json.RawMessage(`{"trigger_type": "manual"}`),
+		ConfigSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"input_schema": {
+					"type": "object",
+					"title": "入力スキーマ",
+					"description": "ワークフロー実行時の入力データのスキーマを定義",
+					"properties": {
+						"type": {"type": "string", "default": "object"},
+						"required": {"type": "array", "items": {"type": "string"}},
+						"properties": {"type": "object"}
+					}
+				}
+			}
+		}`),
+		InputPorts: []domain.InputPort{},
+		OutputPorts: []domain.OutputPort{
+			{Name: "output", Label: "Output", IsDefault: true, Description: "Manual execution input"},
 		},
 		Code:       `return input;`,
 		UIConfig:   json.RawMessage(`{"icon": "play", "color": "#10B981"}`),
