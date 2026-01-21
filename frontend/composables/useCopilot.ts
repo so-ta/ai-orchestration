@@ -302,6 +302,7 @@ export interface AgentSessionMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  extracted_data?: Record<string, unknown>
   created_at: string
 }
 
@@ -358,7 +359,7 @@ export const HEARING_PHASES: CopilotPhase[] = [
 
 // Session mode labels
 export const SESSION_MODE_LABELS: Record<CopilotSessionMode, string> = {
-  create: '新規作成',
+  create: 'ワークフロー構築',
   enhance: '改善',
   explain: '説明',
 }

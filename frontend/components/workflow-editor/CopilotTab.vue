@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { nextTick } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { AgentStreamState } from '~/composables/useCopilot'
 import { useCopilotDraft, type DraftChange } from '~/composables/useCopilotDraft'
 import CopilotProposalCard, { type Proposal, type ProposalChange } from './CopilotProposalCard.vue'
@@ -10,12 +12,13 @@ marked.setOptions({
   gfm: true, // GitHub Flavored Markdown
 })
 
-// Render markdown to HTML
+// Render markdown to HTML with XSS sanitization
 function renderMarkdown(content: string): string {
   try {
-    return marked.parse(content) as string
+    const raw = marked.parse(content) as string
+    return DOMPurify.sanitize(raw)
   } catch {
-    return content
+    return DOMPurify.sanitize(content)
   }
 }
 
@@ -328,7 +331,14 @@ async function sendAgentMessage() {
           if (toolStep) {
             toolStep.status = isError ? 'error' : 'success'
             toolStep.result = result
-            if (isError) toolStep.error = String(result)
+            if (isError) {
+              if (typeof result === 'object' && result !== null) {
+                const errorObj = result as Record<string, unknown>
+                toolStep.error = errorObj.error ? String(errorObj.error) : JSON.stringify(result)
+              } else {
+                toolStep.error = String(result)
+              }
+            }
           }
         },
         onPartialText: (content) => {
