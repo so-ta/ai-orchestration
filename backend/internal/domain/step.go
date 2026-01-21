@@ -96,6 +96,37 @@ func (t StepTriggerType) IsValid() bool {
 	return false
 }
 
+// TriggerBlockSlugs contains all block slugs that should be treated as start blocks
+var TriggerBlockSlugs = []string{
+	"manual_trigger",
+	"schedule_trigger",
+	"webhook_trigger",
+}
+
+// IsTriggerBlockSlug checks if the given slug is a trigger block
+func IsTriggerBlockSlug(slug string) bool {
+	for _, s := range TriggerBlockSlugs {
+		if s == slug {
+			return true
+		}
+	}
+	return false
+}
+
+// GetTriggerTypeFromSlug converts a trigger block slug to StepTriggerType
+func GetTriggerTypeFromSlug(slug string) StepTriggerType {
+	switch slug {
+	case "manual_trigger":
+		return StepTriggerTypeManual
+	case "schedule_trigger":
+		return StepTriggerTypeSchedule
+	case "webhook_trigger":
+		return StepTriggerTypeWebhook
+	default:
+		return StepTriggerTypeManual
+	}
+}
+
 // Step represents a node in the DAG
 type Step struct {
 	ID           uuid.UUID       `json:"id"`

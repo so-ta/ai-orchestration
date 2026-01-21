@@ -102,7 +102,25 @@ func (u *StepUsecase) Create(ctx context.Context, input CreateStepInput) (*domai
 		}
 	}
 
-	step := domain.NewStep(input.TenantID, input.ProjectID, input.Name, input.Type, input.Config)
+	// Apply ConfigDefaults from BlockDefinition if available
+	mergedConfig := input.Config
+	if blockDef != nil {
+		mergedConfig = mergeConfigWithDefaults(input.Config, blockDef.GetEffectiveConfigDefaults())
+	}
+
+	// Normalize trigger block types to "start"
+	// Trigger blocks (manual_trigger, schedule_trigger, webhook_trigger) should have type "start"
+	// with the specific trigger type stored in TriggerType field
+	stepType := input.Type
+	if domain.IsTriggerBlockSlug(string(input.Type)) {
+		stepType = domain.StepTypeStart
+		// Auto-set trigger type if not provided
+		if input.TriggerType == "" {
+			input.TriggerType = string(domain.GetTriggerTypeFromSlug(string(input.Type)))
+		}
+	}
+
+	step := domain.NewStep(input.TenantID, input.ProjectID, input.Name, stepType, mergedConfig)
 	if blockDef != nil {
 		step.BlockDefinitionID = &blockDef.ID
 	}
@@ -140,6 +158,12 @@ func (u *StepUsecase) GetByID(ctx context.Context, tenantID, projectID, stepID u
 		return nil, err
 	}
 	return u.stepRepo.GetByID(ctx, tenantID, projectID, stepID)
+}
+
+// GetByIDOnly retrieves a step by ID only (without tenant/project verification)
+// Used for webhook triggers where only step ID is known from the URL
+func (u *StepUsecase) GetByIDOnly(ctx context.Context, stepID uuid.UUID) (*domain.Step, error) {
+	return u.stepRepo.GetByIDOnly(ctx, stepID)
 }
 
 // List lists steps for a project
@@ -181,8 +205,19 @@ func (u *StepUsecase) Update(ctx context.Context, input UpdateStepInput) (*domai
 	if input.Name != "" {
 		step.Name = input.Name
 	}
-	if input.Type != "" && input.Type.IsValid() {
-		step.Type = input.Type
+	if input.Type != "" {
+		// Normalize trigger block types to "start"
+		stepType := input.Type
+		if domain.IsTriggerBlockSlug(string(input.Type)) {
+			stepType = domain.StepTypeStart
+			// Auto-set trigger type if not provided
+			if input.TriggerType == "" {
+				input.TriggerType = string(domain.GetTriggerTypeFromSlug(string(input.Type)))
+			}
+		}
+		if stepType.IsValid() {
+			step.Type = stepType
+		}
 	}
 	if input.Config != nil {
 		step.Config = input.Config
@@ -291,4 +326,47 @@ func (u *StepUsecase) GetRetryConfig(ctx context.Context, tenantID, projectID, s
 	}
 
 	return &config, nil
+}
+
+// mergeConfigWithDefaults merges user config with default values from BlockDefinition
+// User config takes precedence over defaults
+func mergeConfigWithDefaults(userConfig json.RawMessage, defaults json.RawMessage) json.RawMessage {
+	// If no defaults, return user config as-is
+	if len(defaults) == 0 || string(defaults) == "null" {
+		return userConfig
+	}
+
+	// Parse defaults
+	var defaultMap map[string]interface{}
+	if err := json.Unmarshal(defaults, &defaultMap); err != nil {
+		return userConfig
+	}
+
+	// If no user config, return defaults
+	if len(userConfig) == 0 || string(userConfig) == "null" {
+		return defaults
+	}
+
+	// Parse user config
+	var userMap map[string]interface{}
+	if err := json.Unmarshal(userConfig, &userMap); err != nil {
+		return userConfig
+	}
+
+	// Merge: start with defaults, overlay user config
+	merged := make(map[string]interface{})
+	for k, v := range defaultMap {
+		merged[k] = v
+	}
+	for k, v := range userMap {
+		merged[k] = v
+	}
+
+	// Marshal back to JSON
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return userConfig
+	}
+
+	return result
 }
