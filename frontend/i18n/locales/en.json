@@ -272,6 +272,7 @@
       "chat": "Chat",
       "rag": "RAG",
       "routing": "Routing",
+      "trigger": "Trigger",
       "branching": "Branching",
       "data": "Data",
       "control": "Control",
@@ -602,7 +603,7 @@
       "completed": "Completed"
     },
     "modes": {
-      "create": "Create New",
+      "create": "Build Workflow",
       "enhance": "Enhance",
       "explain": "Explain"
     },
@@ -628,9 +629,9 @@
     "agent": {
       "mode": "Agent Mode",
       "resetSession": "Reset Session",
-      "welcome": "Ask the AI Agent anything",
-      "hint": "The agent uses tools to autonomously help build your workflow",
-      "placeholder": "Describe your workflow requirements or ask a question...",
+      "welcome": "What would you like to add to this workflow?",
+      "hint": "Copilot will add steps to the current workflow",
+      "placeholder": "Describe the features or requirements to add...",
       "cancelled": "Cancelled",
       "cancel": "Cancel"
     },
@@ -655,6 +656,24 @@
       "connection": "Connection",
       "autoApplied": "Changes applied",
       "undoHint": "Press Cmd+Z to undo"
+    },
+    "proposal": {
+      "title": "Proposed Changes",
+      "apply": "Apply",
+      "discard": "Discard",
+      "modify": "Request Modification",
+      "sendModification": "Send",
+      "modifyPlaceholder": "Enter modification request...",
+      "status": {
+        "pending": "Pending",
+        "applied": "Applied",
+        "discarded": "Discarded"
+      }
+    },
+    "change": {
+      "newStep": "New Step",
+      "connection": "Connection",
+      "willBeDeleted": "Will be deleted"
     }
   },
   "stepConfig": {

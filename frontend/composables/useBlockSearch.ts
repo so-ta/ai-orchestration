@@ -97,7 +97,7 @@ export function useBlockSearchWithCategory(
   options: UseBlockSearchOptions = {}
 ): UseBlockSearchWithCategoryReturn {
   const base = useBlockSearch(blocks, options)
-  const activeCategory = ref<BlockCategory>('ai')
+  const activeCategory = ref<BlockCategory>('flow')
 
   const blocksBySubcategory = computed(() => {
     if (base.isSearchActive.value) {

@@ -166,6 +166,7 @@ export type BlockSubcategory =
   | 'chat'       // AI: chat/conversation
   | 'rag'        // AI: RAG (retrieval augmented generation)
   | 'routing'    // AI: routing/classification
+  | 'trigger'    // Flow: start triggers (manual, schedule, webhook)
   | 'branching'  // Flow: conditional branching
   | 'data'       // Flow: data transformation
   | 'control'    // Flow: control flow

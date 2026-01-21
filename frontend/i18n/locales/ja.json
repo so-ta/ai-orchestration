@@ -272,6 +272,7 @@
       "chat": "チャット",
       "rag": "RAG",
       "routing": "ルーティング",
+      "trigger": "スタート",
       "branching": "分岐",
       "data": "データ",
       "control": "制御",
@@ -602,7 +603,7 @@
       "completed": "完了"
     },
     "modes": {
-      "create": "新規作成",
+      "create": "ワークフロー構築",
       "enhance": "ブラッシュアップ",
       "explain": "説明"
     },
@@ -628,9 +629,9 @@
     "agent": {
       "mode": "エージェントモード",
       "resetSession": "セッションをリセット",
-      "welcome": "AIエージェントにご質問ください",
-      "hint": "ツールを使って自律的にワークフロー構築をサポートします",
-      "placeholder": "ワークフローの要件や質問を入力...",
+      "welcome": "このワークフローに何を追加しますか？",
+      "hint": "Copilotが現在のワークフローにステップを追加・構築します",
+      "placeholder": "追加したい機能や要件を入力...",
       "cancelled": "キャンセルしました",
       "cancel": "キャンセル"
     },
@@ -655,6 +656,24 @@
       "connection": "接続",
       "autoApplied": "変更を適用しました",
       "undoHint": "Cmd+Z で元に戻せます"
+    },
+    "proposal": {
+      "title": "提案された変更",
+      "apply": "適用",
+      "discard": "却下",
+      "modify": "修正依頼",
+      "sendModification": "送信",
+      "modifyPlaceholder": "修正内容を入力...",
+      "status": {
+        "pending": "保留中",
+        "applied": "適用済み",
+        "discarded": "却下済み"
+      }
+    },
+    "change": {
+      "newStep": "新規ステップ",
+      "connection": "接続",
+      "willBeDeleted": "削除されます"
     }
   },
   "stepConfig": {

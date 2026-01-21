@@ -80,8 +80,8 @@ export const categoryConfig: Record<BlockCategory, {
   order: number
   color: string
 }> = {
-  ai: { nameKey: 'editor.categories.ai', icon: 'sparkles', order: 1, color: '#8B5CF6' },
-  flow: { nameKey: 'editor.categories.flow', icon: 'git-branch', order: 2, color: '#3B82F6' },
+  flow: { nameKey: 'editor.categories.flow', icon: 'git-branch', order: 1, color: '#3B82F6' },
+  ai: { nameKey: 'editor.categories.ai', icon: 'sparkles', order: 2, color: '#8B5CF6' },
   apps: { nameKey: 'editor.categories.apps', icon: 'plug', order: 3, color: '#10B981' },
   custom: { nameKey: 'editor.categories.custom', icon: 'code', order: 4, color: '#F59E0B' },
 }
@@ -97,6 +97,7 @@ export const subcategoryConfig: Record<BlockSubcategory, {
   rag: { nameKey: 'editor.subcategories.rag', icon: 'book-open', order: 2 },
   routing: { nameKey: 'editor.subcategories.routing', icon: 'route', order: 3 },
   // Flow subcategories
+  trigger: { nameKey: 'editor.subcategories.trigger', icon: 'play', order: 0 },
   branching: { nameKey: 'editor.subcategories.branching', icon: 'git-branch', order: 1 },
   data: { nameKey: 'editor.subcategories.data', icon: 'database', order: 2 },
   control: { nameKey: 'editor.subcategories.control', icon: 'settings', order: 3 },
@@ -117,6 +118,7 @@ export const subcategoryToCategory: Record<BlockSubcategory, BlockCategory> = {
   chat: 'ai',
   rag: 'ai',
   routing: 'ai',
+  trigger: 'flow',
   branching: 'flow',
   data: 'flow',
   control: 'flow',
@@ -205,6 +207,17 @@ export function groupBlocksByCategory(blocks: BlockDefinition[]): Record<BlockCa
   return result
 }
 
+// Trigger block slugs - these are displayed in the "trigger" subcategory
+const TRIGGER_BLOCK_SLUGS = ['manual_trigger', 'schedule_trigger', 'webhook_trigger']
+
+// Get effective subcategory for a block (handles trigger blocks specially)
+function getEffectiveSubcategory(block: BlockDefinition): string {
+  if (TRIGGER_BLOCK_SLUGS.includes(block.slug)) {
+    return 'trigger'
+  }
+  return block.subcategory || 'other'
+}
+
 // Group blocks by subcategory within a category (or all blocks if category is null)
 export function groupBlocksBySubcategory(
   blocks: BlockDefinition[],
@@ -214,7 +227,7 @@ export function groupBlocksBySubcategory(
   const result: Record<string, BlockDefinition[]> = {}
 
   for (const block of categoryBlocks) {
-    const key = block.subcategory || 'other'
+    const key = getEffectiveSubcategory(block)
     if (!result[key]) {
       result[key] = []
     }

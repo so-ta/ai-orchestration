@@ -71,8 +71,8 @@ onMounted(async () => {
   }
 })
 
-// Categories for tabs
-const categories: BlockCategory[] = ['ai', 'flow', 'apps', 'custom']
+// Categories for tabs (order: フロー / AI / アプリ / カスタム)
+const categories: BlockCategory[] = ['flow', 'ai', 'apps', 'custom']
 
 // Get filtered block group types
 const filteredBlockGroupTypes = computed(() => {
