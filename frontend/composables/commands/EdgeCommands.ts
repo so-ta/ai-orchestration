@@ -6,9 +6,9 @@
 
 import type { Command, CommandType } from '../useCommandHistory'
 import type { Edge, Project } from '~/types/api'
-import type { Ref } from 'vue'
 
 type ProjectsApi = ReturnType<typeof useProjects>
+type ProjectGetter = () => Project | null
 
 function generateCommandId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -38,7 +38,7 @@ export class CreateEdgeCommand implements Command {
       condition?: string
     },
     private projectsApi: ProjectsApi,
-    private project: Ref<Project | null>
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -55,8 +55,9 @@ export class CreateEdgeCommand implements Command {
     this.createdEdge = response.data
 
     // Update local state
-    if (this.project.value) {
-      this.project.value.edges = [...(this.project.value.edges || []), response.data]
+    const project = this.getProject()
+    if (project) {
+      project.edges = [...(project.edges || []), response.data]
     }
   }
 
@@ -68,8 +69,9 @@ export class CreateEdgeCommand implements Command {
     await this.projectsApi.deleteEdge(this.projectId, this.createdEdgeId)
 
     // Update local state
-    if (this.project.value?.edges) {
-      this.project.value.edges = this.project.value.edges.filter(e => e.id !== this.createdEdgeId)
+    const project = this.getProject()
+    if (project?.edges) {
+      project.edges = project.edges.filter(e => e.id !== this.createdEdgeId)
     }
   }
 
@@ -99,7 +101,7 @@ export class DeleteEdgeCommand implements Command {
     private projectId: string,
     private deletedEdge: Edge,
     private projectsApi: ProjectsApi,
-    private project: Ref<Project | null>
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -113,8 +115,9 @@ export class DeleteEdgeCommand implements Command {
     await this.projectsApi.deleteEdge(this.projectId, this.deletedEdge.id)
 
     // Update local state
-    if (this.project.value?.edges) {
-      this.project.value.edges = this.project.value.edges.filter(e => e.id !== this.deletedEdge.id)
+    const project = this.getProject()
+    if (project?.edges) {
+      project.edges = project.edges.filter(e => e.id !== this.deletedEdge.id)
     }
   }
 
@@ -148,8 +151,9 @@ export class DeleteEdgeCommand implements Command {
     this.recreatedEdgeId = response.data.id
 
     // Update local state
-    if (this.project.value) {
-      this.project.value.edges = [...(this.project.value.edges || []), response.data]
+    const project = this.getProject()
+    if (project) {
+      project.edges = [...(project.edges || []), response.data]
     }
   }
 

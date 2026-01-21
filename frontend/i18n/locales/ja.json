@@ -1778,7 +1778,8 @@
       "updateFailed": "クレデンシャルの更新に失敗しました",
       "deleteFailed": "クレデンシャルの削除に失敗しました",
       "revokeFailed": "クレデンシャルの失効に失敗しました",
-      "activateFailed": "クレデンシャルの有効化に失敗しました"
+      "activateFailed": "クレデンシャルの有効化に失敗しました",
+      "fetchFailed": "クレデンシャルの取得に失敗しました"
     },
     "securityNote": "認証情報は暗号化されて安全に保存されます。APIキーやパスワードは保存後に表示することはできません。"
   },
@@ -1881,6 +1882,7 @@
     "noCredentials": "利用可能な認証情報がありません",
     "createNew": "新規作成",
     "fetchError": "認証情報の取得に失敗しました",
+    "fetchErrorInline": "認証情報を読み込めませんでした。再度お試しください。",
     "scope": {
       "organization": "組織",
       "project": "プロジェクト",

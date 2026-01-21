@@ -97,11 +97,6 @@ func TestCopilotAgentToolsEndpoint(t *testing.T) {
 }
 
 func TestCopilotAgentSessionCreate(t *testing.T) {
-	// Skip in CI or short mode - this test requires LLM API which may timeout
-	if testing.Short() {
-		t.Skip("Skipping LLM-dependent test in short mode")
-	}
-
 	// Create a test project for this test
 	workflowID := createTestProject(t)
 
@@ -140,9 +135,9 @@ func TestCopilotAgentSessionCreate(t *testing.T) {
 			url := fmt.Sprintf("/api/v1/workflows/%s/copilot/agent/sessions", workflowID)
 			resp, body := makeRequest(t, "POST", url, startReq)
 
-			// Skip if server timed out or returned EOF (LLM not available)
+			// Skip if server timed out or returned EOF
 			if resp == nil {
-				t.Skip("Server connection failed - LLM may not be available")
+				t.Skip("Server connection failed")
 			}
 
 			if tt.wantErr {
@@ -150,9 +145,9 @@ func TestCopilotAgentSessionCreate(t *testing.T) {
 				return
 			}
 
-			// Allow 500 errors when LLM is not configured
+			// Allow 500 errors when Copilot workflow is not seeded
 			if resp.StatusCode == http.StatusInternalServerError {
-				t.Skip("LLM API may not be configured")
+				t.Skip("Copilot workflow may not be seeded")
 			}
 
 			require.Equal(t, http.StatusCreated, resp.StatusCode, "Response: %s", string(body))
@@ -162,7 +157,8 @@ func TestCopilotAgentSessionCreate(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.NotEmpty(t, session.SessionID, "Session ID should not be empty")
-			assert.NotEmpty(t, session.Response, "Response should not be empty")
+			assert.NotEmpty(t, session.Status, "Status should not be empty")
+			// Note: Response is empty on session create - processing happens via SSE stream
 		})
 	}
 }

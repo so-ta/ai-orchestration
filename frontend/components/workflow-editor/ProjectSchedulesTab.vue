@@ -165,7 +165,6 @@ async function handleSubmit() {
         input: parsedInput,
       }
       await schedulesApi.update(editingSchedule.value.id, updateData)
-      toast.success(t('schedules.messages.updated'))
     } else {
       // Create
       const createData: CreateScheduleRequest = {
@@ -178,7 +177,6 @@ async function handleSubmit() {
         input: parsedInput,
       }
       await schedulesApi.create(createData)
-      toast.success(t('schedules.messages.created'))
     }
 
     closeModal()
@@ -202,7 +200,6 @@ async function handleDelete(schedule: Schedule) {
   if (confirmed) {
     try {
       await schedulesApi.remove(schedule.id)
-      toast.success(t('schedules.messages.deleted'))
       fetchSchedules()
     } catch (e) {
       toast.error(t('schedules.messages.deleteFailed'), e instanceof Error ? e.message : undefined)
@@ -215,10 +212,8 @@ async function toggleStatus(schedule: Schedule) {
   try {
     if (schedule.status === 'active') {
       await schedulesApi.pause(schedule.id)
-      toast.success(t('schedules.messages.paused'))
     } else {
       await schedulesApi.resume(schedule.id)
-      toast.success(t('schedules.messages.resumed'))
     }
     fetchSchedules()
   } catch (e) {

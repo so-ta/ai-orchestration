@@ -10,6 +10,7 @@ import type { Step, Edge, StepType, StepRun, BlockDefinition, InputPort, OutputP
 import NodeIcon from './NodeIcon.vue'
 import { getBlockIcon } from '~/composables/useBlockIcons'
 import { useCopilotOffset } from '~/composables/useFloatingLayout'
+import { useEditorState } from '~/composables/useEditorState'
 
 // Constants for group node ID prefix
 const GROUP_NODE_PREFIX = 'group_'
@@ -108,14 +109,15 @@ const emit = defineEmits<{
   }): void
 }>()
 
-const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, viewport, zoomIn, zoomOut, zoomTo } = useVueFlow()
+const { onConnect, onNodeDragStop, onPaneClick, onEdgeClick, project, updateNode, setNodes, getNodes, removeNodes, viewport, zoomIn, zoomOut, zoomTo } = useVueFlow()
 
 // Copilot Sidebar を考慮した右端オフセット
-const copilotOffset = useCopilotOffset(12)
+const { value: copilotOffset, isResizing: copilotResizing } = useCopilotOffset(12)
+const { copilotSidebarOpen, toggleCopilotSidebar } = useEditorState()
 
 // Right offset for auto-layout button (shift left when properties panel is open)
 const autoLayoutRightOffset = computed(() => {
-  // 基本: copilotOffset (CopilotSidebar開時は 320+12=332, 閉時は 12)
+  // 基本: copilotOffset (CopilotSidebarの現在の幅 + baseOffset)
   // パネル開時: さらに 360px (FloatingRightPanel幅) + 12px (gap) を追加
   if (props.selectedStepId || props.selectedGroupId) {
     return copilotOffset.value + 360 + 12
@@ -197,20 +199,33 @@ function getOutputPorts(stepType: string, step?: Step): OutputPort[] {
 
   // Special handling for switch blocks - generate dynamic ports from cases
   if (stepType === 'switch' && config?.cases) {
-    const cases = config.cases as Array<{ name: string; expression?: string; is_default?: boolean }>
+    const casesConfig = config.cases
     const dynamicPorts: OutputPort[] = []
 
-    for (const caseItem of cases) {
-      if (caseItem.is_default) {
+    // Handle both array format and object format for cases
+    if (Array.isArray(casesConfig)) {
+      // Array format: [{ name: string; expression?: string; is_default?: boolean }, ...]
+      for (const caseItem of casesConfig as Array<{ name: string; expression?: string; is_default?: boolean }>) {
+        if (caseItem.is_default) {
+          dynamicPorts.push({
+            name: 'default',
+            label: 'Default',
+            is_default: true,
+          })
+        } else {
+          dynamicPorts.push({
+            name: caseItem.name || `case_${dynamicPorts.length + 1}`,
+            label: caseItem.name || `Case ${dynamicPorts.length + 1}`,
+            is_default: false,
+          })
+        }
+      }
+    } else if (typeof casesConfig === 'object' && casesConfig !== null) {
+      // Object format: { "case_name": "value", ... }
+      for (const caseName of Object.keys(casesConfig as Record<string, unknown>)) {
         dynamicPorts.push({
-          name: 'default',
-          label: 'Default',
-          is_default: true,
-        })
-      } else {
-        dynamicPorts.push({
-          name: caseItem.name || `case_${dynamicPorts.length + 1}`,
-          label: caseItem.name || `Case ${dynamicPorts.length + 1}`,
+          name: caseName,
+          label: caseName,
           is_default: false,
         })
       }
@@ -988,6 +1003,53 @@ const stepNodes = computed<Node[]>(() => {
 const nodes = computed<Node[]>(() => {
   return [...groupNodes.value, ...stepNodes.value]
 })
+
+// Sync Vue Flow's internal state when steps/groups change (needed for Undo/Redo)
+// Vue Flow maintains its own internal state that doesn't automatically sync with props
+// We need to explicitly remove deleted nodes and update existing ones
+function syncVueFlowNodes() {
+  // Use nextTick to ensure Vue's reactivity has fully propagated
+  nextTick(() => {
+    const currentVueFlowNodes = getNodes.value
+    const newNodes = nodes.value
+    const newNodeIds = new Set(newNodes.map(n => n.id))
+
+    console.log('[DagEditor] syncVueFlowNodes called:', {
+      vueFlowNodeCount: currentVueFlowNodes.length,
+      newNodeCount: newNodes.length,
+      vueFlowIds: currentVueFlowNodes.map(n => n.id),
+      newIds: newNodes.map(n => n.id),
+    })
+
+    // Find and remove nodes that no longer exist
+    const nodesToRemove = currentVueFlowNodes.filter(n => !newNodeIds.has(n.id))
+    if (nodesToRemove.length > 0) {
+      console.log('[DagEditor] Removing nodes:', nodesToRemove.map(n => n.id))
+      removeNodes(nodesToRemove)
+    }
+
+    // Update all nodes (this will add new ones and update existing ones)
+    setNodes(newNodes)
+  })
+}
+
+// Watch step IDs (more reliable than length for detecting add/remove)
+watch(
+  () => props.steps.map(s => s.id).join(','),
+  (newIds, oldIds) => {
+    console.log('[DagEditor] step IDs changed:', oldIds, '->', newIds)
+    syncVueFlowNodes()
+  }
+)
+
+// Watch group IDs
+watch(
+  () => (props.blockGroups || []).map(g => g.id).join(','),
+  (newIds, oldIds) => {
+    console.log('[DagEditor] group IDs changed:', oldIds, '->', newIds)
+    syncVueFlowNodes()
+  }
+)
 
 // Get edge color based on source port
 function getEdgeColor(sourcePort?: string): string {
@@ -2755,21 +2817,41 @@ defineExpose({
       Drag blocks here to add steps
     </div>
 
-    <!-- Auto Layout Button -->
-    <button
-      v-if="!readonly"
-      class="auto-layout-button"
+    <!-- Bottom Right Button Group -->
+    <div
+      class="bottom-right-buttons"
+      :class="{ 'no-transition': copilotResizing }"
       :style="{ right: autoLayoutRightOffset + 'px' }"
-      data-tooltip="整形する"
-      @click="emit('autoLayout')"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1"/>
-        <rect x="14" y="3" width="7" height="7" rx="1"/>
-        <rect x="14" y="14" width="7" height="7" rx="1"/>
-        <rect x="3" y="14" width="7" height="7" rx="1"/>
-      </svg>
-    </button>
+      <!-- Auto Layout Button -->
+      <button
+        v-if="!readonly"
+        class="action-button"
+        data-tooltip="整形する"
+        @click="emit('autoLayout')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+        </svg>
+      </button>
+
+      <!-- Copilot Toggle Button -->
+      <button
+        class="action-button copilot-toggle"
+        :class="{ active: copilotSidebarOpen }"
+        data-tooltip="AI Copilot"
+        @click="toggleCopilotSidebar"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2z"/>
+          <circle cx="8" cy="14" r="2"/>
+          <circle cx="16" cy="14" r="2"/>
+        </svg>
+      </button>
+    </div>
 
   </div>
 </template>
@@ -3441,11 +3523,24 @@ defineExpose({
   background: #fee2e2;
 }
 
-/* Auto Layout Button */
-.auto-layout-button {
+/* Bottom Right Button Group */
+.bottom-right-buttons {
   position: absolute;
   bottom: 70px;
   /* right is set dynamically via inline style */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+  transition: right 0.3s ease;
+}
+
+.bottom-right-buttons.no-transition {
+  transition: none;
+}
+
+/* Action Button (shared style for auto-layout and copilot toggle) */
+.action-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3457,23 +3552,31 @@ defineExpose({
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease, right 0.3s ease;
+  transition: all 0.15s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 10;
+  position: relative;
 }
 
-.auto-layout-button:hover {
+.action-button:hover {
   background: #f8fafc;
   color: #3b82f6;
   border-color: #3b82f6;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
 }
 
-.auto-layout-button:active {
+.action-button:active {
   transform: scale(0.95);
 }
 
-.auto-layout-button[data-tooltip]::before {
+/* Copilot Toggle Active State */
+.action-button.copilot-toggle.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  color: #6366f1;
+  border-color: #6366f1;
+}
+
+/* Tooltip for action buttons */
+.action-button[data-tooltip]::before {
   content: attr(data-tooltip);
   position: absolute;
   right: calc(100% + 8px);
@@ -3493,7 +3596,7 @@ defineExpose({
   z-index: 100;
 }
 
-.auto-layout-button[data-tooltip]::after {
+.action-button[data-tooltip]::after {
   content: '';
   position: absolute;
   right: calc(100% + 4px);
@@ -3508,8 +3611,8 @@ defineExpose({
   z-index: 100;
 }
 
-.auto-layout-button[data-tooltip]:hover::before,
-.auto-layout-button[data-tooltip]:hover::after {
+.action-button[data-tooltip]:hover::before,
+.action-button[data-tooltip]:hover::after {
   opacity: 1;
   visibility: visible;
 }

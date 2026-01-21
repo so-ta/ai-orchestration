@@ -56,18 +56,27 @@ export function useRightOffset(baseOffset = 12, panelOpen?: Ref<boolean>): Compu
 /**
  * Copilot Sidebar のオフセットを計算するヘルパー
  * Copilot Sidebar が開いているときは、他のフローティング要素を左にシフトする
+ * サイドバーの幅に連動して動的に計算される
  * @param baseOffset ベースのオフセット（px）
- * @returns 計算されたオフセット値（px）
+ * @returns { offset: 計算されたオフセット値（px）, isResizing: リサイズ中かどうか }
  */
-export function useCopilotOffset(baseOffset = 12): ComputedRef<number> {
-  const { copilotSidebarOpen } = useEditorState()
+export function useCopilotOffset(baseOffset = 12): {
+  value: ComputedRef<number>
+  isResizing: Ref<boolean>
+} {
+  const { copilotSidebarOpen, copilotSidebarWidth, copilotSidebarResizing } = useEditorState()
 
-  return computed(() => {
+  const offset = computed(() => {
     if (copilotSidebarOpen.value) {
-      return COPILOT_SIDEBAR_WIDTH + baseOffset
+      return copilotSidebarWidth.value + baseOffset
     }
     return baseOffset
   })
+
+  return {
+    value: offset,
+    isResizing: copilotSidebarResizing,
+  }
 }
 
 // Re-export constants for convenience

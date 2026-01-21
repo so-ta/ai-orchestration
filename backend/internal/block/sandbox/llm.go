@@ -226,11 +226,23 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 	}
 
 	// Convert messages format (Anthropic requires system message separate)
-	if messages, ok := request["messages"].([]interface{}); ok {
+	// Support both []interface{} and []map[string]interface{} types
+	var rawMessages []interface{}
+	if msgs, ok := request["messages"].([]interface{}); ok {
+		rawMessages = msgs
+	} else if msgs, ok := request["messages"].([]map[string]interface{}); ok {
+		// Convert []map[string]interface{} to []interface{}
+		rawMessages = make([]interface{}, len(msgs))
+		for i, m := range msgs {
+			rawMessages[i] = m
+		}
+	}
+
+	if len(rawMessages) > 0 {
 		var systemMsg string
 		var anthropicMsgs []map[string]interface{}
 
-		for _, m := range messages {
+		for _, m := range rawMessages {
 			msg, ok := m.(map[string]interface{})
 			if !ok {
 				continue
@@ -256,54 +268,61 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 					},
 				})
 			} else {
-				// Handle both string content and content array (for tool_calls)
-				if content, ok := msg["content"].(string); ok {
-					anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
-						"role":    role,
-						"content": content,
-					})
-				} else if contentArr, ok := msg["content"].([]interface{}); ok {
-					anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
-						"role":    role,
-						"content": contentArr,
-					})
-				}
 				// Handle assistant messages with tool_calls
-				if role == "assistant" {
-					if toolCalls, ok := msg["tool_calls"].([]interface{}); ok && len(toolCalls) > 0 {
-						// Build content array with text and tool_use blocks
-						var contentBlocks []map[string]interface{}
-						if textContent, ok := msg["content"].(string); ok && textContent != "" {
+				// Tool calls can come as []interface{} or []map[string]interface{}
+				var toolCallsSlice []interface{}
+				if tc, ok := msg["tool_calls"].([]interface{}); ok {
+					toolCallsSlice = tc
+				} else if tc, ok := msg["tool_calls"].([]map[string]interface{}); ok {
+					for _, t := range tc {
+						toolCallsSlice = append(toolCallsSlice, t)
+					}
+				}
+
+				if role == "assistant" && len(toolCallsSlice) > 0 {
+					// Build content array with text and tool_use blocks
+					var contentBlocks []map[string]interface{}
+					if textContent, ok := msg["content"].(string); ok && textContent != "" {
+						contentBlocks = append(contentBlocks, map[string]interface{}{
+							"type": "text",
+							"text": textContent,
+						})
+					}
+					for _, tc := range toolCallsSlice {
+						if tcMap, ok := tc.(map[string]interface{}); ok {
+							fn, _ := tcMap["function"].(map[string]interface{})
+							name, _ := fn["name"].(string)
+							argsStr, _ := fn["arguments"].(string)
+							var argsMap map[string]interface{}
+							if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
+								// If JSON parsing fails, use empty map to avoid nil input
+								argsMap = make(map[string]interface{})
+							}
 							contentBlocks = append(contentBlocks, map[string]interface{}{
-								"type": "text",
-								"text": textContent,
+								"type":  "tool_use",
+								"id":    tcMap["id"],
+								"name":  name,
+								"input": argsMap,
 							})
 						}
-						for _, tc := range toolCalls {
-							if tcMap, ok := tc.(map[string]interface{}); ok {
-								fn, _ := tcMap["function"].(map[string]interface{})
-								name, _ := fn["name"].(string)
-								argsStr, _ := fn["arguments"].(string)
-								var argsMap map[string]interface{}
-								if err := json.Unmarshal([]byte(argsStr), &argsMap); err != nil {
-									// If JSON parsing fails, use empty map to avoid nil input
-									argsMap = make(map[string]interface{})
-								}
-								contentBlocks = append(contentBlocks, map[string]interface{}{
-									"type":  "tool_use",
-									"id":    tcMap["id"],
-									"name":  name,
-									"input": argsMap,
-								})
-							}
-						}
-						// Replace the last message with proper content blocks
-						if len(anthropicMsgs) > 0 {
-							anthropicMsgs[len(anthropicMsgs)-1] = map[string]interface{}{
-								"role":    "assistant",
-								"content": contentBlocks,
-							}
-						}
+					}
+					// Add assistant message with proper content blocks
+					anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
+						"role":    "assistant",
+						"content": contentBlocks,
+					})
+				} else {
+					// Handle both string content and content array
+					if content, ok := msg["content"].(string); ok {
+						anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
+							"role":    role,
+							"content": content,
+						})
+					} else if contentArr, ok := msg["content"].([]interface{}); ok {
+						anthropicMsgs = append(anthropicMsgs, map[string]interface{}{
+							"role":    role,
+							"content": contentArr,
+						})
 					}
 				}
 			}

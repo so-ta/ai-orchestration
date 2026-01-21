@@ -294,6 +294,72 @@ func (r *CopilotSessionRepository) GetActiveByUserAndProject(ctx context.Context
 	return session, nil
 }
 
+// GetActiveByUserAndProjectWithMessages retrieves the active session for a user and project with all messages
+func (r *CopilotSessionRepository) GetActiveByUserAndProjectWithMessages(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error) {
+	session, err := r.GetActiveByUserAndProject(ctx, tenantID, userID, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, nil
+	}
+
+	// Get messages
+	messagesQuery := `
+		SELECT id, session_id, role, content, phase, extracted_data, suggested_questions, created_at
+		FROM copilot_messages
+		WHERE session_id = $1
+		ORDER BY created_at ASC
+	`
+
+	rows, err := r.pool.Query(ctx, messagesQuery, session.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get copilot messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []domain.CopilotMessage
+	for rows.Next() {
+		var msg domain.CopilotMessage
+		var phase sql.NullString
+		var extractedData, suggestedQuestions []byte
+
+		err := rows.Scan(
+			&msg.ID,
+			&msg.SessionID,
+			&msg.Role,
+			&msg.Content,
+			&phase,
+			&extractedData,
+			&suggestedQuestions,
+			&msg.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan copilot message: %w", err)
+		}
+
+		if phase.Valid {
+			p := domain.CopilotPhase(phase.String)
+			msg.Phase = &p
+		}
+		if extractedData != nil {
+			msg.ExtractedData = json.RawMessage(extractedData)
+		}
+		if suggestedQuestions != nil {
+			msg.SuggestedQuestions = json.RawMessage(suggestedQuestions)
+		}
+
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate copilot messages: %w", err)
+	}
+
+	session.Messages = messages
+	return session, nil
+}
+
 // ListByUser retrieves all sessions for a user (global, no project context)
 func (r *CopilotSessionRepository) ListByUser(ctx context.Context, tenantID uuid.UUID, userID string, filter repository.CopilotSessionFilter) ([]*domain.CopilotSession, int, error) {
 	// Count query

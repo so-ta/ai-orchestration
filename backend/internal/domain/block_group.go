@@ -162,7 +162,7 @@ type AgentConfig struct {
 	Provider      string  `json:"provider"`                   // LLM provider: "openai", "anthropic"
 	Model         string  `json:"model"`                      // Model ID (e.g., "claude-sonnet-4-20250514")
 	SystemPrompt  string  `json:"system_prompt"`              // System prompt defining agent behavior
-	MaxIterations int     `json:"max_iterations,omitempty"`   // ReAct loop max iterations (default: 10)
+	MaxIterations int     `json:"max_iterations,omitempty"`   // ReAct loop max iterations (default: 30)
 	Temperature   float64 `json:"temperature,omitempty"`      // LLM temperature (default: 0.7)
 	ToolChoice    string  `json:"tool_choice,omitempty"`      // "auto", "none", "required" (default: "auto")
 	EnableMemory  bool    `json:"enable_memory,omitempty"`    // Enable conversation memory

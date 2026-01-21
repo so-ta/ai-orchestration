@@ -1863,7 +1863,8 @@
       "updateFailed": "Failed to update credential",
       "deleteFailed": "Failed to delete credential",
       "revokeFailed": "Failed to revoke credential",
-      "activateFailed": "Failed to activate credential"
+      "activateFailed": "Failed to activate credential",
+      "fetchFailed": "Failed to fetch credentials"
     },
     "securityNote": "Credentials are encrypted and stored securely. API keys and passwords cannot be viewed after saving."
   },
@@ -1966,6 +1967,7 @@
     "noCredentials": "No credentials available",
     "createNew": "Create New",
     "fetchError": "Failed to load credentials",
+    "fetchErrorInline": "Could not load credentials. Please try again.",
     "scope": {
       "organization": "Organization",
       "project": "Project",

@@ -19,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
-	"github.com/souta/ai-orchestration/internal/copilot/agent"
+	"github.com/souta/ai-orchestration/internal/engine"
 	"github.com/souta/ai-orchestration/internal/handler"
 	authmw "github.com/souta/ai-orchestration/internal/middleware"
 	"github.com/souta/ai-orchestration/internal/repository/postgres"
@@ -160,11 +160,6 @@ func main() {
 	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo, blockRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
-	// Agent-based copilot usecase
-	agentUsecase := agent.NewAgentUsecase(
-		copilotSessionRepo, blockRepo, projectRepo, stepRepo, edgeRepo, runRepo, stepRunRepo,
-	)
-
 	// OAuth2 service
 	oauth2BaseURL := getEnv("BASE_URL", "http://localhost:8090")
 	oauth2Service := usecase.NewOAuth2Service(
@@ -198,12 +193,31 @@ func main() {
 	variablesHandler := handler.NewVariablesHandler(pool)
 	oauth2Handler := handler.NewOAuth2Handler(oauth2Service, auditService)
 	credentialShareHandler := handler.NewCredentialShareHandler(credentialShareService, auditService)
-	copilotAgentHandler := handler.NewCopilotAgentHandler(agentUsecase)
 
 	// N8N-style feature handlers
 	templateHandler := handler.NewTemplateHandler(templateUsecase, auditService)
 	gitSyncHandler := handler.NewGitSyncHandler(gitSyncUsecase, auditService)
 	blockPackageHandler := handler.NewBlockPackageHandler(blockPackageUsecase, auditService)
+
+	// Run streaming handler (for SSE-based workflow execution)
+	runnerFactory := engine.NewInlineRunnerFactory(
+		pool,
+		projectRepo,
+		runRepo,
+		stepRunRepo,
+		versionRepo,
+		blockRepo,
+		logger,
+	)
+	runStreamHandler := handler.NewRunStreamHandler(runUsecase, runnerFactory)
+
+	// Copilot agent handler (uses workflow engine for execution)
+	copilotAgentHandler := handler.NewCopilotAgentHandler(
+		copilotSessionRepo,
+		projectRepo,
+		runnerFactory,
+		logger,
+	)
 
 	// Initialize auth middleware
 	authConfig := &authmw.AuthConfig{
@@ -406,6 +420,10 @@ func main() {
 			r.Post("/{run_id}/cancel", runHandler.Cancel)
 			r.Post("/{run_id}/resume", runHandler.ResumeFromStep)
 
+			// SSE streaming endpoints
+			r.Get("/{run_id}/stream", runStreamHandler.StreamRunExecution)
+			r.Post("/stream", runStreamHandler.CreateAndStreamRun)
+
 			// Step execution and history
 			r.Route("/{run_id}/steps/{step_id}", func(r chi.Router) {
 				r.Post("/execute", runHandler.ExecuteSingleStep)
@@ -518,6 +536,7 @@ func main() {
 
 			// Agent tools (list available tools for the agent)
 			r.Get("/agent/tools", copilotAgentHandler.GetAvailableTools)
+
 		})
 
 		// Usage tracking and cost management

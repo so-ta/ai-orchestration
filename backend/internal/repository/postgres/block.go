@@ -809,14 +809,12 @@ func (r *BlockDefinitionRepository) resolveInheritance(ctx context.Context, bloc
 			}
 		}
 	}
-	if len(resolved.ConfigSchema) == 0 || string(resolved.ConfigSchema) == "{}" {
-		for i := 1; i < len(chain); i++ {
-			if len(chain[i].ConfigSchema) > 0 && string(chain[i].ConfigSchema) != "{}" {
-				resolved.ConfigSchema = chain[i].ConfigSchema
-				break
-			}
-		}
-	}
+
+	// Merge ConfigSchema properties from inheritance chain (parent properties first, child overrides)
+	resolved.ConfigSchema = mergeConfigSchemas(chain)
+
+	// Merge UIConfig from inheritance chain (parent first, child overrides)
+	resolved.UIConfig = mergeUIConfigs(chain)
 
 	return resolved, nil
 }
@@ -841,6 +839,146 @@ func mergeConfigDefaults(chain []*domain.BlockDefinition) json.RawMessage {
 
 	if len(merged) == 0 {
 		return json.RawMessage("{}")
+	}
+
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return result
+}
+
+// mergeConfigSchemas merges config schemas from inheritance chain
+// Properties are merged from root to child (child's properties override parent's)
+func mergeConfigSchemas(chain []*domain.BlockDefinition) json.RawMessage {
+	mergedProperties := make(map[string]interface{})
+	mergedRequired := make([]string, 0)
+	requiredSet := make(map[string]bool)
+
+	// Process from root to child (child overrides parent)
+	for i := len(chain) - 1; i >= 0; i-- {
+		block := chain[i]
+		if len(block.ConfigSchema) == 0 || string(block.ConfigSchema) == "{}" {
+			continue
+		}
+
+		var schema map[string]interface{}
+		if err := json.Unmarshal(block.ConfigSchema, &schema); err != nil {
+			continue
+		}
+
+		// Merge properties
+		if props, ok := schema["properties"].(map[string]interface{}); ok {
+			for k, v := range props {
+				mergedProperties[k] = v
+			}
+		}
+
+		// Merge required fields
+		if req, ok := schema["required"].([]interface{}); ok {
+			for _, r := range req {
+				if s, ok := r.(string); ok && !requiredSet[s] {
+					mergedRequired = append(mergedRequired, s)
+					requiredSet[s] = true
+				}
+			}
+		}
+	}
+
+	if len(mergedProperties) == 0 {
+		return json.RawMessage("{}")
+	}
+
+	merged := map[string]interface{}{
+		"type":       "object",
+		"properties": mergedProperties,
+	}
+	if len(mergedRequired) > 0 {
+		merged["required"] = mergedRequired
+	}
+
+	result, err := json.Marshal(merged)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return result
+}
+
+// mergeUIConfigs merges UI configs from inheritance chain
+// Groups and fieldGroups are merged from root to child (child overrides parent)
+func mergeUIConfigs(chain []*domain.BlockDefinition) json.RawMessage {
+	mergedGroups := make([]interface{}, 0)
+	groupIDs := make(map[string]bool)
+	mergedFieldGroups := make(map[string]interface{})
+	mergedFieldOverrides := make(map[string]interface{})
+	var icon, color string
+
+	// Process from root to child (child overrides parent)
+	for i := len(chain) - 1; i >= 0; i-- {
+		block := chain[i]
+		if len(block.UIConfig) == 0 || string(block.UIConfig) == "{}" || string(block.UIConfig) == "null" {
+			continue
+		}
+
+		var uiConfig map[string]interface{}
+		if err := json.Unmarshal(block.UIConfig, &uiConfig); err != nil {
+			continue
+		}
+
+		// Take icon and color from child (last wins)
+		if ic, ok := uiConfig["icon"].(string); ok && ic != "" {
+			icon = ic
+		}
+		if c, ok := uiConfig["color"].(string); ok && c != "" {
+			color = c
+		}
+
+		// Merge groups (avoid duplicates by ID)
+		if groups, ok := uiConfig["groups"].([]interface{}); ok {
+			for _, g := range groups {
+				if group, ok := g.(map[string]interface{}); ok {
+					if id, ok := group["id"].(string); ok && !groupIDs[id] {
+						mergedGroups = append(mergedGroups, group)
+						groupIDs[id] = true
+					}
+				}
+			}
+		}
+
+		// Merge fieldGroups
+		if fg, ok := uiConfig["fieldGroups"].(map[string]interface{}); ok {
+			for k, v := range fg {
+				mergedFieldGroups[k] = v
+			}
+		}
+
+		// Merge fieldOverrides
+		if fo, ok := uiConfig["fieldOverrides"].(map[string]interface{}); ok {
+			for k, v := range fo {
+				mergedFieldOverrides[k] = v
+			}
+		}
+	}
+
+	if len(mergedGroups) == 0 && len(mergedFieldGroups) == 0 && icon == "" && color == "" {
+		return json.RawMessage("{}")
+	}
+
+	merged := make(map[string]interface{})
+	if icon != "" {
+		merged["icon"] = icon
+	}
+	if color != "" {
+		merged["color"] = color
+	}
+	if len(mergedGroups) > 0 {
+		merged["groups"] = mergedGroups
+	}
+	if len(mergedFieldGroups) > 0 {
+		merged["fieldGroups"] = mergedFieldGroups
+	}
+	if len(mergedFieldOverrides) > 0 {
+		merged["fieldOverrides"] = mergedFieldOverrides
 	}
 
 	result, err := json.Marshal(merged)

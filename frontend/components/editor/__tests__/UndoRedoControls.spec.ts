@@ -8,7 +8,6 @@ const messages = {
   editor: {
     undo: 'Undo',
     redo: 'Redo',
-    history: 'History',
   },
 }
 
@@ -27,7 +26,6 @@ const mockUndo = vi.fn()
 const mockRedo = vi.fn()
 const mockCanUndo = ref(false)
 const mockCanRedo = ref(false)
-const mockHistory = ref<unknown[]>([])
 
 vi.mock('~/composables/useCommandHistory', () => ({
   useCommandHistory: () => ({
@@ -35,7 +33,6 @@ vi.mock('~/composables/useCommandHistory', () => ({
     canRedo: mockCanRedo,
     undo: mockUndo,
     redo: mockRedo,
-    history: mockHistory,
   }),
 }))
 
@@ -52,7 +49,6 @@ describe('UndoRedoControls', () => {
     vi.clearAllMocks()
     mockCanUndo.value = false
     mockCanRedo.value = false
-    mockHistory.value = []
   })
 
   it('renders undo and redo buttons', () => {
@@ -136,23 +132,6 @@ describe('UndoRedoControls', () => {
     await redoButton.trigger('click')
 
     expect(mockRedo).not.toHaveBeenCalled()
-  })
-
-  it('shows history badge when history has items', () => {
-    mockHistory.value = [{ id: '1' }, { id: '2' }]
-    const wrapper = createWrapper()
-
-    const badge = wrapper.find('.history-badge')
-    expect(badge.exists()).toBe(true)
-    expect(badge.text()).toBe('2')
-  })
-
-  it('hides history badge when history is empty', () => {
-    mockHistory.value = []
-    const wrapper = createWrapper()
-
-    const badge = wrapper.find('.history-badge')
-    expect(badge.exists()).toBe(false)
   })
 
   it('displays correct shortcut in title', () => {

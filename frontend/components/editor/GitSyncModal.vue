@@ -117,7 +117,6 @@ async function handleSave() {
         credentials_id: formData.value.credentials_id || undefined
       })
     }
-    toast.success(t('gitSync.messages.configured'))
     isEditing.value = false
     emit('updated')
   } catch {
@@ -128,7 +127,6 @@ async function handleSave() {
 async function handleSync() {
   try {
     await triggerSync(props.projectId)
-    toast.success(t('gitSync.messages.syncSuccess'))
     await fetchGitSync(props.projectId)
   } catch {
     toast.error(t('gitSync.messages.syncFailed'))
@@ -138,7 +136,6 @@ async function handleSync() {
 async function handleDelete() {
   try {
     await deleteGitSync(props.projectId)
-    toast.success(t('gitSync.messages.deleted'))
     resetForm()
     isEditing.value = true
     emit('updated')

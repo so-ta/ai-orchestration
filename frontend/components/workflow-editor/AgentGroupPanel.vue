@@ -18,7 +18,7 @@ const localConfig = ref<AgentConfig>({
   provider: 'anthropic',
   model: 'claude-sonnet-4-20250514',
   system_prompt: '',
-  max_iterations: 10,
+  max_iterations: 30, // Increased from 10 for complex agent tasks
   temperature: 0.7,
   tool_choice: 'auto',
   enable_memory: false,
@@ -33,7 +33,7 @@ watchEffect(() => {
       provider: config.provider || 'anthropic',
       model: config.model || 'claude-sonnet-4-20250514',
       system_prompt: config.system_prompt || '',
-      max_iterations: config.max_iterations || 10,
+      max_iterations: config.max_iterations || 30,
       temperature: config.temperature || 0.7,
       tool_choice: config.tool_choice || 'auto',
       enable_memory: config.enable_memory || false,

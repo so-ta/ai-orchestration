@@ -109,7 +109,6 @@ async function handleRun() {
       start_step_id: startStep.id,
     })
 
-    toast.success(t('workflows.runDialog.started'))
     emit('success', response.data.id)
     emit('close')
   } catch (e) {

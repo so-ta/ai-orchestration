@@ -84,7 +84,6 @@ async function handleCreate() {
       blocks: createForm.value.blocks,
       dependencies: createForm.value.dependencies
     })
-    toast.success(t('blockPackages.messages.createSuccess'))
     showCreateModal.value = false
     await loadPackages()
   } catch {
@@ -95,7 +94,6 @@ async function handleCreate() {
 async function handlePublish(pkg: CustomBlockPackage) {
   try {
     await publishPackage(pkg.id)
-    toast.success(t('blockPackages.messages.publishSuccess'))
     await loadPackages()
   } catch {
     toast.error(t('blockPackages.messages.publishFailed'))
@@ -114,7 +112,6 @@ async function handleDeprecate(pkg: CustomBlockPackage) {
   if (confirmed) {
     try {
       await deprecatePackage(pkg.id)
-      toast.success(t('blockPackages.messages.deprecateSuccess'))
       await loadPackages()
     } catch {
       toast.error('非推奨化に失敗しました')
@@ -134,7 +131,6 @@ async function handleDelete(pkg: CustomBlockPackage) {
   if (confirmed) {
     try {
       await deletePackage(pkg.id)
-      toast.success(t('blockPackages.messages.deleteSuccess'))
       await loadPackages()
     } catch {
       toast.error('削除に失敗しました')

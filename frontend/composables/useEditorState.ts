@@ -7,8 +7,13 @@ const STORAGE_KEY_BOTTOM_PANEL = 'project-editor-bottom-panel'
 const STORAGE_KEY_COPILOT_SIDEBAR = 'project-editor-copilot-sidebar'
 
 // Copilot Sidebar constants
-export const COPILOT_SIDEBAR_WIDTH = 320
+export const COPILOT_SIDEBAR_DEFAULT_WIDTH = 380
+export const COPILOT_SIDEBAR_MIN_WIDTH = 280
+export const COPILOT_SIDEBAR_MAX_WIDTH = 1200
 export const COPILOT_SIDEBAR_COLLAPSED_WIDTH = 48
+
+// Legacy export for backward compatibility
+export const COPILOT_SIDEBAR_WIDTH = COPILOT_SIDEBAR_DEFAULT_WIDTH
 
 // Clipboard data structure
 interface StepClipboard {
@@ -40,6 +45,8 @@ const lastProjectId = ref<string | null>(null)
 
 // Copilot Sidebar state
 const copilotSidebarOpen = ref(false)
+const copilotSidebarWidth = ref(COPILOT_SIDEBAR_DEFAULT_WIDTH)
+const copilotSidebarResizing = ref(false)
 
 // Initialize from localStorage (client-side only)
 if (typeof window !== 'undefined') {
@@ -83,8 +90,11 @@ if (typeof window !== 'undefined') {
     // Load copilot sidebar state
     const copilotSidebarStored = localStorage.getItem(STORAGE_KEY_COPILOT_SIDEBAR)
     if (copilotSidebarStored) {
-      const { open } = JSON.parse(copilotSidebarStored)
+      const { open, width } = JSON.parse(copilotSidebarStored)
       copilotSidebarOpen.value = !!open
+      if (typeof width === 'number' && width >= COPILOT_SIDEBAR_MIN_WIDTH && width <= COPILOT_SIDEBAR_MAX_WIDTH) {
+        copilotSidebarWidth.value = width
+      }
     }
   } catch (e) {
     console.warn('Failed to load editor state from localStorage:', e)
@@ -146,11 +156,12 @@ watch([bottomPanelCollapsed, bottomPanelHeight], () => {
 }, { deep: true })
 
 // Watch and persist copilot sidebar state
-watch(copilotSidebarOpen, () => {
+watch([copilotSidebarOpen, copilotSidebarWidth], () => {
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem(STORAGE_KEY_COPILOT_SIDEBAR, JSON.stringify({
-        open: copilotSidebarOpen.value
+        open: copilotSidebarOpen.value,
+        width: copilotSidebarWidth.value,
       }))
     } catch (e) {
       console.warn('Failed to save copilot sidebar state to localStorage:', e)
@@ -305,6 +316,14 @@ export function useEditorState(project?: Ref<Project | null>) {
     copilotSidebarOpen.value = !copilotSidebarOpen.value
   }
 
+  function setCopilotSidebarWidth(width: number) {
+    copilotSidebarWidth.value = Math.max(COPILOT_SIDEBAR_MIN_WIDTH, Math.min(COPILOT_SIDEBAR_MAX_WIDTH, width))
+  }
+
+  function setCopilotSidebarResizing(resizing: boolean) {
+    copilotSidebarResizing.value = resizing
+  }
+
   return {
     // State (readonly where appropriate)
     selectedStepId: readonly(selectedStepId),
@@ -325,6 +344,8 @@ export function useEditorState(project?: Ref<Project | null>) {
 
     // Copilot Sidebar state
     copilotSidebarOpen: readonly(copilotSidebarOpen),
+    copilotSidebarWidth,
+    copilotSidebarResizing,
 
     // Actions
     selectStep,
@@ -359,5 +380,7 @@ export function useEditorState(project?: Ref<Project | null>) {
     openCopilotSidebar,
     closeCopilotSidebar,
     toggleCopilotSidebar,
+    setCopilotSidebarWidth,
+    setCopilotSidebarResizing,
   }
 }

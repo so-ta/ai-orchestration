@@ -349,30 +349,29 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 
 	// Get workflow
 	query := `
-		SELECT id, tenant_id, name, description, status, version, input_schema, output_schema,
+		SELECT id, tenant_id, name, description, status, version, variables,
 		       created_at, updated_at, is_system, system_slug
-		FROM workflows
+		FROM projects
 		WHERE id = $1 AND (tenant_id = $2 OR is_system = TRUE) AND deleted_at IS NULL
 	`
 
 	var (
-		id           uuid.UUID
-		tenantID     uuid.UUID
-		name         string
-		description  *string
-		status       string
-		version      int
-		inputSchema  []byte
-		outputSchema []byte
-		createdAt    time.Time
-		updatedAt    time.Time
-		isSystem     bool
-		systemSlug   *string
+		id          uuid.UUID
+		tenantID    uuid.UUID
+		name        string
+		description *string
+		status      string
+		version     int
+		variables   []byte
+		createdAt   time.Time
+		updatedAt   time.Time
+		isSystem    bool
+		systemSlug  *string
 	)
 
 	err = s.pool.QueryRow(s.ctx, query, wfID, s.tenantID).Scan(
 		&id, &tenantID, &name, &description, &status, &version,
-		&inputSchema, &outputSchema, &createdAt, &updatedAt, &isSystem, &systemSlug,
+		&variables, &createdAt, &updatedAt, &isSystem, &systemSlug,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -400,17 +399,10 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 		workflow["system_slug"] = *systemSlug
 	}
 
-	if len(inputSchema) > 0 {
-		var schema interface{}
-		if err := json.Unmarshal(inputSchema, &schema); err == nil {
-			workflow["input_schema"] = schema
-		}
-	}
-
-	if len(outputSchema) > 0 {
-		var schema interface{}
-		if err := json.Unmarshal(outputSchema, &schema); err == nil {
-			workflow["output_schema"] = schema
+	if len(variables) > 0 {
+		var varsMap interface{}
+		if err := json.Unmarshal(variables, &varsMap); err == nil {
+			workflow["variables"] = varsMap
 		}
 	}
 
@@ -418,7 +410,7 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 	stepsQuery := `
 		SELECT id, name, type, config, position_x, position_y
 		FROM steps
-		WHERE workflow_id = $1 AND deleted_at IS NULL
+		WHERE project_id = $1
 		ORDER BY created_at
 	`
 
@@ -470,7 +462,7 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 func (s *WorkflowsServiceImpl) List() ([]map[string]interface{}, error) {
 	query := `
 		SELECT id, tenant_id, name, description, status, version, created_at, updated_at, is_system, system_slug
-		FROM workflows
+		FROM projects
 		WHERE (tenant_id = $1 OR is_system = TRUE) AND deleted_at IS NULL
 		ORDER BY created_at DESC
 	`
@@ -558,12 +550,12 @@ func (s *RunsServiceImpl) Get(runID string) (map[string]interface{}, error) {
 	}
 
 	query := `
-		SELECT r.id, r.workflow_id, r.tenant_id, r.status, r.mode, r.trigger_type,
+		SELECT r.id, r.project_id, r.tenant_id, r.status, r.mode, r.trigger_type,
 		       r.input, r.output, r.error, r.started_at, r.completed_at, r.created_at,
 		       r.trigger_source, r.trigger_metadata,
 		       w.name as workflow_name
 		FROM runs r
-		JOIN workflows w ON r.workflow_id = w.id
+		JOIN projects w ON r.project_id = w.id
 		WHERE r.id = $1 AND r.tenant_id = $2
 	`
 
@@ -599,7 +591,7 @@ func (s *RunsServiceImpl) Get(runID string) (map[string]interface{}, error) {
 
 	run := map[string]interface{}{
 		"id":            id.String(),
-		"workflow_id":   workflowID.String(),
+		"project_id":   workflowID.String(),
 		"workflow_name": workflowName,
 		"tenant_id":     tenantID.String(),
 		"status":        status,

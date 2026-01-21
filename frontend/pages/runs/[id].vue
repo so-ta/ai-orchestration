@@ -296,7 +296,6 @@ async function handleExecuteSingleStep() {
     }
 
     await runsApi.executeSingleStep(runId, selectedStepRun.value.step_id, inputData)
-    toast.success(t('runs.reExecuteSuccess'))
     showReExecuteForm.value = false
 
     // Reload run data
@@ -328,7 +327,6 @@ async function handleResumeFromStep() {
     }
 
     await runsApi.resumeFromStep(runId, selectedStepRun.value.step_id, inputOverride)
-    toast.success(t('runs.reExecuteSuccess'))
     showReExecuteForm.value = false
 
     // Close modal and reload run data

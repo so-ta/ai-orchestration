@@ -88,7 +88,6 @@ function usePreviousOutput() {
     const output = latestStepRunOutput.value as Record<string, unknown>
     stepInputValues.value = output
     customInputJson.value = JSON.stringify(output, null, 2)
-    toast.success(t('execution.usedPreviousOutput'))
   }
 }
 
@@ -188,7 +187,6 @@ function insertSuggestedField(fieldName: string, value: unknown) {
     current[fieldName] = value
     customInputJson.value = JSON.stringify(current, null, 2)
     stepInputValues.value = current
-    toast.success(t('execution.fieldInserted', { field: fieldName }))
   } catch {
     // If JSON is invalid, start fresh
     const newObj: Record<string, unknown> = {}
@@ -496,8 +494,6 @@ async function executeWorkflow() {
       start_step_id: startStep.value.id,
     })
 
-    toast.success(t('execution.workflowStarted'))
-
     // Fetch full run details and emit event
     const detailedRun = await runsApi.get(response.data.id)
     emit('run:created', detailedRun.data)
@@ -534,7 +530,6 @@ async function executeThisStepOnly() {
         Object.keys(input).length > 0 ? input : undefined
       )
       runId = props.latestRun.id
-      toast.success(t('execution.stepExecuted'))
     } else {
       // Use inline test API (creates new test run)
       const response = await runsApi.testStepInline(
@@ -543,7 +538,6 @@ async function executeThisStepOnly() {
         Object.keys(input).length > 0 ? input : undefined
       )
       runId = response.data.run_id
-      toast.success(t('execution.stepQueued'))
 
       // Start polling for result
       startPolling(response.data.run_id, props.step.id)
@@ -580,8 +574,6 @@ async function executeFromThisStep() {
       start_step_id: props.step.id,
     })
 
-    toast.success(t('execution.workflowStarted'))
-
     // Fetch full run details and emit event
     const detailedRun = await runsApi.get(response.data.id)
     emit('run:created', detailedRun.data)
@@ -617,11 +609,9 @@ async function startPolling(runId: string, stepId: string) {
       const stepRun = run.step_runs?.find((sr: { step_id: string }) => sr.step_id === stepId)
       if (stepRun) {
         if (stepRun.status === 'completed') {
-          toast.success(t('execution.stepTestCompleted'))
           loadTestRuns()
           return true // Stop polling
         } else if (stepRun.status === 'failed') {
-          toast.error(t('execution.stepTestFailed'))
           loadTestRuns()
           return true // Stop polling
         }

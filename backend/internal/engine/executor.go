@@ -132,28 +132,31 @@ func (e *Executor) loadScopedVariables(ctx context.Context, tenantID, projectID,
 
 // ExecutionContext holds the context for a project execution
 type ExecutionContext struct {
-	Run             *domain.Run
-	Definition      *domain.ProjectDefinition
-	StepRuns        map[uuid.UUID]*domain.StepRun
-	StepData        map[uuid.UUID]json.RawMessage // step outputs
-	StepOutputPorts map[uuid.UUID]string          // output port used by each step (for port-based routing)
-	GroupData       map[uuid.UUID]json.RawMessage // block group outputs
-	InjectedOutputs map[string]json.RawMessage    // pre-injected outputs for partial execution
-	ScopedVars      *ScopedVariables              // scoped variables (org, project, personal)
-	sequenceCounter int                           // counter for step execution order within an attempt
-	mu              sync.RWMutex
+	Run               *domain.Run
+	Definition        *domain.ProjectDefinition
+	StepRuns          map[uuid.UUID]*domain.StepRun
+	StepData          map[uuid.UUID]json.RawMessage // step outputs
+	StepOutputPorts   map[uuid.UUID]string          // output port used by each step (for port-based routing)
+	GroupData         map[uuid.UUID]json.RawMessage // block group outputs
+	InjectedOutputs   map[string]json.RawMessage    // pre-injected outputs for partial execution
+	ToolInputOverride map[uuid.UUID]json.RawMessage // tool input override for agent tool calls (bypasses edge resolution)
+	ScopedVars        *ScopedVariables              // scoped variables (org, project, personal)
+	EventEmitter      EventEmitter                  // optional event emitter for streaming progress
+	sequenceCounter   int                           // counter for step execution order within an attempt
+	mu                sync.RWMutex
 }
 
 // NewExecutionContext creates a new execution context
 func NewExecutionContext(run *domain.Run, def *domain.ProjectDefinition) *ExecutionContext {
 	return &ExecutionContext{
-		Run:             run,
-		Definition:      def,
-		StepRuns:        make(map[uuid.UUID]*domain.StepRun),
-		StepData:        make(map[uuid.UUID]json.RawMessage),
-		StepOutputPorts: make(map[uuid.UUID]string),
-		GroupData:       make(map[uuid.UUID]json.RawMessage),
-		InjectedOutputs: make(map[string]json.RawMessage),
+		Run:               run,
+		Definition:        def,
+		StepRuns:          make(map[uuid.UUID]*domain.StepRun),
+		StepData:          make(map[uuid.UUID]json.RawMessage),
+		StepOutputPorts:   make(map[uuid.UUID]string),
+		GroupData:         make(map[uuid.UUID]json.RawMessage),
+		InjectedOutputs:   make(map[string]json.RawMessage),
+		ToolInputOverride: make(map[uuid.UUID]json.RawMessage),
 	}
 }
 
@@ -390,6 +393,15 @@ func (e *Executor) executeCustomOrPassthrough(ctx context.Context, execCtx *Exec
 	return nil, fmt.Errorf("unknown step type %q without block definition: step %s (%s)", step.Type, step.Name, step.ID)
 }
 
+// ExecuteWithEvents executes the project with event streaming
+// The events channel will receive execution events for SSE streaming
+func (e *Executor) ExecuteWithEvents(ctx context.Context, execCtx *ExecutionContext, events chan<- ExecutionEvent) error {
+	if events != nil {
+		execCtx.EventEmitter = NewChannelEventEmitter(events)
+	}
+	return e.Execute(ctx, execCtx)
+}
+
 // Execute executes the project
 func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error {
 	ctx, span := tracer.Start(ctx, "project.execute",
@@ -405,6 +417,12 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 		"run_id", execCtx.Run.ID,
 		"project_id", execCtx.Run.ProjectID,
 	)
+
+	// Emit run started event
+	e.emitEvent(execCtx, EventRunStarted, RunStartedData{
+		ProjectID:   execCtx.Run.ProjectID.String(),
+		ProjectName: execCtx.Definition.Name,
+	})
 
 	// Load scoped variables (org, project, personal)
 	userID := uuid.Nil
@@ -440,14 +458,32 @@ func (e *Executor) Execute(ctx context.Context, execCtx *ExecutionContext) error
 	span.SetAttributes(attribute.Int("start_node_count", len(startNodes)))
 
 	// Execute from start nodes
+	startTime := time.Now()
 	if err := e.executeNodes(ctx, execCtx, graph, startNodes); err != nil {
+		// Emit run failed event
+		e.emitEvent(execCtx, EventRunFailed, RunFailedData{
+			Error: err.Error(),
+		})
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
+	// Emit run completed event
+	e.emitEvent(execCtx, EventRunCompleted, RunCompletedData{
+		Duration: time.Since(startTime).Milliseconds(),
+	})
+
 	span.SetStatus(codes.Ok, "project completed")
 	return nil
+}
+
+// emitEvent emits an execution event if an emitter is configured
+func (e *Executor) emitEvent(execCtx *ExecutionContext, eventType ExecutionEventType, data interface{}) {
+	if execCtx.EventEmitter == nil {
+		return
+	}
+	execCtx.EventEmitter.Emit(NewExecutionEvent(execCtx.Run.ID, eventType, data))
 }
 
 // Graph represents the execution graph
@@ -581,6 +617,14 @@ func (e *Executor) executeNextGroups(ctx context.Context, execCtx *ExecutionCont
 	currentOutput := execCtx.StepData[currentStepID]
 	currentOutputPort := execCtx.StepOutputPorts[currentStepID]
 	execCtx.mu.RUnlock()
+
+	// Debug: Log current step output for group input
+	e.logger.Info("executeNextGroups checking output",
+		"step_id", currentStepID,
+		"output_port", currentOutputPort,
+		"output_len", len(currentOutput),
+		"output_raw", string(currentOutput),
+	)
 
 	// Default output port if not set
 	if currentOutputPort == "" {
@@ -949,6 +993,15 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 
 	stepRun.Start(input)
 
+	// Emit step started event
+	e.emitEvent(execCtx, EventStepStarted, StepStartedData{
+		StepID:   step.ID.String(),
+		StepName: step.Name,
+		StepType: string(step.Type),
+		Input:    input,
+	})
+	stepStartTime := time.Now()
+
 	// Get error handling config
 	ehConfig := getErrorHandlingConfig(step.Config)
 
@@ -1068,6 +1121,12 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		} else {
 			// Normal error handling - fail the step
 			stepRun.Fail(err.Error())
+			// Emit step failed event
+			e.emitEvent(execCtx, EventStepFailed, StepFailedData{
+				StepID:   step.ID.String(),
+				StepName: step.Name,
+				Error:    err.Error(),
+			})
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			e.logger.Error("Step execution failed",
@@ -1109,6 +1168,14 @@ func (e *Executor) executeNode(ctx context.Context, execCtx *ExecutionContext, g
 		span.SetAttributes(attribute.Int64("duration_ms", int64(*stepRun.DurationMs)))
 	}
 	span.SetStatus(codes.Ok, "step completed")
+
+	// Emit step completed event
+	e.emitEvent(execCtx, EventStepCompleted, StepCompletedData{
+		StepID:   step.ID.String(),
+		StepName: step.Name,
+		Output:   output,
+		Duration: time.Since(stepStartTime).Milliseconds(),
+	})
 
 	e.logger.Info("Step completed",
 		"run_id", execCtx.Run.ID,
@@ -1338,6 +1405,12 @@ func (e *Executor) extractOutputPortAndData(step domain.Step, output json.RawMes
 func (e *Executor) prepareStepInput(execCtx *ExecutionContext, step domain.Step) (json.RawMessage, error) {
 	execCtx.mu.RLock()
 	defer execCtx.mu.RUnlock()
+
+	// Check for tool input override first (used by agent tool calls)
+	// This takes precedence over edge-based input resolution
+	if override, ok := execCtx.ToolInputOverride[step.ID]; ok {
+		return override, nil
+	}
 
 	// No previous step outputs - use project input
 	if len(execCtx.StepData) == 0 && len(execCtx.GroupData) == 0 {
@@ -1904,6 +1977,9 @@ func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionCo
 		},
 	}
 
+	// Initialize Search service for web search (used by Copilot)
+	sandboxCtx.Search = sandbox.NewSearchService()
+
 	// Add sandbox services if database pool is available (for Copilot/meta-project features)
 	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
 		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
@@ -1914,6 +1990,15 @@ func (e *Executor) executeFunctionStep(ctx context.Context, execCtx *ExecutionCo
 		sandboxCtx.Projects = sandbox.NewProjectsService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Steps = sandbox.NewStepsService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Edges = sandbox.NewEdgesService(ctx, e.pool, execCtx.Run.TenantID)
+		// Set TargetProjectID from workflow input for Copilot tools
+		if execCtx.Run.Input != nil {
+			var runInput map[string]interface{}
+			if err := json.Unmarshal(execCtx.Run.Input, &runInput); err == nil {
+				if workflowID, ok := runInput["workflow_id"].(string); ok {
+					sandboxCtx.TargetProjectID = workflowID
+				}
+			}
+		}
 	}
 
 	// Execute the code in sandbox
@@ -2640,6 +2725,15 @@ func (e *Executor) executeCustomBlockStep(ctx context.Context, execCtx *Executio
 // executeBlockDefinition executes a block definition using the unified execution model
 // Flow: preProcess chain -> internal_steps -> code -> postProcess chain
 func (e *Executor) executeBlockDefinition(ctx context.Context, execCtx *ExecutionContext, step domain.Step, blockDef *domain.BlockDefinition, input json.RawMessage) (json.RawMessage, error) {
+	// Debug: Log block definition execution input
+	e.logger.Info("executeBlockDefinition input",
+		"step_id", step.ID,
+		"step_name", step.Name,
+		"block_slug", blockDef.Slug,
+		"input_len", len(input),
+		"input_raw", string(input),
+	)
+
 	// Parse input to map
 	var inputMap map[string]interface{}
 	if err := json.Unmarshal(input, &inputMap); err != nil {
@@ -2883,6 +2977,9 @@ func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionC
 	sandboxCtx.Human = sandbox.NewHumanService()
 	sandboxCtx.Adapter = sandbox.NewAdapterService()
 
+	// Initialize Search service for web search (used by Copilot)
+	sandboxCtx.Search = sandbox.NewSearchService()
+
 	if e.pool != nil && execCtx != nil && execCtx.Run != nil {
 		sandboxCtx.Blocks = sandbox.NewBlocksService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Workflows = sandbox.NewWorkflowsService(ctx, e.pool, execCtx.Run.TenantID)
@@ -2894,6 +2991,15 @@ func (e *Executor) createSandboxContext(ctx context.Context, execCtx *ExecutionC
 		sandboxCtx.Projects = sandbox.NewProjectsService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Steps = sandbox.NewStepsService(ctx, e.pool, execCtx.Run.TenantID)
 		sandboxCtx.Edges = sandbox.NewEdgesService(ctx, e.pool, execCtx.Run.TenantID)
+		// Set TargetProjectID from workflow input for Copilot tools
+		if execCtx.Run.Input != nil {
+			var runInput map[string]interface{}
+			if err := json.Unmarshal(execCtx.Run.Input, &runInput); err == nil {
+				if workflowID, ok := runInput["workflow_id"].(string); ok {
+					sandboxCtx.TargetProjectID = workflowID
+				}
+			}
+		}
 	}
 
 	return sandboxCtx
@@ -3105,6 +3211,8 @@ func wrapCustomBlockCode(code string) string {
 	// Wrapper provides:
 	// - config: the step configuration
 	// - renderTemplate: simple {{variable}} substitution
+	// NOTE: Do NOT wrap the block code in another IIFE here because sandbox.wrapCode already does that.
+	// Instead, we define helpers and execute the code directly so return values propagate correctly.
 	return `
 // Setup globals for custom block
 var config = input.__config || {};
@@ -3128,10 +3236,8 @@ function renderTemplate(template, data) {
 	});
 }
 
-// Execute the block code
-(function() {
+// Execute the block code (no extra IIFE - sandbox.wrapCode handles that)
 ` + code + `
-})();
 `
 }
 

@@ -102,6 +102,10 @@ const showReleaseModal = ref(false)
 // Environment variables modal state
 const showVariablesModal = ref(false)
 
+// Settings modal state
+const showSettingsModal = ref(false)
+const settingsInitialTab = ref<string | undefined>(undefined)
+
 // Auto-save status
 const saveStatus = ref<'saved' | 'saving' | 'unsaved' | 'error'>('saved')
 
@@ -444,6 +448,12 @@ function handleRunCreated(run: Run) {
     selectedGroupId.value = null
     setSelectedRun(run)
   }
+}
+
+// Handle open settings from credential bindings - open settings modal with credentials tab
+function handleOpenSettingsCredentials() {
+  settingsInitialTab.value = 'credentials'
+  showSettingsModal.value = true
 }
 
 // Handle run refresh request from RunDetailPanel
@@ -1840,6 +1850,7 @@ onMounted(async () => {
           @delete="handleDeleteStep"
           @update:name="handleUpdateStepName"
           @run:created="handleRunCreated"
+          @open-settings="handleOpenSettingsCredentials"
         />
 
         <!-- Agent Group Panel -->
@@ -1924,6 +1935,13 @@ onMounted(async () => {
         :readonly="isReadonly"
         @close="showVariablesModal = false"
         @update:project-variables="handleUpdateVariables"
+      />
+
+      <!-- Settings Modal -->
+      <SettingsModal
+        :show="showSettingsModal"
+        :initial-tab="settingsInitialTab"
+        @close="showSettingsModal = false"
       />
 
       <!-- Run Dialog -->

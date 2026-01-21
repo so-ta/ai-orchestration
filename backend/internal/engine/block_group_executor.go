@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/adapter"
 	"github.com/souta/ai-orchestration/internal/block/sandbox"
 	"github.com/souta/ai-orchestration/internal/domain"
@@ -71,8 +72,10 @@ func (e *BlockGroupExecutor) ExecuteGroup(ctx context.Context, bgCtx *BlockGroup
 
 	e.logger.Info("Executing block group",
 		"group_id", bgCtx.Group.ID,
+		"group_name", bgCtx.Group.Name,
 		"group_type", bgCtx.Group.Type,
 		"step_count", len(bgCtx.Steps),
+		"input_raw", string(bgCtx.Input),
 	)
 
 	// 1. Run pre_process to transform external input to internal input
@@ -320,6 +323,8 @@ func (e *BlockGroupExecutor) executeParallel(ctx context.Context, bgCtx *BlockGr
 }
 
 // executeStep executes a single step within a block group context
+// The input parameter is used for tool chain execution where the step input
+// comes from LLM tool arguments rather than DAG edges
 func (e *BlockGroupExecutor) executeStep(ctx context.Context, execCtx *ExecutionContext, graph *Graph, step *domain.Step, input json.RawMessage) (json.RawMessage, error) {
 	ctx, span := tracer.Start(ctx, "block_group.step",
 		trace.WithAttributes(
@@ -329,6 +334,24 @@ func (e *BlockGroupExecutor) executeStep(ctx context.Context, execCtx *Execution
 		),
 	)
 	defer span.End()
+
+	// Set tool input override so prepareStepInput uses the provided input
+	// instead of resolving input from DAG edges (which don't exist for tool steps)
+	if len(input) > 0 {
+		execCtx.mu.Lock()
+		if execCtx.ToolInputOverride == nil {
+			execCtx.ToolInputOverride = make(map[uuid.UUID]json.RawMessage)
+		}
+		execCtx.ToolInputOverride[step.ID] = input
+		execCtx.mu.Unlock()
+
+		// Clean up the override after execution
+		defer func() {
+			execCtx.mu.Lock()
+			delete(execCtx.ToolInputOverride, step.ID)
+			execCtx.mu.Unlock()
+		}()
+	}
 
 	// Use the main executor's step execution logic
 	err := e.executor.executeNode(ctx, execCtx, graph, step.ID)
@@ -689,7 +712,7 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 
 	// Set defaults
 	if config.MaxIterations <= 0 {
-		config.MaxIterations = 10
+		config.MaxIterations = 30 // Increased from 10 for complex agent tasks
 	}
 	if config.Temperature == 0 {
 		config.Temperature = 0.7
@@ -754,11 +777,21 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 		enhancedPrompt = config.SystemPrompt + "\n\n" + workflowContext
 	}
 
-	// Build initial messages
+	// Build initial messages with system prompt
 	messages := []map[string]interface{}{
 		{"role": "system", "content": enhancedPrompt},
-		{"role": "user", "content": userMessage},
 	}
+
+	// Add conversation history if memory is enabled
+	if config.EnableMemory {
+		messages = e.appendHistoryMessages(messages, inputData, config.MemoryWindow)
+	}
+
+	// Add current user message
+	messages = append(messages, map[string]interface{}{
+		"role":    "user",
+		"content": userMessage,
+	})
 
 	// Create LLM service
 	llmService := sandbox.NewLLMService(ctx)
@@ -775,6 +808,12 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 			"iteration", iteration,
 			"message_count", len(messages),
 		)
+
+		// Emit thinking event
+		e.emitAgentEvent(bgCtx, EventThinking, ThinkingData{
+			Iteration: iteration,
+			Content:   "推論中...",
+		})
 
 		// Build LLM request
 		llmRequest := map[string]interface{}{
@@ -836,8 +875,17 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 				toolArgs = map[string]interface{}{}
 			}
 
+			// Emit tool_call event
+			argsJSON, _ := json.Marshal(toolArgs)
+			e.emitAgentEvent(bgCtx, EventToolCall, ToolCallData{
+				ToolName:   toolName,
+				ToolCallID: toolCallID,
+				Arguments:  argsJSON,
+			})
+
 			// Find and execute the corresponding tool chain
 			var toolResult interface{}
+			var isError bool
 			if toolChain, ok := toolChainMap[toolName]; ok {
 				toolInput, _ := json.Marshal(toolArgs)
 				output, err := e.executeToolChain(ctx, bgCtx, toolChain, toolInput)
@@ -845,19 +893,38 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 					toolResult = map[string]interface{}{
 						"error": err.Error(),
 					}
+					isError = true
 				} else {
 					if err := json.Unmarshal(output, &toolResult); err != nil {
 						toolResult = string(output)
+					}
+					// Check if the tool output contains an error field
+					// This handles cases where the tool execution succeeded but returned an error message
+					// (e.g., validation errors from create_step like "project_id, name, and type are required")
+					if resultMap, ok := toolResult.(map[string]interface{}); ok {
+						if _, hasError := resultMap["error"]; hasError {
+							isError = true
+						}
 					}
 				}
 			} else {
 				toolResult = map[string]interface{}{
 					"error": fmt.Sprintf("Tool not found: %s", toolName),
 				}
+				isError = true
 			}
 
 			// Add tool result to messages
 			toolResultStr, _ := json.Marshal(toolResult)
+
+			// Emit tool_result event
+			e.emitAgentEvent(bgCtx, EventToolResult, ToolResultData{
+				ToolName:   toolName,
+				ToolCallID: toolCallID,
+				Result:     toolResultStr,
+				IsError:    isError,
+			})
+
 			messages = append(messages, map[string]interface{}{
 				"role":         "tool",
 				"tool_call_id": toolCallID,
@@ -882,6 +949,12 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 		finalResponse = "Agent reached maximum iterations without final response."
 	}
 
+	// Emit complete event
+	e.emitAgentEvent(bgCtx, EventComplete, CompleteData{
+		Response:   finalResponse,
+		Iterations: len(messages) / 2,
+	})
+
 	output := map[string]interface{}{
 		"response":      finalResponse,
 		"iterations":    len(messages) / 2, // Rough estimate of iterations
@@ -889,6 +962,57 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 	}
 
 	return json.Marshal(output)
+}
+
+// emitAgentEvent emits an event for agent execution if an emitter is configured
+func (e *BlockGroupExecutor) emitAgentEvent(bgCtx *BlockGroupContext, eventType ExecutionEventType, data interface{}) {
+	if bgCtx.ExecCtx == nil || bgCtx.ExecCtx.EventEmitter == nil {
+		return
+	}
+	bgCtx.ExecCtx.EventEmitter.Emit(NewExecutionEvent(bgCtx.ExecCtx.Run.ID, eventType, data))
+}
+
+// appendHistoryMessages appends conversation history messages to the message array
+// This enables memory for agents by including previous user and assistant messages
+// History is limited by memoryWindow (0 = no limit)
+func (e *BlockGroupExecutor) appendHistoryMessages(
+	messages []map[string]interface{},
+	inputData map[string]interface{},
+	memoryWindow int,
+) []map[string]interface{} {
+	history, ok := inputData["history"].([]interface{})
+	if !ok || len(history) == 0 {
+		return messages
+	}
+
+	// Apply memory window limit
+	start := 0
+	if memoryWindow > 0 && len(history) > memoryWindow {
+		start = len(history) - memoryWindow
+	}
+
+	// Append history messages
+	for _, item := range history[start:] {
+		msg, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		role, _ := msg["role"].(string)
+		content, _ := msg["content"].(string)
+
+		// Only include user and assistant messages
+		if role == "user" || role == "assistant" {
+			if content != "" {
+				messages = append(messages, map[string]interface{}{
+					"role":    role,
+					"content": content,
+				})
+			}
+		}
+	}
+
+	return messages
 }
 
 // buildWorkflowContext builds a context string for the agent with current workflow information

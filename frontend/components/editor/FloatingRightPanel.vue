@@ -27,10 +27,13 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 // ボトムパネルを考慮した下端オフセット
-const { offset: bottomOffset, isResizing } = useBottomOffset(12)
+const { offset: bottomOffset, isResizing: bottomResizing } = useBottomOffset(12)
 
 // Copilot Sidebar を考慮した右端オフセット
-const copilotOffset = useCopilotOffset(12)
+const { value: copilotOffset, isResizing: copilotResizing } = useCopilotOffset(12)
+
+// いずれかのパネルがリサイズ中ならアニメーション無効
+const isResizing = computed(() => bottomResizing.value || copilotResizing.value)
 
 // 閉じるボタン
 function handleClose() {

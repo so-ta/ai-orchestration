@@ -252,7 +252,6 @@ async function save() {
       emit('update:project-variables', localProjectVariables.value)
     }
 
-    toast.success(t('variables.saveSuccess'))
     emit('close')
   } catch {
     toast.error(t('variables.saveError'))

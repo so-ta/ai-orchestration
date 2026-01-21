@@ -7,13 +7,12 @@
  * - Undo button (Cmd/Ctrl+Z)
  * - Redo button (Cmd/Ctrl+Shift+Z)
  * - Visual feedback for available actions
- * - Optional history count display
  */
 
 import { useCommandHistory } from '~/composables/useCommandHistory'
 
 const { t } = useI18n()
-const { canUndo, canRedo, undo, redo, history } = useCommandHistory()
+const { canUndo, canRedo, undo, redo } = useCommandHistory()
 
 // Detect platform for shortcut labels
 const isMac = ref(false)
@@ -90,14 +89,6 @@ async function handleRedo() {
       </svg>
     </button>
 
-    <!-- History count badge (optional) -->
-    <span
-      v-if="history.length > 0"
-      class="history-badge"
-      :title="t('editor.history')"
-    >
-      {{ history.length }}
-    </span>
   </div>
 </template>
 
@@ -136,20 +127,5 @@ async function handleRedo() {
 .control-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.history-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  background: var(--color-primary, #3b82f6);
-  color: white;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  border-radius: 10px;
-  margin-left: 4px;
 }
 </style>

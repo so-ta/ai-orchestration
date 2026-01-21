@@ -5,3 +5,4 @@
 export * from './StepCommands'
 export * from './EdgeCommands'
 export * from './GroupCommands'
+export * from './WorkflowChangeCommand'

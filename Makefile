@@ -1,7 +1,7 @@
 # AI Orchestration - Development Makefile
 # Usage: make <target>
 
-.PHONY: help dev dev-api dev-worker dev-frontend stop stop-all restart restart-api restart-worker restart-frontend install-tools
+.PHONY: help dev dev-middleware dev-api dev-worker dev-frontend stop stop-all restart restart-api restart-worker restart-frontend install-tools
 
 # Go environment - using goenv
 GOENV_ROOT := $(HOME)/.anyenv/envs/goenv
@@ -11,25 +11,40 @@ export GOPATH := $(HOME)/go/$(GO_VERSION)
 export PATH := $(GOPATH)/bin:$(GOROOT)/bin:$(PATH)
 AIR := $(GOPATH)/bin/air
 
+# PID/Paneファイル管理
+PID_DIR := .pids
+API_PID := $(PID_DIR)/api.pid
+WORKER_PID := $(PID_DIR)/worker.pid
+FRONTEND_PID := $(PID_DIR)/frontend.pid
+API_PANE := $(PID_DIR)/api.pane
+WORKER_PANE := $(PID_DIR)/worker.pane
+FRONTEND_PANE := $(PID_DIR)/frontend.pane
+
+# tmux検出
+IN_TMUX := $(TMUX)
+
 # Default target
 help:
 	@echo "AI Orchestration - Development Commands"
 	@echo ""
 	@echo "起動 (ホットリロード):"
-	@echo "  make dev             - ミドルウェア + API + Worker + Frontend を起動"
-	@echo "  make dev-api         - API のみ起動"
-	@echo "  make dev-worker      - Worker のみ起動"
-	@echo "  make dev-frontend    - Frontend のみ起動"
+	@echo "  make dev             - 全サービス起動"
+	@echo "                         tmux内: api/worker/frontend window作成"
+	@echo "                         tmux外: バックグラウンド起動"
+	@echo "  make dev-middleware  - ミドルウェアのみ起動 (DB, Redis, Keycloak, Jaeger)"
+	@echo "  make dev-api         - API 起動/再起動 (起動済paneがあればそこで再起動)"
+	@echo "  make dev-worker      - Worker 起動/再起動 (起動済paneがあればそこで再起動)"
+	@echo "  make dev-frontend    - Frontend 起動/再起動 (起動済paneがあればそこで再起動)"
 	@echo ""
 	@echo "再起動:"
-	@echo "  make restart         - ミドルウェア確認 + API + Worker + Frontend を再起動"
-	@echo "  make restart-api     - API のみ再起動"
-	@echo "  make restart-worker  - Worker のみ再起動"
-	@echo "  make restart-frontend- Frontend のみ再起動"
+	@echo "  make restart         - 全サービス再起動"
+	@echo "  make restart-api     - API 再起動"
+	@echo "  make restart-worker  - Worker 再起動"
+	@echo "  make restart-frontend- Frontend 再起動"
 	@echo ""
 	@echo "停止:"
-	@echo "  make stop            - API + Worker + Frontend を停止"
-	@echo "  make stop-all        - ミドルウェア含む全サービスを停止"
+	@echo "  make stop            - アプリサービス停止"
+	@echo "  make stop-all        - ミドルウェア含む全停止"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-apply        - Apply schema to database"
@@ -66,13 +81,54 @@ install-tools:
 # 起動コマンド（ホットリロード）
 # ============================================================================
 
-# Start API with hot reload (foreground)
+# Start middleware (Docker Compose)
+dev-middleware:
+	@echo "Starting middleware (docker compose)..."
+	@docker compose -f docker-compose.middleware.yml up -d
+	@sleep 3
+	@echo "Middleware started"
+
+# API 起動/再起動 (paneが存在すればそこで再起動、なければフォアグラウンド起動)
 dev-api:
-	@echo "Stopping existing API if running..."
-	@pkill -f "air.*\.air\.toml" 2>/dev/null || true
-	@pkill -f "tmp/api" 2>/dev/null || true
-	@sleep 1
+	@if [ -f $(API_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(API_PANE))"; then \
+		pane_id=$$(cat $(API_PANE)); \
+		echo "Restarting API in pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-api-fg' Enter; \
+	else \
+		$(MAKE) _dev-api-fg; \
+	fi
+
+# Worker 起動/再起動 (paneが存在すればそこで再起動、なければフォアグラウンド起動)
+dev-worker:
+	@if [ -f $(WORKER_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(WORKER_PANE))"; then \
+		pane_id=$$(cat $(WORKER_PANE)); \
+		echo "Restarting Worker in pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-worker-fg' Enter; \
+	else \
+		$(MAKE) _dev-worker-fg; \
+	fi
+
+# Frontend 起動/再起動 (paneが存在すればそこで再起動、なければフォアグラウンド起動)
+dev-frontend:
+	@if [ -f $(FRONTEND_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(FRONTEND_PANE))"; then \
+		pane_id=$$(cat $(FRONTEND_PANE)); \
+		echo "Restarting Frontend in pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-frontend-fg' Enter; \
+	else \
+		$(MAKE) _dev-frontend-fg; \
+	fi
+
+# 内部用: フォアグラウンド起動コマンド (tmux内ならpane IDを保存)
+_dev-api-fg:
 	@echo "Starting API with hot reload..."
+	@mkdir -p $(PID_DIR)
+	@if [ -n "$$TMUX_PANE" ]; then echo "$$TMUX_PANE" > $(API_PANE); fi
 	cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
@@ -81,130 +137,191 @@ dev-api:
 	TELEMETRY_ENABLED=false \
 	$(AIR) -c .air.toml
 
-# Start Worker with hot reload (foreground)
-dev-worker:
-	@echo "Stopping existing worker if running..."
-	@pkill -f "air.*\.air\.worker\.toml" 2>/dev/null || true
-	@pkill -f "tmp/worker" 2>/dev/null || true
-	@sleep 1
+_dev-worker-fg:
 	@echo "Starting Worker with hot reload..."
+	@mkdir -p $(PID_DIR)
+	@if [ -n "$$TMUX_PANE" ]; then echo "$$TMUX_PANE" > $(WORKER_PANE); fi
 	cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
 	TELEMETRY_ENABLED=false \
 	$(AIR) -c .air.worker.toml
 
-# Start Frontend with hot reload (foreground)
-dev-frontend:
-	@echo "Stopping existing Frontend if running..."
-	@pkill -f "nuxt" 2>/dev/null || true
-	@pkill -f "node.*frontend" 2>/dev/null || true
-	@sleep 1
+_dev-frontend-fg:
 	@echo "Starting Frontend with hot reload..."
+	@mkdir -p $(PID_DIR)
+	@if [ -n "$$TMUX_PANE" ]; then echo "$$TMUX_PANE" > $(FRONTEND_PANE); fi
 	cd frontend && npm run dev
 
-# Start all services with tmux (includes middleware)
-dev:
-	@echo "Stopping existing services if running..."
-	@tmux kill-session -t aio 2>/dev/null || true
-	@pkill -f "air.*\.air\.toml" 2>/dev/null || true
-	@pkill -f "air.*\.air\.worker\.toml" 2>/dev/null || true
-	@pkill -f "tmp/api" 2>/dev/null || true
-	@pkill -f "tmp/worker" 2>/dev/null || true
-	@pkill -f "nuxt" 2>/dev/null || true
-	@pkill -f "node.*frontend" 2>/dev/null || true
-	@sleep 1
-	@echo "Starting middleware (docker compose)..."
-	@docker compose -f docker-compose.middleware.yml up -d
-	@sleep 3
-	@if command -v tmux >/dev/null 2>&1; then \
-		$(MAKE) dev-tmux; \
+# Start all services with auto-detection
+dev: dev-middleware
+	@echo "Starting services..."
+ifdef IN_TMUX
+	@echo "Running in tmux..."
+	@# API: 既存paneがあればそこで再起動、なければ新しいwindowを作成
+	@if [ -f $(API_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(API_PANE))"; then \
+		pane_id=$$(cat $(API_PANE)); \
+		echo "Restarting API in pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-api-fg' Enter; \
 	else \
-		echo "tmux not found. Please run in separate terminals:"; \
-		echo "  make dev-api"; \
-		echo "  make dev-worker"; \
-		echo "  make dev-frontend"; \
+		echo "Creating new window for API..."; \
+		tmux new-window -n api 'cd $(CURDIR) && make _dev-api-fg'; \
 	fi
-
-# Development with tmux
-dev-tmux:
-	@echo "Starting development environment with tmux..."
-	@tmux kill-session -t aio 2>/dev/null || true
-	tmux new-session -d -s aio -n api 'make dev-api'
-	tmux new-window -t aio -n worker 'make dev-worker'
-	tmux new-window -t aio -n frontend 'make dev-frontend'
-	tmux select-window -t aio:api
+	@# Worker: 既存paneがあればそこで再起動、なければ新しいwindowを作成
+	@if [ -f $(WORKER_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(WORKER_PANE))"; then \
+		pane_id=$$(cat $(WORKER_PANE)); \
+		echo "Restarting Worker in pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-worker-fg' Enter; \
+	else \
+		echo "Creating new window for Worker..."; \
+		tmux new-window -n worker 'cd $(CURDIR) && make _dev-worker-fg'; \
+	fi
+	@# Frontend: 既存paneがあればそこで再起動、なければ新しいwindowを作成
+	@if [ -f $(FRONTEND_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(FRONTEND_PANE))"; then \
+		pane_id=$$(cat $(FRONTEND_PANE)); \
+		echo "Restarting Frontend in pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-frontend-fg' Enter; \
+	else \
+		echo "Creating new window for Frontend..."; \
+		tmux new-window -n frontend 'cd $(CURDIR) && make _dev-frontend-fg'; \
+	fi
 	@echo ""
-	@echo "Development environment started in tmux session 'aio'"
-	@echo "Attach with: tmux attach -t aio"
-	@echo ""
-	@echo "Tmux shortcuts:"
-	@echo "  Ctrl+b n    - Next window"
-	@echo "  Ctrl+b p    - Previous window"
-	@echo "  Ctrl+b d    - Detach"
-	@echo "  Ctrl+b &    - Kill window"
-
-# ============================================================================
-# 再起動コマンド
-# ============================================================================
-
-# Restart API (kill and restart in background, then show logs)
-restart-api:
-	@echo "Restarting API..."
-	@pkill -f "air.*\.air\.toml" 2>/dev/null || true
-	@pkill -f "tmp/api" 2>/dev/null || true
-	@sleep 1
-	@mkdir -p backend/tmp
+	@echo "Services started. Restart: make dev-api / dev-worker / dev-frontend"
+else
+	@echo "Running in background mode..."
+	@mkdir -p backend/tmp frontend/.nuxt $(PID_DIR)
 	@cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
 	PORT=8090 \
 	AUTH_ENABLED=false \
 	TELEMETRY_ENABLED=false \
-	nohup $(AIR) -c .air.toml > tmp/api.log 2>&1 &
-	@sleep 2
-	@echo "API restarted. Logs: backend/tmp/api.log"
-	@echo "Check: curl -s http://localhost:8090/health"
-
-# Restart Worker (kill and restart in background)
-restart-worker:
-	@echo "Restarting Worker..."
-	@pkill -f "air.*\.air\.worker\.toml" 2>/dev/null || true
-	@pkill -f "tmp/worker" 2>/dev/null || true
-	@sleep 1
-	@mkdir -p backend/tmp
+	nohup $(AIR) -c .air.toml > tmp/api.log 2>&1 & echo $$! > ../$(API_PID)
 	@cd backend && \
 	DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
 	REDIS_URL="redis://localhost:6379" \
 	TELEMETRY_ENABLED=false \
-	nohup $(AIR) -c .air.worker.toml > tmp/worker.log 2>&1 &
-	@sleep 2
-	@echo "Worker restarted. Logs: backend/tmp/worker.log"
+	nohup $(AIR) -c .air.worker.toml > tmp/worker.log 2>&1 & echo $$! > ../$(WORKER_PID)
+	@cd frontend && nohup npm run dev > .nuxt/dev.log 2>&1 & echo $$! > ../$(FRONTEND_PID)
+	@sleep 3
+	@echo ""
+	@echo "All services started in background!"
+	@echo "  API:      http://localhost:8090 (logs: backend/tmp/api.log)"
+	@echo "  Worker:   (logs: backend/tmp/worker.log)"
+	@echo "  Frontend: http://localhost:3000 (logs: frontend/.nuxt/dev.log)"
+	@echo ""
+	@echo "View logs: make logs-api / logs-worker / logs-frontend"
+	@echo "Stop:      make stop"
+endif
 
-# Restart Frontend (kill and restart in background)
+# ============================================================================
+# 再起動コマンド
+# ============================================================================
+
+# Restart API (detects startup method: tmux pane or background process)
+restart-api:
+	@echo "Restarting API..."
+	@if [ -f $(API_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(API_PANE))"; then \
+		pane_id=$$(cat $(API_PANE)); \
+		echo "Restarting in tmux pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-api-fg' Enter; \
+		echo "API restarted in pane $$pane_id"; \
+	elif [ -f $(API_PID) ]; then \
+		echo "Restarting background process..."; \
+		pid=$$(cat $(API_PID)); \
+		if kill -0 $$pid 2>/dev/null; then \
+			kill $$pid 2>/dev/null || true; \
+			sleep 1; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+		rm -f $(API_PID); \
+		mkdir -p backend/tmp $(PID_DIR); \
+		cd backend && \
+		DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
+		REDIS_URL="redis://localhost:6379" \
+		PORT=8090 \
+		AUTH_ENABLED=false \
+		TELEMETRY_ENABLED=false \
+		nohup $(AIR) -c .air.toml > tmp/api.log 2>&1 & echo $$! > ../$(API_PID); \
+		sleep 2; \
+		echo "API restarted. Logs: backend/tmp/api.log"; \
+	else \
+		echo "Error: API not running (no tmux pane or PID file found)"; \
+		exit 1; \
+	fi
+
+# Restart Worker (detects startup method: tmux pane or background process)
+restart-worker:
+	@echo "Restarting Worker..."
+	@if [ -f $(WORKER_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(WORKER_PANE))"; then \
+		pane_id=$$(cat $(WORKER_PANE)); \
+		echo "Restarting in tmux pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-worker-fg' Enter; \
+		echo "Worker restarted in pane $$pane_id"; \
+	elif [ -f $(WORKER_PID) ]; then \
+		echo "Restarting background process..."; \
+		pid=$$(cat $(WORKER_PID)); \
+		if kill -0 $$pid 2>/dev/null; then \
+			kill $$pid 2>/dev/null || true; \
+			sleep 1; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+		rm -f $(WORKER_PID); \
+		mkdir -p backend/tmp $(PID_DIR); \
+		cd backend && \
+		DATABASE_URL="postgres://aio:aio_password@localhost:5432/ai_orchestration?sslmode=disable" \
+		REDIS_URL="redis://localhost:6379" \
+		TELEMETRY_ENABLED=false \
+		nohup $(AIR) -c .air.worker.toml > tmp/worker.log 2>&1 & echo $$! > ../$(WORKER_PID); \
+		sleep 2; \
+		echo "Worker restarted. Logs: backend/tmp/worker.log"; \
+	else \
+		echo "Error: Worker not running (no tmux pane or PID file found)"; \
+		exit 1; \
+	fi
+
+# Restart Frontend (detects startup method: tmux pane or background process)
 restart-frontend:
 	@echo "Restarting Frontend..."
-	@pkill -f "nuxt" 2>/dev/null || true
-	@pkill -f "node.*frontend" 2>/dev/null || true
-	@sleep 1
-	@mkdir -p frontend/.nuxt
-	@cd frontend && nohup npm run dev > .nuxt/dev.log 2>&1 &
-	@sleep 3
-	@echo "Frontend restarted. Logs: frontend/.nuxt/dev.log"
-	@echo "Access: http://localhost:3000"
+	@if [ -f $(FRONTEND_PANE) ] && tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -qF "$$(cat $(FRONTEND_PANE))"; then \
+		pane_id=$$(cat $(FRONTEND_PANE)); \
+		echo "Restarting in tmux pane $$pane_id..."; \
+		tmux send-keys -t "$$pane_id" C-c; \
+		sleep 1; \
+		tmux send-keys -t "$$pane_id" 'cd $(CURDIR) && make _dev-frontend-fg' Enter; \
+		echo "Frontend restarted in pane $$pane_id"; \
+	elif [ -f $(FRONTEND_PID) ]; then \
+		echo "Restarting background process..."; \
+		pid=$$(cat $(FRONTEND_PID)); \
+		if kill -0 $$pid 2>/dev/null; then \
+			kill $$pid 2>/dev/null || true; \
+			sleep 1; \
+			kill -9 $$pid 2>/dev/null || true; \
+		fi; \
+		rm -f $(FRONTEND_PID); \
+		mkdir -p frontend/.nuxt $(PID_DIR); \
+		cd frontend && nohup npm run dev > .nuxt/dev.log 2>&1 & echo $$! > ../$(FRONTEND_PID); \
+		sleep 3; \
+		echo "Frontend restarted. Logs: frontend/.nuxt/dev.log"; \
+	else \
+		echo "Error: Frontend not running (no tmux pane or PID file found)"; \
+		exit 1; \
+	fi
 
-# Restart all services (includes middleware check)
-restart:
-	@echo "Ensuring middleware is running..."
-	@docker compose -f docker-compose.middleware.yml up -d
-	@sleep 2
-	@$(MAKE) restart-api
-	@$(MAKE) restart-worker
-	@$(MAKE) restart-frontend
+# Restart all services
+restart: dev-middleware restart-api restart-worker restart-frontend
 	@echo ""
 	@echo "All services restarted!"
-	@echo "  API:      http://localhost:8090"
-	@echo "  Frontend: http://localhost:3000"
 
 # ============================================================================
 # 停止コマンド
@@ -213,13 +330,38 @@ restart:
 # Stop app services (API, Worker, Frontend)
 stop:
 	@echo "Stopping app services..."
-	@tmux kill-session -t aio 2>/dev/null || true
-	@pkill -f "air.*\.air\.toml" 2>/dev/null || true
-	@pkill -f "air.*\.air\.worker\.toml" 2>/dev/null || true
-	@pkill -f "tmp/api" 2>/dev/null || true
-	@pkill -f "tmp/worker" 2>/dev/null || true
-	@pkill -f "nuxt" 2>/dev/null || true
-	@pkill -f "node.*frontend" 2>/dev/null || true
+	@# tmux paneがあればC-cを送信
+	@if [ -f $(API_PANE) ]; then \
+		pane_id=$$(cat $(API_PANE)); \
+		tmux send-keys -t "$$pane_id" C-c 2>/dev/null || true; \
+		rm -f $(API_PANE); \
+	fi
+	@if [ -f $(WORKER_PANE) ]; then \
+		pane_id=$$(cat $(WORKER_PANE)); \
+		tmux send-keys -t "$$pane_id" C-c 2>/dev/null || true; \
+		rm -f $(WORKER_PANE); \
+	fi
+	@if [ -f $(FRONTEND_PANE) ]; then \
+		pane_id=$$(cat $(FRONTEND_PANE)); \
+		tmux send-keys -t "$$pane_id" C-c 2>/dev/null || true; \
+		rm -f $(FRONTEND_PANE); \
+	fi
+	@# PIDファイルがあれば停止
+	@if [ -f $(API_PID) ]; then \
+		pid=$$(cat $(API_PID)); \
+		kill $$pid 2>/dev/null || true; \
+		rm -f $(API_PID); \
+	fi
+	@if [ -f $(WORKER_PID) ]; then \
+		pid=$$(cat $(WORKER_PID)); \
+		kill $$pid 2>/dev/null || true; \
+		rm -f $(WORKER_PID); \
+	fi
+	@if [ -f $(FRONTEND_PID) ]; then \
+		pid=$$(cat $(FRONTEND_PID)); \
+		kill $$pid 2>/dev/null || true; \
+		rm -f $(FRONTEND_PID); \
+	fi
 	@echo "App services stopped"
 
 # Stop all services including middleware
@@ -320,3 +462,4 @@ clean:
 	rm -rf backend/tmp
 	rm -rf frontend/.nuxt
 	rm -rf frontend/node_modules/.cache
+	rm -rf $(PID_DIR)

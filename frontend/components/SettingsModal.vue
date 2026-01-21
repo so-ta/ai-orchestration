@@ -4,6 +4,7 @@ import type { OAuth2ProviderWithStatus, CredentialScope, StartAuthorizationReque
 
 const props = defineProps<{
   show: boolean
+  initialTab?: string
 }>()
 
 const emit = defineEmits<{
@@ -38,7 +39,6 @@ const saving = ref(false)
 async function saveSettings() {
   saving.value = true
   await new Promise(resolve => setTimeout(resolve, 500))
-  toast.success(t('common.success'))
   saving.value = false
 }
 
@@ -70,7 +70,7 @@ async function fetchCredentials() {
     await credentialsApi.fetchCredentials()
     credentialsList.value = credentialsApi.credentials.value
   } catch {
-    toast.error(t('credentials.messages.createFailed'))
+    toast.error(t('credentials.messages.fetchFailed'))
   } finally {
     credentialsLoading.value = false
   }
@@ -145,7 +145,6 @@ async function submitCredentialForm() {
         metadata: credentialFormData.provider ? { provider: credentialFormData.provider } : undefined,
         expires_at: credentialFormData.expires_at || undefined,
       })
-      toast.success(t('credentials.messages.updated'))
     } else {
       const request: CreateCredentialRequest = {
         name: credentialFormData.name,
@@ -156,7 +155,6 @@ async function submitCredentialForm() {
         expires_at: credentialFormData.expires_at || undefined,
       }
       await credentialsApi.createCredential(request)
-      toast.success(t('credentials.messages.created'))
     }
     showCredentialModal.value = false
     await fetchCredentials()
@@ -178,7 +176,6 @@ async function confirmDeleteCredential() {
   credentialsLoading.value = true
   try {
     await credentialsApi.deleteCredential(selectedCredential.value.id)
-    toast.success(t('credentials.messages.deleted'))
     showDeleteCredentialModal.value = false
     selectedCredential.value = null
     await fetchCredentials()
@@ -193,7 +190,6 @@ async function revokeCredential(credential: Credential) {
   credentialsLoading.value = true
   try {
     await credentialsApi.revokeCredential(credential.id)
-    toast.success(t('credentials.messages.revoked'))
     await fetchCredentials()
   } catch {
     toast.error(t('credentials.messages.revokeFailed'))
@@ -206,7 +202,6 @@ async function activateCredential(credential: Credential) {
   credentialsLoading.value = true
   try {
     await credentialsApi.activateCredential(credential.id)
-    toast.success(t('credentials.messages.activated'))
     await fetchCredentials()
   } catch {
     toast.error(t('credentials.messages.activateFailed'))
@@ -335,6 +330,11 @@ watch(activeTab, (newTab) => {
 // Watch for modal open
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
+    // Set initial tab if specified
+    if (props.initialTab) {
+      activeTab.value = props.initialTab
+    }
+    // Fetch data for the active tab
     if (activeTab.value === 'credentials') {
       fetchCredentials()
     } else if (activeTab.value === 'oauth2') {

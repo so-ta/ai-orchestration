@@ -6,9 +6,11 @@
 
 import type { Command, CommandType } from '../useCommandHistory'
 import type { BlockGroup, BlockGroupType, BlockGroupConfig, Project } from '~/types/api'
-import type { Ref } from 'vue'
 
 type BlockGroupsApi = ReturnType<typeof useBlockGroups>
+type BlockGroupsGetter = () => BlockGroup[]
+type BlockGroupsSetter = (groups: BlockGroup[]) => void
+type ProjectGetter = () => Project | null
 
 function generateCommandId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -36,7 +38,8 @@ export class CreateGroupCommand implements Command {
       size: { width: number; height: number }
     },
     private blockGroupsApi: BlockGroupsApi,
-    private blockGroups: Ref<BlockGroup[]>
+    private getBlockGroups: BlockGroupsGetter,
+    private setBlockGroups: BlockGroupsSetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -50,7 +53,7 @@ export class CreateGroupCommand implements Command {
       this.createdGroup = response.data
 
       // Update local state
-      this.blockGroups.value = [...this.blockGroups.value, response.data]
+      this.setBlockGroups([...this.getBlockGroups(), response.data])
     }
   }
 
@@ -62,7 +65,7 @@ export class CreateGroupCommand implements Command {
     await this.blockGroupsApi.remove(this.projectId, this.createdGroupId)
 
     // Update local state
-    this.blockGroups.value = this.blockGroups.value.filter(g => g.id !== this.createdGroupId)
+    this.setBlockGroups(this.getBlockGroups().filter(g => g.id !== this.createdGroupId))
   }
 
   /** Get the created group ID (available after execute) */
@@ -92,7 +95,7 @@ export class UpdateGroupCommand implements Command {
     private beforeState: Partial<BlockGroup>,
     private afterState: Partial<BlockGroup>,
     private blockGroupsApi: BlockGroupsApi,
-    private blockGroups: Ref<BlockGroup[]>
+    private getBlockGroups: BlockGroupsGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -120,10 +123,11 @@ export class UpdateGroupCommand implements Command {
     await this.blockGroupsApi.update(this.projectId, this.groupId, updateData)
 
     // Update local state
-    const groupIndex = this.blockGroups.value.findIndex(g => g.id === this.groupId)
+    const blockGroups = this.getBlockGroups()
+    const groupIndex = blockGroups.findIndex(g => g.id === this.groupId)
     if (groupIndex >= 0) {
-      this.blockGroups.value[groupIndex] = {
-        ...this.blockGroups.value[groupIndex],
+      blockGroups[groupIndex] = {
+        ...blockGroups[groupIndex],
         ...this.afterState,
       }
     }
@@ -150,10 +154,11 @@ export class UpdateGroupCommand implements Command {
     await this.blockGroupsApi.update(this.projectId, this.groupId, updateData)
 
     // Update local state
-    const groupIndex = this.blockGroups.value.findIndex(g => g.id === this.groupId)
+    const blockGroups = this.getBlockGroups()
+    const groupIndex = blockGroups.findIndex(g => g.id === this.groupId)
     if (groupIndex >= 0) {
-      this.blockGroups.value[groupIndex] = {
-        ...this.blockGroups.value[groupIndex],
+      blockGroups[groupIndex] = {
+        ...blockGroups[groupIndex],
         ...this.beforeState,
       }
     }
@@ -176,7 +181,7 @@ export class MoveGroupCommand implements Command {
     private beforePosition: { x: number; y: number },
     private afterPosition: { x: number; y: number },
     private blockGroupsApi: BlockGroupsApi,
-    private blockGroups: Ref<BlockGroup[]>
+    private getBlockGroups: BlockGroupsGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -189,7 +194,7 @@ export class MoveGroupCommand implements Command {
     })
 
     // Update local state
-    const group = this.blockGroups.value.find(g => g.id === this.groupId)
+    const group = this.getBlockGroups().find(g => g.id === this.groupId)
     if (group) {
       group.position_x = this.afterPosition.x
       group.position_y = this.afterPosition.y
@@ -202,7 +207,7 @@ export class MoveGroupCommand implements Command {
     })
 
     // Update local state
-    const group = this.blockGroups.value.find(g => g.id === this.groupId)
+    const group = this.getBlockGroups().find(g => g.id === this.groupId)
     if (group) {
       group.position_x = this.beforePosition.x
       group.position_y = this.beforePosition.y
@@ -225,8 +230,9 @@ export class DeleteGroupCommand implements Command {
     private projectId: string,
     private deletedGroup: BlockGroup,
     private blockGroupsApi: BlockGroupsApi,
-    private blockGroups: Ref<BlockGroup[]>,
-    private project: Ref<Project | null>
+    private getBlockGroups: BlockGroupsGetter,
+    private setBlockGroups: BlockGroupsSetter,
+    private getProject: ProjectGetter
   ) {
     this.id = generateCommandId()
     this.timestamp = Date.now()
@@ -235,8 +241,9 @@ export class DeleteGroupCommand implements Command {
 
   async execute(): Promise<void> {
     // Clear block_group_id from steps that were in this group
-    if (this.project.value?.steps) {
-      for (const step of this.project.value.steps) {
+    const project = this.getProject()
+    if (project?.steps) {
+      for (const step of project.steps) {
         if (step.block_group_id === this.deletedGroup.id) {
           step.block_group_id = undefined
           step.group_role = undefined
@@ -247,7 +254,7 @@ export class DeleteGroupCommand implements Command {
     await this.blockGroupsApi.remove(this.projectId, this.deletedGroup.id)
 
     // Update local state
-    this.blockGroups.value = this.blockGroups.value.filter(g => g.id !== this.deletedGroup.id)
+    this.setBlockGroups(this.getBlockGroups().filter(g => g.id !== this.deletedGroup.id))
   }
 
   async undo(): Promise<void> {
@@ -262,7 +269,7 @@ export class DeleteGroupCommand implements Command {
 
     if (response?.data) {
       this.recreatedGroupId = response.data.id
-      this.blockGroups.value = [...this.blockGroups.value, response.data]
+      this.setBlockGroups([...this.getBlockGroups(), response.data])
     }
 
     // Note: Steps that were in the group won't be automatically re-added

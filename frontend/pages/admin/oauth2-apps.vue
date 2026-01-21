@@ -76,7 +76,6 @@ async function handleCreateApp() {
   creating.value = true
   try {
     await createApp(formData.value)
-    toast.success(t('admin.oauth2Apps.createSuccess'))
     showCreateModal.value = false
   } catch {
     toast.error(t('admin.oauth2Apps.createError'))
@@ -98,7 +97,6 @@ async function handleDeleteApp(app: OAuth2App) {
   if (confirmed) {
     try {
       await deleteApp(app.id)
-      toast.success(t('admin.oauth2Apps.deleteSuccess'))
     } catch {
       toast.error(t('admin.oauth2Apps.deleteError'))
     }

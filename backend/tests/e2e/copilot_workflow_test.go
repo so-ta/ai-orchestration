@@ -70,11 +70,11 @@ func TestCopilotWorkflowStructure(t *testing.T) {
 	err := json.Unmarshal(body, &getResp)
 	require.NoError(t, err)
 
-	// Verify step count (16 steps: start, set_context, and 14 tool steps)
+	// Verify step count (17 steps: start, set_context, and 15 tool steps)
 	// Tool steps: list_blocks, get_block_schema, search_blocks, list_workflows, get_workflow,
 	//             create_step, update_step, delete_step, create_edge, delete_edge,
-	//             create_batch_steps, create_batch_edges, search_documentation, validate_workflow
-	assert.Equal(t, 16, len(getResp.Data.Steps), "Copilot workflow should have 16 steps")
+	//             create_workflow_structure, search_documentation, validate_workflow, web_search, fetch_url
+	assert.Equal(t, 17, len(getResp.Data.Steps), "Copilot workflow should have 17 steps")
 
 	// Verify required steps exist
 	stepNames := make(map[string]bool)
@@ -93,7 +93,7 @@ func TestCopilotWorkflowStructure(t *testing.T) {
 	assert.Equal(t, "start", stepTypes["Start"])
 	assert.Equal(t, "set-variables", stepTypes["Set Context"])
 
-	// Check tool steps exist (14 tools including batch operations)
+	// Check tool steps exist (15 tools including web search)
 	toolSteps := []string{
 		"list_blocks",
 		"get_block_schema",
@@ -105,10 +105,11 @@ func TestCopilotWorkflowStructure(t *testing.T) {
 		"delete_step",
 		"create_edge",
 		"delete_edge",
-		"create_batch_steps",
-		"create_batch_edges",
+		"create_workflow_structure",
 		"search_documentation",
 		"validate_workflow",
+		"web_search",
+		"fetch_url",
 	}
 	for _, toolName := range toolSteps {
 		assert.True(t, stepNames[toolName], "Should have %s tool step", toolName)
@@ -281,10 +282,11 @@ func TestCopilotAgentConfigurationValid(t *testing.T) {
 		"delete_step",
 		"create_edge",
 		"delete_edge",
-		"create_batch_steps",
-		"create_batch_edges",
+		"create_workflow_structure",
 		"search_documentation",
 		"validate_workflow",
+		"web_search",
+		"fetch_url",
 	}
 
 	// Build map of step names that belong to the agent group
@@ -299,8 +301,8 @@ func TestCopilotAgentConfigurationValid(t *testing.T) {
 		assert.True(t, agentStepNames[toolName], "Should have %s as child step of agent group", toolName)
 	}
 
-	// Verify 14 tool steps belong to the agent group
-	assert.Equal(t, 14, len(agentStepNames), "Should have 14 tool steps in agent group")
+	// Verify 15 tool steps belong to the agent group
+	assert.Equal(t, 15, len(agentStepNames), "Should have 15 tool steps in agent group")
 }
 
 // TestCopilotWorkflowCannotBeDeleted tests that system workflows cannot be deleted

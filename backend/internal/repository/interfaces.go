@@ -255,6 +255,8 @@ type CopilotSessionRepository interface {
 	GetActiveByUser(ctx context.Context, tenantID uuid.UUID, userID string) (*domain.CopilotSession, error)
 	// GetActiveByUserAndProject retrieves the active session for a user and project
 	GetActiveByUserAndProject(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error)
+	// GetActiveByUserAndProjectWithMessages retrieves the active session for a user and project with all messages
+	GetActiveByUserAndProjectWithMessages(ctx context.Context, tenantID uuid.UUID, userID string, projectID uuid.UUID) (*domain.CopilotSession, error)
 	// ListByUser retrieves all sessions for a user (global, no project context)
 	ListByUser(ctx context.Context, tenantID uuid.UUID, userID string, filter CopilotSessionFilter) ([]*domain.CopilotSession, int, error)
 	// ListByUserAndProject retrieves all sessions for a user and project

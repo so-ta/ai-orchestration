@@ -58,7 +58,6 @@ async function handleShare() {
         target_user_email: targetEmail.value,
         permission: permission.value,
       })
-      toast.success(t('credentialShares.shareSuccess'))
       targetEmail.value = ''
     } else {
       if (!targetProjectId.value) {
@@ -69,7 +68,6 @@ async function handleShare() {
         target_project_id: targetProjectId.value,
         permission: permission.value,
       })
-      toast.success(t('credentialShares.shareSuccess'))
       targetProjectId.value = ''
     }
   } catch {
@@ -81,7 +79,6 @@ async function handleShare() {
 async function handleUpdateShare(share: CredentialShare, newPermission: SharePermission) {
   try {
     await updateShare(share.id, { permission: newPermission })
-    toast.success(t('credentialShares.updateSuccess'))
   } catch {
     toast.error(t('credentialShares.updateError'))
   }
@@ -91,7 +88,6 @@ async function handleUpdateShare(share: CredentialShare, newPermission: SharePer
 async function handleRevoke(share: CredentialShare) {
   try {
     await revokeShare(share.id)
-    toast.success(t('credentialShares.revokeSuccess'))
   } catch {
     toast.error(t('credentialShares.revokeError'))
   }

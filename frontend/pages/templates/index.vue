@@ -67,7 +67,6 @@ async function handleUseTemplate(template: ProjectTemplate) {
 
   try {
     const project = await useTemplate(template.id, projectName)
-    toast.success(t('templates.messages.useSuccess'))
     router.push(`/projects/${project.id}`)
   } catch {
     toast.error(t('templates.messages.useFailed'))
@@ -86,7 +85,6 @@ async function handleDeleteTemplate(template: ProjectTemplate) {
   if (confirmed) {
     try {
       await deleteTemplate(template.id)
-      toast.success('テンプレートを削除しました')
       await loadTemplates()
     } catch {
       toast.error('削除に失敗しました')

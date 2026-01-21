@@ -18,8 +18,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const toast = useToast()
 const { credentials, loading, fetchCredentials } = useCredentials()
+const fetchError = ref(false)
 
 // Parse required credentials from block definition
 const requiredCredentials = computed<RequiredCredential[]>(() => {
@@ -72,10 +72,12 @@ function handleCreateNew() {
 // Fetch credentials only when needed
 watch(requiredCredentials, async (required) => {
   if (required.length > 0) {
+    fetchError.value = false
     try {
       await fetchCredentials()
     } catch {
-      toast.error(t('credentialBindings.fetchError'))
+      // Show error inline instead of toast - silent fail for better UX
+      fetchError.value = true
     }
   }
 }, { immediate: true })
@@ -103,6 +105,11 @@ const showSection = computed(() => requiredCredentials.value.length > 0)
         @update:model-value="updateBinding(req.name, $event)"
         @create-new="handleCreateNew"
       />
+    </div>
+
+    <!-- Inline error message instead of toast -->
+    <div v-if="fetchError" class="fetch-error">
+      {{ t('credentialBindings.fetchErrorInline') }}
     </div>
   </section>
 </template>
@@ -140,5 +147,14 @@ const showSection = computed(() => requiredCredentials.value.length > 0)
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.fetch-error {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  padding: 0.5rem;
+  background: var(--color-surface);
+  border-radius: 4px;
+  text-align: center;
 }
 </style>

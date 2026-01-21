@@ -204,11 +204,18 @@ type ExecutionContext struct {
 	Projects        ProjectsService
 	Steps           StepsService
 	Edges           EdgesService
+	// Web search service (for Copilot to fetch external documentation)
+	Search *SearchService
 	// Credentials is a map of credential name to credential data
 	// Accessible in scripts as context.credentials.name.field
 	// e.g., context.credentials.api_key.access_token
 	Credentials map[string]interface{}
 	Logger      func(args ...interface{})
+	// TargetProjectID is the project ID that Copilot tools operate on
+	// This is set from the workflow input (workflow_id parameter) and allows
+	// tools to automatically use the current project without requiring explicit project_id
+	// Accessible in scripts as ctx.targetProjectId
+	TargetProjectID string
 }
 
 // Sandbox provides a secure JavaScript execution environment
@@ -617,9 +624,34 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		}
 	}
 
+	// Add Search service if available (for Copilot web search)
+	if execCtx != nil && execCtx.Search != nil {
+		searchObj := vm.NewObject()
+		if err := searchObj.Set("search", func(call goja.FunctionCall) goja.Value {
+			return s.searchSearch(vm, execCtx.Search, call)
+		}); err != nil {
+			return err
+		}
+		if err := searchObj.Set("isConfigured", func(call goja.FunctionCall) goja.Value {
+			return vm.ToValue(execCtx.Search.IsConfigured())
+		}); err != nil {
+			return err
+		}
+		if err := contextObj.Set("search", searchObj); err != nil {
+			return err
+		}
+	}
+
 	// Add credentials map if available
 	if execCtx != nil && execCtx.Credentials != nil {
 		if err := contextObj.Set("credentials", execCtx.Credentials); err != nil {
+			return err
+		}
+	}
+
+	// Add targetProjectId for Copilot tools (allows tools to operate on the current project)
+	if execCtx != nil && execCtx.TargetProjectID != "" {
+		if err := contextObj.Set("targetProjectId", execCtx.TargetProjectID); err != nil {
 			return err
 		}
 	}
@@ -1613,6 +1645,41 @@ func (s *Sandbox) edgesDelete(vm *goja.Runtime, service EdgesService, call goja.
 	}
 
 	return vm.ToValue(map[string]interface{}{"success": true})
+}
+
+// ============================================================================
+// Search Service Methods (Web search for Copilot)
+// ============================================================================
+
+// searchSearch handles ctx.search.search(query, numResults) calls
+func (s *Sandbox) searchSearch(vm *goja.Runtime, service *SearchService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.search.search requires query argument"))
+	}
+
+	query := call.Arguments[0].String()
+
+	numResults := 5
+	if len(call.Arguments) > 1 {
+		numResults = int(call.Arguments[1].ToInteger())
+	}
+
+	results, err := service.Search(query, numResults)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Search failed: %v", err)))
+	}
+
+	// Convert to JS-compatible format
+	jsResults := make([]interface{}, len(results))
+	for i, r := range results {
+		jsResults[i] = map[string]interface{}{
+			"title":   r.Title,
+			"url":     r.URL,
+			"snippet": r.Snippet,
+		}
+	}
+
+	return vm.ToValue(jsResults)
 }
 
 // ============================================================================

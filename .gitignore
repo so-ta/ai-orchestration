@@ -39,6 +39,9 @@ coverage/
 tmp/
 temp/
 
+# PID files (dev server management)
+.pids/
+
 # Docker volumes (local)
 postgres_data/
 redis_data/

@@ -17,6 +17,7 @@ export type CommandType =
   | 'group:delete'
   | 'group:move'
   | 'copilot:batch'
+  | 'workflow:change'
 
 export interface Command {
   /** Unique identifier for this command */

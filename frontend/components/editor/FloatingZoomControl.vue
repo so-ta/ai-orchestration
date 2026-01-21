@@ -10,14 +10,17 @@ const props = defineProps<{
 }>()
 
 // ボトムパネルを考慮した下端オフセット（リサイズ中はアニメーション無効）
-const { offset: bottomOffset, isResizing } = useBottomOffset(16)
+const { offset: bottomOffset, isResizing: bottomResizing } = useBottomOffset(16)
 
 // Copilot Sidebar を考慮した右端オフセット
-const copilotOffset = useCopilotOffset(16)
+const { value: copilotOffset, isResizing: copilotResizing } = useCopilotOffset(16)
+
+// いずれかのパネルがリサイズ中ならアニメーション無効
+const isResizing = computed(() => bottomResizing.value || copilotResizing.value)
 
 // パネル開閉時の right 計算（Copilot Sidebar + FloatingRightPanel を考慮）
 const rightOffset = computed(() => {
-  // 基本: copilotOffset (CopilotSidebar開時は 320+16=336, 閉時は 16)
+  // 基本: copilotOffset (CopilotSidebarの現在の幅 + baseOffset)
   // panelOpen時: さらに 360px (FloatingRightPanel幅) + 12px (gap) を追加
   if (props.panelOpen) {
     return copilotOffset.value + 360 + 12
