@@ -75,7 +75,7 @@ func (h *CredentialShareHandler) ShareWithUser(w http.ResponseWriter, r *http.Re
 		ExpiresAt:        expiresAt,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *CredentialShareHandler) ShareWithProject(w http.ResponseWriter, r *http
 		ExpiresAt:           expiresAt,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *CredentialShareHandler) UpdateShare(w http.ResponseWriter, r *http.Requ
 		ExpiresAt:  expiresAt,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -224,7 +224,7 @@ func (h *CredentialShareHandler) RevokeShare(w http.ResponseWriter, r *http.Requ
 	userID := getUserID(r)
 
 	if err := h.service.RevokeShare(r.Context(), tenantID, shareID, userID); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -246,7 +246,7 @@ func (h *CredentialShareHandler) ListByCredential(w http.ResponseWriter, r *http
 
 	shares, err := h.service.ListByCredential(r.Context(), tenantID, credentialID, userID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -259,7 +259,7 @@ func (h *CredentialShareHandler) ListMyShares(w http.ResponseWriter, r *http.Req
 
 	shares, err := h.service.ListByUser(r.Context(), userID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -275,7 +275,7 @@ func (h *CredentialShareHandler) ListByProject(w http.ResponseWriter, r *http.Re
 
 	shares, err := h.service.ListByProject(r.Context(), projectID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -291,7 +291,7 @@ func (h *CredentialShareHandler) GetShare(w http.ResponseWriter, r *http.Request
 
 	share, err := h.service.GetShareByID(r.Context(), shareID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

@@ -974,7 +974,6 @@ GET /blocks
       "config_schema": {},
       "input_schema": {},
       "output_schema": {},
-      "input_ports": [],
       "output_ports": [],
       "error_codes": [],
       "code": "...",

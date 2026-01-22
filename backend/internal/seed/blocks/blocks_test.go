@@ -61,7 +61,7 @@ func TestRegistry_RequiredFields(t *testing.T) {
 			if block.Slug == "" {
 				t.Error("Block has empty slug")
 			}
-			if block.Name == "" {
+			if block.Name.EN == "" && block.Name.JA == "" {
 				t.Error("Block has empty name")
 			}
 			if block.Version < 1 {

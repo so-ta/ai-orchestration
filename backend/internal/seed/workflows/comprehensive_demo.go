@@ -573,13 +573,13 @@ func DemoWorkflow() *SystemWorkflowDefinition {
 
 			// Block Group flow
 			{SourceTempID: "start_block_group", TargetTempID: "bg_init", SourcePort: "output"},
-			{SourceTempID: "bg_init", TargetGroupTempID: "bg_parallel_group", SourcePort: "output", TargetPort: "group-input"},
+			{SourceTempID: "bg_init", TargetGroupTempID: "bg_parallel_group", SourcePort: "output"},
 			{SourceGroupTempID: "bg_parallel_group", TargetTempID: "bg_merge_parallel", SourcePort: "out"},
 			{SourceGroupTempID: "bg_parallel_group", TargetTempID: "bg_parallel_error", SourcePort: "error"},
-			{SourceTempID: "bg_merge_parallel", TargetGroupTempID: "bg_try_catch_group", SourcePort: "output", TargetPort: "group-input"},
-			{SourceGroupTempID: "bg_try_catch_group", TargetGroupTempID: "bg_foreach_group", SourcePort: "out", TargetPort: "group-input"},
+			{SourceTempID: "bg_merge_parallel", TargetGroupTempID: "bg_try_catch_group", SourcePort: "output"},
+			{SourceGroupTempID: "bg_try_catch_group", TargetGroupTempID: "bg_foreach_group", SourcePort: "out"},
 			{SourceGroupTempID: "bg_try_catch_group", TargetTempID: "bg_catch_handler", SourcePort: "error"},
-			{SourceGroupTempID: "bg_foreach_group", TargetGroupTempID: "bg_while_group", SourcePort: "out", TargetPort: "group-input"},
+			{SourceGroupTempID: "bg_foreach_group", TargetGroupTempID: "bg_while_group", SourcePort: "out"},
 			{SourceGroupTempID: "bg_foreach_group", TargetTempID: "bg_foreach_error", SourcePort: "error"},
 			{SourceGroupTempID: "bg_while_group", TargetTempID: "bg_final_output", SourcePort: "out"},
 			{SourceGroupTempID: "bg_while_group", TargetTempID: "bg_max_iterations_handler", SourcePort: "error"},

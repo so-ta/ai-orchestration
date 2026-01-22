@@ -19,6 +19,7 @@ const props = defineProps<{
   project: Project | null
   saving?: boolean
   saveStatus?: 'saved' | 'saving' | 'unsaved' | 'error'
+  triggerStatus?: { enabled: boolean; type: string } | null
 }>()
 
 const emit = defineEmits<{
@@ -145,6 +146,15 @@ const saveStatusText = computed(() => {
     <!-- Save Status (gray text) -->
     <span class="save-status">{{ saveStatusText }}</span>
 
+    <!-- Trigger Status Badge -->
+    <div v-if="triggerStatus" class="trigger-status-badge" :class="{ enabled: triggerStatus.enabled }">
+      <span class="trigger-status-dot" />
+      <span class="trigger-status-text">
+        {{ triggerStatus.enabled ? t('editor.triggerEnabled') : t('editor.triggerDisabled') }}
+      </span>
+      <span class="trigger-status-type">{{ triggerStatus.type }}</span>
+    </div>
+
     <!-- Project Picker Modal -->
     <ProjectPickerModal
       :show="showProjectPicker"
@@ -258,6 +268,53 @@ const saveStatusText = computed(() => {
 .save-status {
   font-size: 12px;
   color: #9ca3af;
+}
+
+/* Trigger Status Badge */
+.trigger-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 20px;
+  font-size: 0.75rem;
+}
+
+.trigger-status-badge.enabled {
+  background: #d1fae5;
+  border-color: #10b981;
+}
+
+.trigger-status-dot {
+  width: 6px;
+  height: 6px;
+  background: #f59e0b;
+  border-radius: 50%;
+}
+
+.trigger-status-badge.enabled .trigger-status-dot {
+  background: #10b981;
+}
+
+.trigger-status-text {
+  color: #92400e;
+  font-weight: 500;
+}
+
+.trigger-status-badge.enabled .trigger-status-text {
+  color: #065f46;
+}
+
+.trigger-status-type {
+  color: #b45309;
+  font-size: 0.6875rem;
+  opacity: 0.8;
+}
+
+.trigger-status-badge.enabled .trigger-status-type {
+  color: #047857;
 }
 
 /* Tools Menu Container */

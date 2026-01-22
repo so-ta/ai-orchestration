@@ -5,6 +5,8 @@ import type { VariableTreeNode } from './useVariablePicker'
 import { useVariablePicker } from './useVariablePicker'
 import VariablePickerItem from './VariablePickerItem.vue'
 
+const { t } = useI18n()
+
 const props = defineProps<{
   variables: AvailableVariable[]
   position?: { top: number; left: number }
@@ -132,15 +134,15 @@ function handleItemHover(variable: VariableTreeNode, index: number) {
           />
         </template>
         <div v-else class="picker-empty">
-          <span>変数が見つかりません</span>
+          <span>{{ t('widgets.variablePicker.noVariables') }}</span>
         </div>
       </div>
 
       <div class="picker-footer">
-        <span class="shortcut"><kbd>↑</kbd><kbd>↓</kbd> 移動</span>
-        <span class="shortcut"><kbd>→</kbd> 展開/選択</span>
-        <span class="shortcut"><kbd>←</kbd> 折りたたみ</span>
-        <span class="shortcut"><kbd>Esc</kbd> 閉じる</span>
+        <span class="shortcut"><kbd>↑</kbd><kbd>↓</kbd> {{ t('widgets.variablePicker.move') }}</span>
+        <span class="shortcut"><kbd>→</kbd> {{ t('widgets.variablePicker.expandSelect') }}</span>
+        <span class="shortcut"><kbd>←</kbd> {{ t('widgets.variablePicker.collapse') }}</span>
+        <span class="shortcut"><kbd>Esc</kbd> {{ t('widgets.variablePicker.close') }}</span>
       </div>
     </div>
   </Teleport>

@@ -25,7 +25,6 @@ type CreateEdgeRequest struct {
 	SourceBlockGroupID string `json:"source_block_group_id,omitempty"`
 	TargetBlockGroupID string `json:"target_block_group_id,omitempty"`
 	SourcePort         string `json:"source_port"`
-	TargetPort         string `json:"target_port"`
 	Condition          string `json:"condition"`
 }
 
@@ -46,7 +45,6 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		TenantID:   tenantID,
 		ProjectID:  projectID,
 		SourcePort: req.SourcePort,
-		TargetPort: req.TargetPort,
 		Condition:  req.Condition,
 	}
 
@@ -88,7 +86,7 @@ func (h *EdgeHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	edge, err := h.edgeUsecase.Create(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -105,7 +103,7 @@ func (h *EdgeHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	edges, err := h.edgeUsecase.List(r.Context(), tenantID, projectID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -125,7 +123,7 @@ func (h *EdgeHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.edgeUsecase.Delete(r.Context(), tenantID, projectID, edgeID); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

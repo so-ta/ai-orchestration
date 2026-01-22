@@ -174,7 +174,6 @@ oauth2_providers（グローバル）
 | source_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | ソースがステップの場合は Null |
 | target_block_group_id | UUID | FK block_groups(id) ON DELETE CASCADE | ターゲットがステップの場合は Null |
 | source_port | VARCHAR(100) | DEFAULT 'output' | 出力ポート名 |
-| target_port | VARCHAR(100) | DEFAULT 'input' | 入力ポート名 |
 | condition | TEXT | | 条件分岐ルーティング用の式 |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() | |
 

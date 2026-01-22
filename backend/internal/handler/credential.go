@@ -61,7 +61,7 @@ func (h *CredentialHandler) Create(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:      expiresAt,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -86,7 +86,7 @@ func (h *CredentialHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	credential, err := h.usecase.GetByID(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -120,7 +120,7 @@ func (h *CredentialHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.usecase.List(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -172,7 +172,7 @@ func (h *CredentialHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:   expiresAt,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -194,7 +194,7 @@ func (h *CredentialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 
 	if err := h.usecase.Delete(r.Context(), tenantID, id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -215,7 +215,7 @@ func (h *CredentialHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 
 	credential, err := h.usecase.Revoke(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -236,7 +236,7 @@ func (h *CredentialHandler) Activate(w http.ResponseWriter, r *http.Request) {
 
 	credential, err := h.usecase.Activate(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

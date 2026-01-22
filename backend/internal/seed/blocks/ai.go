@@ -18,12 +18,34 @@ func LLMBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "llm",
 		Version:     1,
-		Name:        "LLM",
-		Description: "Execute LLM prompts with various providers",
+		Name:        LText("LLM", "LLM"),
+		Description: LText("Execute LLM prompts with various providers", "様々なプロバイダーでLLMプロンプトを実行"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryChat,
 		Icon:        "brain",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
+			"type": "object",
+			"required": ["provider", "model", "user_prompt"],
+			"properties": {
+				"model": {"type": "string", "title": "Model"},
+				"provider": {
+					"enum": ["openai", "anthropic", "mock"],
+					"type": "string",
+					"title": "Provider",
+					"default": "openai"
+				},
+				"max_tokens": {"type": "integer", "default": 4096, "maximum": 128000},
+				"temperature": {"type": "number", "default": 0.7, "maximum": 2},
+				"user_prompt": {"type": "string", "maxLength": 50000},
+				"system_prompt": {"type": "string", "maxLength": 10000},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "Enable Error Port",
+					"description": "Output to dedicated error port on error",
+					"default": false
+				}
+			}
+		}`, `{
 			"type": "object",
 			"required": ["provider", "model", "user_prompt"],
 			"properties": {
@@ -46,17 +68,9 @@ func LLMBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false},
-		},
-		OutputPorts: []domain.OutputPort{
-			{
-				Name:        "output",
-				Label:       "Output",
-				Schema:      json.RawMessage(`{"type": "object", "properties": {"content": {"type": "string"}, "tokens_used": {"type": "number"}}}`),
-				IsDefault:   true,
-				Description: "LLM response",
-			},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithSchema("output", "Output", "出力", "LLM response", "LLMの応答", true,
+				json.RawMessage(`{"type": "object", "properties": {"content": {"type": "string"}, "tokens_used": {"type": "number"}}}`)),
 		},
 		Code: `
 const prompt = renderTemplate(config.user_prompt || '', input);
@@ -74,7 +88,22 @@ return {
     usage: response.usage
 };
 `,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "brain",
+			"color": "#8B5CF6",
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "Model Settings"},
+				{"id": "prompt", "icon": "message", "title": "Prompt"}
+			],
+			"fieldGroups": {
+				"model": "model",
+				"provider": "model",
+				"user_prompt": "prompt"
+			},
+			"fieldOverrides": {
+				"user_prompt": {"rows": 8, "widget": "textarea"}
+			}
+		}`, `{
 			"icon": "brain",
 			"color": "#8B5CF6",
 			"groups": [
@@ -90,11 +119,11 @@ return {
 				"user_prompt": {"rows": 8, "widget": "textarea"}
 			}
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "LLM_001", Name: "RATE_LIMIT", Description: "Rate limit exceeded", Retryable: true},
-			{Code: "LLM_002", Name: "INVALID_MODEL", Description: "Invalid model specified", Retryable: false},
-			{Code: "LLM_003", Name: "TOKEN_LIMIT", Description: "Token limit exceeded", Retryable: false},
-			{Code: "LLM_004", Name: "API_ERROR", Description: "LLM API error", Retryable: true},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("LLM_001", "RATE_LIMIT", "レート制限", "Rate limit exceeded", "レート制限を超過しました", true),
+			LError("LLM_002", "INVALID_MODEL", "無効なモデル", "Invalid model specified", "無効なモデルが指定されました", false),
+			LError("LLM_003", "TOKEN_LIMIT", "トークン制限", "Token limit exceeded", "トークン制限を超過しました", false),
+			LError("LLM_004", "API_ERROR", "APIエラー", "LLM API error", "LLM APIエラー", true),
 		},
 		RequiredCredentials: json.RawMessage(`[{"name": "llm_api_key", "type": "api_key", "scope": "system", "required": true, "description": "LLM Provider API Key"}]`),
 		Enabled:             true,
@@ -116,8 +145,8 @@ func LLMJSONBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:            "llm-json",
 		Version:         1,
-		Name:            "LLM (JSON)",
-		Description:     "LLM with automatic JSON output parsing",
+		Name:            LText("LLM (JSON)", "LLM (JSON)"),
+		Description:     LText("LLM with automatic JSON output parsing", "自動JSON出力パース付きLLM"),
 		Category:        domain.BlockCategoryAI,
 		Subcategory:     domain.BlockSubcategoryChat,
 		Icon:            "braces",
@@ -125,7 +154,29 @@ func LLMJSONBlock() *SystemBlockDefinition {
 		ConfigDefaults: json.RawMessage(`{
 			"temperature": 0.3
 		}`),
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
+			"type": "object",
+			"properties": {
+				"json_instruction": {
+					"type": "string",
+					"title": "JSON Instruction",
+					"default": "Always respond with valid JSON only. No markdown, no explanation.",
+					"description": "JSON format instruction added to system prompt"
+				},
+				"strict_parse": {
+					"type": "boolean",
+					"title": "Strict Parse",
+					"default": false,
+					"description": "Throw error on parse failure (if false, returns {error: ...})"
+				},
+				"preserve_input": {
+					"type": "boolean",
+					"title": "Preserve Input",
+					"default": false,
+					"description": "Merge original input data with LLM output"
+				}
+			}
+		}`, `{
 			"type": "object",
 			"properties": {
 				"json_instruction": {
@@ -139,6 +190,12 @@ func LLMJSONBlock() *SystemBlockDefinition {
 					"title": "厳密パース",
 					"default": false,
 					"description": "パース失敗時にエラーを投げる（falseの場合は{error: ...}を返す）"
+				},
+				"preserve_input": {
+					"type": "boolean",
+					"title": "入力を保持",
+					"default": false,
+					"description": "元の入力データをLLM出力とマージして保持する"
 				}
 			}
 		}`),
@@ -149,6 +206,19 @@ if (config.system_prompt) {
     config.system_prompt = config.system_prompt + '\n\n' + jsonInstruction;
 } else {
     config.system_prompt = jsonInstruction;
+}
+// Store original input for preserve_input option
+// Note: We store it in __preserved_for_postprocess field of the result
+// so it survives the internal LLM step execution and is available in PostProcess
+if (config.preserve_input) {
+    const preserved = {};
+    for (const key in input) {
+        if (!key.startsWith('__')) {
+            preserved[key] = input[key];
+        }
+    }
+    // Store in result so it gets passed through
+    return { ...input, __preserved_for_postprocess: preserved };
 }
 return input;
 `,
@@ -166,9 +236,14 @@ return input;
 			"}\n" +
 			"content = content.trim();\n" +
 			"\n" +
+			"// Get preserved input from PreProcess (passed through executor)\n" +
+			"const preserved = input.__preserved_for_postprocess || {};\n" +
+			"\n" +
 			"try {\n" +
 			"    const parsed = JSON.parse(content);\n" +
+			"    // Merge with preserved input if enabled (LLM output takes precedence)\n" +
 			"    return {\n" +
+			"        ...preserved,\n" +
 			"        ...parsed,\n" +
 			"        __raw: input.content,\n" +
 			"        __usage: input.usage\n" +
@@ -178,12 +253,32 @@ return input;
 			"        throw new Error('[LLM_JSON_001] Failed to parse JSON: ' + e.message);\n" +
 			"    }\n" +
 			"    return {\n" +
+			"        ...preserved,\n" +
 			"        error: 'JSON parse failed: ' + e.message,\n" +
 			"        __raw: input.content,\n" +
 			"        __usage: input.usage\n" +
 			"    };\n" +
 			"}\n",
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "braces",
+			"color": "#F59E0B",
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "Model Settings"},
+				{"id": "prompt", "icon": "message", "title": "Prompt"},
+				{"id": "json", "icon": "braces", "title": "JSON Settings"}
+			],
+			"fieldGroups": {
+				"model": "model",
+				"provider": "model",
+				"user_prompt": "prompt",
+				"system_prompt": "prompt",
+				"json_instruction": "json",
+				"strict_parse": "json"
+			},
+			"fieldOverrides": {
+				"user_prompt": {"rows": 8, "widget": "textarea"}
+			}
+		}`, `{
 			"icon": "braces",
 			"color": "#F59E0B",
 			"groups": [
@@ -203,8 +298,8 @@ return input;
 				"user_prompt": {"rows": 8, "widget": "textarea"}
 			}
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "LLM_JSON_001", Name: "PARSE_FAILED", Description: "Failed to parse LLM response as JSON", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("LLM_JSON_001", "PARSE_FAILED", "パース失敗", "Failed to parse LLM response as JSON", "LLMの応答をJSONとしてパースできませんでした", false),
 		},
 		Enabled: true,
 		TestCases: []BlockTestCase{
@@ -225,8 +320,8 @@ func LLMStructuredBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:            "llm-structured",
 		Version:         1,
-		Name:            "LLM (Structured)",
-		Description:     "LLM with schema-driven structured output and validation",
+		Name:            LText("LLM (Structured)", "LLM (構造化出力)"),
+		Description:     LText("LLM with schema-driven structured output and validation", "スキーマ駆動の構造化出力と検証付きLLM"),
 		Category:        domain.BlockCategoryAI,
 		Subcategory:     domain.BlockSubcategoryChat,
 		Icon:            "layout-template",
@@ -236,7 +331,29 @@ func LLMStructuredBlock() *SystemBlockDefinition {
 			"validate_output": true,
 			"include_examples": true
 		}`),
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
+			"type": "object",
+			"properties": {
+				"output_schema": {
+					"type": "object",
+					"title": "Output Schema",
+					"x-ui-widget": "output-schema",
+					"description": "JSON Schema for expected output"
+				},
+				"validate_output": {
+					"type": "boolean",
+					"title": "Validate Output",
+					"default": true,
+					"description": "Validate output against schema"
+				},
+				"include_examples": {
+					"type": "boolean",
+					"title": "Include Examples",
+					"default": true,
+					"description": "Include schema examples in prompt"
+				}
+			}
+		}`, `{
 			"type": "object",
 			"properties": {
 				"output_schema": {
@@ -321,7 +438,27 @@ if (config.output_schema && config.output_schema.properties) {
 
 return input;
 `,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "layout-template",
+			"color": "#8B5CF6",
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "Model Settings"},
+				{"id": "prompt", "icon": "message", "title": "Prompt"},
+				{"id": "schema", "icon": "braces", "title": "Output Schema"}
+			],
+			"fieldGroups": {
+				"model": "model",
+				"provider": "model",
+				"user_prompt": "prompt",
+				"system_prompt": "prompt",
+				"output_schema": "schema",
+				"validate_output": "schema",
+				"include_examples": "schema"
+			},
+			"fieldOverrides": {
+				"user_prompt": {"rows": 8, "widget": "textarea"}
+			}
+		}`, `{
 			"icon": "layout-template",
 			"color": "#8B5CF6",
 			"groups": [
@@ -342,8 +479,8 @@ return input;
 				"user_prompt": {"rows": 8, "widget": "textarea"}
 			}
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "LLM_STRUCT_001", Name: "VALIDATION_FAILED", Description: "Output validation failed - missing required fields", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("LLM_STRUCT_001", "VALIDATION_FAILED", "検証失敗", "Output validation failed - missing required fields", "出力検証に失敗しました - 必須フィールドがありません", false),
 		},
 		Enabled: true,
 		TestCases: []BlockTestCase{
@@ -375,12 +512,44 @@ func MemoryBufferBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "memory-buffer",
 		Version:     1,
-		Name:        "Memory Buffer",
-		Description: "Manage conversation memory with sliding window",
+		Name:        LText("Memory Buffer", "メモリバッファ"),
+		Description: LText("Manage conversation memory with sliding window", "スライディングウィンドウで会話メモリを管理"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryChat,
 		Icon:        "database",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
+			"type": "object",
+			"properties": {
+				"window_size": {
+					"type": "integer",
+					"title": "Window Size",
+					"default": 20,
+					"minimum": 1,
+					"maximum": 100,
+					"description": "Maximum number of messages to keep"
+				},
+				"memory_key": {
+					"type": "string",
+					"title": "Memory Key",
+					"default": "default",
+					"description": "Key to distinguish multiple memories"
+				},
+				"operation": {
+					"enum": ["get", "add", "clear"],
+					"type": "string",
+					"title": "Operation",
+					"default": "get",
+					"description": "Operation to perform"
+				},
+				"message_role": {
+					"enum": ["user", "assistant", "system"],
+					"type": "string",
+					"title": "Message Role",
+					"default": "user",
+					"description": "Role of message to add (for operation=add)"
+				}
+			}
+		}`, `{
 			"type": "object",
 			"properties": {
 				"window_size": {
@@ -413,11 +582,8 @@ func MemoryBufferBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: false, Description: "Message to add (for add operation)"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Memory buffer contents or operation result"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Memory buffer contents or operation result", "メモリバッファの内容または操作結果", true),
 		},
 		Code: `
 const windowSize = config.window_size || 20;
@@ -457,7 +623,20 @@ switch (operation) {
         return { error: 'Unknown operation: ' + operation };
 }
 `,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "database",
+			"color": "#6366F1",
+			"groups": [
+				{"id": "buffer", "icon": "database", "title": "Buffer Settings"},
+				{"id": "operation", "icon": "settings", "title": "Operation Settings"}
+			],
+			"fieldGroups": {
+				"window_size": "buffer",
+				"memory_key": "buffer",
+				"operation": "operation",
+				"message_role": "operation"
+			}
+		}`, `{
 			"icon": "database",
 			"color": "#6366F1",
 			"groups": [
@@ -471,8 +650,8 @@ switch (operation) {
 				"message_role": "operation"
 			}
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "MEMORY_001", Name: "NOT_AVAILABLE", Description: "Memory service not available", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("MEMORY_001", "NOT_AVAILABLE", "利用不可", "Memory service not available", "メモリサービスが利用できません", false),
 		},
 		Enabled: true,
 		TestCases: []BlockTestCase{
@@ -493,17 +672,18 @@ func RouterBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "router",
 		Version:     1,
-		Name:        "Router",
-		Description: "AI-driven dynamic routing",
+		Name:        LText("Router", "ルーター"),
+		Description: LText("AI-driven dynamic routing", "AI駆動の動的ルーティング"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryRouting,
 		Icon:        "git-branch",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
-				"model": {"type": "string"},
+				"model": {"type": "string", "title": "Model"},
 				"routes": {
 					"type": "array",
+					"title": "Routes",
 					"items": {
 						"type": "object",
 						"properties": {
@@ -512,20 +692,33 @@ func RouterBlock() *SystemBlockDefinition {
 						}
 					}
 				},
-				"provider": {"type": "string"}
+				"provider": {"type": "string", "title": "Provider"}
+			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"model": {"type": "string", "title": "モデル"},
+				"routes": {
+					"type": "array",
+					"title": "ルート",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"},
+							"description": {"type": "string"}
+						}
+					}
+				},
+				"provider": {"type": "string", "title": "プロバイダー"}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "string"}`), Required: true, Description: "Message to analyze for routing"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "default", Label: "Default", IsDefault: true, Description: "Default route when no match"},
-			// Dynamic route ports - common route names for AI routing scenarios
-			{Name: "technical", Label: "Technical", Description: "Technical/code-related content"},
-			{Name: "general", Label: "General", Description: "General knowledge content"},
-			{Name: "creative", Label: "Creative", Description: "Creative/brainstorming content"},
-			{Name: "support", Label: "Support", Description: "Customer support content"},
-			{Name: "sales", Label: "Sales", Description: "Sales-related content"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("default", "Default", "デフォルト", "Default route when no match", "マッチしない場合のデフォルトルート", true),
+			LPortWithDesc("technical", "Technical", "技術", "Technical/code-related content", "技術/コード関連コンテンツ", false),
+			LPortWithDesc("general", "General", "一般", "General knowledge content", "一般的な知識コンテンツ", false),
+			LPortWithDesc("creative", "Creative", "クリエイティブ", "Creative/brainstorming content", "クリエイティブ/ブレインストーミングコンテンツ", false),
+			LPortWithDesc("support", "Support", "サポート", "Customer support content", "カスタマーサポートコンテンツ", false),
+			LPortWithDesc("sales", "Sales", "営業", "Sales-related content", "営業関連コンテンツ", false),
 		},
 		Code: `
 const routeDescriptions = (config.routes || []).map(r =>
@@ -542,9 +735,9 @@ return {
     __branch: selectedRoute
 };
 `,
-		UIConfig: json.RawMessage(`{"icon": "git-branch", "color": "#8B5CF6"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "ROUTER_001", Name: "NO_MATCH", Description: "No matching route found", Retryable: false},
+		UIConfig: LSchema(`{"icon": "git-branch", "color": "#8B5CF6"}`, `{"icon": "git-branch", "color": "#8B5CF6"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("ROUTER_001", "NO_MATCH", "マッチなし", "No matching route found", "マッチするルートが見つかりません", false),
 		},
 		RequiredCredentials: json.RawMessage(`[{"name": "llm_api_key", "type": "api_key", "scope": "system", "required": true, "description": "LLM Provider API Key"}]`),
 		Enabled:             true,

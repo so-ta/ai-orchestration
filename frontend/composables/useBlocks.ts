@@ -252,18 +252,109 @@ export function getSubcategoriesForCategory(category: BlockCategory): BlockSubca
   return subcategories
 }
 
-// Search blocks by query (name, description, slug)
+// Keyword aliases for smart search (bilingual support)
+const searchAliases: Record<string, string[]> = {
+  // AI-related
+  'ai': ['llm', 'chat', 'gpt', 'claude', 'model', '人工知能', 'チャット'],
+  'llm': ['ai', 'chat', 'gpt', 'claude', 'language model', '言語モデル'],
+  'chat': ['llm', 'ai', 'message', 'conversation', 'チャット', '会話'],
+  // Data-related
+  'data': ['json', 'transform', 'filter', 'map', 'データ', '変換'],
+  'json': ['data', 'parse', 'object', 'データ'],
+  'transform': ['data', 'convert', 'map', '変換'],
+  // Integration-related
+  'webhook': ['http', 'api', 'request', 'ウェブフック'],
+  'http': ['api', 'request', 'webhook', 'fetch'],
+  'api': ['http', 'request', 'fetch', 'endpoint'],
+  // Control flow
+  'condition': ['if', 'branch', 'switch', '条件', '分岐'],
+  'branch': ['condition', 'if', 'switch', '分岐'],
+  'loop': ['repeat', 'iterate', 'for', 'each', '繰り返し', 'ループ'],
+  // Japanese keywords
+  '条件': ['condition', 'if', 'branch'],
+  '分岐': ['condition', 'branch', 'switch'],
+  '繰り返し': ['loop', 'repeat', 'iterate'],
+  'データ': ['data', 'json', 'transform'],
+  'チャット': ['chat', 'llm', 'ai'],
+}
+
+// Simple fuzzy matching score (0-1)
+function fuzzyMatchScore(text: string, query: string): number {
+  if (text.includes(query)) return 1.0
+  if (text.startsWith(query)) return 0.95
+
+  // Check for partial word matches
+  const words = text.split(/[\s\-_]+/)
+  for (const word of words) {
+    if (word.startsWith(query)) return 0.8
+  }
+
+  // Character-by-character matching for typo tolerance
+  let matchedChars = 0
+  let queryIdx = 0
+  for (let i = 0; i < text.length && queryIdx < query.length; i++) {
+    if (text[i] === query[queryIdx]) {
+      matchedChars++
+      queryIdx++
+    }
+  }
+  const charMatchRatio = matchedChars / query.length
+  return charMatchRatio >= 0.7 ? charMatchRatio * 0.6 : 0
+}
+
+// Search blocks by query with smart matching and ranking
 export function searchBlocks(blocks: BlockDefinition[], query: string): BlockDefinition[] {
   const lowerQuery = query.toLowerCase().trim()
   if (!lowerQuery) return blocks
 
-  return blocks.filter(block => {
-    return (
-      block.name.toLowerCase().includes(lowerQuery) ||
-      block.slug.toLowerCase().includes(lowerQuery) ||
-      block.description?.toLowerCase().includes(lowerQuery)
-    )
-  })
+  // Get expanded search terms including aliases
+  const searchTerms = [lowerQuery]
+  const aliases = searchAliases[lowerQuery]
+  if (aliases) {
+    searchTerms.push(...aliases)
+  }
+
+  // Score and filter blocks
+  const scoredBlocks: Array<{ block: BlockDefinition; score: number }> = []
+
+  for (const block of blocks) {
+    let maxScore = 0
+
+    for (const term of searchTerms) {
+      // Name match (highest priority)
+      const nameScore = fuzzyMatchScore(block.name.toLowerCase(), term)
+      if (nameScore > 0) maxScore = Math.max(maxScore, nameScore * 1.0)
+
+      // Slug match (high priority)
+      const slugScore = fuzzyMatchScore(block.slug.toLowerCase(), term)
+      if (slugScore > 0) maxScore = Math.max(maxScore, slugScore * 0.9)
+
+      // Category/subcategory match (medium priority)
+      if (block.category) {
+        const categoryScore = fuzzyMatchScore(block.category.toLowerCase(), term)
+        if (categoryScore > 0) maxScore = Math.max(maxScore, categoryScore * 0.7)
+      }
+      if (block.subcategory) {
+        const subcatScore = fuzzyMatchScore(block.subcategory.toLowerCase(), term)
+        if (subcatScore > 0) maxScore = Math.max(maxScore, subcatScore * 0.7)
+      }
+
+      // Description match (lower priority)
+      if (block.description) {
+        const descScore = fuzzyMatchScore(block.description.toLowerCase(), term)
+        if (descScore > 0) maxScore = Math.max(maxScore, descScore * 0.5)
+      }
+    }
+
+    if (maxScore > 0) {
+      scoredBlocks.push({ block, score: maxScore })
+    }
+  }
+
+  // Sort by score descending and return blocks
+  return scoredBlocks
+    .sort((a, b) => b.score - a.score)
+    .map(item => item.block)
 }
 
 // ============================================================================

@@ -2403,10 +2403,6 @@ components:
           type: object
         output_schema:
           type: object
-        input_ports:
-          type: array
-          items:
-            type: object
         output_ports:
           type: array
           items:

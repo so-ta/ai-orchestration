@@ -261,7 +261,6 @@ export class WorkflowChangeCommand implements Command {
       source_block_group_id: data.source_block_group_id ?? undefined,
       target_block_group_id: data.target_block_group_id ?? undefined,
       source_port: data.source_port,
-      target_port: data.target_port,
       condition: data.condition,
     })
 

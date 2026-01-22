@@ -44,7 +44,7 @@ const emit = defineEmits<{
   (e: 'step:update', stepId: string, position: { x: number; y: number }, movedGroups?: MovedGroup[]): void
   (e: 'step:drop', data: { type: StepType; name: string; position: { x: number; y: number }; groupId?: string; groupRole?: GroupRole }): void
   (e: 'step:assign-group', stepId: string, groupId: string | null, position: { x: number; y: number }, role?: GroupRole, movedGroups?: MovedGroup[]): void
-  (e: 'edge:add', source: string, target: string, sourcePort?: string, targetPort?: string): void
+  (e: 'edge:add', source: string, target: string, sourcePort?: string): void
   (e: 'edge:delete', edgeId: string): void
   (e: 'pane:click' | 'autoLayout'): void
   (e: 'step:showDetails', stepRun: StepRun): void
@@ -93,10 +93,8 @@ const {
   getOutgoingEdgesFromStep,
   getOutgoingEdgesFromGroup,
   getDefaultSourcePort,
-  getDefaultTargetPort,
 } = useFlowEdges({
   edges: edgesRef,
-  steps: stepsRef,
   stepRuns: stepRunsRef,
   blockDefinitions: blockDefinitionsRef,
   blockGroups: blockGroupsRef,
@@ -213,8 +211,7 @@ onConnect((params) => {
     }
 
     const sourcePort = params.sourceHandle || getDefaultSourcePort(sourceNodeId, sourceStep)
-    const targetPort = params.targetHandle || getDefaultTargetPort(params.target)
-    emit('edge:add', params.source, params.target, sourcePort, targetPort)
+    emit('edge:add', params.source, params.target, sourcePort)
   }
 })
 
@@ -499,19 +496,7 @@ defineExpose({ viewport, zoomIn, zoomOut, zoomTo })
         >
           <div v-if="data.stepRun" class="dag-node-status-miro" :style="{ backgroundColor: getStepRunStatusColor(data.stepRun.status) }" :title="`${data.stepRun.status} - Click for details`" />
 
-          <template v-if="!isStartNode(data.type) && data.inputPorts && data.inputPorts.length > 1">
-            <Handle
-              v-for="(port, index) in data.inputPorts"
-              :id="port.name"
-              :key="port.name"
-              type="target"
-              :position="Position.Left"
-              :class="['dag-handle-miro', 'dag-handle-target']"
-              :style="{ '--handle-top': `${24 + (index - (data.inputPorts.length - 1) / 2) * 12}px` }"
-              :title="port.label"
-            />
-          </template>
-          <Handle v-else-if="!isStartNode(data.type)" id="input" type="target" :position="Position.Left" class="dag-handle-miro dag-handle-target dag-handle-center" />
+          <Handle v-if="!isStartNode(data.type)" id="input" type="target" :position="Position.Left" class="dag-handle-miro dag-handle-target dag-handle-center" />
 
           <div class="dag-node-icon-box">
             <NodeIcon :icon="data.icon" :color="getStepColor(data.type)" />
@@ -526,6 +511,15 @@ defineExpose({ viewport, zoomIn, zoomOut, zoomTo })
 
           <div v-if="data.stepRun?.duration_ms" class="dag-node-duration-miro">
             {{ data.stepRun.duration_ms < 1000 ? `${data.stepRun.duration_ms}ms` : `${(data.stepRun.duration_ms / 1000).toFixed(1)}s` }}
+          </div>
+
+          <!-- Incomplete config warning indicator -->
+          <div
+            v-if="data.hasIncompleteConfig"
+            class="dag-node-warning-indicator"
+            :title="$t('dagEditor.incompleteConfig', { fields: data.incompleteFields?.join(', ') })"
+          >
+            <span class="warning-count">{{ data.incompleteFields?.length || 0 }}</span>
           </div>
 
           <template v-if="data.outputPorts && data.outputPorts.length > 1">
@@ -1188,6 +1182,36 @@ defineExpose({ viewport, zoomIn, zoomOut, zoomTo })
   color: #64748b;
   font-family: 'SF Mono', Monaco, monospace;
   white-space: nowrap;
+}
+
+/* Warning indicator for incomplete config */
+.dag-node-warning-indicator {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  z-index: 10;
+  padding: 0 4px;
+}
+
+.dag-node-warning-indicator:hover {
+  background: #fde68a;
+  transform: scale(1.1);
+}
+
+.warning-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #b45309;
+  line-height: 1;
 }
 
 /* Miro-style Handle Styles */

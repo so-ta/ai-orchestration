@@ -20,12 +20,12 @@ func parallelBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "parallel",
 		Version:     1,
-		Name:        "Parallel",
-		Description: "Execute multiple independent flows concurrently within the group",
+		Name:        LText("Parallel", "並列"),
+		Description: LText("Execute multiple independent flows concurrently within the group", "グループ内で複数の独立したフローを同時に実行"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "git-branch",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"max_concurrent": {
@@ -41,23 +41,42 @@ func parallelBlock() *SystemBlockDefinition {
 					"default": false
 				}
 			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"max_concurrent": {
+					"type": "integer",
+					"title": "最大同時実行数",
+					"description": "最大同時実行数（0 = 無制限）",
+					"default": 0
+				},
+				"fail_fast": {
+					"type": "boolean",
+					"title": "即座に失敗",
+					"description": "最初の失敗で全フローを停止",
+					"default": false
+				}
+			}
 		}`),
-		InputPorts: DefaultInputPorts(),
-		OutputPorts: []domain.OutputPort{
-			{Name: "out", Label: "Complete", IsDefault: true},
-			{Name: "error", Label: "Error", IsDefault: false},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("out", "Complete", "完了", "All flows completed", "全フロー完了", true),
+			LPortWithDesc("error", "Error", "エラー", "Error output", "エラー出力", false),
 		},
 		Code: `// Parallel execution is handled by the engine
 // pre_process: transforms external input to internal input
 // post_process: transforms internal outputs to external output
 return input;`,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "git-branch",
+			"color": "#3B82F6",
+			"isContainer": true
+		}`, `{
 			"icon": "git-branch",
 			"color": "#3B82F6",
 			"isContainer": true
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "PAR_001", Name: "FLOW_FAILED", Description: "One or more flows failed", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("PAR_001", "FLOW_FAILED", "フロー失敗", "One or more flows failed", "1つ以上のフローが失敗しました", false),
 		},
 		Enabled:     true,
 		GroupKind:   domain.BlockGroupKindParallel,
@@ -70,12 +89,12 @@ func tryCatchBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "try_catch",
 		Version:     1,
-		Name:        "Try-Catch",
-		Description: "Execute body with error handling and retry support",
+		Name:        LText("Try-Catch", "Try-Catch"),
+		Description: LText("Execute body with error handling and retry support", "エラーハンドリングとリトライサポート付きで本体を実行"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "shield",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"retry_count": {
@@ -94,23 +113,45 @@ func tryCatchBlock() *SystemBlockDefinition {
 					"minimum": 0
 				}
 			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"retry_count": {
+					"type": "integer",
+					"title": "リトライ回数",
+					"description": "エラー時のリトライ回数（デフォルト: 0）",
+					"default": 0,
+					"minimum": 0,
+					"maximum": 10
+				},
+				"retry_delay_ms": {
+					"type": "integer",
+					"title": "リトライ遅延 (ミリ秒)",
+					"description": "リトライ間の遅延時間（ミリ秒）",
+					"default": 1000,
+					"minimum": 0
+				}
+			}
 		}`),
-		InputPorts: DefaultInputPorts(),
-		OutputPorts: []domain.OutputPort{
-			{Name: "out", Label: "Success", IsDefault: true},
-			{Name: "error", Label: "Error", IsDefault: false},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("out", "Success", "成功", "Successful execution", "実行成功", true),
+			LPortWithDesc("error", "Error", "エラー", "Error output", "エラー出力", false),
 		},
 		Code: `// Try-catch execution is handled by the engine
 // Body is executed with retry support
 // Errors are routed to error port
 return input;`,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "shield",
+			"color": "#EF4444",
+			"isContainer": true
+		}`, `{
 			"icon": "shield",
 			"color": "#EF4444",
 			"isContainer": true
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "TRY_001", Name: "MAX_RETRIES", Description: "Maximum retries exceeded", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("TRY_001", "MAX_RETRIES", "最大リトライ超過", "Maximum retries exceeded", "最大リトライ回数を超過しました", false),
 		},
 		Enabled:     true,
 		GroupKind:   domain.BlockGroupKindTryCatch,
@@ -123,12 +164,12 @@ func foreachBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "foreach",
 		Version:     1,
-		Name:        "For Each",
-		Description: "Iterate over array elements, executing the same process for each",
+		Name:        LText("For Each", "繰り返し"),
+		Description: LText("Iterate over array elements, executing the same process for each", "配列要素を反復し、各要素に対して同じ処理を実行"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "repeat",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"input_path": {
@@ -150,24 +191,49 @@ func foreachBlock() *SystemBlockDefinition {
 					"default": 0
 				}
 			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"input_path": {
+					"type": "string",
+					"title": "入力パス",
+					"description": "入力内の配列へのJSONPath（デフォルト: $.items）",
+					"default": "$.items"
+				},
+				"parallel": {
+					"type": "boolean",
+					"title": "並列実行",
+					"description": "反復を並列で実行",
+					"default": false
+				},
+				"max_workers": {
+					"type": "integer",
+					"title": "最大ワーカー数",
+					"description": "最大並列ワーカー数（0 = 無制限）",
+					"default": 0
+				}
+			}
 		}`),
-		InputPorts: DefaultInputPorts(),
-		OutputPorts: []domain.OutputPort{
-			{Name: "out", Label: "Complete", IsDefault: true},
-			{Name: "error", Label: "Error", IsDefault: false},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("out", "Complete", "完了", "All iterations completed", "全反復完了", true),
+			LPortWithDesc("error", "Error", "エラー", "Error output", "エラー出力", false),
 		},
 		Code: `// ForEach execution is handled by the engine
 // Each iteration receives: { item, index, context }
 // Results are aggregated into an array
 return input;`,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "repeat",
+			"color": "#8B5CF6",
+			"isContainer": true
+		}`, `{
 			"icon": "repeat",
 			"color": "#8B5CF6",
 			"isContainer": true
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "FOR_001", Name: "ITERATION_FAILED", Description: "One or more iterations failed", Retryable: false},
-			{Code: "FOR_002", Name: "EMPTY_INPUT", Description: "Input array is empty", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("FOR_001", "ITERATION_FAILED", "反復失敗", "One or more iterations failed", "1つ以上の反復が失敗しました", false),
+			LError("FOR_002", "EMPTY_INPUT", "入力が空", "Input array is empty", "入力配列が空です", false),
 		},
 		Enabled:     true,
 		GroupKind:   domain.BlockGroupKindForeach,
@@ -180,12 +246,12 @@ func whileBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "while",
 		Version:     1,
-		Name:        "While",
-		Description: "Repeat body execution while condition is true",
+		Name:        LText("While", "While"),
+		Description: LText("Repeat body execution while condition is true", "条件が真の間、本体を繰り返し実行"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryControl,
 		Icon:        "rotate-cw",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"condition": {
@@ -209,24 +275,51 @@ func whileBlock() *SystemBlockDefinition {
 				}
 			},
 			"required": ["condition"]
+		}`, `{
+			"type": "object",
+			"properties": {
+				"condition": {
+					"type": "string",
+					"title": "条件",
+					"description": "条件式（例: $.counter < $.target）"
+				},
+				"max_iterations": {
+					"type": "integer",
+					"title": "最大反復回数",
+					"description": "無限ループ防止の安全制限",
+					"default": 100,
+					"minimum": 1,
+					"maximum": 10000
+				},
+				"do_while": {
+					"type": "boolean",
+					"title": "Do-Whileモード",
+					"description": "条件チェック前に少なくとも1回は本体を実行",
+					"default": false
+				}
+			},
+			"required": ["condition"]
 		}`),
-		InputPorts: DefaultInputPorts(),
-		OutputPorts: []domain.OutputPort{
-			{Name: "out", Label: "Done", IsDefault: true},
-			{Name: "error", Label: "Error", IsDefault: false},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("out", "Done", "完了", "Loop completed", "ループ完了", true),
+			LPortWithDesc("error", "Error", "エラー", "Error output", "エラー出力", false),
 		},
 		Code: `// While execution is handled by the engine
 // Body output becomes next iteration input
 // Loop exits when condition is false
 return input;`,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
+			"icon": "rotate-cw",
+			"color": "#F59E0B",
+			"isContainer": true
+		}`, `{
 			"icon": "rotate-cw",
 			"color": "#F59E0B",
 			"isContainer": true
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "WHL_001", Name: "MAX_ITERATIONS", Description: "Maximum iterations exceeded", Retryable: false},
-			{Code: "WHL_002", Name: "CONDITION_ERROR", Description: "Failed to evaluate condition", Retryable: false},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("WHL_001", "MAX_ITERATIONS", "最大反復超過", "Maximum iterations exceeded", "最大反復回数を超過しました", false),
+			LError("WHL_002", "CONDITION_ERROR", "条件エラー", "Failed to evaluate condition", "条件の評価に失敗しました", false),
 		},
 		Enabled:     true,
 		GroupKind:   domain.BlockGroupKindWhile,
@@ -240,12 +333,12 @@ func agentGroupBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "agent-group",
 		Version:     1,
-		Name:        "Agent",
-		Description: "AI agent with ReAct loop - child steps become callable tools",
+		Name:        LText("Agent", "エージェント"),
+		Description: LText("AI agent with ReAct loop - child steps become callable tools", "ReActループを持つAIエージェント - 子ステップが呼び出し可能なツールになります"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryAgent,
 		Icon:        "bot",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"required": ["provider", "model", "system_prompt"],
 			"properties": {
@@ -306,18 +399,76 @@ func agentGroupBlock() *SystemBlockDefinition {
 					"description": "Number of messages to keep in memory"
 				}
 			}
+		}`, `{
+			"type": "object",
+			"required": ["provider", "model", "system_prompt"],
+			"properties": {
+				"provider": {
+					"type": "string",
+					"title": "プロバイダー",
+					"enum": ["openai", "anthropic"],
+					"default": "anthropic",
+					"description": "LLMプロバイダー"
+				},
+				"model": {
+					"type": "string",
+					"title": "モデル",
+					"default": "claude-sonnet-4-20250514",
+					"description": "モデルID（例: claude-sonnet-4-20250514, gpt-4）"
+				},
+				"system_prompt": {
+					"type": "string",
+					"title": "システムプロンプト",
+					"maxLength": 50000,
+					"description": "エージェントの動作と機能を定義するシステムプロンプト"
+				},
+				"max_iterations": {
+					"type": "integer",
+					"title": "最大反復回数",
+					"default": 10,
+					"minimum": 1,
+					"maximum": 50,
+					"description": "ReActループの最大反復回数"
+				},
+				"temperature": {
+					"type": "number",
+					"title": "温度",
+					"default": 0.7,
+					"minimum": 0,
+					"maximum": 2,
+					"description": "LLM温度（0-2）"
+				},
+				"tool_choice": {
+					"type": "string",
+					"title": "ツール選択",
+					"enum": ["auto", "none", "required"],
+					"default": "auto",
+					"description": "エージェントがツールを使用する方法"
+				},
+				"enable_memory": {
+					"type": "boolean",
+					"title": "メモリ有効化",
+					"default": false,
+					"description": "実行間で会話メモリを有効にする"
+				},
+				"memory_window": {
+					"type": "integer",
+					"title": "メモリウィンドウ",
+					"default": 20,
+					"minimum": 1,
+					"maximum": 100,
+					"description": "メモリに保持するメッセージ数"
+				}
+			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "in", Label: "Input", Required: true, Description: "User message or task input"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "out", Label: "Response", IsDefault: true, Description: "Agent's final response"},
-			{Name: "error", Label: "Error", IsDefault: false, Description: "Error output"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("out", "Response", "応答", "Agent's final response", "エージェントの最終応答", true),
+			LPortWithDesc("error", "Error", "エラー", "Error output", "エラー出力", false),
 		},
 		Code: `// Agent execution is handled by the engine's executeAgent()
 // Child steps become tools that the agent can call
 return input;`,
-		UIConfig: json.RawMessage(`{
+		UIConfig: LSchema(`{
 			"icon": "bot",
 			"color": "#10B981",
 			"isContainer": true,
@@ -339,11 +490,33 @@ return input;`,
 			"fieldOverrides": {
 				"system_prompt": {"rows": 8, "widget": "textarea"}
 			}
+		}`, `{
+			"icon": "bot",
+			"color": "#10B981",
+			"isContainer": true,
+			"groups": [
+				{"id": "model", "icon": "robot", "title": "モデル設定"},
+				{"id": "agent", "icon": "bot", "title": "エージェント設定"},
+				{"id": "memory", "icon": "database", "title": "メモリ設定"}
+			],
+			"fieldGroups": {
+				"provider": "model",
+				"model": "model",
+				"system_prompt": "agent",
+				"max_iterations": "agent",
+				"temperature": "agent",
+				"tool_choice": "agent",
+				"enable_memory": "memory",
+				"memory_window": "memory"
+			},
+			"fieldOverrides": {
+				"system_prompt": {"rows": 8, "widget": "textarea"}
+			}
 		}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "AGENT_001", Name: "MAX_ITERATIONS", Description: "Agent reached maximum iterations", Retryable: false},
-			{Code: "AGENT_002", Name: "TOOL_ERROR", Description: "Tool execution failed", Retryable: true},
-			{Code: "AGENT_003", Name: "LLM_ERROR", Description: "LLM API error", Retryable: true},
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("AGENT_001", "MAX_ITERATIONS", "最大反復超過", "Agent reached maximum iterations", "エージェントが最大反復回数に達しました", false),
+			LError("AGENT_002", "TOOL_ERROR", "ツールエラー", "Tool execution failed", "ツールの実行に失敗しました", true),
+			LError("AGENT_003", "LLM_ERROR", "LLMエラー", "LLM API error", "LLM APIエラー", true),
 		},
 		RequiredCredentials: json.RawMessage(`[{"name": "llm_api_key", "type": "api_key", "scope": "system", "required": true, "description": "LLM Provider API Key"}]`),
 		Enabled:             true,

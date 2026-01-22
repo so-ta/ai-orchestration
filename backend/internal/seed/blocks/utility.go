@@ -1,8 +1,6 @@
 package blocks
 
 import (
-	"encoding/json"
-
 	"github.com/souta/ai-orchestration/internal/domain"
 )
 
@@ -18,23 +16,28 @@ func NoteBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "note",
 		Version:     1,
-		Name:        "Note",
-		Description: "Documentation/comment",
+		Name:        LText("Note", "ノート"),
+		Description: LText("Documentation/comment", "ドキュメント/コメント"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "file-text",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
-				"color": {"type": "string"},
-				"content": {"type": "string"}
+				"color": {"type": "string", "title": "Color", "description": "Note color"},
+				"content": {"type": "string", "title": "Content", "description": "Note content"}
+			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"color": {"type": "string", "title": "色", "description": "ノートの色"},
+				"content": {"type": "string", "title": "内容", "description": "ノートの内容"}
 			}
 		}`),
-		InputPorts:  []domain.InputPort{},
-		OutputPorts: []domain.OutputPort{},
+		OutputPorts: []domain.LocalizedOutputPort{},
 		Code:        `return input;`,
-		UIConfig:    json.RawMessage(`{"icon": "file-text", "color": "#9CA3AF"}`),
-		ErrorCodes:  []domain.ErrorCodeDef{},
+		UIConfig:    LSchema(`{"icon": "file-text", "color": "#9CA3AF"}`, `{"icon": "file-text", "color": "#9CA3AF"}`),
+		ErrorCodes:  []domain.LocalizedErrorCodeDef{},
 		Enabled:     true,
 	}
 }
@@ -43,18 +46,47 @@ func CodeBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "code",
 		Version:     1,
-		Name:        "Code",
-		Description: "Execute custom JavaScript code",
+		Name:        LText("Code", "コード"),
+		Description: LText("Execute custom JavaScript code", "カスタムJavaScriptコードを実行"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "terminal",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
+			"type": "object",
+			"properties": {
+				"code": {
+					"type": "string",
+					"title": "Code",
+					"description": "JavaScript code to execute. Use 'return { port: \"portName\", data: {...} }' to specify output port.",
+					"x-ui-widget": "code"
+				},
+				"output_schema": {
+					"type": "object",
+					"title": "Output Schema",
+					"description": "Define the schema for output data (only defined fields are passed to the next step)",
+					"x-ui-widget": "output-schema"
+				},
+				"custom_output_ports": {
+					"type": "array",
+					"title": "Custom Output Ports",
+					"description": "Define output port names that can be specified from code. Use 'return { port: \"portName\", data: {...} }' to specify the output destination.",
+					"items": {"type": "string"},
+					"default": []
+				},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "Enable Error Port",
+					"description": "Output to dedicated error port on error",
+					"default": false
+				}
+			}
+		}`, `{
 			"type": "object",
 			"properties": {
 				"code": {
 					"type": "string",
 					"title": "コード",
-					"description": "JavaScript code to execute. Use 'return { port: \"portName\", data: {...} }' to specify output port.",
+					"description": "実行するJavaScriptコード。'return { port: \"portName\", data: {...} }' で出力先を指定できます。",
 					"x-ui-widget": "code"
 				},
 				"output_schema": {
@@ -78,17 +110,14 @@ func CodeBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for code execution"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Code execution result", "コード実行結果", true),
 		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Code execution result"},
-		},
-		Code:        "// User code is dynamically injected\nreturn input;",
-		UIConfig:    json.RawMessage(`{"icon": "terminal", "color": "#6366F1"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "CODE_001", Name: "SYNTAX_ERROR", Description: "JavaScript syntax error", Retryable: false},
-			{Code: "CODE_002", Name: "RUNTIME_ERROR", Description: "JavaScript runtime error", Retryable: false},
+		Code:     "// User code is dynamically injected\nreturn input;",
+		UIConfig: LSchema(`{"icon": "terminal", "color": "#6366F1"}`, `{"icon": "terminal", "color": "#6366F1"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("CODE_001", "SYNTAX_ERROR", "構文エラー", "JavaScript syntax error", "JavaScriptの構文エラーです", false),
+			LError("CODE_002", "RUNTIME_ERROR", "実行時エラー", "JavaScript runtime error", "JavaScriptの実行時エラーです", false),
 		},
 		Enabled: true,
 	}
@@ -98,25 +127,61 @@ func FunctionBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "function",
 		Version:     1,
-		Name:        "Function",
-		Description: "Execute custom JavaScript",
+		Name:        LText("Function", "関数"),
+		Description: LText("Execute custom JavaScript", "カスタムJavaScriptを実行"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "code",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"code": {
 					"type": "string",
-					"title": "コード",
+					"title": "Code",
 					"description": "JavaScript code to execute. Use 'return { port: \"portName\", data: {...} }' to specify output port.",
 					"x-ui-widget": "code"
 				},
 				"language": {
 					"enum": ["javascript"],
-					"type": "string"
+					"type": "string",
+					"title": "Language"
 				},
-				"timeout_ms": {"type": "integer"},
+				"timeout_ms": {"type": "integer", "title": "Timeout (ms)", "description": "Execution timeout in milliseconds"},
+				"output_schema": {
+					"type": "object",
+					"title": "Output Schema",
+					"description": "Define the schema for output data (only defined fields are passed to the next step)",
+					"x-ui-widget": "output-schema"
+				},
+				"custom_output_ports": {
+					"type": "array",
+					"title": "Custom Output Ports",
+					"description": "Define output port names that can be specified from code. Use 'return { port: \"portName\", data: {...} }' to specify the output destination.",
+					"items": {"type": "string"},
+					"default": []
+				},
+				"enable_error_port": {
+					"type": "boolean",
+					"title": "Enable Error Port",
+					"description": "Output to dedicated error port on error",
+					"default": false
+				}
+			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"code": {
+					"type": "string",
+					"title": "コード",
+					"description": "実行するJavaScriptコード。'return { port: \"portName\", data: {...} }' で出力先を指定できます。",
+					"x-ui-widget": "code"
+				},
+				"language": {
+					"enum": ["javascript"],
+					"type": "string",
+					"title": "言語"
+				},
+				"timeout_ms": {"type": "integer", "title": "タイムアウト (ミリ秒)", "description": "実行タイムアウト（ミリ秒）"},
 				"output_schema": {
 					"type": "object",
 					"title": "出力スキーマ",
@@ -138,22 +203,19 @@ func FunctionBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data for function"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Function result"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Function result", "関数の実行結果", true),
 		},
 		Code: `
 // This block executes user-defined code
 // The user's code is stored in config.code and evaluated dynamically
 return input;
 `,
-		UIConfig: json.RawMessage(`{"icon": "code", "color": "#6366F1"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "FUNC_001", Name: "SYNTAX_ERROR", Description: "JavaScript syntax error", Retryable: false},
-			{Code: "FUNC_002", Name: "RUNTIME_ERROR", Description: "JavaScript runtime error", Retryable: false},
-			{Code: "FUNC_003", Name: "TIMEOUT", Description: "Function execution timeout", Retryable: false},
+		UIConfig: LSchema(`{"icon": "code", "color": "#6366F1"}`, `{"icon": "code", "color": "#6366F1"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("FUNC_001", "SYNTAX_ERROR", "構文エラー", "JavaScript syntax error", "JavaScriptの構文エラーです", false),
+			LError("FUNC_002", "RUNTIME_ERROR", "実行時エラー", "JavaScript runtime error", "JavaScriptの実行時エラーです", false),
+			LError("FUNC_003", "TIMEOUT", "タイムアウト", "Function execution timeout", "関数の実行がタイムアウトしました", false),
 		},
 		Enabled: true,
 	}
@@ -163,35 +225,56 @@ func LogBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "log",
 		Version:     1,
-		Name:        "Log",
-		Description: "Output log messages for debugging",
+		Name:        LText("Log", "ログ"),
+		Description: LText("Output log messages for debugging", "デバッグ用にログメッセージを出力"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "terminal",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"data": {
 					"type": "string",
+					"title": "Data",
 					"description": "JSON path to include additional data (e.g. $.input)"
 				},
 				"level": {
 					"enum": ["debug", "info", "warn", "error"],
 					"type": "string",
+					"title": "Level",
 					"default": "info",
 					"description": "Log level"
 				},
 				"message": {
 					"type": "string",
+					"title": "Message",
 					"description": "Log message (supports {{$.field}} template variables)"
 				}
 			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"data": {
+					"type": "string",
+					"title": "データ",
+					"description": "追加データのJSONパス（例: $.input）"
+				},
+				"level": {
+					"enum": ["debug", "info", "warn", "error"],
+					"type": "string",
+					"title": "レベル",
+					"default": "info",
+					"description": "ログレベル"
+				},
+				"message": {
+					"type": "string",
+					"title": "メッセージ",
+					"description": "ログメッセージ（{{$.field}} テンプレート変数に対応）"
+				}
+			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Description: "Data to log"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Pass-through output"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Pass-through output", "パススルー出力", true),
 		},
 		Code: `
 // Log block: outputs to console and passes input through
@@ -200,8 +283,8 @@ const message = config.message || JSON.stringify(input);
 ctx.log(level, message, input);
 return input;
 `,
-		UIConfig:   json.RawMessage(`{"icon": "terminal", "color": "#6B7280"}`),
-		ErrorCodes: []domain.ErrorCodeDef{},
+		UIConfig:   LSchema(`{"icon": "terminal", "color": "#6B7280"}`, `{"icon": "terminal", "color": "#6B7280"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{},
 		Enabled:    true,
 	}
 }
@@ -216,12 +299,50 @@ func SetVariablesBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "set-variables",
 		Version:     1,
-		Name:        "Set Variables",
-		Description: "Set or transform variables for use in subsequent steps",
+		Name:        LText("Set Variables", "変数設定"),
+		Description: LText("Set or transform variables for use in subsequent steps", "後続のステップで使用する変数を設定または変換"),
 		Category:    domain.BlockCategoryFlow,
 		Subcategory: domain.BlockSubcategoryUtility,
 		Icon:        "variable",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
+			"type": "object",
+			"properties": {
+				"variables": {
+					"type": "array",
+					"title": "Variables",
+					"description": "Array of variables to set",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string",
+								"title": "Variable Name",
+								"description": "Variable name to add to output data"
+							},
+							"value": {
+								"type": "string",
+								"title": "Value",
+								"description": "Variable value (supports template expressions {{$.field}})"
+							},
+							"type": {
+								"type": "string",
+								"title": "Type",
+								"enum": ["string", "number", "boolean", "json"],
+								"default": "string",
+								"description": "Variable type"
+							}
+						},
+						"required": ["name", "value"]
+					}
+				},
+				"merge_input": {
+					"type": "boolean",
+					"title": "Merge Input",
+					"description": "If true, merge set variables with input data for output (default: true)",
+					"default": true
+				}
+			}
+		}`, `{
 			"type": "object",
 			"properties": {
 				"variables": {
@@ -260,21 +381,20 @@ func SetVariablesBlock() *SystemBlockDefinition {
 				}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "any"}`), Required: false, Description: "Input data to merge with variables"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Input merged with set variables"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Input merged with set variables", "設定した変数とマージした入力", true),
 		},
 		Code: `
 // Set Variables block: sets/transforms variables for subsequent steps
 const variables = config.variables || [];
 const mergeInput = config.merge_input !== false; // default true
 
-// Helper function to render template expressions
-function renderTemplate(template, data) {
+// Helper function to render template expressions in strings
+// Supports both {{$.path}} and {{path}} patterns
+function renderTemplateString(template, data) {
     if (typeof template !== 'string') return template;
-    return template.replace(/\{\{\s*\$\.([^}]+)\s*\}\}/g, function(match, path) {
+    // First, replace {{$.path}} patterns
+    let result = template.replace(/\{\{\s*\$\.([^}]+)\s*\}\}/g, function(match, path) {
         const parts = path.split('.');
         let value = data;
         for (const part of parts) {
@@ -283,6 +403,35 @@ function renderTemplate(template, data) {
         }
         return value != null ? String(value) : '';
     });
+    // Then, replace {{path}} patterns (without $.)
+    result = result.replace(/\{\{\s*([^$}][^}]*)\s*\}\}/g, function(match, path) {
+        const parts = path.trim().split('.');
+        let value = data;
+        for (const part of parts) {
+            if (value == null) return '';
+            value = value[part];
+        }
+        return value != null ? String(value) : '';
+    });
+    return result;
+}
+
+// Deep render template expressions in nested objects/arrays
+function renderTemplate(value, data) {
+    if (typeof value === 'string') {
+        return renderTemplateString(value, data);
+    }
+    if (Array.isArray(value)) {
+        return value.map(item => renderTemplate(item, data));
+    }
+    if (value && typeof value === 'object') {
+        const result = {};
+        for (const key in value) {
+            result[key] = renderTemplate(value[key], data);
+        }
+        return result;
+    }
+    return value;
 }
 
 // Process each variable
@@ -317,9 +466,9 @@ if (mergeInput) {
 }
 return result;
 `,
-		UIConfig:   json.RawMessage(`{"icon": "variable", "color": "#10B981"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "VAR_001", Name: "PARSE_ERROR", Description: "Failed to parse JSON value", Retryable: false},
+		UIConfig: LSchema(`{"icon": "variable", "color": "#10B981"}`, `{"icon": "variable", "color": "#10B981"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("VAR_001", "PARSE_ERROR", "パースエラー", "Failed to parse JSON value", "JSON値のパースに失敗しました", false),
 		},
 		Enabled: true,
 	}

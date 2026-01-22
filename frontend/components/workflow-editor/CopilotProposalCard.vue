@@ -32,7 +32,6 @@ export interface ProposalChange {
   source_id?: string
   target_id?: string
   source_port?: string
-  target_port?: string
 }
 
 export interface Proposal {

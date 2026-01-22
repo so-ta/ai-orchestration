@@ -20,10 +20,10 @@ type YAMLBlockDefinition struct {
 	Slug    string `yaml:"slug"`
 	Version int    `yaml:"version"`
 
-	// Basic info
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	Category    string `yaml:"category"`
+	// Basic info (supports i18n with en/ja keys)
+	Name        interface{} `yaml:"name"`        // string or {en: "", ja: ""}
+	Description interface{} `yaml:"description"` // string or {en: "", ja: ""}
+	Category    string      `yaml:"category"`
 	Subcategory string `yaml:"subcategory,omitempty"`
 	Icon        string `yaml:"icon"`
 
@@ -32,7 +32,6 @@ type YAMLBlockDefinition struct {
 	OutputSchema interface{} `yaml:"output_schema,omitempty"`
 
 	// Ports
-	InputPorts  []YAMLInputPort  `yaml:"input_ports,omitempty"`
 	OutputPorts []YAMLOutputPort `yaml:"output_ports,omitempty"`
 
 	// Execution
@@ -66,30 +65,21 @@ type YAMLBlockDefinition struct {
 	InternalSteps []YAMLInternalStep `yaml:"internal_steps,omitempty"`
 }
 
-// YAMLInputPort represents an input port in YAML
-type YAMLInputPort struct {
-	Name        string      `yaml:"name"`
-	Label       string      `yaml:"label"`
-	Description string      `yaml:"description,omitempty"`
-	Required    bool        `yaml:"required"`
-	Schema      interface{} `yaml:"schema,omitempty"`
-}
-
 // YAMLOutputPort represents an output port in YAML
 type YAMLOutputPort struct {
 	Name        string      `yaml:"name"`
-	Label       string      `yaml:"label"`
-	Description string      `yaml:"description,omitempty"`
+	Label       interface{} `yaml:"label"`       // string or {en: "", ja: ""}
+	Description interface{} `yaml:"description"` // string or {en: "", ja: ""}
 	IsDefault   bool        `yaml:"is_default"`
 	Schema      interface{} `yaml:"schema,omitempty"`
 }
 
 // YAMLErrorCodeDef represents an error code in YAML
 type YAMLErrorCodeDef struct {
-	Code        string `yaml:"code"`
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
-	Retryable   bool   `yaml:"retryable"`
+	Code        string      `yaml:"code"`
+	Name        interface{} `yaml:"name"`        // string or {en: "", ja: ""}
+	Description interface{} `yaml:"description"` // string or {en: "", ja: ""}
+	Retryable   bool        `yaml:"retryable"`
 }
 
 // YAMLRequestConfig represents declarative request config in YAML
@@ -233,8 +223,8 @@ func convertYAMLToSystemBlock(y *YAMLBlockDefinition) (*SystemBlockDefinition, e
 	block := &SystemBlockDefinition{
 		Slug:            y.Slug,
 		Version:         y.Version,
-		Name:            y.Name,
-		Description:     y.Description,
+		Name:            parseLocalizedText(y.Name),
+		Description:     parseLocalizedText(y.Description),
 		Category:        domain.BlockCategory(y.Category),
 		Subcategory:     domain.BlockSubcategory(y.Subcategory),
 		Icon:            y.Icon,
@@ -247,13 +237,13 @@ func convertYAMLToSystemBlock(y *YAMLBlockDefinition) (*SystemBlockDefinition, e
 		IsContainer:     y.IsContainer,
 	}
 
-	// Convert schemas to JSON
+	// Convert schemas to JSON (as LocalizedConfigSchema - same for both en/ja from YAML)
 	if y.ConfigSchema != nil {
 		jsonData, err := toJSONRawMessage(y.ConfigSchema)
 		if err != nil {
 			return nil, fmt.Errorf("invalid config_schema: %w", err)
 		}
-		block.ConfigSchema = jsonData
+		block.ConfigSchema = domain.LocalizedConfigSchema{EN: jsonData, JA: jsonData}
 	}
 
 	if y.OutputSchema != nil {
@@ -277,7 +267,7 @@ func convertYAMLToSystemBlock(y *YAMLBlockDefinition) (*SystemBlockDefinition, e
 		if err != nil {
 			return nil, fmt.Errorf("invalid ui_config: %w", err)
 		}
-		block.UIConfig = jsonData
+		block.UIConfig = domain.LocalizedConfigSchema{EN: jsonData, JA: jsonData}
 	}
 
 	if y.RequiredCredentials != nil {
@@ -288,30 +278,12 @@ func convertYAMLToSystemBlock(y *YAMLBlockDefinition) (*SystemBlockDefinition, e
 		block.RequiredCredentials = jsonData
 	}
 
-	// Convert input ports
-	for _, p := range y.InputPorts {
-		port := domain.InputPort{
-			Name:        p.Name,
-			Label:       p.Label,
-			Description: p.Description,
-			Required:    p.Required,
-		}
-		if p.Schema != nil {
-			jsonData, err := toJSONRawMessage(p.Schema)
-			if err != nil {
-				return nil, fmt.Errorf("invalid input port schema for %s: %w", p.Name, err)
-			}
-			port.Schema = jsonData
-		}
-		block.InputPorts = append(block.InputPorts, port)
-	}
-
 	// Convert output ports
 	for _, p := range y.OutputPorts {
-		port := domain.OutputPort{
+		port := domain.LocalizedOutputPort{
 			Name:        p.Name,
-			Label:       p.Label,
-			Description: p.Description,
+			Label:       parseLocalizedText(p.Label),
+			Description: parseLocalizedText(p.Description),
 			IsDefault:   p.IsDefault,
 		}
 		if p.Schema != nil {
@@ -326,10 +298,10 @@ func convertYAMLToSystemBlock(y *YAMLBlockDefinition) (*SystemBlockDefinition, e
 
 	// Convert error codes
 	for _, e := range y.ErrorCodes {
-		block.ErrorCodes = append(block.ErrorCodes, domain.ErrorCodeDef{
+		block.ErrorCodes = append(block.ErrorCodes, domain.LocalizedErrorCodeDef{
 			Code:        e.Code,
-			Name:        e.Name,
-			Description: e.Description,
+			Name:        parseLocalizedText(e.Name),
+			Description: parseLocalizedText(e.Description),
 			Retryable:   e.Retryable,
 		})
 	}
@@ -384,6 +356,40 @@ func toJSONRawMessage(v interface{}) (json.RawMessage, error) {
 		return nil, err
 	}
 	return json.RawMessage(jsonBytes), nil
+}
+
+// parseLocalizedText converts a YAML value to LocalizedText
+// Supports both plain string and {en: "", ja: ""} format
+func parseLocalizedText(v interface{}) domain.LocalizedText {
+	if v == nil {
+		return domain.LocalizedText{}
+	}
+
+	// Plain string - use for both languages
+	if s, ok := v.(string); ok {
+		return domain.LocalizedText{EN: s, JA: s}
+	}
+
+	// Map with en/ja keys
+	if m, ok := v.(map[string]interface{}); ok {
+		lt := domain.LocalizedText{}
+		if en, ok := m["en"].(string); ok {
+			lt.EN = en
+		}
+		if ja, ok := m["ja"].(string); ok {
+			lt.JA = ja
+		}
+		// If only one language is provided, use it for both
+		if lt.EN == "" && lt.JA != "" {
+			lt.EN = lt.JA
+		}
+		if lt.JA == "" && lt.EN != "" {
+			lt.JA = lt.EN
+		}
+		return lt
+	}
+
+	return domain.LocalizedText{}
 }
 
 // LoadFromEmbed loads blocks from embedded filesystem (for future use)

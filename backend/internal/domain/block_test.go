@@ -87,9 +87,6 @@ func TestNewBlockDefinition(t *testing.T) {
 	if !block.Enabled {
 		t.Error("NewBlockDefinition() should be enabled by default")
 	}
-	if len(block.InputPorts) != 1 || block.InputPorts[0].Name != "input" {
-		t.Error("NewBlockDefinition() should have default input port")
-	}
 	if len(block.OutputPorts) != 1 || block.OutputPorts[0].Name != "output" {
 		t.Error("NewBlockDefinition() should have default output port")
 	}

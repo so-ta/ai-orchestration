@@ -513,6 +513,20 @@ func (h *CopilotAgentHandler) StreamAgentMessage(w http.ResponseWriter, r *http.
 	runResultChan := make(chan runResult, 1)
 
 	go func() {
+		// Panic recovery to ensure runResultChan always receives a result
+		defer func() {
+			if r := recover(); r != nil {
+				h.logger.Error("Panic in workflow execution",
+					"panic", r,
+					"project_id", copilotProjectID,
+				)
+				runResultChan <- runResult{
+					run: nil,
+					err: fmt.Errorf("internal execution error: %v", r),
+				}
+			}
+		}()
+
 		runner := h.inlineRunner.Create()
 		run, err := runner.RunWithEvents(streamCtx, engine.RunInput{
 			TenantID:    tenantID,
@@ -656,6 +670,16 @@ func (h *CopilotAgentHandler) forwardWorkflowEvent(w http.ResponseWriter, flushe
 
 	case engine.EventComplete:
 		eventType = "complete"
+		eventData = event.Data
+
+	case engine.EventRunFailed:
+		// Forward run failure as error event
+		eventType = "error"
+		eventData = event.Data
+
+	case engine.EventStepFailed:
+		// Forward step failure as error event with step context
+		eventType = "step_error"
 		eventData = event.Data
 
 	default:

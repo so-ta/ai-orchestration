@@ -70,7 +70,7 @@ func (h *GitSyncHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CredentialsID: credentialsID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *GitSyncHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	gitSync, err := h.gitSyncUsecase.GetByID(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *GitSyncHandler) GetByProject(w http.ResponseWriter, r *http.Request) {
 
 	gitSync, err := h.gitSyncUsecase.GetByProject(r.Context(), tenantID, projectID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *GitSyncHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	gitSyncs, err := h.gitSyncUsecase.ListByTenant(r.Context(), tenantID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -170,7 +170,7 @@ func (h *GitSyncHandler) Update(w http.ResponseWriter, r *http.Request) {
 		CredentialsID: credentialsID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -187,7 +187,7 @@ func (h *GitSyncHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.gitSyncUsecase.Delete(r.Context(), tenantID, id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -215,7 +215,7 @@ func (h *GitSyncHandler) TriggerSync(w http.ResponseWriter, r *http.Request) {
 
 	syncOp, err := h.gitSyncUsecase.TriggerSync(r.Context(), tenantID, id, req.Operation)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

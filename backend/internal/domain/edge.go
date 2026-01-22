@@ -21,7 +21,6 @@ type Edge struct {
 	SourceBlockGroupID *uuid.UUID `json:"source_block_group_id,omitempty"` // Source group (nil if from step)
 	TargetBlockGroupID *uuid.UUID `json:"target_block_group_id,omitempty"` // Target group (nil if to step)
 	SourcePort         string     `json:"source_port,omitempty"`           // Output port name (e.g., "true", "false", "out")
-	TargetPort         string     `json:"target_port,omitempty"`           // Input port name (e.g., "input", "items", "in")
 	Condition          *string    `json:"condition,omitempty"`             // Optional condition expression for edge traversal
 	CreatedAt          time.Time  `json:"created_at"`
 }
@@ -39,14 +38,13 @@ func NewEdge(tenantID, projectID, sourceStepID, targetStepID uuid.UUID, conditio
 		SourceStepID: &sourceStepID,
 		TargetStepID: &targetStepID,
 		SourcePort:   "", // Default: use default output port
-		TargetPort:   "", // Default: use default input port
 		Condition:    cond,
 		CreatedAt:    time.Now().UTC(),
 	}
 }
 
-// NewEdgeWithPort creates a new edge between steps with specific source and target ports
-func NewEdgeWithPort(tenantID, projectID, sourceStepID, targetStepID uuid.UUID, sourcePort, targetPort, condition string) *Edge {
+// NewEdgeWithPort creates a new edge between steps with specific source port
+func NewEdgeWithPort(tenantID, projectID, sourceStepID, targetStepID uuid.UUID, sourcePort, condition string) *Edge {
 	var cond *string
 	if condition != "" {
 		cond = &condition
@@ -58,7 +56,6 @@ func NewEdgeWithPort(tenantID, projectID, sourceStepID, targetStepID uuid.UUID, 
 		SourceStepID: &sourceStepID,
 		TargetStepID: &targetStepID,
 		SourcePort:   sourcePort,
-		TargetPort:   targetPort,
 		Condition:    cond,
 		CreatedAt:    time.Now().UTC(),
 	}
@@ -73,13 +70,12 @@ func NewEdgeToGroup(tenantID, projectID, sourceStepID, targetGroupID uuid.UUID, 
 		SourceStepID:       &sourceStepID,
 		TargetBlockGroupID: &targetGroupID,
 		SourcePort:         sourcePort,
-		TargetPort:         "in", // Default group input port
 		CreatedAt:          time.Now().UTC(),
 	}
 }
 
 // NewEdgeFromGroup creates a new edge from a block group to a step
-func NewEdgeFromGroup(tenantID, projectID, sourceGroupID, targetStepID uuid.UUID, targetPort string) *Edge {
+func NewEdgeFromGroup(tenantID, projectID, sourceGroupID, targetStepID uuid.UUID) *Edge {
 	return &Edge{
 		ID:                 uuid.New(),
 		TenantID:           tenantID,
@@ -87,7 +83,6 @@ func NewEdgeFromGroup(tenantID, projectID, sourceGroupID, targetStepID uuid.UUID
 		SourceBlockGroupID: &sourceGroupID,
 		TargetStepID:       &targetStepID,
 		SourcePort:         "out", // Default group output port
-		TargetPort:         targetPort,
 		CreatedAt:          time.Now().UTC(),
 	}
 }
@@ -101,7 +96,6 @@ func NewGroupToGroupEdge(tenantID, projectID, sourceGroupID, targetGroupID uuid.
 		SourceBlockGroupID: &sourceGroupID,
 		TargetBlockGroupID: &targetGroupID,
 		SourcePort:         "out",
-		TargetPort:         "in",
 		CreatedAt:          time.Now().UTC(),
 	}
 }

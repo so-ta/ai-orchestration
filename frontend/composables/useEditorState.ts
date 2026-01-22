@@ -12,9 +12,6 @@ export const COPILOT_SIDEBAR_MIN_WIDTH = 280
 export const COPILOT_SIDEBAR_MAX_WIDTH = 1200
 export const COPILOT_SIDEBAR_COLLAPSED_WIDTH = 48
 
-// Legacy export for backward compatibility
-export const COPILOT_SIDEBAR_WIDTH = COPILOT_SIDEBAR_DEFAULT_WIDTH
-
 // Clipboard data structure
 interface StepClipboard {
   name: string

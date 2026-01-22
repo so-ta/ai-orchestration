@@ -13,7 +13,6 @@ interface Port {
 }
 
 defineProps<{
-  inputPorts?: Port[]
   outputPorts?: Port[]
   stepType: StepType
 }>()
@@ -32,24 +31,6 @@ function formatSchemaType(schema: object | undefined): string {
 <template>
   <div class="form-section">
     <h4 class="section-title">{{ t('stepConfig.ioPorts.title') }}</h4>
-
-    <!-- Input Ports -->
-    <div v-if="inputPorts && inputPorts.length > 1" class="io-ports-group">
-      <div class="ports-header">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 18 9 12 15 6"/>
-        </svg>
-        <span>{{ t('stepConfig.ioPorts.inputs') }}</span>
-      </div>
-      <div class="ports-list">
-        <div v-for="port in inputPorts" :key="port.name" class="port-item">
-          <span class="port-name">{{ port.label }}</span>
-          <code class="port-type">{{ formatSchemaType(port.schema) }}</code>
-          <span v-if="port.required" class="port-required">*</span>
-          <span v-if="port.description" class="port-desc">{{ port.description }}</span>
-        </div>
-      </div>
-    </div>
 
     <!-- Output Ports (for blocks not covered by specific config sections) -->
     <div v-if="outputPorts && outputPorts.length > 1 && !['condition', 'switch', 'human_in_loop'].includes(stepType)" class="io-ports-group">

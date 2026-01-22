@@ -57,7 +57,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Visibility:  req.Visibility,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (h *TemplateHandler) CreateFromProject(w http.ResponseWriter, r *http.Reque
 		Visibility:  req.Visibility,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -148,7 +148,7 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.templateUsecase.List(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *TemplateHandler) ListPublic(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.templateUsecase.List(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -199,7 +199,7 @@ func (h *TemplateHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	template, err := h.templateUsecase.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -243,7 +243,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Visibility:  req.Visibility,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -260,7 +260,7 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.templateUsecase.Delete(r.Context(), tenantID, id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -288,7 +288,7 @@ func (h *TemplateHandler) Use(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.templateUsecase.UseTemplate(r.Context(), tenantID, id, req.ProjectName)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -318,7 +318,7 @@ func (h *TemplateHandler) AddReview(w http.ResponseWriter, r *http.Request) {
 
 	review, err := h.templateUsecase.AddReview(r.Context(), tenantID, templateID, userID, req.Rating, req.Comment)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -335,7 +335,7 @@ func (h *TemplateHandler) GetReviews(w http.ResponseWriter, r *http.Request) {
 
 	reviews, err := h.templateUsecase.GetReviews(r.Context(), templateID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

@@ -63,7 +63,6 @@ export function useProjects() {
       source_block_group_id?: string | null
       target_block_group_id?: string | null
       source_port?: string
-      target_port?: string
       condition?: string
     }>
   }) {
@@ -90,7 +89,6 @@ export function useProjects() {
       source_block_group_id?: string | null
       target_block_group_id?: string | null
       source_port?: string
-      target_port?: string
       condition?: string
     }>
   }) {
@@ -149,7 +147,6 @@ export function useProjects() {
     source_block_group_id?: string
     target_block_group_id?: string
     source_port?: string
-    target_port?: string
     condition?: string
   }) {
     return api.post<ApiResponse<Edge>>(`/workflows/${projectId}/edges`, data)

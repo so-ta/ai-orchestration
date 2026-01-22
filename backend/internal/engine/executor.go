@@ -2250,24 +2250,34 @@ func (e *Executor) executeSwitchStep(ctx context.Context, execCtx *ExecutionCont
 		matchedCase = defaultCase
 	}
 
-	output := map[string]interface{}{
-		"input":        json.RawMessage(input),
-		"matched_case": nil,
+	// Parse input to preserve original data structure
+	var inputData map[string]interface{}
+	if err := json.Unmarshal(input, &inputData); err != nil {
+		// If input is not an object, wrap it
+		inputData = map[string]interface{}{
+			"input": json.RawMessage(input),
+		}
 	}
 
+	// Add matched_case and __port to the output without wrapping
 	if matchedCase != nil {
-		output["matched_case"] = matchedCase.Name
+		inputData["matched_case"] = matchedCase.Name
+		// Set __port for output port routing (used by extractOutputPortAndData)
+		inputData["__port"] = matchedCase.Name
 		e.logger.Info("Switch case matched",
 			"step_id", step.ID,
 			"case_name", matchedCase.Name,
 		)
 	} else {
+		inputData["matched_case"] = nil
+		// Use default port when no case matched
+		inputData["__port"] = "default"
 		e.logger.Info("Switch no case matched",
 			"step_id", step.ID,
 		)
 	}
 
-	return json.Marshal(output)
+	return json.Marshal(inputData)
 }
 
 func (e *Executor) executeFilterStep(ctx context.Context, step domain.Step, input json.RawMessage) (json.RawMessage, error) {
@@ -2784,6 +2794,15 @@ func (e *Executor) executeBlockDefinition(ctx context.Context, execCtx *Executio
 
 	var output map[string]interface{}
 
+	// Preserve __preserved_for_postprocess from PreProcess result (for preserve_input feature)
+	// This needs to survive internal step execution and be available in PostProcess
+	var preservedForPostprocess interface{}
+	if preserved, ok := currentInput["__preserved_for_postprocess"]; ok {
+		preservedForPostprocess = preserved
+		// Remove from input to avoid polluting internal step input
+		delete(currentInput, "__preserved_for_postprocess")
+	}
+
 	// === Phase 2: Execute internal_steps (if any) ===
 	if len(blockDef.InternalSteps) > 0 {
 		e.logger.Debug("Executing internal steps",
@@ -2864,8 +2883,22 @@ func (e *Executor) executeBlockDefinition(ctx context.Context, execCtx *Executio
 
 	// === Phase 4: Execute postProcess chain (root -> child order) ===
 	currentOutput := output
+
+	// Re-add preserved data for PostProcess (from PreProcess's preserve_input feature)
+	if preservedForPostprocess != nil {
+		currentOutput["__preserved_for_postprocess"] = preservedForPostprocess
+	}
+
+	// Debug: log the output before postProcess (temporarily using Info level)
+	outputJSON, _ := json.Marshal(output)
+	e.logger.Info("Block output before postProcess",
+		"step_id", step.ID,
+		"block", blockDef.Slug,
+		"output_preview", truncateString(string(outputJSON), 500),
+	)
+
 	if len(blockDef.PostProcessChain) > 0 {
-		e.logger.Debug("Executing postProcess chain",
+		e.logger.Info("Executing postProcess chain",
 			"step_id", step.ID,
 			"block", blockDef.Slug,
 			"chain_length", len(blockDef.PostProcessChain),
@@ -2885,6 +2918,14 @@ func (e *Executor) executeBlockDefinition(ctx context.Context, execCtx *Executio
 				)
 				return nil, fmt.Errorf("postProcess hook %d failed: %w", i, err)
 			}
+			// Debug: log output after each postProcess hook
+			processedJSON, _ := json.Marshal(processed)
+			e.logger.Info("PostProcess hook result",
+				"step_id", step.ID,
+				"block", blockDef.Slug,
+				"hook_index", i,
+				"output_preview", truncateString(string(processedJSON), 500),
+			)
 			currentOutput = processed
 		}
 	} else if blockDef.PostProcess != "" {
@@ -2908,7 +2949,15 @@ func (e *Executor) executeBlockDefinition(ctx context.Context, execCtx *Executio
 	}
 
 	// Filter output by schema if defined in step config
+	// Skip filtering when preserve_input is enabled since we want to keep the merged fields
 	if configMap != nil {
+		if preserveInput, ok := configMap["preserve_input"].(bool); ok && preserveInput {
+			e.logger.Debug("Skipping output schema filtering due to preserve_input",
+				"step_id", step.ID,
+				"block", blockDef.Slug,
+			)
+			return result, nil
+		}
 		if outputSchemaRaw, ok := configMap["output_schema"]; ok && outputSchemaRaw != nil {
 			outputSchemaJSON, err := json.Marshal(outputSchemaRaw)
 			if err == nil && len(outputSchemaJSON) > 0 {
@@ -3073,15 +3122,16 @@ func (e *Executor) createStepExecutor(ctx context.Context, execCtx *ExecutionCon
 // runHookCode executes preProcess or postProcess JavaScript code
 func (e *Executor) runHookCode(ctx context.Context, code string, input map[string]interface{}, config map[string]interface{}, sandboxCtx *sandbox.ExecutionContext, hookType string, index int) (map[string]interface{}, error) {
 	// Wrap hook code with config access
+	// NOTE: sandbox.wrapCode will wrap this in an outer IIFE, so we need to ensure
+	// the user's return value propagates correctly. We DON'T use an inner IIFE here
+	// because the outer IIFE from wrapCode is sufficient.
 	wrappedCode := fmt.Sprintf(`
 var config = input.__config || {};
 delete input.__config;
 var ctx = {
 	log: function(level, message) { console.log('[' + level + '] ' + message); }
 };
-(function() {
 %s
-})();
 `, code)
 
 	// Prepare input with config
@@ -3204,6 +3254,14 @@ func (e *Executor) executeCustomBlockStepBySlug(ctx context.Context, execCtx *Ex
 
 	// Use unified execution model
 	return e.executeBlockDefinition(ctx, execCtx, step, blockDef, input)
+}
+
+// truncateString truncates a string to maxLen characters for logging
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // wrapCustomBlockCode wraps custom block code with setup that provides expected globals

@@ -5,6 +5,8 @@ import { useExpressionMode } from './useExpressionMode'
 import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
 import VariablePicker from '../variable-picker/VariablePicker.vue'
 
+const { t } = useI18n()
+
 const props = defineProps<{
   name: string
   property: JSONSchemaProperty
@@ -21,6 +23,11 @@ const emit = defineEmits<{
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
+
+// Track whether field has been touched for validation
+const touched = ref(false)
+const isEmpty = computed(() => props.modelValue === undefined || props.modelValue === '')
+const showRequiredWarning = computed(() => props.required && touched.value && isEmpty.value && !props.error)
 
 const options = computed(() => {
   return props.property.enum || []
@@ -92,6 +99,7 @@ function handleExpressionKeydown(event: KeyboardEvent) {
 }
 
 function handleBlur() {
+  touched.value = true
   emit('blur')
 }
 
@@ -132,12 +140,12 @@ function formatOptionLabel(option: string | number): string {
       :id="name"
       :value="displayValue"
       :disabled="disabled"
-      :class="['field-select', { 'has-error': error }]"
+      :class="['field-select', { 'has-error': error || showRequiredWarning }]"
       @change="handleChange"
       @blur="handleBlur"
     >
       <option v-if="!property.default && !modelValue" value="" disabled>
-        選択してください
+        {{ t('widgets.select.placeholder') }}
       </option>
       <option
         v-for="option in options"
@@ -157,7 +165,7 @@ function formatOptionLabel(option: string | number): string {
       :value="expressionText"
       :disabled="disabled"
       :class="['field-input', { 'has-error': error, 'drag-over': isDragOver }]"
-      placeholder="{{$.steps.prev.output}} または値を入力"
+      placeholder="{{$.steps.prev.output}} or value"
       autocomplete="off"
       @input="handleExpressionInput"
       @keydown="handleExpressionKeydown"
@@ -168,12 +176,16 @@ function formatOptionLabel(option: string | number): string {
       @drop="handleDrop"
     >
 
-    <p v-if="property.description && !error" class="field-description">
+    <p v-if="property.description && !error && !showRequiredWarning" class="field-description">
       {{ property.description }}
     </p>
 
     <p v-if="error" class="field-error">
       {{ error }}
+    </p>
+
+    <p v-else-if="showRequiredWarning" class="field-warning">
+      {{ t('fieldValidation.required') }}
     </p>
 
     <VariablePicker
@@ -315,6 +327,12 @@ function formatOptionLabel(option: string | number): string {
 .field-error {
   font-size: 11px;
   color: var(--color-error, #ef4444);
+  margin: 0;
+}
+
+.field-warning {
+  font-size: 11px;
+  color: var(--color-warning, #f59e0b);
   margin: 0;
 }
 </style>

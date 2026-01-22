@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -455,6 +456,14 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 		}
 	}
 
+	// Debug: log the LLM response content (temporarily using Info level for debugging)
+	slog.Info("Anthropic LLM response",
+		"content_length", len(content),
+		"content_preview", truncateString(content, 500),
+		"tool_calls_count", len(toolCalls),
+		"stop_reason", respData.StopReason,
+	)
+
 	result := map[string]interface{}{
 		"content":       content,
 		"finish_reason": respData.StopReason, // Use unified key name across providers
@@ -471,6 +480,14 @@ func (s *LLMServiceImpl) chatAnthropic(model string, request map[string]interfac
 	}
 
 	return result, nil
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // mockChat provides mock responses when LLM API keys are not configured

@@ -1,7 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
 import CodeWidget from '../CodeWidget.vue'
 import type { JSONSchemaProperty, FieldOverride } from '../../types/config-schema'
+
+// Create i18n instance for tests
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  messages: {
+    en: {
+      fieldValidation: {
+        required: 'This field is required',
+      },
+    },
+    ja: {
+      fieldValidation: {
+        required: 'このフィールドは必須です',
+      },
+    },
+  },
+})
 
 describe('CodeWidget', () => {
   const defaultProperty: JSONSchemaProperty = {
@@ -26,6 +45,9 @@ describe('CodeWidget', () => {
         override: props.override,
         error: props.error,
         disabled: props.disabled,
+      },
+      global: {
+        plugins: [i18n],
       },
     })
   }

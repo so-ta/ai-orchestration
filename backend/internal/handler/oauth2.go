@@ -31,7 +31,7 @@ func NewOAuth2Handler(service *usecase.OAuth2Service, auditService *usecase.Audi
 func (h *OAuth2Handler) ListProviders(w http.ResponseWriter, r *http.Request) {
 	providers, err := h.service.ListProviders(r.Context())
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -48,7 +48,7 @@ func (h *OAuth2Handler) GetProvider(w http.ResponseWriter, r *http.Request) {
 
 	provider, err := h.service.GetProvider(r.Context(), slug)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *OAuth2Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		CustomScopes: req.CustomScopes,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *OAuth2Handler) ListApps(w http.ResponseWriter, r *http.Request) {
 
 	apps, err := h.service.ListApps(r.Context(), tenantID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *OAuth2Handler) GetApp(w http.ResponseWriter, r *http.Request) {
 
 	app, err := h.service.GetApp(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *OAuth2Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.DeleteApp(r.Context(), id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -216,7 +216,7 @@ func (h *OAuth2Handler) StartAuthorization(w http.ResponseWriter, r *http.Reques
 		Scopes:       req.Scopes,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -278,7 +278,7 @@ func (h *OAuth2Handler) ListConnections(w http.ResponseWriter, r *http.Request) 
 
 	connections, err := h.service.ListConnectionsByApp(r.Context(), appID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -294,7 +294,7 @@ func (h *OAuth2Handler) GetConnection(w http.ResponseWriter, r *http.Request) {
 
 	connection, err := h.service.GetConnection(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -310,7 +310,7 @@ func (h *OAuth2Handler) GetConnectionByCredential(w http.ResponseWriter, r *http
 
 	connection, err := h.service.GetConnectionByCredential(r.Context(), credentialID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -325,7 +325,7 @@ func (h *OAuth2Handler) RefreshConnection(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := h.service.RefreshToken(r.Context(), id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -335,7 +335,7 @@ func (h *OAuth2Handler) RefreshConnection(w http.ResponseWriter, r *http.Request
 	// Return updated connection
 	connection, err := h.service.GetConnection(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -350,7 +350,7 @@ func (h *OAuth2Handler) RevokeConnection(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.service.RevokeConnection(r.Context(), id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -370,7 +370,7 @@ func (h *OAuth2Handler) DeleteConnection(w http.ResponseWriter, r *http.Request)
 	tenantID := getTenantID(r)
 
 	if err := h.service.DeleteConnection(r.Context(), id, tenantID); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

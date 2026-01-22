@@ -31,11 +31,6 @@ const formatSchemaType = (schema: { type?: string } | null | undefined): string 
   return schema.type
 }
 
-// Check if step has input ports
-const hasInputPorts = computed(() => {
-  return currentBlockDef.value?.input_ports && currentBlockDef.value.input_ports.length > 0
-})
-
 // Check if step has output ports
 const hasOutputPorts = computed(() => {
   return currentBlockDef.value?.output_ports && currentBlockDef.value.output_ports.length > 0
@@ -146,29 +141,6 @@ watch(errorHandlingConfig, emitChanges, { deep: true })
 
     <!-- Step Flow Configuration -->
     <div v-else class="flow-content">
-      <!-- Input Ports Section -->
-      <div class="flow-section">
-        <h4 class="section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-          {{ t('flow.inputPorts') }}
-        </h4>
-        <div v-if="hasInputPorts" class="ports-list">
-          <div v-for="port in currentBlockDef?.input_ports" :key="port.name" class="port-item">
-            <div class="port-header">
-              <span class="port-name">{{ port.label || port.name }}</span>
-              <code class="port-type">{{ formatSchemaType(port.schema) }}</code>
-              <span v-if="port.required" class="port-required">{{ t('flow.portRequired') }}</span>
-            </div>
-            <p v-if="port.description" class="port-description">{{ port.description }}</p>
-          </div>
-        </div>
-        <div v-else class="no-ports">
-          <span>{{ t('flow.noInputPorts') }}</span>
-        </div>
-      </div>
-
       <!-- Output Ports Section -->
       <div class="flow-section">
         <h4 class="section-title">

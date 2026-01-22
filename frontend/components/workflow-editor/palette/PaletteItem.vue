@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { BlockDefinition } from '~/types/api'
 import { getBlockColor } from '~/composables/useBlocks'
+import BlockTooltip from './BlockTooltip.vue'
 
 const props = defineProps<{
   block: BlockDefinition
@@ -13,8 +14,48 @@ const emit = defineEmits<{
   'drag-end': []
 }>()
 
+// Tooltip state
+const showTooltip = ref(false)
+const tooltipPosition = ref({ x: 0, y: 0 })
+let tooltipTimeout: ReturnType<typeof setTimeout> | null = null
+
+function handleMouseEnter(event: MouseEvent) {
+  if (props.dragging || props.disabled) return
+
+  // Capture the element reference immediately (event.currentTarget becomes null after event)
+  const element = event.currentTarget as HTMLElement
+
+  // Delay showing tooltip to avoid flicker (200ms for responsive feel)
+  tooltipTimeout = setTimeout(() => {
+    // Ensure element is still in the DOM
+    if (!element.isConnected) return
+
+    const rect = element.getBoundingClientRect()
+    tooltipPosition.value = {
+      x: rect.right + 10,
+      y: rect.top,
+    }
+    showTooltip.value = true
+  }, 200)
+}
+
+function handleMouseLeave() {
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+    tooltipTimeout = null
+  }
+  showTooltip.value = false
+}
+
 function handleDragStart(event: DragEvent) {
   if (!event.dataTransfer || props.disabled) return
+
+  // Hide tooltip when dragging
+  showTooltip.value = false
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+    tooltipTimeout = null
+  }
 
   event.dataTransfer.effectAllowed = 'copy'
   event.dataTransfer.setData('step-type', props.block.slug)
@@ -22,6 +63,12 @@ function handleDragStart(event: DragEvent) {
 
   emit('drag-start', event)
 }
+
+onUnmounted(() => {
+  if (tooltipTimeout) {
+    clearTimeout(tooltipTimeout)
+  }
+})
 </script>
 
 <template>
@@ -36,6 +83,8 @@ function handleDragStart(event: DragEvent) {
     :draggable="!disabled"
     @dragstart="handleDragStart"
     @dragend="emit('drag-end')"
+    @mouseenter="handleMouseEnter"
+    @mouseleave="handleMouseLeave"
   >
     <div
       class="item-color"
@@ -45,6 +94,13 @@ function handleDragStart(event: DragEvent) {
       <div class="item-name">{{ block.name }}</div>
       <div class="item-desc">{{ block.description || '' }}</div>
     </div>
+
+    <!-- Block preview tooltip -->
+    <BlockTooltip
+      :block="block"
+      :visible="showTooltip"
+      :position="tooltipPosition"
+    />
   </div>
 </template>
 

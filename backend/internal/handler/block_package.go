@@ -52,7 +52,7 @@ func (h *BlockPackageHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:    &userID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *BlockPackageHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	pkg, err := h.packageUsecase.GetByID(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *BlockPackageHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.packageUsecase.List(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *BlockPackageHandler) Update(w http.ResponseWriter, r *http.Request) {
 		BundleURL:    req.BundleURL,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h *BlockPackageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.packageUsecase.Delete(r.Context(), tenantID, id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -176,7 +176,7 @@ func (h *BlockPackageHandler) Publish(w http.ResponseWriter, r *http.Request) {
 
 	pkg, err := h.packageUsecase.Publish(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -194,7 +194,7 @@ func (h *BlockPackageHandler) Deprecate(w http.ResponseWriter, r *http.Request) 
 
 	pkg, err := h.packageUsecase.Deprecate(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

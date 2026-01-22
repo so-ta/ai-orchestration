@@ -16,18 +16,26 @@ func DocLoaderBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "doc-loader",
 		Version:     1,
-		Name:        "Document Loader",
-		Description: "Load documents from URL, text, or JSON",
+		Name:        LText("Document Loader", "ドキュメントローダー"),
+		Description: LText("Load documents from URL, text, or JSON", "URL、テキスト、またはJSONからドキュメントを読み込み"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "file-text",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
-				"source_type": {"type": "string", "enum": ["url", "text", "json"], "default": "url", "title": "Source Type"},
-				"url": {"type": "string", "title": "URL"},
-				"content": {"type": "string", "title": "Text Content"},
-				"strip_html": {"type": "boolean", "default": true, "title": "Strip HTML Tags"}
+				"source_type": {"type": "string", "enum": ["url", "text", "json"], "default": "url", "title": "Source Type", "description": "Document source type"},
+				"url": {"type": "string", "title": "URL", "description": "URL to load document from"},
+				"content": {"type": "string", "title": "Text Content", "description": "Text content to load"},
+				"strip_html": {"type": "boolean", "default": true, "title": "Strip HTML Tags", "description": "Remove HTML tags from content"}
+			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"source_type": {"type": "string", "enum": ["url", "text", "json"], "default": "url", "title": "ソースタイプ", "description": "ドキュメントのソースタイプ"},
+				"url": {"type": "string", "title": "URL", "description": "ドキュメントを読み込むURL"},
+				"content": {"type": "string", "title": "テキストコンテンツ", "description": "読み込むテキストコンテンツ"},
+				"strip_html": {"type": "boolean", "default": true, "title": "HTMLタグを除去", "description": "コンテンツからHTMLタグを除去"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{
@@ -36,11 +44,8 @@ func DocLoaderBlock() *SystemBlockDefinition {
 				"documents": {"type": "array"}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "input", Label: "Input", Schema: json.RawMessage(`{"type": "object"}`), Required: false, Description: "Optional source data"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Loaded documents"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Loaded documents", "読み込まれたドキュメント", true),
 		},
 		Code: `function isPrivateIp(hostname) {
   const parts = hostname.split('.').map(Number);
@@ -86,10 +91,10 @@ if (config.strip_html && content && content.includes('<')) {
   content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 return {documents: [{content, metadata, char_count: content.length}]};`,
-		UIConfig: json.RawMessage(`{"icon": "file-text", "color": "#F59E0B"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "DOC_001", Name: "FETCH_ERROR", Description: "Failed to fetch URL", Retryable: true},
-			{Code: "DOC_002", Name: "EMPTY_CONTENT", Description: "No content provided", Retryable: false},
+		UIConfig: LSchema(`{"icon": "file-text", "color": "#F59E0B"}`, `{"icon": "file-text", "color": "#F59E0B"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("DOC_001", "FETCH_ERROR", "取得エラー", "Failed to fetch URL", "URLの取得に失敗しました", true),
+			LError("DOC_002", "EMPTY_CONTENT", "空のコンテンツ", "No content provided", "コンテンツが提供されていません", false),
 		},
 		Enabled: true,
 	}
@@ -99,17 +104,24 @@ func TextSplitterBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "text-splitter",
 		Version:     1,
-		Name:        "Text Splitter",
-		Description: "Split documents into smaller chunks",
+		Name:        LText("Text Splitter", "テキスト分割"),
+		Description: LText("Split documents into smaller chunks", "ドキュメントを小さなチャンクに分割"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "scissors",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
-				"chunk_size": {"type": "integer", "default": 1000, "minimum": 100, "maximum": 8000, "title": "Chunk Size (chars)"},
-				"chunk_overlap": {"type": "integer", "default": 200, "minimum": 0, "title": "Overlap (chars)"},
-				"separator": {"type": "string", "default": "\\n\\n", "title": "Separator"}
+				"chunk_size": {"type": "integer", "default": 1000, "minimum": 100, "maximum": 8000, "title": "Chunk Size (chars)", "description": "Maximum characters per chunk"},
+				"chunk_overlap": {"type": "integer", "default": 200, "minimum": 0, "title": "Overlap (chars)", "description": "Character overlap between chunks"},
+				"separator": {"type": "string", "default": "\\n\\n", "title": "Separator", "description": "Text separator for splitting"}
+			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"chunk_size": {"type": "integer", "default": 1000, "minimum": 100, "maximum": 8000, "title": "チャンクサイズ（文字数）", "description": "チャンクあたりの最大文字数"},
+				"chunk_overlap": {"type": "integer", "default": 200, "minimum": 0, "title": "オーバーラップ（文字数）", "description": "チャンク間の文字オーバーラップ"},
+				"separator": {"type": "string", "default": "\\n\\n", "title": "区切り文字", "description": "分割用のテキスト区切り文字"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{
@@ -119,11 +131,8 @@ func TextSplitterBlock() *SystemBlockDefinition {
 				"chunk_count": {"type": "integer"}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "documents", Label: "Documents", Schema: json.RawMessage(`{"type": "array"}`), Required: true, Description: "Documents to split"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Split documents"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Split documents", "分割されたドキュメント", true),
 		},
 		Code: `const documents = input.documents || [{content: input.content || input.text}];
 if (!documents || documents.length === 0) throw new Error('[SPLIT_001] No content to split');
@@ -156,9 +165,9 @@ for (const doc of documents) {
   }
 }
 return {documents: result, chunk_count: result.length, original_count: documents.length};`,
-		UIConfig: json.RawMessage(`{"icon": "scissors", "color": "#06B6D4"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "SPLIT_001", Name: "NO_CONTENT", Description: "No content to split", Retryable: false},
+		UIConfig: LSchema(`{"icon": "scissors", "color": "#06B6D4"}`, `{"icon": "scissors", "color": "#06B6D4"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("SPLIT_001", "NO_CONTENT", "コンテンツなし", "No content to split", "分割するコンテンツがありません", false),
 		},
 		Enabled: true,
 	}
@@ -168,23 +177,36 @@ func RAGQueryBlock() *SystemBlockDefinition {
 	return &SystemBlockDefinition{
 		Slug:        "rag-query",
 		Version:     1,
-		Name:        "RAG Query",
-		Description: "Search documents and generate answer with LLM",
+		Name:        LText("RAG Query", "RAGクエリ"),
+		Description: LText("Search documents and generate answer with LLM", "ドキュメントを検索しLLMで回答を生成"),
 		Category:    domain.BlockCategoryAI,
 		Subcategory: domain.BlockSubcategoryRAG,
 		Icon:        "message-square",
-		ConfigSchema: json.RawMessage(`{
+		ConfigSchema: LSchema(`{
 			"type": "object",
 			"properties": {
 				"collection": {"type": "string", "title": "Collection Name", "description": "Collection name (can also be provided via input.collection)"},
-				"top_k": {"type": "integer", "default": 5, "title": "Search Results"},
-				"embedding_provider": {"type": "string", "default": "openai"},
-				"embedding_model": {"type": "string", "default": "text-embedding-3-small"},
-				"llm_provider": {"type": "string", "enum": ["openai", "anthropic"], "default": "openai", "title": "LLM Provider"},
-				"llm_model": {"type": "string", "default": "gpt-4", "title": "LLM Model"},
-				"system_prompt": {"type": "string", "title": "System Prompt"},
-				"temperature": {"type": "number", "default": 0.3, "minimum": 0, "maximum": 2},
-				"max_tokens": {"type": "integer", "default": 2000}
+				"top_k": {"type": "integer", "default": 5, "title": "Search Results", "description": "Number of search results to retrieve"},
+				"embedding_provider": {"type": "string", "default": "openai", "title": "Embedding Provider"},
+				"embedding_model": {"type": "string", "default": "text-embedding-3-small", "title": "Embedding Model"},
+				"llm_provider": {"type": "string", "enum": ["openai", "anthropic"], "default": "openai", "title": "LLM Provider", "description": "LLM provider for answer generation"},
+				"llm_model": {"type": "string", "default": "gpt-4", "title": "LLM Model", "description": "LLM model for answer generation"},
+				"system_prompt": {"type": "string", "title": "System Prompt", "description": "System prompt for LLM"},
+				"temperature": {"type": "number", "default": 0.3, "minimum": 0, "maximum": 2, "title": "Temperature"},
+				"max_tokens": {"type": "integer", "default": 2000, "title": "Max Tokens"}
+			}
+		}`, `{
+			"type": "object",
+			"properties": {
+				"collection": {"type": "string", "title": "コレクション名", "description": "コレクション名（input.collectionでも指定可能）"},
+				"top_k": {"type": "integer", "default": 5, "title": "検索結果数", "description": "取得する検索結果の数"},
+				"embedding_provider": {"type": "string", "default": "openai", "title": "埋め込みプロバイダー"},
+				"embedding_model": {"type": "string", "default": "text-embedding-3-small", "title": "埋め込みモデル"},
+				"llm_provider": {"type": "string", "enum": ["openai", "anthropic"], "default": "openai", "title": "LLMプロバイダー", "description": "回答生成用のLLMプロバイダー"},
+				"llm_model": {"type": "string", "default": "gpt-4", "title": "LLMモデル", "description": "回答生成用のLLMモデル"},
+				"system_prompt": {"type": "string", "title": "システムプロンプト", "description": "LLM用のシステムプロンプト"},
+				"temperature": {"type": "number", "default": 0.3, "minimum": 0, "maximum": 2, "title": "温度"},
+				"max_tokens": {"type": "integer", "default": 2000, "title": "最大トークン数"}
 			}
 		}`),
 		OutputSchema: json.RawMessage(`{
@@ -194,11 +216,8 @@ func RAGQueryBlock() *SystemBlockDefinition {
 				"sources": {"type": "array"}
 			}
 		}`),
-		InputPorts: []domain.InputPort{
-			{Name: "query", Label: "Query", Schema: json.RawMessage(`{"type": "string"}`), Required: true, Description: "Question to answer"},
-		},
-		OutputPorts: []domain.OutputPort{
-			{Name: "output", Label: "Output", IsDefault: true, Description: "Answer with sources"},
+		OutputPorts: []domain.LocalizedOutputPort{
+			LPortWithDesc("output", "Output", "出力", "Answer with sources", "ソース付きの回答", true),
 		},
 		Code: `const query = input.query || input.question;
 if (!query) throw new Error('[RAG_001] Query is required');
@@ -217,10 +236,10 @@ const systemPrompt = config.system_prompt || 'You are a helpful assistant. Answe
 const userPrompt = '## Context\n\n' + context + '\n\n## Question\n\n' + query + '\n\n## Answer';
 const llmResponse = ctx.llm.chat(llmProvider, llmModel, {messages: [{role: 'system', content: systemPrompt}, {role: 'user', content: userPrompt}], temperature: config.temperature || 0.3, max_tokens: config.max_tokens || 2000});
 return {answer: llmResponse.content, sources: searchResult.matches.map(m => ({id: m.id, score: m.score, content: (m.content || '').substring(0, 200) + '...', metadata: m.metadata})), usage: {embedding: embedResult.usage, llm: llmResponse.usage}};`,
-		UIConfig: json.RawMessage(`{"icon": "message-square", "color": "#8B5CF6"}`),
-		ErrorCodes: []domain.ErrorCodeDef{
-			{Code: "RAG_001", Name: "QUERY_REQUIRED", Description: "Query is required", Retryable: false},
-			{Code: "RAG_002", Name: "COLLECTION_REQUIRED", Description: "Collection is required", Retryable: false},
+		UIConfig: LSchema(`{"icon": "message-square", "color": "#8B5CF6"}`, `{"icon": "message-square", "color": "#8B5CF6"}`),
+		ErrorCodes: []domain.LocalizedErrorCodeDef{
+			LError("RAG_001", "QUERY_REQUIRED", "クエリ必須", "Query is required", "クエリが必要です", false),
+			LError("RAG_002", "COLLECTION_REQUIRED", "コレクション必須", "Collection is required", "コレクションが必要です", false),
 		},
 		Enabled: true,
 	}

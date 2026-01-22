@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/souta/ai-orchestration/internal/domain"
+	"github.com/souta/ai-orchestration/internal/middleware"
 )
 
 // Response represents a standard API response
@@ -62,7 +63,7 @@ func JSONList(w http.ResponseWriter, status int, data interface{}, page, limit, 
 	})
 }
 
-// Error writes an error response
+// Error writes an error response (uses message as-is)
 func Error(w http.ResponseWriter, status int, code, message string, details interface{}) {
 	JSON(w, status, ErrorResponse{
 		Error: ErrorDetail{
@@ -73,14 +74,30 @@ func Error(w http.ResponseWriter, status int, code, message string, details inte
 	})
 }
 
-// HandleError converts domain errors to HTTP responses
-func HandleError(w http.ResponseWriter, err error) {
+// ErrorL writes a localized error response using the error code
+// The message is looked up from domain.ErrorMessages based on the request's language
+func ErrorL(w http.ResponseWriter, r *http.Request, status int, code string, details interface{}) {
+	lang := middleware.GetLanguage(r.Context())
+	message := domain.GetErrorMessage(lang, code)
+	JSON(w, status, ErrorResponse{
+		Error: ErrorDetail{
+			Code:    code,
+			Message: message,
+			Details: details,
+		},
+	})
+}
+
+// HandleErrorL converts domain errors to HTTP responses with localized messages
+func HandleErrorL(w http.ResponseWriter, r *http.Request, err error) {
+	lang := middleware.GetLanguage(r.Context())
+
 	// Check for input schema validation errors first
 	var inputValidationErrs *domain.InputValidationErrors
 	if errors.As(err, &inputValidationErrs) {
-		Error(w, http.StatusBadRequest, "SCHEMA_VALIDATION_ERROR", "Input validation failed", map[string]interface{}{
-			"errors": inputValidationErrs.Errors,
-		})
+		Error(w, http.StatusBadRequest, "SCHEMA_VALIDATION_ERROR",
+			domain.GetErrorMessage(lang, "SCHEMA_VALIDATION_ERROR"),
+			map[string]interface{}{"errors": inputValidationErrs.Errors})
 		return
 	}
 
@@ -92,82 +109,104 @@ func HandleError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	switch {
-	case errors.Is(err, domain.ErrProjectNotFound),
-		errors.Is(err, domain.ErrProjectVersionNotFound),
-		errors.Is(err, domain.ErrStepNotFound),
-		errors.Is(err, domain.ErrEdgeNotFound),
-		errors.Is(err, domain.ErrRunNotFound),
-		errors.Is(err, domain.ErrScheduleNotFound),
-		errors.Is(err, domain.ErrWebhookNotFound),
-		errors.Is(err, domain.ErrTenantNotFound),
-		errors.Is(err, domain.ErrBlockGroupNotFound),
-		errors.Is(err, domain.ErrCredentialNotFound),
-		errors.Is(err, domain.ErrSystemCredentialNotFound),
-		errors.Is(err, domain.ErrBlockDefinitionNotFound),
-		errors.Is(err, domain.ErrStepRunNotFound),
-		errors.Is(err, domain.ErrOAuth2ProviderNotFound),
-		errors.Is(err, domain.ErrOAuth2AppNotFound),
-		errors.Is(err, domain.ErrOAuth2ConnectionNotFound),
-		errors.Is(err, domain.ErrCredentialShareNotFound):
-		Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
+	// Map domain errors to error codes
+	type errorMapping struct {
+		err    error
+		status int
+		code   string
+	}
 
-	case errors.Is(err, domain.ErrRunNotCancellable),
-		errors.Is(err, domain.ErrRunNotResumable),
-		errors.Is(err, domain.ErrScheduleDisabled):
-		Error(w, http.StatusConflict, "INVALID_STATE", err.Error(), nil)
+	notFoundErrors := []error{
+		domain.ErrProjectNotFound, domain.ErrProjectVersionNotFound,
+		domain.ErrStepNotFound, domain.ErrEdgeNotFound,
+		domain.ErrRunNotFound, domain.ErrScheduleNotFound,
+		domain.ErrTenantNotFound, domain.ErrBlockGroupNotFound,
+		domain.ErrCredentialNotFound, domain.ErrSystemCredentialNotFound,
+		domain.ErrBlockDefinitionNotFound, domain.ErrStepRunNotFound,
+		domain.ErrOAuth2ProviderNotFound, domain.ErrOAuth2AppNotFound,
+		domain.ErrOAuth2ConnectionNotFound, domain.ErrCredentialShareNotFound,
+	}
+	for _, e := range notFoundErrors {
+		if errors.Is(err, e) {
+			Error(w, http.StatusNotFound, "NOT_FOUND", domain.GetErrorMessage(lang, "NOT_FOUND"), nil)
+			return
+		}
+	}
+
+	switch {
+	case errors.Is(err, domain.ErrRunNotCancellable):
+		Error(w, http.StatusConflict, "RUN_NOT_CANCELLABLE", domain.GetErrorMessage(lang, "RUN_NOT_CANCELLABLE"), nil)
+	case errors.Is(err, domain.ErrRunNotResumable):
+		Error(w, http.StatusConflict, "RUN_NOT_RESUMABLE", domain.GetErrorMessage(lang, "RUN_NOT_RESUMABLE"), nil)
+	case errors.Is(err, domain.ErrScheduleDisabled):
+		Error(w, http.StatusConflict, "SCHEDULE_DISABLED", domain.GetErrorMessage(lang, "SCHEDULE_DISABLED"), nil)
 
 	case errors.Is(err, domain.ErrCredentialExpired),
 		errors.Is(err, domain.ErrCredentialRevoked),
 		errors.Is(err, domain.ErrSystemCredentialExpired),
-		errors.Is(err, domain.ErrSystemCredentialRevoked),
-		errors.Is(err, domain.ErrOAuth2TokenExpired),
-		errors.Is(err, domain.ErrOAuth2RefreshFailed):
-		Error(w, http.StatusForbidden, "CREDENTIAL_UNAVAILABLE", err.Error(), nil)
+		errors.Is(err, domain.ErrSystemCredentialRevoked):
+		Error(w, http.StatusForbidden, "CREDENTIAL_UNAVAILABLE", domain.GetErrorMessage(lang, "CREDENTIAL_UNAVAILABLE"), nil)
 
-	case errors.Is(err, domain.ErrOAuth2AppAlreadyExists),
-		errors.Is(err, domain.ErrCredentialShareDuplicate):
-		Error(w, http.StatusConflict, "ALREADY_EXISTS", err.Error(), nil)
+	case errors.Is(err, domain.ErrOAuth2TokenExpired):
+		Error(w, http.StatusForbidden, "OAUTH2_TOKEN_EXPIRED", domain.GetErrorMessage(lang, "OAUTH2_TOKEN_EXPIRED"), nil)
+	case errors.Is(err, domain.ErrOAuth2RefreshFailed):
+		Error(w, http.StatusForbidden, "OAUTH2_REFRESH_FAILED", domain.GetErrorMessage(lang, "OAUTH2_REFRESH_FAILED"), nil)
+
+	case errors.Is(err, domain.ErrOAuth2AppAlreadyExists):
+		Error(w, http.StatusConflict, "OAUTH2_APP_ALREADY_EXISTS", domain.GetErrorMessage(lang, "OAUTH2_APP_ALREADY_EXISTS"), nil)
+	case errors.Is(err, domain.ErrCredentialShareDuplicate):
+		Error(w, http.StatusConflict, "ALREADY_EXISTS", domain.GetErrorMessage(lang, "ALREADY_EXISTS"), nil)
 
 	case errors.Is(err, domain.ErrOAuth2InvalidState):
-		Error(w, http.StatusBadRequest, "INVALID_STATE", err.Error(), nil)
+		Error(w, http.StatusBadRequest, "OAUTH2_INVALID_STATE", domain.GetErrorMessage(lang, "OAUTH2_INVALID_STATE"), nil)
 
-	case errors.Is(err, domain.ErrCredentialAccessDenied),
-		errors.Is(err, domain.ErrCredentialBindingMissing),
-		errors.Is(err, domain.ErrCredentialInvalidScope):
-		Error(w, http.StatusForbidden, "ACCESS_DENIED", err.Error(), nil)
+	case errors.Is(err, domain.ErrCredentialAccessDenied):
+		Error(w, http.StatusForbidden, "CREDENTIAL_ACCESS_DENIED", domain.GetErrorMessage(lang, "CREDENTIAL_ACCESS_DENIED"), nil)
+	case errors.Is(err, domain.ErrCredentialBindingMissing):
+		Error(w, http.StatusForbidden, "CREDENTIAL_BINDING_MISSING", domain.GetErrorMessage(lang, "CREDENTIAL_BINDING_MISSING"), nil)
+	case errors.Is(err, domain.ErrCredentialInvalidScope):
+		Error(w, http.StatusForbidden, "CREDENTIAL_INVALID_SCOPE", domain.GetErrorMessage(lang, "CREDENTIAL_INVALID_SCOPE"), nil)
 
 	case errors.Is(err, domain.ErrBlockDefinitionSlugExists):
-		Error(w, http.StatusConflict, "SLUG_EXISTS", err.Error(), nil)
-
+		Error(w, http.StatusConflict, "BLOCK_SLUG_EXISTS", domain.GetErrorMessage(lang, "BLOCK_SLUG_EXISTS"), nil)
 	case errors.Is(err, domain.ErrBlockCodeHidden):
-		Error(w, http.StatusForbidden, "CODE_HIDDEN", err.Error(), nil)
+		Error(w, http.StatusForbidden, "BLOCK_CODE_HIDDEN", domain.GetErrorMessage(lang, "BLOCK_CODE_HIDDEN"), nil)
 
-	case errors.Is(err, domain.ErrProjectAlreadyPublished),
-		errors.Is(err, domain.ErrProjectNotEditable),
-		errors.Is(err, domain.ErrEdgeDuplicate):
-		Error(w, http.StatusConflict, "CONFLICT", err.Error(), nil)
+	case errors.Is(err, domain.ErrProjectAlreadyPublished):
+		Error(w, http.StatusConflict, "PROJECT_ALREADY_PUBLISHED", domain.GetErrorMessage(lang, "PROJECT_ALREADY_PUBLISHED"), nil)
+	case errors.Is(err, domain.ErrProjectNotEditable):
+		Error(w, http.StatusConflict, "PROJECT_NOT_EDITABLE", domain.GetErrorMessage(lang, "PROJECT_NOT_EDITABLE"), nil)
+	case errors.Is(err, domain.ErrEdgeDuplicate):
+		Error(w, http.StatusConflict, "EDGE_DUPLICATE", domain.GetErrorMessage(lang, "EDGE_DUPLICATE"), nil)
 
-	case errors.Is(err, domain.ErrProjectHasCycle),
-		errors.Is(err, domain.ErrProjectHasUnconnected),
-		errors.Is(err, domain.ErrProjectHasUnreachable),
-		errors.Is(err, domain.ErrEdgeSelfLoop),
-		errors.Is(err, domain.ErrEdgeCreatesCycle),
-		errors.Is(err, domain.ErrInvalidStepType),
-		errors.Is(err, domain.ErrScheduleInvalidCron),
-		errors.Is(err, domain.ErrBlockGroupInvalidType),
-		errors.Is(err, domain.ErrStepCannotBeInGroup),
-		errors.Is(err, domain.ErrBlockGroupInvalidRole):
-		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error(), nil)
+	case errors.Is(err, domain.ErrProjectHasCycle):
+		Error(w, http.StatusBadRequest, "PROJECT_HAS_CYCLE", domain.GetErrorMessage(lang, "PROJECT_HAS_CYCLE"), nil)
+	case errors.Is(err, domain.ErrProjectHasUnconnected):
+		Error(w, http.StatusBadRequest, "PROJECT_HAS_UNCONNECTED", domain.GetErrorMessage(lang, "PROJECT_HAS_UNCONNECTED"), nil)
+	case errors.Is(err, domain.ErrProjectHasUnreachable):
+		Error(w, http.StatusBadRequest, "PROJECT_HAS_UNREACHABLE", domain.GetErrorMessage(lang, "PROJECT_HAS_UNREACHABLE"), nil)
+	case errors.Is(err, domain.ErrEdgeSelfLoop):
+		Error(w, http.StatusBadRequest, "EDGE_SELF_LOOP", domain.GetErrorMessage(lang, "EDGE_SELF_LOOP"), nil)
+	case errors.Is(err, domain.ErrEdgeCreatesCycle):
+		Error(w, http.StatusBadRequest, "EDGE_CREATES_CYCLE", domain.GetErrorMessage(lang, "EDGE_CREATES_CYCLE"), nil)
+	case errors.Is(err, domain.ErrInvalidStepType):
+		Error(w, http.StatusBadRequest, "INVALID_STEP_TYPE", domain.GetErrorMessage(lang, "INVALID_STEP_TYPE"), nil)
+	case errors.Is(err, domain.ErrScheduleInvalidCron):
+		Error(w, http.StatusBadRequest, "SCHEDULE_INVALID_CRON", domain.GetErrorMessage(lang, "SCHEDULE_INVALID_CRON"), nil)
+	case errors.Is(err, domain.ErrBlockGroupInvalidType):
+		Error(w, http.StatusBadRequest, "BLOCK_GROUP_INVALID_TYPE", domain.GetErrorMessage(lang, "BLOCK_GROUP_INVALID_TYPE"), nil)
+	case errors.Is(err, domain.ErrStepCannotBeInGroup):
+		Error(w, http.StatusBadRequest, "STEP_CANNOT_BE_IN_GROUP", domain.GetErrorMessage(lang, "STEP_CANNOT_BE_IN_GROUP"), nil)
+	case errors.Is(err, domain.ErrBlockGroupInvalidRole):
+		Error(w, http.StatusBadRequest, "BLOCK_GROUP_INVALID_ROLE", domain.GetErrorMessage(lang, "BLOCK_GROUP_INVALID_ROLE"), nil)
 
 	case errors.Is(err, domain.ErrUnauthorized):
-		Error(w, http.StatusUnauthorized, "UNAUTHORIZED", err.Error(), nil)
-
+		Error(w, http.StatusUnauthorized, "UNAUTHORIZED", domain.GetErrorMessage(lang, "UNAUTHORIZED"), nil)
 	case errors.Is(err, domain.ErrForbidden):
-		Error(w, http.StatusForbidden, "FORBIDDEN", err.Error(), nil)
+		Error(w, http.StatusForbidden, "FORBIDDEN", domain.GetErrorMessage(lang, "FORBIDDEN"), nil)
 
 	default:
 		slog.Error("internal error", "error", err)
-		Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error", nil)
+		Error(w, http.StatusInternalServerError, "INTERNAL_ERROR", domain.GetErrorMessage(lang, "INTERNAL_ERROR"), nil)
 	}
 }

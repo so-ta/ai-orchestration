@@ -4,6 +4,15 @@ export function useApi() {
   const baseURL = config.public.apiBase
   const { getToken, isAuthenticated, isDevMode, devRole } = useAuth()
 
+  // Get i18n locale for Accept-Language header
+  // Use try-catch for test environments where useI18n may not be available
+  let locale: { value: string }
+  try {
+    locale = useI18n().locale
+  } catch {
+    locale = { value: 'ja' }
+  }
+
   async function request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -12,6 +21,7 @@ export function useApi() {
 
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
+      'Accept-Language': locale.value,
       ...options.headers,
     }
 

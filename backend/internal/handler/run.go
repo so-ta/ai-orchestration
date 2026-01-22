@@ -29,7 +29,6 @@ func NewRunHandler(runUsecase *usecase.RunUsecase, auditService *usecase.AuditSe
 type CreateRunRequest struct {
 	Input       json.RawMessage `json:"input"`
 	TriggeredBy string          `json:"triggered_by,omitempty"` // manual, webhook, schedule, test, internal
-	Mode        string          `json:"mode,omitempty"`         // Deprecated: use triggered_by instead (backward compat: "test" maps to triggered_by="test")
 	Version     int             `json:"version,omitempty"`      // 0 or omitted means latest
 	StartStepID *string         `json:"start_step_id"`          // Required: which Start block to execute from
 }
@@ -53,25 +52,17 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Determine triggered_by with backward compatibility for mode
+	// Determine triggered_by
 	triggeredBy := domain.TriggerTypeManual // default
-	if req.TriggeredBy != "" {
-		// New API: use triggered_by directly
-		switch req.TriggeredBy {
-		case "test":
-			triggeredBy = domain.TriggerTypeTest
-		case "webhook":
-			triggeredBy = domain.TriggerTypeWebhook
-		case "schedule":
-			triggeredBy = domain.TriggerTypeSchedule
-		case "internal":
-			triggeredBy = domain.TriggerTypeInternal
-		default:
-			triggeredBy = domain.TriggerTypeManual
-		}
-	} else if req.Mode == "test" {
-		// Backward compatibility: mode: "test" maps to triggered_by: "test"
+	switch req.TriggeredBy {
+	case "test":
 		triggeredBy = domain.TriggerTypeTest
+	case "webhook":
+		triggeredBy = domain.TriggerTypeWebhook
+	case "schedule":
+		triggeredBy = domain.TriggerTypeSchedule
+	case "internal":
+		triggeredBy = domain.TriggerTypeInternal
 	}
 
 	var userIDPtr *uuid.UUID
@@ -81,7 +72,7 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Parse start_step_id (required)
 	if req.StartStepID == nil || *req.StartStepID == "" {
-		HandleError(w, domain.NewValidationError("start_step_id", "start_step_id is required"))
+		HandleErrorL(w, r, domain.NewValidationError("start_step_id", "start_step_id is required"))
 		return
 	}
 	startStepID, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
@@ -99,7 +90,7 @@ func (h *RunHandler) Create(w http.ResponseWriter, r *http.Request) {
 		StartStepID: &startStepID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -130,7 +121,7 @@ func (h *RunHandler) List(w http.ResponseWriter, r *http.Request) {
 		Limit:     limit,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -147,7 +138,7 @@ func (h *RunHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.runUsecase.GetWithDetailsAndDefinition(r.Context(), tenantID, runID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -169,7 +160,7 @@ func (h *RunHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 
 	run, err := h.runUsecase.Cancel(r.Context(), tenantID, runID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -209,7 +200,7 @@ func (h *RunHandler) ExecuteSingleStep(w http.ResponseWriter, r *http.Request) {
 		Input:    req.Input,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -247,7 +238,7 @@ func (h *RunHandler) ResumeFromStep(w http.ResponseWriter, r *http.Request) {
 		InputOverride: req.InputOverride,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -268,7 +259,7 @@ func (h *RunHandler) GetStepHistory(w http.ResponseWriter, r *http.Request) {
 
 	stepRuns, err := h.runUsecase.GetStepHistory(r.Context(), tenantID, runID, stepID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -318,7 +309,7 @@ func (h *RunHandler) TestStepInline(w http.ResponseWriter, r *http.Request) {
 		UserID:    userIDPtr,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

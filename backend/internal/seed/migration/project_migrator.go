@@ -139,7 +139,7 @@ func (m *ProjectMigrator) createProject(ctx context.Context, seedProject *workfl
 		Description: seedProject.Description,
 		Status:      domain.ProjectStatusPublished,
 		Version:     seedProject.Version,
-		Variables:   seedProject.InputSchema, // Use InputSchema as Variables for backward compat
+		Variables:   seedProject.InputSchema, // Seed definition uses InputSchema field name
 		IsSystem:    true,
 		SystemSlug:  &seedProject.SystemSlug,
 		PublishedAt: &now,
@@ -246,7 +246,7 @@ func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflow
 
 		var blockDefID *uuid.UUID
 
-		// Resolve block ID from slug (preferred) or use direct ID (deprecated)
+		// Resolve block ID from slug
 		if seedStep.BlockSlug != "" && m.blockRepo != nil {
 			// Look up block by slug (system blocks have tenant_id = NULL)
 			block, err := m.blockRepo.GetBySlug(ctx, nil, seedStep.BlockSlug)
@@ -255,12 +255,6 @@ func (m *ProjectMigrator) createSteps(ctx context.Context, seedProject *workflow
 			}
 			if block != nil {
 				blockDefID = &block.ID
-			}
-		} else if seedStep.BlockDefID != nil {
-			// Fallback to direct ID (deprecated)
-			parsed, err := uuid.Parse(*seedStep.BlockDefID)
-			if err == nil {
-				blockDefID = &parsed
 			}
 		}
 
@@ -405,21 +399,6 @@ func (m *ProjectMigrator) createEdgesWithGroupMap(ctx context.Context, seedProje
 			}
 		}
 
-		// Validate target port if block repo is available
-		if m.blockRepo != nil && seedEdge.TargetPort != "" && seedEdge.TargetPort != "group-input" {
-			var blockSlug string
-			if seedEdge.TargetTempID != "" {
-				blockSlug = stepTypeMap[seedEdge.TargetTempID]
-			} else if seedEdge.TargetGroupTempID != "" {
-				blockSlug = groupTypeMap[seedEdge.TargetGroupTempID]
-			}
-			if blockSlug != "" {
-				if err := m.validateTargetPort(ctx, seedEdge.TargetPort, blockSlug); err != nil {
-					return fmt.Errorf("edge target port validation failed for %s->%s: %w", seedEdge.SourceTempID+seedEdge.SourceGroupTempID, seedEdge.TargetTempID+seedEdge.TargetGroupTempID, err)
-				}
-			}
-		}
-
 		var condition *string
 		if seedEdge.Condition != "" {
 			condition = &seedEdge.Condition
@@ -434,7 +413,6 @@ func (m *ProjectMigrator) createEdgesWithGroupMap(ctx context.Context, seedProje
 			SourceBlockGroupID: sourceGroupID,
 			TargetBlockGroupID: targetGroupID,
 			SourcePort:         seedEdge.SourcePort,
-			TargetPort:         seedEdge.TargetPort,
 			Condition:          condition,
 			CreatedAt:          now,
 		}
@@ -451,10 +429,6 @@ func (m *ProjectMigrator) createEdgesWithGroupMap(ctx context.Context, seedProje
 func (m *ProjectMigrator) validateSourcePort(ctx context.Context, sourcePort, blockSlug string) error {
 	blockDef, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
 	if err != nil {
-		// If block definition not found, skip validation (legacy blocks)
-		if errors.Is(err, domain.ErrBlockDefinitionNotFound) {
-			return nil
-		}
 		return err
 	}
 
@@ -474,35 +448,6 @@ func (m *ProjectMigrator) validateSourcePort(ctx context.Context, sourcePort, bl
 	}
 
 	return fmt.Errorf("source port '%s' not found in block '%s' output ports (available: %v)", sourcePort, blockSlug, getPortNames(allPorts))
-}
-
-// validateTargetPort validates that the target port exists in the block definition
-func (m *ProjectMigrator) validateTargetPort(ctx context.Context, targetPort, blockSlug string) error {
-	blockDef, err := m.blockRepo.GetBySlug(ctx, nil, blockSlug)
-	if err != nil {
-		// If block definition not found, skip validation (legacy blocks)
-		if errors.Is(err, domain.ErrBlockDefinitionNotFound) {
-			return nil
-		}
-		return err
-	}
-
-	// Check current block's input ports
-	for _, port := range blockDef.InputPorts {
-		if port.Name == targetPort {
-			return nil
-		}
-	}
-
-	// Check inherited ports from parent blocks
-	allPorts := m.getInheritedInputPorts(ctx, blockDef)
-	for _, port := range allPorts {
-		if port.Name == targetPort {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("target port '%s' not found in block '%s' input ports (available: %v)", targetPort, blockSlug, getInputPortNames(allPorts))
 }
 
 // getInheritedOutputPorts recursively collects output ports from parent blocks
@@ -536,48 +481,8 @@ func (m *ProjectMigrator) getInheritedOutputPorts(ctx context.Context, blockDef 
 	return allPorts
 }
 
-// getInheritedInputPorts recursively collects input ports from parent blocks
-func (m *ProjectMigrator) getInheritedInputPorts(ctx context.Context, blockDef *domain.BlockDefinition) []domain.InputPort {
-	var allPorts []domain.InputPort
-
-	// Start with current block's ports
-	allPorts = append(allPorts, blockDef.InputPorts...)
-
-	// Recursively get parent block's ports
-	if blockDef.ParentBlockID != nil {
-		parentBlock, err := m.blockRepo.GetByID(ctx, *blockDef.ParentBlockID)
-		if err == nil && parentBlock != nil {
-			parentPorts := m.getInheritedInputPorts(ctx, parentBlock)
-			// Add parent ports that don't exist in current block
-			for _, pp := range parentPorts {
-				found := false
-				for _, cp := range allPorts {
-					if cp.Name == pp.Name {
-						found = true
-						break
-					}
-				}
-				if !found {
-					allPorts = append(allPorts, pp)
-				}
-			}
-		}
-	}
-
-	return allPorts
-}
-
 // getPortNames extracts port names from output ports for error messages
 func getPortNames(ports []domain.OutputPort) []string {
-	names := make([]string, len(ports))
-	for i, p := range ports {
-		names[i] = p.Name
-	}
-	return names
-}
-
-// getInputPortNames extracts port names from input ports for error messages
-func getInputPortNames(ports []domain.InputPort) []string {
 	names := make([]string, len(ports))
 	for i, p := range ports {
 		names[i] = p.Name
@@ -593,7 +498,7 @@ func (m *ProjectMigrator) updateProject(ctx context.Context, existing *domain.Pr
 	existing.Name = seedProject.Name
 	existing.Description = seedProject.Description
 	existing.Version = seedProject.Version
-	existing.Variables = seedProject.InputSchema // Use InputSchema as Variables for backward compat
+	existing.Variables = seedProject.InputSchema // Seed definition uses InputSchema field name
 	existing.UpdatedAt = now
 
 	if err := m.projectRepo.Update(ctx, existing); err != nil {

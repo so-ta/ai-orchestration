@@ -70,7 +70,7 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Validate credential_bindings format
 	if err := validateCredentialBindings(req.CredentialBindings); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *StepHandler) Create(w http.ResponseWriter, r *http.Request) {
 		PositionY:          req.Position.Y,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *StepHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	steps, err := h.stepUsecase.List(r.Context(), tenantID, projectID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -144,7 +144,7 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Validate credential_bindings format
 	if err := validateCredentialBindings(req.CredentialBindings); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func (h *StepHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	step, err := h.stepUsecase.Update(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *StepHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.stepUsecase.Delete(r.Context(), tenantID, projectID, stepID); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -232,7 +232,7 @@ func (h *StepHandler) UpdateRetryConfig(w http.ResponseWriter, r *http.Request) 
 		},
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (h *StepHandler) GetRetryConfig(w http.ResponseWriter, r *http.Request) {
 
 	config, err := h.stepUsecase.GetRetryConfig(r.Context(), tenantID, projectID, stepID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -279,9 +279,77 @@ func (h *StepHandler) DeleteRetryConfig(w http.ResponseWriter, r *http.Request) 
 		RetryConfig: nil,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// EnableTrigger handles POST /api/v1/projects/{project_id}/steps/{step_id}/trigger/enable
+func (h *StepHandler) EnableTrigger(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	projectID, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
+		return
+	}
+
+	step, err := h.stepUsecase.EnableTrigger(r.Context(), tenantID, projectID, stepID)
+	if err != nil {
+		HandleErrorL(w, r, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, step)
+}
+
+// DisableTrigger handles POST /api/v1/projects/{project_id}/steps/{step_id}/trigger/disable
+func (h *StepHandler) DisableTrigger(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	projectID, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
+		return
+	}
+
+	step, err := h.stepUsecase.DisableTrigger(r.Context(), tenantID, projectID, stepID)
+	if err != nil {
+		HandleErrorL(w, r, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, step)
+}
+
+// TriggerStatusResponse represents the trigger status response
+type TriggerStatusResponse struct {
+	Enabled bool `json:"enabled"`
+}
+
+// GetTriggerStatus handles GET /api/v1/projects/{project_id}/steps/{step_id}/trigger/status
+func (h *StepHandler) GetTriggerStatus(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	projectID, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+	stepID, ok := parseUUID(w, r, "step_id", "step ID")
+	if !ok {
+		return
+	}
+
+	enabled, err := h.stepUsecase.GetTriggerStatus(r.Context(), tenantID, projectID, stepID)
+	if err != nil {
+		HandleErrorL(w, r, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, TriggerStatusResponse{Enabled: enabled})
 }

@@ -345,7 +345,6 @@ type BlockDefinition struct {
     ConfigSchema  json.RawMessage  // config用JSONスキーマ
     InputSchema   json.RawMessage  // 入力用JSONスキーマ
     OutputSchema  json.RawMessage  // 出力用JSONスキーマ
-    InputPorts    []InputPort
     OutputPorts   []OutputPort
     ErrorCodes    []ErrorCodeDef
 

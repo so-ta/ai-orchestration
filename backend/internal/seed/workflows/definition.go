@@ -36,7 +36,6 @@ type SystemStepDefinition struct {
 	TriggerConfig    json.RawMessage `json:"trigger_config,omitempty"`      // For Start blocks: trigger-specific config (includes entry_point)
 	PositionX        int             `json:"position_x"`                    // Canvas X position
 	PositionY        int             `json:"position_y"`                    // Canvas Y position
-	BlockDefID       *string         `json:"block_definition_id"`           // Optional block definition ID reference (deprecated, use BlockSlug)
 	BlockSlug        string          `json:"block_slug,omitempty"`          // Block slug reference (resolved to ID at migration time)
 	BlockGroupTempID string          `json:"block_group_temp_id,omitempty"` // Parent block group temp_id (for steps inside a group)
 	// Agent Group tool definition (for entry point steps within Agent groups)
@@ -54,7 +53,6 @@ type SystemEdgeDefinition struct {
 	SourceGroupTempID string `json:"source_group_temp_id,omitempty"` // Source block group temp_id
 	TargetGroupTempID string `json:"target_group_temp_id,omitempty"` // Target block group temp_id
 	SourcePort        string `json:"source_port"`                    // Source port name (e.g., "output", "true", "false", "out")
-	TargetPort        string `json:"target_port"`                    // Target port name (e.g., "input", "in")
 	Condition         string `json:"condition,omitempty"`            // Optional condition expression
 }
 

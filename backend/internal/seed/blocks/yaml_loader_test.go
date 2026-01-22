@@ -45,13 +45,13 @@ func TestYAMLLoader_LoadHTTPBlock(t *testing.T) {
 	}
 
 	require.NotNil(t, httpBlock, "HTTP block should be loaded")
-	assert.Equal(t, "HTTP Request", httpBlock.Name)
+	assert.Equal(t, "HTTP Request", httpBlock.Name.EN)
 	assert.Equal(t, domain.BlockCategoryApps, httpBlock.Category)
 	assert.Equal(t, domain.BlockSubcategoryWeb, httpBlock.Subcategory)
 	assert.Equal(t, 2, httpBlock.Version)
 	assert.True(t, httpBlock.Enabled)
 	assert.NotEmpty(t, httpBlock.Code)
-	assert.NotEmpty(t, httpBlock.ConfigSchema)
+	assert.NotEmpty(t, httpBlock.ConfigSchema.EN)
 }
 
 func TestYAMLLoader_LoadBlockWithInheritance(t *testing.T) {
@@ -145,7 +145,7 @@ func TestYAMLLoader_LoadBlockWithErrorCodes(t *testing.T) {
 
 	// Check first error code
 	assert.Equal(t, "HTTP_001", httpBlock.ErrorCodes[0].Code)
-	assert.Equal(t, "CONNECTION_ERROR", httpBlock.ErrorCodes[0].Name)
+	assert.Equal(t, "CONNECTION_ERROR", httpBlock.ErrorCodes[0].Name.EN)
 	assert.True(t, httpBlock.ErrorCodes[0].Retryable)
 }
 
@@ -238,7 +238,7 @@ func TestYAMLLoader_SlackBlock(t *testing.T) {
 	}
 
 	require.NotNil(t, slackBlock, "Slack block should be loaded")
-	assert.Equal(t, "Slack", slackBlock.Name)
+	assert.Equal(t, "Slack", slackBlock.Name.EN)
 	assert.Equal(t, "webhook", slackBlock.ParentBlockSlug)
 	assert.Equal(t, domain.BlockSubcategorySlack, slackBlock.Subcategory)
 

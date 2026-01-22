@@ -165,7 +165,7 @@ func (e *ChannelEventEmitter) Close() {
 	}
 }
 
-// NoopEventEmitter is an emitter that does nothing (for backwards compatibility)
+// NoopEventEmitter is an emitter that does nothing (useful for testing)
 type NoopEventEmitter struct{}
 
 // Emit does nothing

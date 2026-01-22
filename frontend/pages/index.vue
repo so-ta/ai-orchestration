@@ -12,6 +12,7 @@
  */
 
 import type { Project, Step, StepType, BlockDefinition, BlockGroup, BlockGroupType, Run, GroupRole, OutputPort, StepRun, AgentConfig } from '~/types/api'
+import type { StepTestResult } from '~/composables/test'
 import type DagEditor from '~/components/dag-editor/DagEditor.vue'
 import type { SlideOutPanel } from '~/composables/useEditorState'
 import { calculateLayout, calculateLayoutWithGroups, parseNodeId } from '~/utils/graph-layout'
@@ -92,6 +93,13 @@ const showRunDialog = ref(false)
 
 // Welcome dialog state (shows on new project creation)
 const showWelcomeDialog = ref(false)
+
+// Setup wizard state (shows after Copilot workflow generation with incomplete steps)
+const showSetupWizard = ref(false)
+
+// Step test result floating panel state
+const showTestResultPanel = ref(false)
+const testResultData = ref<StepTestResult | null>(null)
 
 // Right panel mode: 'block' for properties, 'run' for run details, 'group' for group properties
 type RightPanelMode = 'block' | 'run' | 'group'
@@ -181,6 +189,12 @@ async function initializeProject() {
       try {
         await loadProject(projectId)
         setProjectInUrl(projectId)
+
+        // Show welcome dialog for projects with only 1 block (start trigger only)
+        const stepCount = project.value?.steps?.length ?? 0
+        if (stepCount <= 1) {
+          showWelcomeDialog.value = true
+        }
         return
       } catch {
         // Project doesn't exist, fall through to create new
@@ -253,6 +267,12 @@ async function handleSelectProject(projectId: string) {
     selectedGroupId.value = null
     setSelectedRun(null)
     closeSlideOut()
+
+    // Show welcome dialog for projects with only 1 block (start trigger only)
+    const stepCount = project.value?.steps?.length ?? 0
+    if (stepCount <= 1) {
+      showWelcomeDialog.value = true
+    }
   } catch {
     toast.error(t('projects.loadFailed'))
   }
@@ -462,6 +482,17 @@ function handleRunCreated(run: Run) {
 function handleOpenSettingsCredentials() {
   settingsInitialTab.value = 'credentials'
   showSettingsModal.value = true
+}
+
+// Handle test result from PropertiesPanel - show in floating panel
+function handleTestResult(result: StepTestResult) {
+  testResultData.value = result
+  showTestResultPanel.value = true
+}
+
+// Close test result floating panel
+function handleCloseTestResultPanel() {
+  showTestResultPanel.value = false
 }
 
 // Handle run refresh request from RunDetailPanel
@@ -1125,7 +1156,7 @@ async function handleUpdateStepPosition(
 }
 
 // Add edge
-async function handleAddEdge(source: string, target: string, sourcePort?: string, targetPort?: string) {
+async function handleAddEdge(source: string, target: string, sourcePort?: string) {
   if (!project.value || isReadonly.value) return
 
   const sourceInfo = parseNodeId(source)
@@ -1134,7 +1165,6 @@ async function handleAddEdge(source: string, target: string, sourcePort?: string
   try {
     const edgeData: Parameters<typeof projects.createEdge>[1] = {
       source_port: sourcePort,
-      target_port: targetPort,
     }
 
     if (sourceInfo.isGroup) {
@@ -1194,7 +1224,6 @@ function prepareProjectData() {
       source_block_group_id: e.source_block_group_id,
       target_block_group_id: e.target_block_group_id,
       source_port: e.source_port,
-      target_port: e.target_port,
       condition: e.condition,
     })),
   }
@@ -1650,7 +1679,6 @@ async function handleCopilotChangesApplied(changes: ProposalChange[]) {
         source_step_id: sourceId,
         target_step_id: targetId,
         source_port: change.source_port,
-        target_port: change.target_port,
       })
 
       // Update local state
@@ -1681,12 +1709,63 @@ async function handleCopilotChangesApplied(changes: ProposalChange[]) {
       }
     }
 
+    // 6. Check for incomplete steps and show setup wizard
+    if (creates.length > 0 && project.value.steps) {
+      const incompleteCount = countIncompleteSteps(project.value.steps, blockDefinitions.value)
+      if (incompleteCount > 0) {
+        // Delay to allow UI to settle
+        nextTick(() => {
+          showSetupWizard.value = true
+        })
+      }
+    }
+
   } catch (e) {
     console.error('Failed to apply Copilot changes:', e)
     toast.error('変更の適用に失敗しました')
     // Reload to restore consistent state
     await loadProject(projectId)
   }
+}
+
+// Count steps with incomplete required configuration
+function countIncompleteSteps(steps: Step[], blocks: BlockDefinition[]): number {
+  let count = 0
+  for (const step of steps) {
+    const blockDef = blocks.find(b => b.slug === step.type)
+    if (!blockDef?.config_schema) continue
+
+    // Parse config schema
+    let schema: { required?: string[] }
+    try {
+      schema = typeof blockDef.config_schema === 'string'
+        ? JSON.parse(blockDef.config_schema)
+        : blockDef.config_schema
+    } catch {
+      continue
+    }
+
+    // Check required fields
+    const config = step.config as Record<string, unknown> | undefined
+    for (const field of schema.required || []) {
+      const value = config?.[field]
+      if (value === undefined || value === null || value === '') {
+        count++
+        break // Count this step once
+      }
+    }
+  }
+  return count
+}
+
+// Handle setup wizard step selection
+function handleSetupWizardStepSelect(step: Step) {
+  selectStep(step.id)
+}
+
+// Handle setup wizard completion
+function handleSetupWizardComplete() {
+  toast.success(t('setupWizard.completed'))
 }
 
 // Handle Copilot changes preview
@@ -1889,6 +1968,7 @@ onMounted(async () => {
           @update:name="handleUpdateStepName"
           @run:created="handleRunCreated"
           @open-settings="handleOpenSettingsCredentials"
+          @test-result="handleTestResult"
         />
 
         <!-- Agent Group Panel -->
@@ -1922,6 +2002,20 @@ onMounted(async () => {
         <StepDetailPanel
           v-if="selectedStepRun"
           :step-run="selectedStepRun"
+        />
+      </FloatingRightPanel>
+
+      <!-- Test Result Floating Panel -->
+      <FloatingRightPanel
+        :show="showTestResultPanel"
+        :title="t('test.resultPanelTitle')"
+        :shift-left="showRightPanel ? 372 : 0"
+        :level="2"
+        @close="handleCloseTestResultPanel"
+      >
+        <StepDetailPanel
+          v-if="testResultData?.stepRun"
+          :step-run="testResultData.stepRun"
         />
       </FloatingRightPanel>
 
@@ -1961,6 +2055,7 @@ onMounted(async () => {
       <!-- Copilot Sidebar (Fixed Right Panel) -->
       <CopilotSidebar
         :workflow-id="project.id"
+        :step-count="project.steps?.length ?? 0"
         @changes:applied="handleCopilotChangesApplied"
         @changes:preview="handleCopilotChangesPreview"
         @workflow:updated="handleWorkflowUpdated"
@@ -2002,6 +2097,16 @@ onMounted(async () => {
         @submit="handleWelcomeSubmit"
         @skip-to-canvas="handleWelcomeSkip"
         @close="handleWelcomeSkip"
+      />
+
+      <!-- Setup Wizard (shows after Copilot workflow generation with incomplete steps) -->
+      <StepSetupWizard
+        v-model="showSetupWizard"
+        :steps="project.steps || []"
+        :block-definitions="blockDefinitions"
+        @step:select="handleSetupWizardStepSelect"
+        @complete="handleSetupWizardComplete"
+        @skip-all="showSetupWizard = false"
       />
     </template>
   </div>

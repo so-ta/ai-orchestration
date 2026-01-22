@@ -21,8 +21,8 @@ func TestHasChanges(t *testing.T) {
 			name: "no changes",
 			existing: &domain.BlockDefinition{
 				Version:     1,
-				Name:        "Test Block",
-				Description: "A test block",
+				Name:        "テストブロック", // DB stores JA version (defaultMigrationLanguage = "ja")
+				Description: "テストブロック",
 				Category:    domain.BlockCategoryFlow,
 				Icon:        "test",
 				Code:        "return {};",
@@ -30,8 +30,8 @@ func TestHasChanges(t *testing.T) {
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version:     1,
-				Name:        "Test Block",
-				Description: "A test block",
+				Name:        blocks.LText("Test Block", "テストブロック"),
+				Description: blocks.LText("A test block", "テストブロック"),
 				Category:    domain.BlockCategoryFlow,
 				Icon:        "test",
 				Code:        "return {};",
@@ -47,7 +47,7 @@ func TestHasChanges(t *testing.T) {
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version: 2,
-				Name:    "Test Block",
+				Name:    domain.LocalizedText{EN: "Test Block", JA: "テストブロック"},
 			},
 			want: true,
 		},
@@ -59,7 +59,7 @@ func TestHasChanges(t *testing.T) {
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version: 1,
-				Name:    "New Name",
+				Name:    domain.LocalizedText{EN: "New Name", JA: "新名"},
 			},
 			want: true,
 		},
@@ -83,7 +83,7 @@ func TestHasChanges(t *testing.T) {
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version:      1,
-				ConfigSchema: json.RawMessage(`{"type": "object", "properties": {}}`),
+				ConfigSchema: domain.LocalizedConfigSchema{EN: json.RawMessage(`{"type": "object", "properties": {}}`), JA: json.RawMessage(`{"type": "object", "properties": {}}`)},
 			},
 			want: true,
 		},
@@ -97,7 +97,7 @@ func TestHasChanges(t *testing.T) {
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version:     1,
-				Name:        "Test Block",
+				Name:        domain.LocalizedText{EN: "Test Block", JA: "テストブロック"},
 				Category:    domain.BlockCategoryAI,
 				Subcategory: domain.BlockSubcategoryRAG,
 			},
@@ -113,7 +113,7 @@ func TestHasChanges(t *testing.T) {
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version:     1,
-				Name:        "Test Block",
+				Name:        domain.LocalizedText{EN: "Test Block", JA: "テストブロック"},
 				Category:    domain.BlockCategoryAI,
 				Subcategory: domain.BlockSubcategoryChat,
 			},
@@ -123,13 +123,13 @@ func TestHasChanges(t *testing.T) {
 			name: "subcategory same",
 			existing: &domain.BlockDefinition{
 				Version:     1,
-				Name:        "Test Block",
+				Name:        "テストブロック", // DB stores JA version
 				Category:    domain.BlockCategoryAI,
 				Subcategory: domain.BlockSubcategoryChat,
 			},
 			seed: &blocks.SystemBlockDefinition{
 				Version:     1,
-				Name:        "Test Block",
+				Name:        blocks.LText("Test Block", "テストブロック"),
 				Category:    domain.BlockCategoryAI,
 				Subcategory: domain.BlockSubcategoryChat,
 			},
@@ -194,58 +194,6 @@ func TestJSONEqual(t *testing.T) {
 	}
 }
 
-func TestPortsEqual(t *testing.T) {
-	tests := []struct {
-		name string
-		a    []domain.InputPort
-		b    []domain.InputPort
-		want bool
-	}{
-		{
-			name: "both empty",
-			a:    nil,
-			b:    nil,
-			want: true,
-		},
-		{
-			name: "equal ports",
-			a: []domain.InputPort{
-				{Name: "input", Label: "Input", Required: true},
-			},
-			b: []domain.InputPort{
-				{Name: "input", Label: "Input", Required: true},
-			},
-			want: true,
-		},
-		{
-			name: "different length",
-			a: []domain.InputPort{
-				{Name: "input", Label: "Input"},
-			},
-			b:    nil,
-			want: false,
-		},
-		{
-			name: "different name",
-			a: []domain.InputPort{
-				{Name: "input1", Label: "Input"},
-			},
-			b: []domain.InputPort{
-				{Name: "input2", Label: "Input"},
-			},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := portsEqual(tt.a, tt.b); got != tt.want {
-				t.Errorf("portsEqual() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestDescribeChanges(t *testing.T) {
 	migrator := &Migrator{}
 
@@ -257,7 +205,7 @@ func TestDescribeChanges(t *testing.T) {
 
 	seed := &blocks.SystemBlockDefinition{
 		Version: 2,
-		Name:    "Test Updated",
+		Name:    blocks.LText("Test Updated", "テスト更新"),
 		Code:    "new code",
 	}
 

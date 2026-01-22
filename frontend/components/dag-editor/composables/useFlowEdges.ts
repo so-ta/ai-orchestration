@@ -1,5 +1,6 @@
 import { MarkerType, type Edge as FlowEdge } from '@vue-flow/core'
 import type { Edge, StepRun, Step, BlockDefinition, OutputPort, BlockGroup } from '~/types/api'
+// Note: Step type is still imported for use in getOutputPorts function signature
 import { GROUP_NODE_PREFIX, getGroupUuidFromNodeId, getGroupOutputPorts } from '../utils/dagHelpers'
 
 // Preview state for Copilot changes
@@ -13,7 +14,6 @@ export interface PreviewState {
 
 interface UseFlowEdgesOptions {
   edges: Ref<Edge[]>
-  steps: Ref<Step[]>
   stepRuns: Ref<StepRun[] | undefined>
   blockDefinitions: Ref<BlockDefinition[] | undefined>
   blockGroups: Ref<BlockGroup[] | undefined>
@@ -22,7 +22,7 @@ interface UseFlowEdgesOptions {
 }
 
 export function useFlowEdges(options: UseFlowEdgesOptions) {
-  const { edges, steps, stepRuns, blockDefinitions, blockGroups, selectedEdgeId, previewState } = options
+  const { edges, stepRuns, blockDefinitions, blockGroups, selectedEdgeId, previewState } = options
 
   // Create a map of step ID to step run for quick lookup
   const stepRunMap = computed(() => {
@@ -92,17 +92,19 @@ export function useFlowEdges(options: UseFlowEdgesOptions) {
 
     // Special handling for router blocks
     if (stepType === 'router' && config?.routes) {
-      const routes = config.routes as Array<{ name: string; description?: string }>
+      const routes = config.routes
       const dynamicPorts: OutputPort[] = [
         { name: 'default', label: 'Default', is_default: true }
       ]
 
-      for (const route of routes) {
-        dynamicPorts.push({
-          name: route.name,
-          label: route.name,
-          is_default: false,
-        })
+      if (Array.isArray(routes)) {
+        for (const route of routes as Array<{ name: string; description?: string }>) {
+          dynamicPorts.push({
+            name: route.name,
+            label: route.name,
+            is_default: false,
+          })
+        }
       }
 
       return dynamicPorts
@@ -262,21 +264,6 @@ export function useFlowEdges(options: UseFlowEdgesOptions) {
     return undefined
   }
 
-  /**
-   * Get default target port for a node (step or group)
-   */
-  function getDefaultTargetPort(nodeId: string): string | undefined {
-    const step = steps.value.find(s => s.id === nodeId)
-    if (step) {
-      // For now, just return 'input' as default
-      return 'input'
-    }
-    if (nodeId?.startsWith(GROUP_NODE_PREFIX)) {
-      return 'in'
-    }
-    return undefined
-  }
-
   // Convert edges to Vue Flow edges
   const flowEdges = computed<FlowEdge[]>(() => {
     const result: FlowEdge[] = []
@@ -322,7 +309,6 @@ export function useFlowEdges(options: UseFlowEdgesOptions) {
         source,
         target,
         sourceHandle: edge.source_port || undefined,
-        targetHandle: edge.target_port || undefined,
         type: 'smoothstep',
         animated: flowStatus.animated || isSelected,
         label: edgeLabel,
@@ -351,6 +337,5 @@ export function useFlowEdges(options: UseFlowEdgesOptions) {
     getOutgoingEdgesFromStep,
     getOutgoingEdgesFromGroup,
     getDefaultSourcePort,
-    getDefaultTargetPort,
   }
 }

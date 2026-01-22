@@ -160,7 +160,7 @@ func (s *BlocksServiceImpl) GetWithSchema(slug string) (map[string]interface{}, 
 	// Get the block with all schema-related fields
 	query := `
 		SELECT id, slug, name, description, category, config_schema, config_defaults,
-		       output_schema, required_credentials, input_ports, output_ports, parent_block_id
+		       output_schema, required_credentials, output_ports, parent_block_id
 		FROM block_definitions
 		WHERE slug = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
 		LIMIT 1
@@ -176,14 +176,13 @@ func (s *BlocksServiceImpl) GetWithSchema(slug string) (map[string]interface{}, 
 		configDefaults      []byte
 		outputSchema        []byte
 		requiredCredentials []byte
-		inputPorts          []byte
 		outputPorts         []byte
 		parentBlockID       *uuid.UUID
 	)
 
 	err := s.pool.QueryRow(s.ctx, query, slug, s.tenantID).Scan(
 		&id, &blockSlug, &name, &description, &category, &configSchema, &configDefaults,
-		&outputSchema, &requiredCredentials, &inputPorts, &outputPorts, &parentBlockID,
+		&outputSchema, &requiredCredentials, &outputPorts, &parentBlockID,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -247,14 +246,6 @@ func (s *BlocksServiceImpl) GetWithSchema(slug string) (map[string]interface{}, 
 		var creds interface{}
 		if err := json.Unmarshal(requiredCredentials, &creds); err == nil {
 			block["required_credentials"] = creds
-		}
-	}
-
-	// Parse input_ports
-	if len(inputPorts) > 0 {
-		var ports interface{}
-		if err := json.Unmarshal(inputPorts, &ports); err == nil {
-			block["input_ports"] = ports
 		}
 	}
 
@@ -1648,7 +1639,7 @@ func (s *EdgesServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 	}
 
 	query := `
-		SELECT e.id, e.source_step_id, e.target_step_id, e.source_port, e.target_port, e.condition
+		SELECT e.id, e.source_step_id, e.target_step_id, e.source_port, e.condition
 		FROM edges e
 		JOIN projects p ON e.project_id = p.id
 		WHERE e.project_id = $1 AND p.tenant_id = $2
@@ -1667,11 +1658,10 @@ func (s *EdgesServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 			sourceStepID uuid.UUID
 			targetStepID uuid.UUID
 			sourcePort   string
-			targetPort   string
 			condition    *string
 		)
 
-		if err := rows.Scan(&id, &sourceStepID, &targetStepID, &sourcePort, &targetPort, &condition); err != nil {
+		if err := rows.Scan(&id, &sourceStepID, &targetStepID, &sourcePort, &condition); err != nil {
 			return nil, fmt.Errorf("failed to scan edge: %w", err)
 		}
 
@@ -1680,7 +1670,6 @@ func (s *EdgesServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 			"source_step_id": sourceStepID.String(),
 			"target_step_id": targetStepID.String(),
 			"source_port":    sourcePort,
-			"target_port":    targetPort,
 		}
 
 		if condition != nil {
@@ -1699,7 +1688,6 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	sourceStepID, _ := data["source_step_id"].(string)
 	targetStepID, _ := data["target_step_id"].(string)
 	sourcePort, _ := data["source_port"].(string)
-	targetPort, _ := data["target_port"].(string)
 
 	if projectID == "" || sourceStepID == "" || targetStepID == "" {
 		return nil, fmt.Errorf("project_id, source_step_id, and target_step_id are required")
@@ -1723,18 +1711,15 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	if sourcePort == "" {
 		sourcePort = "output"
 	}
-	if targetPort == "" {
-		targetPort = "input"
-	}
 
 	query := `
-		INSERT INTO edges (tenant_id, project_id, source_step_id, target_step_id, source_port, target_port)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO edges (tenant_id, project_id, source_step_id, target_step_id, source_port)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
 	`
 
 	var id uuid.UUID
-	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, ssID, tsID, sourcePort, targetPort).Scan(&id)
+	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, ssID, tsID, sourcePort).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create edge: %w", err)
 	}
@@ -1745,7 +1730,6 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 		"source_step_id": sourceStepID,
 		"target_step_id": targetStepID,
 		"source_port":    sourcePort,
-		"target_port":    targetPort,
 	}, nil
 }
 

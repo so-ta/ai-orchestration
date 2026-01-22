@@ -85,7 +85,7 @@ func (h *BlockHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	blocks, err := h.blockRepo.List(r.Context(), &tenantID, filter)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *BlockHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	block, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, slug)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -142,7 +142,7 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Check for existing block with same slug
 	existing, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, req.Slug)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	if existing != nil {
@@ -177,7 +177,7 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 		// Validate parent block exists and can be inherited
 		parentBlock, err := h.blockRepo.GetByID(r.Context(), parentID)
 		if err != nil {
-			HandleError(w, err)
+			HandleErrorL(w, r, err)
 			return
 		}
 		if parentBlock == nil {
@@ -201,7 +201,7 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 				Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "inheritance depth exceeded maximum limit", nil)
 				return
 			default:
-				HandleError(w, err)
+				HandleErrorL(w, r, err)
 				return
 			}
 		}
@@ -220,7 +220,7 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 			// Validate each internal step's block type exists
 			stepBlock, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, step.Type)
 			if err != nil {
-				HandleError(w, err)
+				HandleErrorL(w, r, err)
 				return
 			}
 			if stepBlock == nil {
@@ -237,7 +237,7 @@ func (h *BlockHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.blockRepo.Create(r.Context(), block); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Get existing block
 	block, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, slug)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	if block == nil {
@@ -332,7 +332,7 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 			// Validate parent block exists and can be inherited
 			parentBlock, err := h.blockRepo.GetByID(r.Context(), parentID)
 			if err != nil {
-				HandleError(w, err)
+				HandleErrorL(w, r, err)
 				return
 			}
 			if parentBlock == nil {
@@ -354,7 +354,7 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 					Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "inheritance depth exceeded maximum limit", nil)
 					return
 				default:
-					HandleError(w, err)
+					HandleErrorL(w, r, err)
 					return
 				}
 			}
@@ -380,7 +380,7 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 			// Validate each internal step's block type exists
 			stepBlock, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, step.Type)
 			if err != nil {
-				HandleError(w, err)
+				HandleErrorL(w, r, err)
 				return
 			}
 			if stepBlock == nil {
@@ -397,7 +397,7 @@ func (h *BlockHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.blockRepo.Update(r.Context(), block); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -412,7 +412,7 @@ func (h *BlockHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Get existing block
 	block, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, slug)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	if block == nil {
@@ -427,7 +427,7 @@ func (h *BlockHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.blockRepo.Delete(r.Context(), block.ID); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -442,7 +442,7 @@ func (h *BlockHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *BlockHandler) ListSystemBlocks(w http.ResponseWriter, r *http.Request) {
 	blocks, err := h.blockUsecase.ListSystemBlocks(r.Context())
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -499,7 +499,7 @@ func (h *BlockHandler) UpdateSystemBlock(w http.ResponseWriter, r *http.Request)
 
 	block, err := h.blockUsecase.UpdateSystemBlock(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -517,7 +517,7 @@ func (h *BlockHandler) GetSystemBlock(w http.ResponseWriter, r *http.Request) {
 
 	block, err := h.blockRepo.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	if block == nil {
@@ -539,7 +539,7 @@ func (h *BlockHandler) ListBlockVersions(w http.ResponseWriter, r *http.Request)
 
 	versions, err := h.blockUsecase.GetBlockVersions(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -568,7 +568,7 @@ func (h *BlockHandler) GetBlockVersion(w http.ResponseWriter, r *http.Request) {
 
 	blockVersion, err := h.blockUsecase.GetBlockVersion(r.Context(), id, version)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	if blockVersion == nil {
@@ -582,6 +582,158 @@ func (h *BlockHandler) GetBlockVersion(w http.ResponseWriter, r *http.Request) {
 // RollbackBlockRequest represents a request to rollback a block
 type RollbackBlockRequest struct {
 	Version int `json:"version"`
+}
+
+// ValidateConfigRequest represents a request to validate block config
+type ValidateConfigRequest struct {
+	Config json.RawMessage `json:"config"`
+}
+
+// ConfigValidationError represents a single validation error
+type ConfigValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// ValidateConfigResponse represents the config validation response
+type ValidateConfigResponse struct {
+	Valid  bool                    `json:"valid"`
+	Errors []ConfigValidationError `json:"errors"`
+}
+
+// ValidateConfig handles POST /api/v1/blocks/{slug}/validate-config
+func (h *BlockHandler) ValidateConfig(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	slug := chi.URLParam(r, "slug")
+
+	var req ValidateConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid request body", nil)
+		return
+	}
+
+	// Get block definition
+	block, err := h.blockRepo.GetBySlug(r.Context(), &tenantID, slug)
+	if err != nil {
+		HandleErrorL(w, r, err)
+		return
+	}
+	if block == nil {
+		Error(w, http.StatusNotFound, "NOT_FOUND", "block not found", nil)
+		return
+	}
+
+	// Validate config against schema
+	errors := h.validateConfigAgainstSchema(block, req.Config)
+
+	response := ValidateConfigResponse{
+		Valid:  len(errors) == 0,
+		Errors: errors,
+	}
+
+	JSONData(w, http.StatusOK, response)
+}
+
+// validateConfigAgainstSchema validates config against block's config schema
+func (h *BlockHandler) validateConfigAgainstSchema(block *domain.BlockDefinition, config json.RawMessage) []ConfigValidationError {
+	var errors []ConfigValidationError
+
+	// If no config schema, config is valid
+	if block.ConfigSchema == nil || len(block.ConfigSchema) == 0 {
+		return errors
+	}
+
+	// Parse config schema
+	var schema struct {
+		Type       string                       `json:"type"`
+		Properties map[string]json.RawMessage   `json:"properties"`
+		Required   []string                     `json:"required"`
+	}
+	if err := json.Unmarshal(block.ConfigSchema, &schema); err != nil {
+		// Schema itself is invalid, skip validation
+		return errors
+	}
+
+	// Parse config
+	var configMap map[string]interface{}
+	if config == nil || len(config) == 0 || string(config) == "null" {
+		configMap = make(map[string]interface{})
+	} else {
+		if err := json.Unmarshal(config, &configMap); err != nil {
+			errors = append(errors, ConfigValidationError{
+				Field:   "",
+				Message: "config must be a valid JSON object",
+			})
+			return errors
+		}
+	}
+
+	// Check required fields
+	for _, field := range schema.Required {
+		val, exists := configMap[field]
+		if !exists || val == nil || val == "" {
+			errors = append(errors, ConfigValidationError{
+				Field:   field,
+				Message: "required field is missing or empty",
+			})
+		}
+	}
+
+	// Check field types if properties are defined
+	for fieldName, propRaw := range schema.Properties {
+		val, exists := configMap[fieldName]
+		if !exists {
+			continue
+		}
+
+		var prop struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(propRaw, &prop); err != nil {
+			continue
+		}
+
+		// Type check
+		switch prop.Type {
+		case "string":
+			if _, ok := val.(string); !ok && val != nil {
+				errors = append(errors, ConfigValidationError{
+					Field:   fieldName,
+					Message: "expected string type",
+				})
+			}
+		case "number", "integer":
+			if _, ok := val.(float64); !ok && val != nil {
+				errors = append(errors, ConfigValidationError{
+					Field:   fieldName,
+					Message: "expected number type",
+				})
+			}
+		case "boolean":
+			if _, ok := val.(bool); !ok && val != nil {
+				errors = append(errors, ConfigValidationError{
+					Field:   fieldName,
+					Message: "expected boolean type",
+				})
+			}
+		case "array":
+			if _, ok := val.([]interface{}); !ok && val != nil {
+				errors = append(errors, ConfigValidationError{
+					Field:   fieldName,
+					Message: "expected array type",
+				})
+			}
+		case "object":
+			if _, ok := val.(map[string]interface{}); !ok && val != nil {
+				errors = append(errors, ConfigValidationError{
+					Field:   fieldName,
+					Message: "expected object type",
+				})
+			}
+		}
+	}
+
+	return errors
 }
 
 // RollbackBlock handles POST /api/v1/admin/blocks/{id}/rollback
@@ -618,7 +770,7 @@ func (h *BlockHandler) RollbackBlock(w http.ResponseWriter, r *http.Request) {
 
 	block, err := h.blockUsecase.RollbackSystemBlock(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

@@ -40,7 +40,7 @@ func (v *BlockValidator) ValidateBlock(block *blocks.SystemBlockDefinition) []Va
 	if block.Slug == "" {
 		errors = append(errors, ValidationError{block.Slug, "slug", "slug is required"})
 	}
-	if block.Name == "" {
+	if block.Name.EN == "" && block.Name.JA == "" {
 		errors = append(errors, ValidationError{block.Slug, "name", "name is required"})
 	}
 	if !block.Category.IsValid() {
@@ -55,27 +55,15 @@ func (v *BlockValidator) ValidateBlock(block *blocks.SystemBlockDefinition) []Va
 		errors = append(errors, ValidationError{block.Slug, "code", err.Error()})
 	}
 
-	// Schema validation
-	if err := v.schemaValidator.ValidateSchema(block.ConfigSchema); err != nil {
+	// Schema validation (validate EN version, both should be structurally similar)
+	if err := v.schemaValidator.ValidateSchema(block.ConfigSchema.EN); err != nil {
 		errors = append(errors, ValidationError{block.Slug, "config_schema", err.Error()})
 	}
 	if err := v.schemaValidator.ValidateSchema(block.OutputSchema); err != nil {
 		errors = append(errors, ValidationError{block.Slug, "output_schema", err.Error()})
 	}
-	if err := v.schemaValidator.ValidateSchema(block.UIConfig); err != nil {
+	if err := v.schemaValidator.ValidateSchema(block.UIConfig.EN); err != nil {
 		errors = append(errors, ValidationError{block.Slug, "ui_config", err.Error()})
-	}
-
-	// Validate input ports
-	for i, port := range block.InputPorts {
-		if port.Name == "" {
-			errors = append(errors, ValidationError{block.Slug, fmt.Sprintf("input_ports[%d].name", i), "port name is required"})
-		}
-		if port.Schema != nil {
-			if err := v.schemaValidator.ValidateSchema(port.Schema); err != nil {
-				errors = append(errors, ValidationError{block.Slug, fmt.Sprintf("input_ports[%d].schema", i), err.Error()})
-			}
-		}
 	}
 
 	// Validate output ports

@@ -54,13 +54,10 @@ func TestNewEdgeWithPort(t *testing.T) {
 	sourceStepID := uuid.New()
 	targetStepID := uuid.New()
 
-	edge := NewEdgeWithPort(tenantID, projectID, sourceStepID, targetStepID, "true", "input", "")
+	edge := NewEdgeWithPort(tenantID, projectID, sourceStepID, targetStepID, "true", "")
 
 	if edge.SourcePort != "true" {
 		t.Errorf("NewEdgeWithPort() SourcePort = %v, want true", edge.SourcePort)
-	}
-	if edge.TargetPort != "input" {
-		t.Errorf("NewEdgeWithPort() TargetPort = %v, want input", edge.TargetPort)
 	}
 }
 
@@ -81,9 +78,6 @@ func TestNewEdgeToGroup(t *testing.T) {
 	if edge.SourcePort != "output" {
 		t.Errorf("NewEdgeToGroup() SourcePort = %v, want output", edge.SourcePort)
 	}
-	if edge.TargetPort != "in" {
-		t.Errorf("NewEdgeToGroup() TargetPort = %v, want in", edge.TargetPort)
-	}
 }
 
 func TestNewEdgeFromGroup(t *testing.T) {
@@ -92,7 +86,7 @@ func TestNewEdgeFromGroup(t *testing.T) {
 	sourceGroupID := uuid.New()
 	targetStepID := uuid.New()
 
-	edge := NewEdgeFromGroup(tenantID, projectID, sourceGroupID, targetStepID, "input")
+	edge := NewEdgeFromGroup(tenantID, projectID, sourceGroupID, targetStepID)
 
 	if edge.SourceBlockGroupID == nil || *edge.SourceBlockGroupID != sourceGroupID {
 		t.Error("NewEdgeFromGroup() SourceBlockGroupID mismatch")
@@ -102,9 +96,6 @@ func TestNewEdgeFromGroup(t *testing.T) {
 	}
 	if edge.SourcePort != "out" {
 		t.Errorf("NewEdgeFromGroup() SourcePort = %v, want out", edge.SourcePort)
-	}
-	if edge.TargetPort != "input" {
-		t.Errorf("NewEdgeFromGroup() TargetPort = %v, want input", edge.TargetPort)
 	}
 }
 
@@ -124,9 +115,6 @@ func TestNewGroupToGroupEdge(t *testing.T) {
 	}
 	if edge.SourcePort != "out" {
 		t.Errorf("NewGroupToGroupEdge() SourcePort = %v, want out", edge.SourcePort)
-	}
-	if edge.TargetPort != "in" {
-		t.Errorf("NewGroupToGroupEdge() TargetPort = %v, want in", edge.TargetPort)
 	}
 }
 

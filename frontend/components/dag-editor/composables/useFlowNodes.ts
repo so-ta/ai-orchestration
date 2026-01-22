@@ -1,5 +1,5 @@
 import type { Node } from '@vue-flow/core'
-import type { Step, StepRun, BlockDefinition, BlockGroup, InputPort, OutputPort } from '~/types/api'
+import type { Step, StepRun, BlockDefinition, BlockGroup, OutputPort } from '~/types/api'
 import {
   getGroupColor,
   getGroupIcon,
@@ -43,17 +43,6 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
     return map
   })
 
-  // Create a map of block slug to input ports
-  const inputPortsMap = computed(() => {
-    const map = new Map<string, InputPort[]>()
-    if (blockDefinitions.value) {
-      for (const block of blockDefinitions.value) {
-        map.set(block.slug, block.input_ports || [])
-      }
-    }
-    return map
-  })
-
   // Create a map of block slug to output ports
   const outputPortsMap = computed(() => {
     const map = new Map<string, OutputPort[]>()
@@ -64,17 +53,6 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
     }
     return map
   })
-
-  /**
-   * Get input ports for a step type
-   */
-  function getInputPorts(stepType: string): InputPort[] {
-    const ports = inputPortsMap.value.get(stepType)
-    if (ports && ports.length > 0) {
-      return ports
-    }
-    return [{ name: 'input', label: 'Input', required: true }]
-  }
 
   /**
    * Get output ports for a step type (or step for dynamic ports like switch)
@@ -114,11 +92,13 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
 
     // Special handling for router blocks
     if (stepType === 'router' && config?.routes) {
-      const routes = config.routes as Array<{ name: string; description?: string }>
+      const routes = config.routes
       const dynamicPorts: OutputPort[] = [{ name: 'default', label: 'Default', is_default: true }]
 
-      for (const route of routes) {
-        dynamicPorts.push({ name: route.name, label: route.name, is_default: false })
+      if (Array.isArray(routes)) {
+        for (const route of routes as Array<{ name: string; description?: string }>) {
+          dynamicPorts.push({ name: route.name, label: route.name, is_default: false })
+        }
       }
 
       return dynamicPorts
@@ -200,6 +180,46 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
     return getBlockIcon(type)
   }
 
+  /**
+   * Check if step config is incomplete based on block definition schema
+   */
+  function checkIncompleteConfig(step: Step): { hasIncompleteConfig: boolean; incompleteFields: string[] } {
+    const incompleteFields: string[] = []
+
+    // Get block definition
+    const blockDef = blockDefinitions.value?.find(b => b.slug === step.type)
+    if (!blockDef?.config_schema) {
+      return { hasIncompleteConfig: false, incompleteFields: [] }
+    }
+
+    // Parse config schema
+    let schema: { required?: string[]; properties?: Record<string, unknown> }
+    try {
+      schema = typeof blockDef.config_schema === 'string'
+        ? JSON.parse(blockDef.config_schema)
+        : blockDef.config_schema
+    } catch {
+      return { hasIncompleteConfig: false, incompleteFields: [] }
+    }
+
+    // Get step config
+    const config = step.config as Record<string, unknown> | undefined
+
+    // Check required fields
+    const requiredFields = schema.required || []
+    for (const field of requiredFields) {
+      const value = config?.[field]
+      if (value === undefined || value === null || value === '') {
+        incompleteFields.push(field)
+      }
+    }
+
+    return {
+      hasIncompleteConfig: incompleteFields.length > 0,
+      incompleteFields,
+    }
+  }
+
   // Convert block groups to Vue Flow group nodes
   const groupNodes = computed<Node[]>(() => {
     if (!blockGroups.value) return []
@@ -239,7 +259,6 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
   const stepNodes = computed<Node[]>(() => {
     return steps.value.map(step => {
       const stepRun = stepRunMap.value.get(step.id)
-      const inputPorts = getInputPorts(step.type)
       const outputPorts = getOutputPorts(step.type, step)
 
       const parentGroupId = step.block_group_id || undefined
@@ -256,6 +275,7 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
       }
 
       const previewClass = getPreviewClass(step.id)
+      const { hasIncompleteConfig, incompleteFields } = checkIncompleteConfig(step)
 
       return {
         id: step.id,
@@ -269,10 +289,11 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
           step,
           isSelected: step.id === selectedStepId.value,
           stepRun,
-          inputPorts,
           outputPorts,
           icon: getStepIcon(step.type),
           previewClass,
+          hasIncompleteConfig,
+          incompleteFields,
         },
       }
     })
@@ -288,7 +309,6 @@ export function useFlowNodes(options: UseFlowNodesOptions) {
     groupNodes,
     stepNodes,
     stepRunMap,
-    getInputPorts,
     getOutputPorts,
     getPreviewClass,
     getStepColor,

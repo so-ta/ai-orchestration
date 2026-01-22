@@ -109,15 +109,6 @@ type ErrorCodeDef struct {
 	Retryable   bool   `json:"retryable"`   // Can this error be retried?
 }
 
-// InputPort defines an input connection point for a block
-type InputPort struct {
-	Name        string          `json:"name"`                  // Unique identifier (e.g., "input", "items", "condition")
-	Label       string          `json:"label"`                 // Display label (e.g., "Input", "Items to process")
-	Description string          `json:"description,omitempty"` // Human-readable description
-	Required    bool            `json:"required"`              // Is this input required?
-	Schema      json.RawMessage `json:"schema,omitempty"`      // Input type schema (JSON Schema)
-}
-
 // OutputPort defines an output connection point for a block
 type OutputPort struct {
 	Name        string          `json:"name"`                  // Unique identifier (e.g., "true", "false", "default")
@@ -194,9 +185,6 @@ type BlockDefinition struct {
 	// Users can set fixed values or use {{field}} syntax to reference input from previous steps
 	ConfigSchema json.RawMessage `json:"config_schema"`
 	OutputSchema json.RawMessage `json:"output_schema,omitempty"`
-
-	// Input ports (for blocks with multiple inputs like join, aggregate)
-	InputPorts []InputPort `json:"input_ports"`
 
 	// Output ports (for blocks with multiple outputs like condition, switch)
 	OutputPorts []OutputPort `json:"output_ports"`
@@ -278,7 +266,6 @@ func NewBlockDefinition(tenantID *uuid.UUID, slug, name string, category BlockCa
 		Name:         name,
 		Category:     category,
 		ConfigSchema: json.RawMessage("{}"),
-		InputPorts:   []InputPort{{Name: "input", Label: "Input", Required: true}}, // Default single input
 		OutputPorts:  []OutputPort{{Name: "output", Label: "Output", IsDefault: true}}, // Default single output
 		ErrorCodes:   []ErrorCodeDef{},
 		Enabled:      true,

@@ -328,6 +328,102 @@ func (u *StepUsecase) GetRetryConfig(ctx context.Context, tenantID, projectID, s
 	return &config, nil
 }
 
+// EnableTrigger enables the trigger for a Start block
+func (u *StepUsecase) EnableTrigger(ctx context.Context, tenantID, projectID, stepID uuid.UUID) (*domain.Step, error) {
+	return u.setTriggerEnabled(ctx, tenantID, projectID, stepID, true)
+}
+
+// DisableTrigger disables the trigger for a Start block
+func (u *StepUsecase) DisableTrigger(ctx context.Context, tenantID, projectID, stepID uuid.UUID) (*domain.Step, error) {
+	return u.setTriggerEnabled(ctx, tenantID, projectID, stepID, false)
+}
+
+// setTriggerEnabled sets the enabled state for a trigger
+func (u *StepUsecase) setTriggerEnabled(ctx context.Context, tenantID, projectID, stepID uuid.UUID, enabled bool) (*domain.Step, error) {
+	// Verify project is editable
+	if _, err := u.projectChecker.CheckEditable(ctx, tenantID, projectID); err != nil {
+		return nil, err
+	}
+
+	step, err := u.stepRepo.GetByID(ctx, tenantID, projectID, stepID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify this is a Start block with a trigger type
+	if step.Type != domain.StepTypeStart {
+		return nil, domain.NewValidationError("type", "step is not a start block")
+	}
+	if step.TriggerType == nil {
+		return nil, domain.NewValidationError("trigger_type", "step has no trigger type")
+	}
+
+	// Manual triggers don't need enabled/disabled state
+	if *step.TriggerType == domain.StepTriggerTypeManual {
+		return nil, domain.NewValidationError("trigger_type", "manual triggers cannot be enabled/disabled")
+	}
+
+	// Parse current trigger config
+	var triggerConfig map[string]interface{}
+	if len(step.TriggerConfig) > 0 && string(step.TriggerConfig) != "null" {
+		if err := json.Unmarshal(step.TriggerConfig, &triggerConfig); err != nil {
+			triggerConfig = make(map[string]interface{})
+		}
+	} else {
+		triggerConfig = make(map[string]interface{})
+	}
+
+	// Update enabled field
+	triggerConfig["enabled"] = enabled
+
+	// Marshal back to JSON
+	updatedConfig, err := json.Marshal(triggerConfig)
+	if err != nil {
+		return nil, err
+	}
+	step.TriggerConfig = updatedConfig
+
+	if err := u.stepRepo.Update(ctx, step); err != nil {
+		return nil, err
+	}
+
+	return step, nil
+}
+
+// GetTriggerStatus returns the trigger status for a Start block
+func (u *StepUsecase) GetTriggerStatus(ctx context.Context, tenantID, projectID, stepID uuid.UUID) (bool, error) {
+	step, err := u.stepRepo.GetByID(ctx, tenantID, projectID, stepID)
+	if err != nil {
+		return false, err
+	}
+
+	if step.Type != domain.StepTypeStart || step.TriggerType == nil {
+		return false, domain.NewValidationError("type", "step is not a start block with trigger")
+	}
+
+	// Manual triggers are always "enabled"
+	if *step.TriggerType == domain.StepTriggerTypeManual {
+		return true, nil
+	}
+
+	// Parse trigger config to get enabled state
+	if len(step.TriggerConfig) == 0 || string(step.TriggerConfig) == "null" {
+		return false, nil // Default to disabled if no config
+	}
+
+	var triggerConfig map[string]interface{}
+	if err := json.Unmarshal(step.TriggerConfig, &triggerConfig); err != nil {
+		return false, nil
+	}
+
+	enabled, ok := triggerConfig["enabled"].(bool)
+	if !ok {
+		return false, nil
+	}
+
+	return enabled, nil
+}
+
 // mergeConfigWithDefaults merges user config with default values from BlockDefinition
 // User config takes precedence over defaults
 func mergeConfigWithDefaults(userConfig json.RawMessage, defaults json.RawMessage) json.RawMessage {

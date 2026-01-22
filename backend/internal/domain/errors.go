@@ -27,7 +27,6 @@ var (
 	ErrEdgeCreatesCycle    = errors.New("edge would create a cycle")
 	ErrEdgeInvalidPort     = errors.New("invalid port specified")
 	ErrSourcePortNotFound  = errors.New("source port not found in block definition")
-	ErrTargetPortNotFound  = errors.New("target port not found in block definition")
 
 	// Run errors
 	ErrRunNotFound      = errors.New("run not found")
@@ -47,11 +46,6 @@ var (
 	ErrScheduleNotFound    = errors.New("schedule not found")
 	ErrScheduleInvalidCron = errors.New("invalid cron expression")
 	ErrScheduleDisabled    = errors.New("schedule is disabled")
-
-	// Webhook errors
-	ErrWebhookNotFound       = errors.New("webhook not found")
-	ErrWebhookDisabled       = errors.New("webhook is disabled")
-	ErrWebhookInvalidSecret  = errors.New("invalid webhook secret")
 
 	// Credential errors
 	ErrCredentialNotFound       = errors.New("credential not found")

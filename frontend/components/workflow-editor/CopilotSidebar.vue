@@ -6,8 +6,9 @@ import {
 import { useBottomOffset } from '~/composables/useFloatingLayout'
 import type { ProposalChange } from './CopilotProposalCard.vue'
 
-defineProps<{
+const props = defineProps<{
   workflowId: string
+  stepCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -107,7 +108,8 @@ function handleWorkflowUpdated() {
         <!-- Copilot Content -->
         <div class="sidebar-body">
           <CopilotTab
-            :workflow-id="workflowId"
+            :workflow-id="props.workflowId"
+            :step-count="props.stepCount"
             @changes:applied="handleChangesApplied"
             @changes:preview="handleChangesPreview"
             @workflow:updated="handleWorkflowUpdated"

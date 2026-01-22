@@ -59,7 +59,6 @@ describe('BlockCard', () => {
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     config_schema: {},
-    input_ports: [],
     output_ports: [],
     error_codes: [],
   }

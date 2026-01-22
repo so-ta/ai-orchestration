@@ -43,7 +43,7 @@ func (h *VariablesHandler) GetTenantVariables(w http.ResponseWriter, r *http.Req
 
 	variables, err := h.tenantRepo.GetVariables(r.Context(), tenantID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (h *VariablesHandler) UpdateTenantVariables(w http.ResponseWriter, r *http.
 	}
 
 	if err := h.tenantRepo.UpdateVariables(r.Context(), tenantID, req.Variables); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *VariablesHandler) GetUserVariables(w http.ResponseWriter, r *http.Reque
 
 	variables, err := h.userRepo.GetVariables(r.Context(), tenantID, userID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *VariablesHandler) UpdateUserVariables(w http.ResponseWriter, r *http.Re
 	}
 
 	if err := h.userRepo.UpdateVariables(r.Context(), tenantID, userID, req.Variables); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

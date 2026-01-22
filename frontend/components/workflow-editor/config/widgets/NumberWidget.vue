@@ -5,6 +5,8 @@ import { useExpressionMode } from './useExpressionMode'
 import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
 import VariablePicker from '../variable-picker/VariablePicker.vue'
 
+const { t } = useI18n()
+
 const props = defineProps<{
   name: string
   property: JSONSchemaProperty
@@ -22,6 +24,11 @@ const emit = defineEmits<{
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const numberInputRef = ref<HTMLInputElement | null>(null)
+
+// Track whether field has been touched for validation
+const touched = ref(false)
+const isEmpty = computed(() => props.modelValue === undefined || props.modelValue === '')
+const showRequiredWarning = computed(() => props.required && touched.value && isEmpty.value && !props.error)
 
 // 式モードのセットアップ
 const modelValueRef = toRef(props, 'modelValue')
@@ -114,6 +121,7 @@ function handleExpressionKeydown(event: KeyboardEvent) {
 }
 
 function handleBlur() {
+  touched.value = true
   emit('blur')
 }
 </script>
@@ -154,7 +162,7 @@ function handleBlur() {
       :max="property.maximum"
       :step="step"
       :disabled="disabled"
-      :class="['field-input', { 'has-error': error }]"
+      :class="['field-input', { 'has-error': error || showRequiredWarning }]"
       @input="handleInput"
       @blur="handleBlur"
     >
@@ -168,7 +176,7 @@ function handleBlur() {
       :value="expressionText"
       :disabled="disabled"
       :class="['field-input', { 'has-error': error, 'drag-over': isDragOver }]"
-      placeholder="{{$.steps.prev.output}} または数値を入力"
+      placeholder="{{$.steps.prev.output}} or number"
       autocomplete="off"
       @input="handleExpressionInput"
       @keydown="handleExpressionKeydown"
@@ -179,12 +187,16 @@ function handleBlur() {
       @drop="handleDrop"
     >
 
-    <p v-if="property.description && !error" class="field-description">
+    <p v-if="property.description && !error && !showRequiredWarning" class="field-description">
       {{ property.description }}
     </p>
 
     <p v-if="error" class="field-error">
       {{ error }}
+    </p>
+
+    <p v-else-if="showRequiredWarning" class="field-warning">
+      {{ t('fieldValidation.required') }}
     </p>
 
     <VariablePicker
@@ -312,6 +324,12 @@ function handleBlur() {
 .field-error {
   font-size: 11px;
   color: var(--color-error, #ef4444);
+  margin: 0;
+}
+
+.field-warning {
+  font-size: 11px;
+  color: var(--color-warning, #f59e0b);
   margin: 0;
 }
 </style>

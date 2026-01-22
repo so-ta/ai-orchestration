@@ -7,6 +7,8 @@
  */
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema';
 
+const { t } = useI18n();
+
 const props = defineProps<{
   name: string;
   property: JSONSchemaProperty;
@@ -29,7 +31,7 @@ const emit = defineEmits<{
 const secretKeyOptions = computed(() => {
   // Common secret keys by category
   const commonKeys = [
-    { value: '', label: '選択してください', group: '' },
+    { value: '', label: t('widgets.secretKey.selectPlaceholder'), group: '' },
     // AI Providers
     { value: 'OPENAI_API_KEY', label: 'OpenAI API Key', group: 'AI' },
     { value: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', group: 'AI' },
@@ -50,7 +52,7 @@ const secretKeyOptions = computed(() => {
     // Search
     { value: 'TAVILY_API_KEY', label: 'Tavily API Key', group: 'Search' },
     // Custom
-    { value: '_custom', label: 'カスタムキー名を入力...', group: '' },
+    { value: '_custom', label: t('widgets.secretKey.customKeyOption'), group: '' },
   ];
 
   // Filter by credential type if specified
@@ -91,6 +93,11 @@ const groupedOptions = computed(() => {
   return { groups, ungrouped };
 });
 
+// Track whether field has been touched for validation
+const touched = ref(false);
+const isEmpty = computed(() => !props.modelValue || props.modelValue === '');
+const showRequiredWarning = computed(() => props.required && touched.value && isEmpty.value && !props.error);
+
 function handleChange(event: Event) {
   const target = event.target as HTMLSelectElement;
   const value = target.value;
@@ -111,6 +118,7 @@ function handleCustomInput(event: Event) {
 }
 
 function handleBlur() {
+  touched.value = true;
   emit('blur');
 }
 
@@ -147,15 +155,15 @@ onMounted(() => {
         type="text"
         :value="customValue"
         :disabled="disabled"
-        :class="['field-input', { 'has-error': error }]"
-        placeholder="シークレットキー名を入力"
+        :class="['field-input', { 'has-error': error || showRequiredWarning }]"
+        :placeholder="t('widgets.secretKey.customKeyPlaceholder')"
         @input="handleCustomInput"
         @blur="handleBlur"
       >
       <button
         type="button"
         class="back-button"
-        title="リストから選択"
+        :title="t('widgets.secretKey.backToList')"
         @click="exitCustomMode"
       >
         <svg
@@ -180,7 +188,7 @@ onMounted(() => {
       :id="name"
       :value="displayValue"
       :disabled="disabled"
-      :class="['field-select', { 'has-error': error }]"
+      :class="['field-select', { 'has-error': error || showRequiredWarning }]"
       @change="handleChange"
       @blur="handleBlur"
     >
@@ -210,12 +218,16 @@ onMounted(() => {
       </optgroup>
     </select>
 
-    <p v-if="property.description && !error" class="field-description">
+    <p v-if="property.description && !error && !showRequiredWarning" class="field-description">
       {{ property.description }}
     </p>
 
     <p v-if="error" class="field-error">
       {{ error }}
+    </p>
+
+    <p v-else-if="showRequiredWarning" class="field-warning">
+      {{ t('fieldValidation.required') }}
     </p>
 
     <!-- Info about secret management -->
@@ -235,7 +247,7 @@ onMounted(() => {
         <path d="M12 16v-4" />
         <path d="M12 8h.01" />
       </svg>
-      シークレットは設定画面で管理されます
+      {{ t('widgets.secretKey.managedInSettings') }}
     </p>
   </div>
 </template>
@@ -346,6 +358,12 @@ onMounted(() => {
 .field-error {
   font-size: 11px;
   color: var(--color-error, #ef4444);
+  margin: 0;
+}
+
+.field-warning {
+  font-size: 11px;
+  color: var(--color-warning, #f59e0b);
   margin: 0;
 }
 

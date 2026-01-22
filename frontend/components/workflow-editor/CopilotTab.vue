@@ -9,6 +9,7 @@ import CopilotProposalCard, { type Proposal } from './CopilotProposalCard.vue'
 import CopilotProgressCard from './copilot/CopilotProgressCard.vue'
 import CopilotInlineAction from './copilot/CopilotInlineAction.vue'
 import CopilotTestResultCard from './copilot/CopilotTestResultCard.vue'
+import CopilotWelcomePanel from './CopilotWelcomePanel.vue'
 import type { WorkflowProgressStatus, InlineAction, WorkflowTestResult, InlineActionResult, CopilotChatExtension } from './copilot/types'
 
 // Configure marked for safe rendering
@@ -28,6 +29,7 @@ function renderMarkdown(content: string): string {
 
 const props = defineProps<{
   workflowId: string
+  stepCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -377,11 +379,24 @@ async function handleSend() {
   await sendAgentMessage()
 }
 
+// Handle structured prompt submit from empty state
+async function handleStructuredPromptSubmit(prompt: string) {
+  chatMessage.value = prompt
+  await sendAgentMessage()
+}
+
 const showAgentStreaming = computed(() => {
   return agentStreamState.value.isStreaming ||
     agentStreamState.value.toolSteps.length > 0 ||
     agentStreamState.value.currentThinking ||
     agentStreamState.value.error
+})
+
+// Show welcome panel when chat is empty OR workflow has 1 or fewer blocks
+const showWelcomePanel = computed(() => {
+  const hasNoChat = chatHistory.value.length === 0
+  const hasMinimalWorkflow = (props.stepCount ?? 0) <= 1
+  return hasNoChat || hasMinimalWorkflow
 })
 
 function updateProposalStatus(proposalId: string, status: 'applied' | 'discarded') {
@@ -444,15 +459,34 @@ function handleProgressActionClick(itemId: string, action: InlineAction) {
 function handleTestRerun() {
   copilotActions.runTest()
 }
+
+// Template prompt mapping for quick start templates
+const templatePrompts: Record<string, string> = {
+  'webhook-notification': 'Webhookを受信してSlackに通知するワークフローを作成してください',
+  'scheduled-report': '定期的にデータを収集してレポートを生成するワークフローを作成してください',
+  'api-integration': '複数のAPIを連携してデータを同期するワークフローを作成してください',
+  'llm-assistant': 'LLMを使った問い合わせ対応ワークフローを作成してください',
+}
+
+// Handle template selection from CopilotWelcomePanel
+async function handleTemplateSelect(templateId: string) {
+  const prompt = templatePrompts[templateId] || `${templateId}のワークフローを作成してください`
+  chatMessage.value = prompt
+  await sendAgentMessage()
+}
 </script>
 
 <template>
   <div class="copilot-tab">
     <div class="chat-section">
       <div ref="chatMessagesRef" class="chat-messages" @scroll="handleChatScroll">
-        <div v-if="chatHistory.length === 0" class="chat-empty">
-          <p>{{ t('copilot.agent.welcome') }}</p>
-          <p class="chat-hint">{{ t('copilot.agent.hint') }}</p>
+        <!-- Welcome Panel: Show when chat empty OR workflow has 1 or fewer blocks -->
+        <div v-if="showWelcomePanel" class="chat-empty">
+          <CopilotWelcomePanel
+            compact
+            @submit="handleStructuredPromptSubmit"
+            @select-template="handleTemplateSelect"
+          />
         </div>
         <div v-for="(msg, idx) in chatHistory" :key="idx" class="chat-message" :class="msg.role">
           <div v-if="msg.toolExecutions && msg.toolExecutions.length > 0" class="saved-tool-executions">
@@ -559,9 +593,7 @@ function handleTestRerun() {
 .cancel-btn:hover { background: var(--color-error); color: white; }
 .chat-section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 0.5rem 0; }
-.chat-empty { text-align: center; padding: 2rem 1rem; color: var(--color-text-secondary); }
-.chat-empty p { margin: 0; font-size: 0.8125rem; }
-.chat-hint { margin-top: 0.5rem !important; font-size: 0.75rem !important; opacity: 0.7; }
+.chat-empty { display: flex; flex-direction: column; padding: 0.5rem 0; }
 .chat-message { padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; border-radius: 8px; font-size: 0.8125rem; line-height: 1.5; }
 .chat-message.user { background: var(--color-primary); color: white; margin-left: 1rem; }
 .chat-message.assistant { background: var(--color-background); border: 1px solid var(--color-border); margin-right: 1rem; }

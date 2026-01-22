@@ -13,20 +13,29 @@ func (r *Registry) registerCopilotWorkflows() {
 // - Get help with block configuration
 //
 // Architecture:
-// - Start → Set Context → Agent Group (with tool steps inside)
+// - Start → Set Default Config → Classify Intent → Switch Intent → Set Intent Config → Set Context → Agent Group
 // - Tool steps inside the Agent Group are automatically available as tools
 // - The agent uses ReAct loop to call tools and generate responses
 //
-// This workflow serves as a dogfooding example - it's built using
-// the same blocks available to all users, demonstrating that
-// sophisticated AI agents can be created with the platform.
+// DOGFOODING: This workflow is built using the same blocks available to all users.
+// All configuration (LLM settings, thresholds, mappings) is defined in the workflow,
+// NOT hardcoded in Go code. This demonstrates that sophisticated AI agents can be
+// created entirely through the workflow builder.
+//
+// Phase 1: LLM Configuration Migration
+// - Default LLM config defined in set_default_config step
+// - Intent-specific configs defined via switch + set-variables steps
+//
+// Phase 2: Validation Configuration Migration
+// - Confidence thresholds defined in set_default_config
+// - Refinement settings defined in workflow variables
 func CopilotWorkflow() *SystemWorkflowDefinition {
 	return &SystemWorkflowDefinition{
 		ID:          "a0000000-0000-0000-0000-000000000201",
 		SystemSlug:  "copilot",
 		Name:        "Copilot AI Assistant",
 		Description: "AI assistant for workflow building and platform guidance",
-		Version:     16,
+		Version:     25,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -58,21 +67,242 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 			},
 
 			// ============================
-			// Set Variables - Context injection
+			// Phase 1: Set Default Configuration
+			// ============================
+			// This step replaces hardcoded DefaultLLMConfig(), DefaultLLMRetryConfig(),
+			// and DefaultRefinementConfig() in copilot_llm.go and copilot_validation.go
+			{
+				TempID:    "set_default_config",
+				Name:      "Set Default Config",
+				Type:      "set-variables",
+				PositionX: 100,
+				PositionY: 300,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.3, "type": "number"},
+						{"name": "llm_max_tokens", "value": 2000, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2.0, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+
+			// ============================
+			// Intent Classification - LLM-based intent detection
+			// ============================
+			{
+				TempID:    "classify_intent",
+				Name:      "Classify Intent",
+				Type:      "llm-structured",
+				PositionX: 160,
+				PositionY: 300,
+				BlockSlug: "llm-structured",
+				Config:    json.RawMessage(intentClassificationConfig()),
+			},
+
+			// ============================
+			// Phase 1: Intent-based Config Switch
+			// ============================
+			// This step replaces hardcoded GetIntentLLMConfig() in copilot_llm.go
+			// Intent to case mapping (internal, not exposed to users):
+			//   case_1 = create, case_2 = debug, case_3 = explain,
+			//   case_4 = enhance, case_5 = search, default = general
+			{
+				TempID:    "switch_intent",
+				Name:      "Switch Intent",
+				Type:      "switch",
+				PositionX: 220,
+				PositionY: 300,
+				BlockSlug: "switch",
+				Config: json.RawMessage(`{
+					"mode": "rules",
+					"cases": [
+						{"name": "case_1", "expression": "$.intent == 'create'"},
+						{"name": "case_2", "expression": "$.intent == 'debug'"},
+						{"name": "case_3", "expression": "$.intent == 'explain'"},
+						{"name": "case_4", "expression": "$.intent == 'enhance'"},
+						{"name": "case_5", "expression": "$.intent == 'search'"},
+						{"name": "default", "is_default": true}
+					]
+				}`),
+			},
+
+			// Intent-specific config steps (Phase 1 migration from GetIntentLLMConfig)
+			// NOTE: Each config step re-injects base config values since Classify Intent doesn't merge input
+			// Case 1: Create intent - higher temperature for creativity
+			{
+				TempID:    "set_config_create",
+				Name:      "Config: Create",
+				Type:      "set-variables",
+				PositionX: 280,
+				PositionY: 100,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.5, "type": "number"},
+						{"name": "llm_max_tokens", "value": 3000, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+			// Case 2: Debug intent - low temperature for precision
+			{
+				TempID:    "set_config_debug",
+				Name:      "Config: Debug",
+				Type:      "set-variables",
+				PositionX: 280,
+				PositionY: 180,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.1, "type": "number"},
+						{"name": "llm_max_tokens", "value": 2000, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+			// Case 3: Explain intent - balanced settings
+			{
+				TempID:    "set_config_explain",
+				Name:      "Config: Explain",
+				Type:      "set-variables",
+				PositionX: 280,
+				PositionY: 260,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.3, "type": "number"},
+						{"name": "llm_max_tokens", "value": 2500, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+			// Case 4: Enhance intent - moderate creativity
+			{
+				TempID:    "set_config_enhance",
+				Name:      "Config: Enhance",
+				Type:      "set-variables",
+				PositionX: 280,
+				PositionY: 340,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.4, "type": "number"},
+						{"name": "llm_max_tokens", "value": 2500, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+			// Case 5: Search intent - low temperature for accuracy
+			{
+				TempID:    "set_config_search",
+				Name:      "Config: Search",
+				Type:      "set-variables",
+				PositionX: 280,
+				PositionY: 420,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.2, "type": "number"},
+						{"name": "llm_max_tokens", "value": 1500, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+			// Default: General intent - use default config values
+			{
+				TempID:    "set_config_general",
+				Name:      "Config: General",
+				Type:      "set-variables",
+				PositionX: 280,
+				PositionY: 500,
+				BlockSlug: "set-variables",
+				Config: json.RawMessage(`{
+					"variables": [
+						{"name": "llm_model", "value": "gpt-4o-mini", "type": "string"},
+						{"name": "llm_temperature", "value": 0.3, "type": "number"},
+						{"name": "llm_max_tokens", "value": 2000, "type": "number"},
+						{"name": "confidence_threshold", "value": 0.7, "type": "number"},
+						{"name": "max_refinement_retries", "value": 2, "type": "number"},
+						{"name": "refinement_temperature", "value": 0.2, "type": "number"},
+						{"name": "retry_max_retries", "value": 3, "type": "number"},
+						{"name": "retry_initial_delay_ms", "value": 1000, "type": "number"},
+						{"name": "retry_max_delay_ms", "value": 30000, "type": "number"},
+						{"name": "retry_backoff_factor", "value": 2, "type": "number"}
+					],
+					"merge_input": true
+				}`),
+			},
+
+			// ============================
+			// Set Variables - Context injection with config
 			// ============================
 			{
 				TempID:    "set_context",
 				Name:      "Set Context",
 				Type:      "set-variables",
-				PositionX: 160,
+				PositionX: 340,
 				PositionY: 300,
 				BlockSlug: "set-variables",
 				Config: json.RawMessage(`{
 					"variables": [
-						{"name": "mode", "value": "{{$.mode}}", "type": "string"},
+						{"name": "intent", "value": "{{intent}}", "type": "string"},
+						{"name": "confidence", "value": "{{confidence}}", "type": "number"},
+						{"name": "detected_blocks", "value": "{{detected_blocks}}", "type": "array"},
 						{"name": "workflow_id", "value": "{{$.workflow_id}}", "type": "string"},
 						{"name": "session_id", "value": "{{$.session_id}}", "type": "string"},
-						{"name": "user_message", "value": "{{$.message}}", "type": "string"}
+						{"name": "user_message", "value": "{{$.message}}", "type": "string"},
+						{"name": "llm_config", "value": {"model": "{{llm_model}}", "temperature": "{{llm_temperature}}", "max_tokens": "{{llm_max_tokens}}"}, "type": "object"},
+						{"name": "retry_config", "value": {"max_retries": "{{retry_max_retries}}", "initial_delay_ms": "{{retry_initial_delay_ms}}", "max_delay_ms": "{{retry_max_delay_ms}}", "backoff_factor": "{{retry_backoff_factor}}"}, "type": "object"},
+						{"name": "validation_config", "value": {"confidence_threshold": "{{confidence_threshold}}", "max_refinement_retries": "{{max_refinement_retries}}", "refinement_temperature": "{{refinement_temperature}}"}, "type": "object"}
 					],
 					"merge_input": true
 				}`),
@@ -464,11 +694,83 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				BlockGroupTempID: "copilot_agent_group",
 				Config:           json.RawMessage(checkWorkflowReadinessToolConfig()),
 			},
+
+			// ============================
+			// Phase 3: Auto-Fix Tools (Migration from copilot_autofix.go)
+			// ============================
+
+			// Block type mapping tool - replaces findSimilarBlockType() in copilot_autofix.go
+			{
+				TempID:           "fix_block_type",
+				Name:             "fix_block_type",
+				Type:             "function",
+				PositionX:        740,
+				PositionY:        140,
+				BlockGroupTempID: "copilot_agent_group",
+				Config:           json.RawMessage(fixBlockTypeToolConfig()),
+			},
+
+			// Auto-fix validation errors tool
+			{
+				TempID:           "auto_fix_errors",
+				Name:             "auto_fix_errors",
+				Type:             "function",
+				PositionX:        740,
+				PositionY:        240,
+				BlockGroupTempID: "copilot_agent_group",
+				Config:           json.RawMessage(autoFixErrorsToolConfig()),
+			},
+
+			// ============================
+			// Phase 4: Security Check Tool (Migration from copilot_sanitizer.go)
+			// ============================
+			{
+				TempID:           "check_security",
+				Name:             "check_security",
+				Type:             "function",
+				PositionX:        740,
+				PositionY:        340,
+				BlockGroupTempID: "copilot_agent_group",
+				Config:           json.RawMessage(checkSecurityToolConfig()),
+			},
+
+			// ============================
+			// Phase 5: Few-shot Examples Tool (Migration from copilot_examples.go)
+			// ============================
+			{
+				TempID:           "get_relevant_examples",
+				Name:             "get_relevant_examples",
+				Type:             "function",
+				PositionX:        740,
+				PositionY:        440,
+				BlockGroupTempID: "copilot_agent_group",
+				Config:           json.RawMessage(getRelevantExamplesToolConfig()),
+			},
 		},
 		Edges: []SystemEdgeDefinition{
-			// Main flow: Start → Set Context → Agent Group
-			{SourceTempID: "start", TargetTempID: "set_context"},
-			// Note: TargetPort is empty to skip port validation (group ports are handled differently)
+			// Main flow: Start → Set Default Config → Classify Intent → Switch Intent
+			{SourceTempID: "start", TargetTempID: "set_default_config"},
+			{SourceTempID: "set_default_config", TargetTempID: "classify_intent"},
+			{SourceTempID: "classify_intent", TargetTempID: "switch_intent"},
+
+			// Intent-specific branches (from switch to config steps)
+			// Mapping: case_1=create, case_2=debug, case_3=explain, case_4=enhance, case_5=search, default=general
+			{SourceTempID: "switch_intent", TargetTempID: "set_config_create", SourcePort: "case_1"},
+			{SourceTempID: "switch_intent", TargetTempID: "set_config_debug", SourcePort: "case_2"},
+			{SourceTempID: "switch_intent", TargetTempID: "set_config_explain", SourcePort: "case_3"},
+			{SourceTempID: "switch_intent", TargetTempID: "set_config_enhance", SourcePort: "case_4"},
+			{SourceTempID: "switch_intent", TargetTempID: "set_config_search", SourcePort: "case_5"},
+			{SourceTempID: "switch_intent", TargetTempID: "set_config_general", SourcePort: "default"},
+
+			// Config steps converge to set_context
+			{SourceTempID: "set_config_create", TargetTempID: "set_context"},
+			{SourceTempID: "set_config_debug", TargetTempID: "set_context"},
+			{SourceTempID: "set_config_explain", TargetTempID: "set_context"},
+			{SourceTempID: "set_config_enhance", TargetTempID: "set_context"},
+			{SourceTempID: "set_config_search", TargetTempID: "set_context"},
+			{SourceTempID: "set_config_general", TargetTempID: "set_context"},
+
+			// Set Context → Agent Group
 			{SourceTempID: "set_context", TargetGroupTempID: "copilot_agent_group"},
 		},
 		BlockGroups: []SystemBlockGroupDefinition{
@@ -495,7 +797,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 func copilotAgentGroupConfig() string {
 	config := map[string]interface{}{
 		"provider":       "anthropic",
-		"model":          "claude-sonnet-4-20250514",
+		"model":          "claude-3-5-haiku-20241022",
 		"max_iterations": 15,
 		"temperature":    0.7,
 		"enable_memory":  true,
@@ -510,11 +812,47 @@ func copilotAgentGroupConfig() string {
 func copilotSystemPrompt() string {
 	return `You are Copilot, an AI assistant for the AI Orchestration platform.
 
+## Context Variables
+
+The following context is available from intent classification:
+- **{{intent}}**: Classified user intent (create, explain, enhance, search, debug, general)
+- **{{confidence}}**: Classification confidence score (0.0-1.0)
+- **{{detected_blocks}}**: Block types detected in the user's message
+
+Use these to optimize your response strategy.
+
 ## MOST IMPORTANT RULES
 
 1. **NEVER introduce yourself** - Do NOT start with "Hello, I'm Copilot" or similar greetings
 2. **ALWAYS use tools first** - Your first action should be calling a tool, not writing text
 3. **Respond with text ONLY after completing tool calls** - Explain what you did, not what you will do
+4. **Use intent to guide your approach** - Adapt your tool selection and response based on the classified intent
+
+## Intent-Based Behavior
+
+**When intent = "create"**:
+→ Immediately use create_workflow_structure with detected_blocks
+→ Call get_block_schema first to ensure proper config
+
+**When intent = "explain"**:
+→ Use search_documentation and get_block_schema
+→ Provide clear explanations with examples
+
+**When intent = "enhance"**:
+→ First get_workflow to understand current state
+→ Suggest specific improvements with rationale
+
+**When intent = "search"**:
+→ Use search_blocks or list_blocks
+→ Filter results based on detected_blocks
+
+**When intent = "debug"**:
+→ Use validate_workflow and check_workflow_readiness
+→ Identify and explain issues clearly
+
+**When intent = "general"**:
+→ Respond conversationally
+→ Offer guidance on how you can help
 
 ## When to Use Tools vs Text
 
@@ -656,7 +994,6 @@ This is the PREFERRED tool for building workflows because:
 - **condition blocks**: Use "true" or "false" for from_port
 - **switch blocks**: Use case values or "default" for from_port
 - **other blocks**: Default from_port is "output"
-- All blocks: Default to_port is "input"
 
 ## Common Block Slugs (use with create_workflow_structure)
 
@@ -688,26 +1025,38 @@ This is the PREFERRED tool for building workflows because:
 
 ## Your Capabilities
 
-### Workflow Building (create mode)
-When users want to create new workflows:
-1. Immediately use tools to start building
-2. If something is unclear, ask ONE specific question while showing progress
-3. Use get_block_schema to get proper configuration
-4. Use create_workflow_structure to create steps and connections (works for both single and multiple steps)
+### Workflow Building (intent = "create")
+When the classified intent is "create":
+1. Check detected_blocks for block types the user mentioned
+2. Use get_block_schema to understand required configuration
+3. Use create_workflow_structure to create steps with proper config
+4. If unclear, ask ONE specific question while showing progress
 
-### Platform Guidance (explain mode)
-When users ask about the platform:
+### Platform Guidance (intent = "explain")
+When the classified intent is "explain":
 1. Search documentation for relevant information
-2. Explain block functionality and configuration
+2. Use get_block_schema to explain block configuration
 3. Provide examples and best practices
 4. Guide users through complex features
 
-### Workflow Enhancement (enhance mode)
-When users want to improve existing workflows:
-1. Analyze the current workflow structure
-2. Identify potential improvements
+### Workflow Enhancement (intent = "enhance")
+When the classified intent is "enhance":
+1. Analyze the current workflow with get_workflow
+2. Identify potential improvements based on context
 3. Suggest optimizations (performance, reliability, cost)
 4. Implement changes with user approval
+
+### Block Search (intent = "search")
+When the classified intent is "search":
+1. Use search_blocks with semantic query for best results
+2. Filter by category if detected_blocks suggests specific types
+3. Present options with brief descriptions
+
+### Debugging (intent = "debug")
+When the classified intent is "debug":
+1. Use validate_workflow to check structure
+2. Use check_workflow_readiness for config issues
+3. Explain problems clearly with suggested fixes
 
 ## Common Blocks Quick Reference
 
@@ -855,6 +1204,12 @@ When creating steps:
 - **check_workflow_readiness**: Check if all steps have required fields configured (CALL AFTER creating steps!)
 - **search_documentation**: Search platform documentation
 - **validate_workflow**: Validate workflow structure
+
+### Auto-Fix & Validation Tools
+- **fix_block_type**: Fix invalid block types by finding similar valid ones (e.g., "gpt" → "llm", "trigger" → "manual-trigger")
+- **auto_fix_errors**: Analyze validation errors and get suggested fixes
+- **check_security**: Check code/text for security issues (dangerous commands, sensitive data patterns)
+- **get_relevant_examples**: Get workflow examples based on intent and keywords (use for reference when creating workflows)
 
 ### External Documentation Tools
 - **web_search**: Search the web for API documentation (requires TAVILY_API_KEY)
@@ -1102,7 +1457,7 @@ After creating workflow steps, you MUST:
 // - Automatic project_id from ctx.targetProjectId (no need to specify)
 func createWorkflowStructureToolConfig() string {
 	return `{
-		"code": "if (!ctx.targetProjectId) return { error: 'No target project - Copilot must be opened from a workflow' }; const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s); const TRIGGER_TYPES = ['schedule-trigger', 'manual-trigger', 'webhook-trigger']; const projectId = ctx.targetProjectId; const tempIdToRealId = {}; const createdStepIds = []; const stepTypes = {}; let triggerStepId = null; for (const stepConfig of (input.steps || [])) { if (!stepConfig.temp_id || !stepConfig.name || !stepConfig.type) { for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Each step requires temp_id, name, and type' }; } const pos = stepConfig.position || {}; const step = ctx.steps.create({ project_id: projectId, name: stepConfig.name, type: stepConfig.type, config: stepConfig.config || {}, position_x: pos.x || 0, position_y: pos.y || 0, block_definition_id: stepConfig.block_definition_id }); if (!step || step.error) { for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Failed to create step: ' + stepConfig.name + (step && step.error ? ' - ' + step.error : '') }; } tempIdToRealId[stepConfig.temp_id] = step.id; createdStepIds.push(step.id); stepTypes[stepConfig.temp_id] = stepConfig.type; if (TRIGGER_TYPES.includes(stepConfig.type)) { triggerStepId = step.id; } } const createdEdgeIds = []; if (triggerStepId) { const wf = ctx.workflows.getWithStart(projectId); if (wf && wf.start_step_id) { const autoEdge = ctx.edges.create({ project_id: projectId, source_step_id: wf.start_step_id, target_step_id: triggerStepId, source_port: 'output', target_port: 'input' }); if (autoEdge && autoEdge.id) { createdEdgeIds.push(autoEdge.id); } } } for (const conn of (input.connections || [])) { let sourceId = tempIdToRealId[conn.from]; let targetId = tempIdToRealId[conn.to]; if (!sourceId && isUUID(conn.from)) { sourceId = conn.from; } if (!targetId && isUUID(conn.to)) { targetId = conn.to; } if (!sourceId) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Invalid step reference: ' + conn.from }; } if (!targetId) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Invalid step reference: ' + conn.to }; } let fromPort = conn.from_port; if (!fromPort) { const sourceType = stepTypes[conn.from]; if (sourceType === 'condition') { fromPort = 'true'; } else if (sourceType === 'switch') { fromPort = 'default'; } else { fromPort = 'output'; } } const edge = ctx.edges.create({ project_id: projectId, source_step_id: sourceId, target_step_id: targetId, source_port: fromPort, target_port: conn.to_port || 'input' }); if (!edge || edge.error) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Failed to create connection from ' + conn.from + ' to ' + conn.to + (edge && edge.error ? ' - ' + edge.error : '') }; } createdEdgeIds.push(edge.id); } return { success: true, steps_created: createdStepIds.length, edges_created: createdEdgeIds.length, step_id_mapping: tempIdToRealId };",
+		"code": "if (!ctx.targetProjectId) return { error: 'No target project - Copilot must be opened from a workflow' }; const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s); const TRIGGER_TYPES = ['schedule-trigger', 'manual-trigger', 'webhook-trigger']; const projectId = ctx.targetProjectId; const tempIdToRealId = {}; const createdStepIds = []; const stepTypes = {}; let triggerStepId = null; for (const stepConfig of (input.steps || [])) { if (!stepConfig.temp_id || !stepConfig.name || !stepConfig.type) { for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Each step requires temp_id, name, and type' }; } const pos = stepConfig.position || {}; const step = ctx.steps.create({ project_id: projectId, name: stepConfig.name, type: stepConfig.type, config: stepConfig.config || {}, position_x: pos.x || 0, position_y: pos.y || 0, block_definition_id: stepConfig.block_definition_id }); if (!step || step.error) { for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Failed to create step: ' + stepConfig.name + (step && step.error ? ' - ' + step.error : '') }; } tempIdToRealId[stepConfig.temp_id] = step.id; createdStepIds.push(step.id); stepTypes[stepConfig.temp_id] = stepConfig.type; if (TRIGGER_TYPES.includes(stepConfig.type)) { triggerStepId = step.id; } } const createdEdgeIds = []; if (triggerStepId) { const wf = ctx.workflows.getWithStart(projectId); if (wf && wf.start_step_id) { const autoEdge = ctx.edges.create({ project_id: projectId, source_step_id: wf.start_step_id, target_step_id: triggerStepId, source_port: 'output' }); if (autoEdge && autoEdge.id) { createdEdgeIds.push(autoEdge.id); } } } for (const conn of (input.connections || [])) { let sourceId = tempIdToRealId[conn.from]; let targetId = tempIdToRealId[conn.to]; if (!sourceId && isUUID(conn.from)) { sourceId = conn.from; } if (!targetId && isUUID(conn.to)) { targetId = conn.to; } if (!sourceId) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Invalid step reference: ' + conn.from }; } if (!targetId) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Invalid step reference: ' + conn.to }; } let fromPort = conn.from_port; if (!fromPort) { const sourceType = stepTypes[conn.from]; if (sourceType === 'condition') { fromPort = 'true'; } else if (sourceType === 'switch') { fromPort = 'default'; } else { fromPort = 'output'; } } const edge = ctx.edges.create({ project_id: projectId, source_step_id: sourceId, target_step_id: targetId, source_port: fromPort }); if (!edge || edge.error) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Failed to create connection from ' + conn.from + ' to ' + conn.to + (edge && edge.error ? ' - ' + edge.error : '') }; } createdEdgeIds.push(edge.id); } return { success: true, steps_created: createdStepIds.length, edges_created: createdEdgeIds.length, step_id_mapping: tempIdToRealId };",
 		"description": "Create multiple steps and connections in a single API call. Project ID is automatically set. Uses temp_id for new steps. Connections can reference temp_ids OR existing step UUIDs (e.g., to connect to an existing Start step). Transactional: all-or-nothing. Automatic port resolution: condition='true', switch='default', others='output'. IMPORTANT: Block defaults are automatically merged with provided config - but you should still call get_block_schema first to understand required fields and provide appropriate values.",
 		"input_schema": {
 			"type": "object",
@@ -1140,8 +1495,7 @@ func createWorkflowStructureToolConfig() string {
 						"properties": {
 							"from": {"type": "string", "description": "Source step temp_id"},
 							"to": {"type": "string", "description": "Target step temp_id"},
-							"from_port": {"type": "string", "description": "Source port (auto-resolved: condition='true', switch='default', others='output')"},
-							"to_port": {"type": "string", "description": "Target port (default: 'input')"}
+							"from_port": {"type": "string", "description": "Source port (auto-resolved: condition='true', switch='default', others='output')"}
 						}
 					}
 				}
@@ -1164,9 +1518,169 @@ func checkWorkflowReadinessToolConfig() string {
 	}`
 }
 
+// intentClassificationConfig returns the configuration for the LLM-based intent classification step
+// This replaces the hardcoded keyword-based IntentClassifier in Go code
+func intentClassificationConfig() string {
+	config := map[string]interface{}{
+		"provider":       "anthropic",
+		"model":          "claude-3-5-haiku-20241022",
+		"preserve_input": true, // Keep original input (message, workflow_id, session_id, etc.) merged with output
+		// NOTE: The schema instruction is included directly in system_prompt because
+		// the llm-structured PreProcess chain may not correctly propagate config changes
+		// when Go maps are converted to JavaScript objects.
+		"system_prompt": `You are a JSON-only intent classifier. You MUST respond with ONLY a valid JSON object, nothing else. No explanations, no markdown, no text before or after the JSON.
+
+## Intent Categories
+
+- create: User wants to create new steps, workflows, or add blocks
+- explain: User wants to understand something about the platform
+- enhance: User wants to modify or improve existing workflow
+- search: User is searching for blocks or documentation
+- debug: User is debugging or troubleshooting
+- general: General questions or casual conversation
+
+## Block Types to Detect
+
+Integration: slack, discord, notion, github, http, email, google-sheets
+AI/LLM: llm, llm-chat, llm-structured, agent
+Control: condition, switch, loop, map, filter
+Data: function, set-variables, template, json-path
+Trigger: schedule-trigger, manual-trigger, webhook-trigger
+
+## Required Output Format
+Respond with a JSON object containing these fields:
+  - intent (string) (required): The classified intent category
+  - confidence (number) (required): Confidence score from 0.0 to 1.0
+  - detected_blocks (array) (required): Block slugs mentioned or implied in the message
+  - reasoning (string): Brief explanation of the classification
+
+Example:
+{"intent":"create","confidence":0.95,"detected_blocks":["slack"],"reasoning":"User wants to create a Slack notification workflow"}`,
+		"user_prompt": "Classify this message and respond with JSON only:\n\n{{$.message}}\n\nRespond with JSON:",
+		"temperature": 0.1,
+		"output_schema": map[string]interface{}{
+			"type":     "object",
+			"required": []string{"intent", "confidence", "detected_blocks"},
+			"properties": map[string]interface{}{
+				"intent": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"create", "explain", "enhance", "search", "debug", "general"},
+					"description": "The classified intent category",
+				},
+				"confidence": map[string]interface{}{
+					"type":        "number",
+					"minimum":     0,
+					"maximum":     1,
+					"description": "Confidence score from 0.0 to 1.0",
+				},
+				"detected_blocks": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Block slugs mentioned or implied in the message",
+				},
+				"reasoning": map[string]interface{}{
+					"type":        "string",
+					"description": "Brief explanation of the classification",
+				},
+			},
+		},
+	}
+	jsonBytes, _ := json.Marshal(config)
+	return string(jsonBytes)
+}
+
 // Note: copilotTools() has been removed.
 // In Agent Group architecture, child steps automatically become tools.
 // Tool definitions are derived from:
 // - Step name -> tool name
 // - Step config.description -> tool description
 // - Step config.input_schema -> tool parameters
+
+// ============================================================================
+// Phase 3: Auto-Fix Tool Configurations (Migration from copilot_autofix.go)
+// ============================================================================
+
+// fixBlockTypeToolConfig returns the configuration for the fix_block_type tool
+// This migrates the hardcoded findSimilarBlockType() from copilot_autofix.go
+func fixBlockTypeToolConfig() string {
+	return `{
+		"code": "if (!input.invalid_type) return { error: 'invalid_type is required' }; const invalidLower = input.invalid_type.toLowerCase(); const mappings = { 'trigger': 'manual-trigger', 'start': 'manual-trigger', 'begin': 'manual-trigger', 'ai': 'llm', 'gpt': 'llm', 'openai': 'llm', 'claude': 'llm', 'anthropic': 'llm', 'if': 'condition', 'branch': 'condition', 'conditional': 'condition', 'case': 'switch', 'delay': 'delay', 'sleep': 'delay', 'timer': 'delay', 'api': 'http', 'request': 'http', 'cron': 'schedule-trigger', 'schedule': 'schedule-trigger', 'scheduled': 'schedule-trigger', 'debug': 'log', 'print': 'log', 'console': 'log', 'parallel': 'map', 'foreach': 'map', 'loop': 'loop', 'merge': 'join', 'aggregate': 'aggregate', 'collect': 'join', 'human': 'human-in-loop', 'approval': 'human-in-loop', 'human_approval': 'human-in-loop' }; if (mappings[invalidLower]) { const mapped = mappings[invalidLower]; const block = ctx.blocks.getWithSchema(mapped); if (block) return { fixed: true, original_type: input.invalid_type, suggested_type: mapped, block_name: block.name, block_description: block.description }; } const blocks = ctx.blocks.list(); for (const block of blocks) { const slugLower = block.slug.toLowerCase(); if (slugLower.includes(invalidLower) || invalidLower.includes(slugLower)) { return { fixed: true, original_type: input.invalid_type, suggested_type: block.slug, block_name: block.name, block_description: block.description }; } } return { fixed: false, original_type: input.invalid_type, error: 'No similar block type found', available_types: blocks.slice(0, 20).map(b => b.slug) };",
+		"description": "Find a valid block type similar to an invalid one. Uses a mapping table and fuzzy matching to suggest corrections. This replaces hardcoded mappings in copilot_autofix.go.",
+		"input_schema": {
+			"type": "object",
+			"required": ["invalid_type"],
+			"properties": {
+				"invalid_type": {"type": "string", "description": "The invalid block type to fix (e.g., 'gpt', 'ai', 'trigger')"}
+			}
+		}
+	}`
+}
+
+// autoFixErrorsToolConfig returns the configuration for the auto_fix_errors tool
+// This migrates auto-fix logic from copilot_autofix.go
+func autoFixErrorsToolConfig() string {
+	return `{
+		"code": "if (!input.errors || !Array.isArray(input.errors)) return { error: 'errors array is required' }; const fixes = []; for (const err of input.errors) { const fix = { error: err, fixed: false }; switch (err.category) { case 'missing_field': if (err.step_id && err.field) { const step = ctx.steps.get(err.step_id); if (step) { const block = ctx.blocks.getWithSchema(step.type); if (block && block.config_defaults && block.config_defaults[err.field] !== undefined) { fix.suggestion = { field: err.field, default_value: block.config_defaults[err.field] }; fix.fixed = true; } } } break; case 'invalid_port': if (err.step_type === 'condition') { fix.suggestion = { valid_ports: ['true', 'false'] }; fix.fixed = true; } else if (err.step_type === 'switch') { fix.suggestion = { valid_ports: ['case values or default'] }; fix.fixed = true; } else { fix.suggestion = { valid_ports: ['output'] }; fix.fixed = true; } break; case 'invalid_block': fix.suggestion = { action: 'Use fix_block_type tool to find a valid replacement' }; break; default: fix.suggestion = { action: 'Manual fix required' }; break; } fixes.push(fix); } return { total: input.errors.length, fixable: fixes.filter(f => f.fixed).length, fixes: fixes };",
+		"description": "Analyze validation errors and suggest auto-fixes. Returns fixable errors with suggested corrections. Use update_step to apply fixes.",
+		"input_schema": {
+			"type": "object",
+			"required": ["errors"],
+			"properties": {
+				"errors": {
+					"type": "array",
+					"description": "Array of validation errors from check_workflow_readiness",
+					"items": {
+						"type": "object",
+						"properties": {
+							"step_id": {"type": "string"},
+							"step_name": {"type": "string"},
+							"step_type": {"type": "string"},
+							"field": {"type": "string"},
+							"category": {"type": "string", "enum": ["missing_field", "invalid_port", "invalid_block", "disconnected", "structure"]}
+						}
+					}
+				}
+			}
+		}
+	}`
+}
+
+// ============================================================================
+// Phase 4: Security Check Tool Configuration (Migration from copilot_sanitizer.go)
+// ============================================================================
+
+// checkSecurityToolConfig returns the configuration for the check_security tool
+// This migrates the hardcoded dangerousPatterns and suspiciousPatterns from copilot_sanitizer.go
+func checkSecurityToolConfig() string {
+	return `{
+		"code": "if (!input.code && !input.text) return { error: 'code or text is required' }; const content = input.code || input.text; const dangerousPatterns = ['rm -rf', 'rm -f', 'DROP TABLE', 'DELETE FROM', 'TRUNCATE', 'eval(', 'exec(', 'system(', 'os.system', 'subprocess.', 'child_process', '__import__', 'require(\"fs\")', 'fs.unlink', 'fs.rmdir', 'process.exit', 'curl |', 'wget |', 'base64 -d', '; bash', '| sh', 'ignore previous', 'ignore above', 'ignore all', 'disregard previous', 'system:', 'jailbreak', 'dan mode']; const suspiciousPatterns = ['password', 'api_key', 'api-key', 'secret', 'token', 'credential', 'private_key', 'private-key', 'access_key', 'access-key']; const contentLower = content.toLowerCase(); const dangerous = []; const suspicious = []; for (const pattern of dangerousPatterns) { if (contentLower.includes(pattern.toLowerCase())) { dangerous.push({ pattern: pattern, risk: 'high' }); } } for (const pattern of suspiciousPatterns) { if (contentLower.includes(pattern.toLowerCase())) { suspicious.push({ pattern: pattern, risk: 'medium' }); } } const riskLevel = dangerous.length > 0 ? 'high' : (suspicious.length > 0 ? 'medium' : 'low'); return { safe: dangerous.length === 0, risk_level: riskLevel, dangerous_patterns: dangerous, suspicious_patterns: suspicious, recommendation: dangerous.length > 0 ? 'Block contains potentially dangerous code. Review and remove before execution.' : (suspicious.length > 0 ? 'Block may contain sensitive data references. Ensure proper handling.' : 'No security issues detected.') };",
+		"description": "Check code or text for security issues. Detects dangerous commands (rm -rf, DROP TABLE, etc.) and suspicious patterns (API keys, passwords). Use this before executing or storing user-provided code.",
+		"input_schema": {
+			"type": "object",
+			"properties": {
+				"code": {"type": "string", "description": "Code to check for security issues"},
+				"text": {"type": "string", "description": "Text to check for security issues (alternative to code)"}
+			}
+		}
+	}`
+}
+
+// ============================================================================
+// Phase 5: Few-shot Examples Tool Configuration (Migration from copilot_examples.go)
+// ============================================================================
+
+// getRelevantExamplesToolConfig returns the configuration for the get_relevant_examples tool
+// This migrates the hardcoded keywordToCategory and WorkflowExamples from copilot_examples.go
+func getRelevantExamplesToolConfig() string {
+	return `{
+		"code": "const intent = input.intent || 'general'; const message = (input.message || '').toLowerCase(); const keywordToCategory = { 'loop': ['並列', '配列', 'ループ', '繰り返し', 'map', 'join', 'each', 'foreach', 'イテレート'], 'llm_chain': ['連鎖', 'チェーン', '多段', '順番', 'chain', 'パイプライン', '連続'], 'nested_condition': ['ネスト', '入れ子', '複数条件', '条件の中に条件', '優先度', '複合条件'], 'retry': ['リトライ', '再試行', '失敗時', 'エラー時', 'retry', '再実行', 'リカバリ'], 'data_pipeline': ['変換', 'フィルター', '集計', 'データ処理', 'パイプライン', 'etl', 'aggregate'], 'webhook_response': ['webhook', '外部連携', 'api呼び出し', 'リクエスト', 'レスポンス', 'コールバック'] }; const examples = { 'basic': { description: '基本的なワークフロー（トリガー → LLM → ログ）', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual-trigger' }, { temp_id: 'step_2', name: 'AI処理', type: 'llm', config: { provider: 'openai', model: 'gpt-4o-mini', user_prompt: '{{$.message}}' } }, { temp_id: 'step_3', name: '結果をログ', type: 'log', config: { message: '処理完了: {{content}}' } }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }] }, 'condition': { description: '条件分岐を含むワークフロー', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual-trigger' }, { temp_id: 'step_2', name: '条件チェック', type: 'condition', config: { expression: '{{value}} > 100' } }, { temp_id: 'step_3', name: '高値処理', type: 'log' }, { temp_id: 'step_4', name: '通常処理', type: 'log' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3', from_port: 'true' }, { from: 'step_2', to: 'step_4', from_port: 'false' }] }, 'integration': { description: '外部連携ワークフロー（Slack通知）', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual-trigger' }, { temp_id: 'step_2', name: 'メッセージ生成', type: 'llm' }, { temp_id: 'step_3', name: 'Slack通知', type: 'slack', config: { channel: '#general' } }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }] }, 'loop': { description: '配列データの並列処理（map/join使用）', steps: [{ temp_id: 'step_1', name: 'トリガー', type: 'manual-trigger' }, { temp_id: 'step_2', name: '配列展開', type: 'map' }, { temp_id: 'step_3', name: '各要素処理', type: 'llm' }, { temp_id: 'step_4', name: '結果集約', type: 'join' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }, { from: 'step_3', to: 'step_4' }] }, 'retry': { description: 'リトライパターン（エラー時の再試行）', steps: [{ temp_id: 'step_1', name: 'トリガー', type: 'manual-trigger' }, { temp_id: 'step_2', name: 'API呼び出し', type: 'http' }, { temp_id: 'step_3', name: '成功チェック', type: 'condition' }, { temp_id: 'step_4', name: '成功処理', type: 'log' }, { temp_id: 'step_5', name: '待機', type: 'delay' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }, { from: 'step_3', to: 'step_4', from_port: 'true' }, { from: 'step_3', to: 'step_5', from_port: 'false' }] } }; const result = []; const intentCategories = { 'create': ['basic', 'integration'], 'enhance': ['condition', 'retry'], 'debug': ['condition', 'retry'], 'general': ['basic'] }; const baseCategories = intentCategories[intent] || ['basic']; for (const cat of baseCategories) { if (examples[cat]) result.push(examples[cat]); } for (const [category, keywords] of Object.entries(keywordToCategory)) { for (const keyword of keywords) { if (message.includes(keyword) && examples[category] && !result.find(e => e.description === examples[category].description)) { result.push(examples[category]); break; } } } return { examples: result.slice(0, 3), count: result.length, intent: intent, matched_keywords: [] };",
+		"description": "Get relevant workflow examples based on intent and keywords in the user message. Returns up to 3 examples that match the context. Use these examples as templates when creating workflows.",
+		"input_schema": {
+			"type": "object",
+			"properties": {
+				"intent": {"type": "string", "enum": ["create", "explain", "enhance", "search", "debug", "general"], "description": "The classified user intent"},
+				"message": {"type": "string", "description": "The user's message to extract keywords from"}
+			}
+		}
+	}`
+}

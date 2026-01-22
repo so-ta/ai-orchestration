@@ -12,6 +12,10 @@ import (
 	"github.com/souta/ai-orchestration/internal/seed/blocks"
 )
 
+// defaultMigrationLanguage is the language used when storing block definitions in DB
+// In future, this could be expanded to store all languages in JSONB columns
+const defaultMigrationLanguage = "ja"
+
 // MigrationResult tracks what happened during migration
 type MigrationResult struct {
 	Created   []string // Slugs of newly created blocks
@@ -183,6 +187,7 @@ func (m *Migrator) upsertBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 // createBlock creates a new system block
 func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBlockDefinition) (string, error) {
 	now := time.Now().UTC()
+	lang := defaultMigrationLanguage
 
 	// Resolve parent block slug to ID
 	var parentBlockID *uuid.UUID
@@ -197,22 +202,25 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 		parentBlockID = &parentBlock.ID
 	}
 
+	// Convert localized fields to single language for DB storage
+	outputPorts := convertLocalizedOutputPorts(seedBlock.OutputPorts, lang)
+	errorCodes := convertLocalizedErrorCodes(seedBlock.ErrorCodes, lang)
+
 	block := &domain.BlockDefinition{
 		ID:                  uuid.New(),
 		TenantID:            nil, // System block
 		Slug:                seedBlock.Slug,
-		Name:                seedBlock.Name,
-		Description:         seedBlock.Description,
+		Name:                seedBlock.Name.Get(lang),
+		Description:         seedBlock.Description.Get(lang),
 		Category:            seedBlock.Category,
 		Subcategory:         seedBlock.Subcategory,
 		Icon:                seedBlock.Icon,
-		ConfigSchema:        seedBlock.ConfigSchema,
+		ConfigSchema:        seedBlock.ConfigSchema.Get(lang),
 		OutputSchema:        seedBlock.OutputSchema,
-		InputPorts:          seedBlock.InputPorts,
-		OutputPorts:         seedBlock.OutputPorts,
+		OutputPorts:         outputPorts,
 		Code:                seedBlock.Code,
-		UIConfig:            seedBlock.UIConfig,
-		ErrorCodes:          seedBlock.ErrorCodes,
+		UIConfig:            seedBlock.UIConfig.Get(lang),
+		ErrorCodes:          errorCodes,
 		RequiredCredentials: seedBlock.RequiredCredentials,
 		IsSystem:            true,
 		IsPublic:            false,
@@ -251,6 +259,8 @@ func (m *Migrator) createBlock(ctx context.Context, seedBlock *blocks.SystemBloc
 
 // updateBlock updates an existing system block
 func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefinition, seedBlock *blocks.SystemBlockDefinition) (string, error) {
+	lang := defaultMigrationLanguage
+
 	// Create version snapshot BEFORE updating only if version changes
 	if m.versionRepo != nil && existing.Version != seedBlock.Version {
 		version := domain.NewBlockVersion(existing, "Migration update", nil)
@@ -272,19 +282,22 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 		parentBlockID = &parentBlock.ID
 	}
 
+	// Convert localized fields to single language for DB storage
+	outputPorts := convertLocalizedOutputPorts(seedBlock.OutputPorts, lang)
+	errorCodes := convertLocalizedErrorCodes(seedBlock.ErrorCodes, lang)
+
 	// Update fields (version is explicitly set from seedBlock)
-	existing.Name = seedBlock.Name
-	existing.Description = seedBlock.Description
+	existing.Name = seedBlock.Name.Get(lang)
+	existing.Description = seedBlock.Description.Get(lang)
 	existing.Category = seedBlock.Category
 	existing.Subcategory = seedBlock.Subcategory
 	existing.Icon = seedBlock.Icon
-	existing.ConfigSchema = seedBlock.ConfigSchema
+	existing.ConfigSchema = seedBlock.ConfigSchema.Get(lang)
 	existing.OutputSchema = seedBlock.OutputSchema
-	existing.InputPorts = seedBlock.InputPorts
-	existing.OutputPorts = seedBlock.OutputPorts
+	existing.OutputPorts = outputPorts
 	existing.Code = seedBlock.Code
-	existing.UIConfig = seedBlock.UIConfig
-	existing.ErrorCodes = seedBlock.ErrorCodes
+	existing.UIConfig = seedBlock.UIConfig.Get(lang)
+	existing.ErrorCodes = errorCodes
 	existing.RequiredCredentials = seedBlock.RequiredCredentials
 	existing.Enabled = seedBlock.Enabled
 	existing.Version = seedBlock.Version // Use explicit version from seed (no auto-increment)
@@ -310,16 +323,18 @@ func (m *Migrator) updateBlock(ctx context.Context, existing *domain.BlockDefini
 
 // hasChanges compares existing block with seed definition
 func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.SystemBlockDefinition) bool {
+	lang := defaultMigrationLanguage
+
 	// Compare version first
 	if existing.Version != seed.Version {
 		return true
 	}
 
-	// Compare key fields that would indicate a change
-	if existing.Name != seed.Name {
+	// Compare key fields that would indicate a change (using localized values)
+	if existing.Name != seed.Name.Get(lang) {
 		return true
 	}
-	if existing.Description != seed.Description {
+	if existing.Description != seed.Description.Get(lang) {
 		return true
 	}
 	if existing.Category != seed.Category {
@@ -358,28 +373,27 @@ func (m *Migrator) hasChanges(existing *domain.BlockDefinition, seed *blocks.Sys
 		return true
 	}
 
-	// Compare JSON fields
-	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema) {
+	// Compare JSON fields (using localized schema)
+	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema.Get(lang)) {
 		return true
 	}
 	if !jsonEqual(existing.OutputSchema, seed.OutputSchema) {
 		return true
 	}
-	if !jsonEqual(existing.UIConfig, seed.UIConfig) {
+	if !jsonEqual(existing.UIConfig, seed.UIConfig.Get(lang)) {
 		return true
 	}
 	if !jsonEqual(existing.RequiredCredentials, seed.RequiredCredentials) {
 		return true
 	}
 
-	// Compare ports and error codes
-	if !portsEqual(existing.InputPorts, seed.InputPorts) {
+	// Compare ports and error codes (using converted values)
+	seedOutputPorts := convertLocalizedOutputPorts(seed.OutputPorts, lang)
+	seedErrorCodes := convertLocalizedErrorCodes(seed.ErrorCodes, lang)
+	if !outputPortsEqual(existing.OutputPorts, seedOutputPorts) {
 		return true
 	}
-	if !outputPortsEqual(existing.OutputPorts, seed.OutputPorts) {
-		return true
-	}
-	if !errorCodesEqual(existing.ErrorCodes, seed.ErrorCodes) {
+	if !errorCodesEqual(existing.ErrorCodes, seedErrorCodes) {
 		return true
 	}
 
@@ -426,25 +440,6 @@ func jsonEqual(a, b json.RawMessage) bool {
 	bNorm, _ := json.Marshal(bVal)
 
 	return string(aNorm) == string(bNorm)
-}
-
-// portsEqual compares input ports
-func portsEqual(a []domain.InputPort, b []domain.InputPort) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Name != b[i].Name ||
-			a[i].Label != b[i].Label ||
-			a[i].Description != b[i].Description ||
-			a[i].Required != b[i].Required {
-			return false
-		}
-		if !jsonEqual(a[i].Schema, b[i].Schema) {
-			return false
-		}
-	}
-	return true
 }
 
 // outputPortsEqual compares output ports
@@ -525,30 +520,29 @@ func (m *Migrator) DryRun(ctx context.Context, registry *blocks.Registry) (*DryR
 
 // describeChanges returns a human-readable description of what changed
 func (m *Migrator) describeChanges(existing *domain.BlockDefinition, seed *blocks.SystemBlockDefinition) string {
+	lang := defaultMigrationLanguage
 	changes := make([]string, 0)
 
 	if existing.Version != seed.Version {
 		changes = append(changes, "version")
 	}
-	if existing.Name != seed.Name {
+	if existing.Name != seed.Name.Get(lang) {
 		changes = append(changes, "name")
 	}
-	if existing.Description != seed.Description {
+	if existing.Description != seed.Description.Get(lang) {
 		changes = append(changes, "description")
 	}
 	if existing.Code != seed.Code {
 		changes = append(changes, "code")
 	}
-	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema) {
+	if !jsonEqual(existing.ConfigSchema, seed.ConfigSchema.Get(lang)) {
 		changes = append(changes, "config_schema")
 	}
 	if !jsonEqual(existing.OutputSchema, seed.OutputSchema) {
 		changes = append(changes, "output_schema")
 	}
-	if !portsEqual(existing.InputPorts, seed.InputPorts) {
-		changes = append(changes, "input_ports")
-	}
-	if !outputPortsEqual(existing.OutputPorts, seed.OutputPorts) {
+	seedOutputPorts := convertLocalizedOutputPorts(seed.OutputPorts, lang)
+	if !outputPortsEqual(existing.OutputPorts, seedOutputPorts) {
 		changes = append(changes, "output_ports")
 	}
 	// Inheritance fields
@@ -572,6 +566,35 @@ func (m *Migrator) describeChanges(existing *domain.BlockDefinition, seed *block
 	result := changes[0]
 	for i := 1; i < len(changes); i++ {
 		result += ", " + changes[i]
+	}
+	return result
+}
+
+// convertLocalizedOutputPorts converts localized output ports to domain output ports
+func convertLocalizedOutputPorts(ports []domain.LocalizedOutputPort, lang string) []domain.OutputPort {
+	result := make([]domain.OutputPort, len(ports))
+	for i, p := range ports {
+		result[i] = domain.OutputPort{
+			Name:        p.Name,
+			Label:       p.Label.Get(lang),
+			Description: p.Description.Get(lang),
+			IsDefault:   p.IsDefault,
+			Schema:      p.Schema,
+		}
+	}
+	return result
+}
+
+// convertLocalizedErrorCodes converts localized error codes to domain error codes
+func convertLocalizedErrorCodes(codes []domain.LocalizedErrorCodeDef, lang string) []domain.ErrorCodeDef {
+	result := make([]domain.ErrorCodeDef, len(codes))
+	for i, c := range codes {
+		result[i] = domain.ErrorCodeDef{
+			Code:        c.Code,
+			Name:        c.Name.Get(lang),
+			Description: c.Description.Get(lang),
+			Retryable:   c.Retryable,
+		}
 	}
 	return result
 }

@@ -33,11 +33,6 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal error codes: %w", err)
 	}
 
-	inputPortsJSON, err := json.Marshal(block.InputPorts)
-	if err != nil {
-		return fmt.Errorf("failed to marshal input ports: %w", err)
-	}
-
 	outputPortsJSON, err := json.Marshal(block.OutputPorts)
 	if err != nil {
 		return fmt.Errorf("failed to marshal output ports: %w", err)
@@ -80,13 +75,13 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 	query := `
 		INSERT INTO block_definitions (
 			id, tenant_id, slug, name, description, category, subcategory, icon,
-			config_schema, output_schema, input_ports, output_ports,
+			config_schema, output_schema, output_ports,
 			error_codes, required_credentials, is_public,
 			code, ui_config, is_system, version,
 			parent_block_id, config_defaults, pre_process, post_process, internal_steps,
 			group_kind, is_container, request, response,
 			enabled, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
 	`
 
 	_, err = r.pool.Exec(ctx, query,
@@ -100,7 +95,6 @@ func (r *BlockDefinitionRepository) Create(ctx context.Context, block *domain.Bl
 		block.Icon,
 		block.ConfigSchema,
 		block.OutputSchema,
-		inputPortsJSON,
 		outputPortsJSON,
 		errorCodesJSON,
 		block.RequiredCredentials,
@@ -155,7 +149,7 @@ func (r *BlockDefinitionRepository) GetByIDRaw(ctx context.Context, id uuid.UUID
 func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID) (*domain.BlockDefinition, error) {
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, subcategory, icon,
-			   config_schema, output_schema, input_ports, output_ports,
+			   config_schema, output_schema, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
@@ -167,7 +161,6 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 
 	block := &domain.BlockDefinition{}
 	var errorCodesJSON []byte
-	var inputPortsJSON []byte
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
 	var requestJSON []byte
@@ -186,7 +179,6 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 		&block.Icon,
 		&block.ConfigSchema,
 		&block.OutputSchema,
-		&inputPortsJSON,
 		&outputPortsJSON,
 		&errorCodesJSON,
 		&block.RequiredCredentials,
@@ -224,12 +216,6 @@ func (r *BlockDefinitionRepository) getByIDRaw(ctx context.Context, id uuid.UUID
 	if len(errorCodesJSON) > 0 {
 		if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
-		}
-	}
-
-	if len(inputPortsJSON) > 0 {
-		if err := json.Unmarshal(inputPortsJSON, &block.InputPorts); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal input ports: %w", err)
 		}
 	}
 
@@ -285,7 +271,7 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	// Use proper NULL comparison: (tenant_id = $2) OR ($2 IS NULL AND tenant_id IS NULL)
 	query := `
 		SELECT id, tenant_id, slug, name, description, category, subcategory, icon,
-			   config_schema, output_schema, input_ports, output_ports,
+			   config_schema, output_schema, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
@@ -299,7 +285,6 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 
 	block := &domain.BlockDefinition{}
 	var errorCodesJSON []byte
-	var inputPortsJSON []byte
 	var outputPortsJSON []byte
 	var internalStepsJSON []byte
 	var requestJSON []byte
@@ -318,7 +303,6 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 		&block.Icon,
 		&block.ConfigSchema,
 		&block.OutputSchema,
-		&inputPortsJSON,
 		&outputPortsJSON,
 		&errorCodesJSON,
 		&block.RequiredCredentials,
@@ -357,12 +341,6 @@ func (r *BlockDefinitionRepository) getBySlugRaw(ctx context.Context, tenantID *
 	if len(errorCodesJSON) > 0 {
 		if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
-		}
-	}
-
-	if len(inputPortsJSON) > 0 {
-		if err := json.Unmarshal(inputPortsJSON, &block.InputPorts); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal input ports: %w", err)
 		}
 	}
 
@@ -442,7 +420,7 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 
 	query := fmt.Sprintf(`
 		SELECT id, tenant_id, slug, name, description, category, subcategory, icon,
-			   config_schema, output_schema, input_ports, output_ports,
+			   config_schema, output_schema, output_ports,
 			   COALESCE(error_codes, '[]'::jsonb), required_credentials, COALESCE(is_public, false),
 			   COALESCE(code, ''), COALESCE(ui_config, '{}'), COALESCE(is_system, false), COALESCE(version, 1),
 			   parent_block_id, COALESCE(config_defaults, '{}'), COALESCE(pre_process, ''), COALESCE(post_process, ''), COALESCE(internal_steps, '[]'),
@@ -463,7 +441,6 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 	for rows.Next() {
 		block := &domain.BlockDefinition{}
 		var errorCodesJSON []byte
-		var inputPortsJSON []byte
 		var outputPortsJSON []byte
 		var internalStepsJSON []byte
 		var requestJSON []byte
@@ -482,7 +459,6 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 			&block.Icon,
 			&block.ConfigSchema,
 			&block.OutputSchema,
-			&inputPortsJSON,
 			&outputPortsJSON,
 			&errorCodesJSON,
 			&block.RequiredCredentials,
@@ -518,12 +494,6 @@ func (r *BlockDefinitionRepository) List(ctx context.Context, tenantID *uuid.UUI
 		if len(errorCodesJSON) > 0 {
 			if err := json.Unmarshal(errorCodesJSON, &block.ErrorCodes); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal error codes: %w", err)
-			}
-		}
-
-		if len(inputPortsJSON) > 0 {
-			if err := json.Unmarshal(inputPortsJSON, &block.InputPorts); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal input ports: %w", err)
 			}
 		}
 
@@ -569,11 +539,6 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		return fmt.Errorf("failed to marshal error codes: %w", err)
 	}
 
-	inputPortsJSON, err := json.Marshal(block.InputPorts)
-	if err != nil {
-		return fmt.Errorf("failed to marshal input ports: %w", err)
-	}
-
 	outputPortsJSON, err := json.Marshal(block.OutputPorts)
 	if err != nil {
 		return fmt.Errorf("failed to marshal output ports: %w", err)
@@ -616,12 +581,12 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 	query := `
 		UPDATE block_definitions
 		SET name = $2, description = $3, category = $4, subcategory = $5, icon = $6,
-			config_schema = $7, output_schema = $8, input_ports = $9, output_ports = $10,
-			error_codes = $11, required_credentials = $12, is_public = $13,
-			code = $14, ui_config = $15, is_system = $16, version = $17,
-			parent_block_id = $18, config_defaults = $19, pre_process = $20, post_process = $21, internal_steps = $22,
-			group_kind = $23, is_container = $24, request = $25, response = $26,
-			enabled = $27, updated_at = NOW()
+			config_schema = $7, output_schema = $8, output_ports = $9,
+			error_codes = $10, required_credentials = $11, is_public = $12,
+			code = $13, ui_config = $14, is_system = $15, version = $16,
+			parent_block_id = $17, config_defaults = $18, pre_process = $19, post_process = $20, internal_steps = $21,
+			group_kind = $22, is_container = $23, request = $24, response = $25,
+			enabled = $26, updated_at = NOW()
 		WHERE id = $1
 	`
 
@@ -634,7 +599,6 @@ func (r *BlockDefinitionRepository) Update(ctx context.Context, block *domain.Bl
 		block.Icon,
 		block.ConfigSchema,
 		block.OutputSchema,
-		inputPortsJSON,
 		outputPortsJSON,
 		errorCodesJSON,
 		block.RequiredCredentials,
@@ -759,7 +723,6 @@ func (r *BlockDefinitionRepository) resolveInheritance(ctx context.Context, bloc
 		// Schemas - use child's if set, otherwise inherit from parent chain
 		ConfigSchema: block.ConfigSchema,
 		OutputSchema: block.OutputSchema,
-		InputPorts:   block.InputPorts,
 		OutputPorts:  block.OutputPorts,
 		ErrorCodes:   block.ErrorCodes,
 		UIConfig:     block.UIConfig,

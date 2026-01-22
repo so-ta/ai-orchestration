@@ -67,7 +67,7 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.service.List(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *AuditHandler) GetByResource(w http.ResponseWriter, r *http.Request) {
 
 	logs, err := h.service.ListByResource(r.Context(), tenantID, resourceType, resourceID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

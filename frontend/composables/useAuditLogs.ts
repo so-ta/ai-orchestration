@@ -96,7 +96,7 @@ export function useAuditLogs() {
     return colorMap[action] || '#6b7280'
   }
 
-  // Note: State refs not wrapped in readonly() to preserve backward compatibility
+  // Note: State refs not wrapped in readonly() for direct mutation support
   return {
     auditLogs,
     total,

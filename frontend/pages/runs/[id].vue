@@ -1540,13 +1540,6 @@ onUnmounted(() => {
   color: var(--color-text-secondary);
 }
 
-/* Legacy Overview Grid (kept for compatibility) */
-.overview-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-}
-
 .info-card {
   padding: 1.5rem;
   background: var(--color-surface);
@@ -2429,10 +2422,6 @@ onUnmounted(() => {
 @media (max-width: 1024px) {
   .stats-bar {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .overview-grid {
-    grid-template-columns: 1fr;
   }
 }
 

@@ -34,7 +34,6 @@ export class CreateEdgeCommand implements Command {
       source_block_group_id?: string
       target_block_group_id?: string
       source_port?: string
-      target_port?: string
       condition?: string
     },
     private projectsApi: ProjectsApi,
@@ -139,9 +138,6 @@ export class DeleteEdgeCommand implements Command {
     }
     if (this.deletedEdge.source_port) {
       edgeData.source_port = this.deletedEdge.source_port
-    }
-    if (this.deletedEdge.target_port) {
-      edgeData.target_port = this.deletedEdge.target_port
     }
     if (this.deletedEdge.condition) {
       edgeData.condition = this.deletedEdge.condition

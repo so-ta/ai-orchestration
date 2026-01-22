@@ -4,6 +4,8 @@ import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
 import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
 import VariablePicker from '../variable-picker/VariablePicker.vue'
 
+const { t } = useI18n()
+
 // DOMPurify is loaded dynamically for SSR compatibility
 const purify = ref<typeof import('dompurify')['default'] | null>(null)
 
@@ -83,6 +85,11 @@ const isRequired = computed(() => {
   return props.required || props.property['x-required'] === true
 })
 
+// Track whether field has been touched for validation
+const touched = ref(false)
+const isEmpty = computed(() => !props.modelValue || props.modelValue.trim() === '')
+const showRequiredWarning = computed(() => isRequired.value && touched.value && isEmpty.value && !props.error)
+
 // Number of rows
 const rows = computed(() => {
   return props.override?.rows || 10
@@ -145,6 +152,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 // Handle blur
 function handleBlur() {
+  touched.value = true
   emit('blur')
 }
 
@@ -546,6 +554,10 @@ const highlightedCode = computed(() => {
       {{ error }}
     </p>
 
+    <p v-else-if="showRequiredWarning" class="code-widget-warning">
+      {{ t('fieldValidation.required') }}
+    </p>
+
     <VariablePicker
       v-if="availableVariables.length > 0"
       v-model="pickerVisible"
@@ -722,6 +734,12 @@ const highlightedCode = computed(() => {
 .code-widget-error {
   font-size: 0.6875rem;
   color: var(--color-error);
+  margin: 0;
+}
+
+.code-widget-warning {
+  font-size: 0.6875rem;
+  color: var(--color-warning, #f59e0b);
   margin: 0;
 }
 

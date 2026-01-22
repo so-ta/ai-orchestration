@@ -13,21 +13,7 @@ import AvailableVariablesSection from './properties/AvailableVariablesSection.vu
 import IOPortsDisplay from './properties/IOPortsDisplay.vue'
 import OutputSchemaPreview from './properties/OutputSchemaPreview.vue'
 import CredentialBindingsSection from '../credentials/CredentialBindingsSection.vue'
-import { useStepTest } from '~/composables/test'
-// Legacy Forms
-import LegacyLlmForm from './properties/legacy/LegacyLlmForm.vue'
-import LegacyToolForm from './properties/legacy/LegacyToolForm.vue'
-import LegacyConditionForm from './properties/legacy/LegacyConditionForm.vue'
-import LegacySwitchForm from './properties/legacy/LegacySwitchForm.vue'
-import LegacyLoopForm from './properties/legacy/LegacyLoopForm.vue'
-import LegacyWaitForm from './properties/legacy/LegacyWaitForm.vue'
-import LegacyFunctionForm from './properties/legacy/LegacyFunctionForm.vue'
-import LegacyRouterForm from './properties/legacy/LegacyRouterForm.vue'
-import LegacyHumanInLoopForm from './properties/legacy/LegacyHumanInLoopForm.vue'
-import LegacyMapForm from './properties/legacy/LegacyMapForm.vue'
-import LegacySubflowForm from './properties/legacy/LegacySubflowForm.vue'
-import LegacyStartForm from './properties/legacy/LegacyStartForm.vue'
-import LegacyLogForm from './properties/legacy/LegacyLogForm.vue'
+import { useStepTest, type StepTestResult } from '~/composables/test'
 // Composables
 import { useAvailableVariables } from './composables/useAvailableVariables'
 import { AVAILABLE_VARIABLES_KEY, ACTIVE_FIELD_INSERTER_KEY } from './config/variable-picker/useVariableInsertion'
@@ -65,6 +51,7 @@ const emit = defineEmits<{
   'update:trigger': [data: { trigger_type: StartTriggerType; trigger_config: object }]
   'update:credential-bindings': [bindings: Record<string, string>]
   'run:created': [run: Run]
+  'test-result': [result: StepTestResult]
 }>()
 
 // Active tab state
@@ -97,6 +84,13 @@ watch(() => props.step?.id, (stepId) => {
     clearResult()
   }
 }, { immediate: true })
+
+// Emit test result to parent for floating panel display
+watch(testResult, (result) => {
+  if (result) {
+    emit('test-result', result)
+  }
+})
 
 // Trigger block types
 const TRIGGER_BLOCK_TYPES = ['start', 'manual_trigger', 'schedule_trigger', 'webhook_trigger']
@@ -227,10 +221,7 @@ provide(ACTIVE_FIELD_INSERTER_KEY, {
 
 // Show I/O ports
 const showIOPorts = computed(() => {
-  return currentBlockDef.value && (
-    (currentBlockDef.value.input_ports?.length ?? 0) > 1 ||
-    (currentBlockDef.value.output_ports?.length ?? 0) > 1
-  )
+  return currentBlockDef.value && (currentBlockDef.value.output_ports?.length ?? 0) > 1
 })
 
 // Handlers
@@ -310,7 +301,7 @@ function handleOpenSettings() {
 
         <!-- Dynamic Config Form -->
         <div v-if="hasConfigSchema && !['join', 'note', ...TRIGGER_BLOCK_TYPES].includes(formType)" class="form-section">
-          <h4 class="section-title">{{ currentBlockDef?.name || formType }} 設定</h4>
+          <h4 class="section-title">{{ t('widgets.propertiesPanel.configSectionTitle', { name: currentBlockDef?.name || formType }) }}</h4>
           <DynamicConfigForm v-model="formConfig" :schema="configSchema" :ui-config="uiConfig" :disabled="readonlyMode" />
         </div>
 
@@ -355,25 +346,9 @@ function handleOpenSettings() {
         <!-- Template Preview Section -->
         <TemplatePreviewSection v-if="showTemplatePreview" :variables="templateVariables" />
 
-        <!-- Legacy Forms (when no config_schema) -->
-        <LegacyLlmForm v-if="!hasConfigSchema && formType === 'llm'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyToolForm v-if="!hasConfigSchema && formType === 'tool'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyConditionForm v-if="!hasConfigSchema && formType === 'condition'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacySwitchForm v-if="!hasConfigSchema && formType === 'switch'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyLoopForm v-if="!hasConfigSchema && formType === 'loop'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyWaitForm v-if="!hasConfigSchema && formType === 'wait'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyFunctionForm v-if="!hasConfigSchema && formType === 'function'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyRouterForm v-if="!hasConfigSchema && formType === 'router'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyHumanInLoopForm v-if="!hasConfigSchema && formType === 'human_in_loop'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyMapForm v-if="!hasConfigSchema && formType === 'map'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacySubflowForm v-if="!hasConfigSchema && formType === 'subflow'" v-model="formConfig" :disabled="readonlyMode" />
-        <LegacyStartForm v-if="!hasConfigSchema && formType === 'start'" :disabled="readonlyMode" />
-        <LegacyLogForm v-if="!hasConfigSchema && formType === 'log'" v-model="formConfig" :disabled="readonlyMode" />
-
         <!-- I/O Ports Display -->
         <IOPortsDisplay
           v-if="showIOPorts"
-          :input-ports="currentBlockDef?.input_ports"
           :output-ports="currentBlockDef?.output_ports"
           :step-type="formType"
         />

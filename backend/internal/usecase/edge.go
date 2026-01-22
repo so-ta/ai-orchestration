@@ -56,7 +56,6 @@ type CreateEdgeInput struct {
 	SourceBlockGroupID *uuid.UUID
 	TargetBlockGroupID *uuid.UUID
 	SourcePort         string
-	TargetPort         string
 	Condition          string
 }
 
@@ -94,29 +93,22 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 		sourceBlockGroup = group
 	}
 
-	// Verify target exists (step or group) and validate target port
-	var targetStep *domain.Step
-	var targetBlockGroup *domain.BlockGroup
+	// Verify target exists (step or group)
 	if input.TargetStepID != nil {
-		step, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.TargetStepID)
+		_, err := u.stepRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.TargetStepID)
 		if err != nil {
 			return nil, err
 		}
-		targetStep = step
 	} else if input.TargetBlockGroupID != nil && u.blockGroupRepo != nil {
-		group, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.TargetBlockGroupID)
+		_, err := u.blockGroupRepo.GetByID(ctx, input.TenantID, input.ProjectID, *input.TargetBlockGroupID)
 		if err != nil {
 			return nil, err
 		}
-		targetBlockGroup = group
 	}
 
 	// Validate ports if block definition repository is available
 	if u.blockDefinitionRepo != nil {
 		if err := u.validateSourcePort(ctx, input.SourcePort, sourceStep, sourceBlockGroup); err != nil {
-			return nil, err
-		}
-		if err := u.validateTargetPort(ctx, input.TargetPort, targetStep, targetBlockGroup); err != nil {
 			return nil, err
 		}
 	}
@@ -128,13 +120,13 @@ func (u *EdgeUsecase) Create(ctx context.Context, input CreateEdgeInput) (*domai
 	var newEdge *domain.Edge
 	if input.SourceStepID != nil && input.TargetStepID != nil {
 		// Step to step
-		newEdge = domain.NewEdgeWithPort(input.TenantID, input.ProjectID, *input.SourceStepID, *input.TargetStepID, input.SourcePort, input.TargetPort, input.Condition)
+		newEdge = domain.NewEdgeWithPort(input.TenantID, input.ProjectID, *input.SourceStepID, *input.TargetStepID, input.SourcePort, input.Condition)
 	} else if input.SourceStepID != nil && input.TargetBlockGroupID != nil {
 		// Step to group
 		newEdge = domain.NewEdgeToGroup(input.TenantID, input.ProjectID, *input.SourceStepID, *input.TargetBlockGroupID, input.SourcePort)
 	} else if input.SourceBlockGroupID != nil && input.TargetStepID != nil {
 		// Group to step
-		newEdge = domain.NewEdgeFromGroup(input.TenantID, input.ProjectID, *input.SourceBlockGroupID, *input.TargetStepID, input.TargetPort)
+		newEdge = domain.NewEdgeFromGroup(input.TenantID, input.ProjectID, *input.SourceBlockGroupID, *input.TargetStepID)
 	} else if input.SourceBlockGroupID != nil && input.TargetBlockGroupID != nil {
 		// Group to group
 		newEdge = domain.NewGroupToGroupEdge(input.TenantID, input.ProjectID, *input.SourceBlockGroupID, *input.TargetBlockGroupID)
@@ -251,10 +243,6 @@ func (u *EdgeUsecase) validateSourcePort(ctx context.Context, sourcePort string,
 	}
 
 	if err != nil {
-		// If block definition not found, skip validation (legacy blocks)
-		if err == domain.ErrBlockDefinitionNotFound {
-			return nil
-		}
 		return err
 	}
 
@@ -272,56 +260,12 @@ func (u *EdgeUsecase) validateSourcePort(ctx context.Context, sourcePort string,
 	return domain.ErrSourcePortNotFound
 }
 
-// validateTargetPort validates that the target port exists in the block definition
-func (u *EdgeUsecase) validateTargetPort(ctx context.Context, targetPort string, step *domain.Step, group *domain.BlockGroup) error {
-	// Skip validation if port is empty (default port will be used)
-	if targetPort == "" {
-		return nil
-	}
-
-	// Special case: "group-input" is a virtual port for block groups
-	if group != nil && targetPort == "group-input" {
-		return nil
-	}
-
-	var blockDef *domain.BlockDefinition
-	var err error
-
-	if step != nil {
-		blockDef, err = u.getBlockDefinitionForStep(ctx, step)
-	} else if group != nil {
-		blockDef, err = u.getBlockDefinitionForGroup(ctx, group)
-	}
-
-	if err != nil {
-		// If block definition not found, skip validation (legacy blocks)
-		if err == domain.ErrBlockDefinitionNotFound {
-			return nil
-		}
-		return err
-	}
-
-	if blockDef == nil {
-		return nil
-	}
-
-	// Check if the target port exists in input ports
-	for _, port := range blockDef.InputPorts {
-		if port.Name == targetPort {
-			return nil
-		}
-	}
-
-	return domain.ErrTargetPortNotFound
-}
-
 // getBlockDefinitionForStep retrieves the block definition for a step
 func (u *EdgeUsecase) getBlockDefinitionForStep(ctx context.Context, step *domain.Step) (*domain.BlockDefinition, error) {
-	if step.BlockDefinitionID != nil {
-		return u.blockDefinitionRepo.GetByID(ctx, *step.BlockDefinitionID)
+	if step.BlockDefinitionID == nil {
+		return nil, domain.ErrBlockDefinitionNotFound
 	}
-	// Use step type as slug for legacy steps
-	return u.blockDefinitionRepo.GetBySlug(ctx, nil, string(step.Type))
+	return u.blockDefinitionRepo.GetByID(ctx, *step.BlockDefinitionID)
 }
 
 // getBlockDefinitionForGroup retrieves the block definition for a block group

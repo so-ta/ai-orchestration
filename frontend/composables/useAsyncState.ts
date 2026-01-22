@@ -84,7 +84,7 @@ export function useAsyncState<T>() {
  * Creates a list state handler with pagination support
  *
  * Note: Unlike useAsyncState, the state refs are returned as-is (not readonly)
- * to preserve backward compatibility with existing components that mutate them.
+ * because components may need to mutate pagination values directly.
  */
 export function useListState<T>() {
   const items = ref<T[]>([]) as Ref<T[]>
@@ -146,8 +146,8 @@ export function useListState<T>() {
     pagination.value = { page: 1, limit: 20, total: 0 }
   }
 
-  // Note: State refs are not wrapped in readonly() to preserve backward compatibility
-  // with components that directly mutate pagination.value.page, etc.
+  // Note: State refs are not wrapped in readonly() because components
+  // may need to mutate pagination.value.page, etc. directly.
   return {
     items,
     loading,

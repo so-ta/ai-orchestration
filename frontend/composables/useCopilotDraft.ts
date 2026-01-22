@@ -45,7 +45,6 @@ export interface DraftEdgeCreate {
   sourceId: string
   targetId: string
   sourcePort?: string
-  targetPort?: string
 }
 
 export interface DraftEdgeDelete {

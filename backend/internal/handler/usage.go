@@ -34,7 +34,7 @@ func (h *UsageHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		Period:   period,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *UsageHandler) GetDaily(w http.ResponseWriter, r *http.Request) {
 		End:      end,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *UsageHandler) GetByProject(w http.ResponseWriter, r *http.Request) {
 		Period:   period,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *UsageHandler) GetByModel(w http.ResponseWriter, r *http.Request) {
 		Period:   period,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *UsageHandler) GetByRun(w http.ResponseWriter, r *http.Request) {
 		RunID:    runID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -181,7 +181,7 @@ func (h *UsageHandler) ListBudgets(w http.ResponseWriter, r *http.Request) {
 		TenantID: tenantID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -235,7 +235,7 @@ func (h *UsageHandler) CreateBudget(w http.ResponseWriter, r *http.Request) {
 			Error(w, http.StatusConflict, "CONFLICT", err.Error(), nil)
 			return
 		}
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -272,7 +272,7 @@ func (h *UsageHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 		Enabled:         req.Enabled,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -292,7 +292,7 @@ func (h *UsageHandler) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 		TenantID: tenantID,
 		BudgetID: budgetID,
 	}); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -303,7 +303,7 @@ func (h *UsageHandler) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 func (h *UsageHandler) GetPricing(w http.ResponseWriter, r *http.Request) {
 	output, err := h.usageUsecase.GetPricing(r.Context())
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

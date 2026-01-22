@@ -57,7 +57,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Parse start_step_id (required for multi-start projects)
 	if req.StartStepID == nil || *req.StartStepID == "" {
-		HandleError(w, domain.NewValidationError("start_step_id", "start_step_id is required"))
+		HandleErrorL(w, r, domain.NewValidationError("start_step_id", "start_step_id is required"))
 		return
 	}
 	startStepID, ok := parseUUIDString(w, *req.StartStepID, "start_step_id")
@@ -77,7 +77,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		CreatedBy:      createdBy,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *ScheduleHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	schedule, err := h.usecase.GetByID(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *ScheduleHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	output, err := h.usecase.List(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 		StartStepID:    startStepID,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -208,7 +208,7 @@ func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := getTenantID(r)
 
 	if err := h.usecase.Delete(r.Context(), tenantID, id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -229,7 +229,7 @@ func (h *ScheduleHandler) Pause(w http.ResponseWriter, r *http.Request) {
 
 	schedule, err := h.usecase.Pause(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -250,7 +250,7 @@ func (h *ScheduleHandler) Resume(w http.ResponseWriter, r *http.Request) {
 
 	schedule, err := h.usecase.Resume(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -271,7 +271,7 @@ func (h *ScheduleHandler) Trigger(w http.ResponseWriter, r *http.Request) {
 
 	run, err := h.usecase.Trigger(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

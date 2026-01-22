@@ -7,6 +7,7 @@
  */
 
 const { t } = useI18n()
+const toast = useToast()
 
 type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
@@ -14,22 +15,26 @@ interface WebhookConfig {
   secret?: string
   input_mapping?: Record<string, string>
   allowed_ips?: string[]
+  enabled?: boolean
 }
 
 interface ScheduleConfig {
   cron_expression?: string
   timezone?: string
   input_data?: Record<string, unknown>
+  enabled?: boolean
 }
 
 interface SlackConfig {
   event_types?: string[]
   channel_filter?: string[]
+  enabled?: boolean
 }
 
 interface EmailConfig {
   trigger_condition?: string
   input_mapping?: Record<string, string>
+  enabled?: boolean
 }
 
 type TriggerConfig = WebhookConfig | ScheduleConfig | SlackConfig | EmailConfig | Record<string, unknown>
@@ -43,6 +48,46 @@ const props = defineProps<{
   /** Block definition's fixed trigger type (from config_defaults) - when set, type selection is disabled */
   fixedTriggerType?: StartTriggerType
 }>()
+
+// Steps API for trigger enable/disable
+const stepsApi = useSteps()
+
+// Trigger enabled state
+const triggerEnabled = ref(false)
+const togglingTrigger = ref(false)
+
+// Initialize trigger enabled state from config
+watch(() => props.triggerConfig, (config) => {
+  if (config && 'enabled' in config) {
+    triggerEnabled.value = !!config.enabled
+  }
+}, { immediate: true })
+
+// Check if trigger can be enabled/disabled (not for manual triggers)
+const canToggleTrigger = computed(() => {
+  const type = props.fixedTriggerType || props.triggerType
+  return type && type !== 'manual'
+})
+
+// Handle trigger toggle
+async function handleTriggerToggle(enabled: boolean) {
+  if (!props.workflowId || !props.stepId) return
+
+  togglingTrigger.value = true
+  try {
+    await stepsApi.toggleTrigger(props.workflowId, props.stepId, enabled)
+    triggerEnabled.value = enabled
+    // Also update local config
+    updateField('enabled', enabled)
+    toast.success(enabled ? t('trigger.enabled.enabledMessage') : t('trigger.enabled.disabledMessage'))
+  } catch {
+    toast.error(enabled ? t('trigger.enabled.enableFailed') : t('trigger.enabled.disableFailed'))
+    // Revert the toggle
+    triggerEnabled.value = !enabled
+  } finally {
+    togglingTrigger.value = false
+  }
+}
 
 // Runtime config for API base URL
 const runtimeConfig = useRuntimeConfig()
@@ -262,6 +307,27 @@ const timezoneOptions = [
       </div>
     </div>
 
+    <!-- Trigger Enable/Disable Toggle (for non-manual triggers) -->
+    <div v-if="canToggleTrigger && stepId && workflowId" class="trigger-enabled-section">
+      <div class="trigger-enabled-toggle">
+        <label class="toggle-container">
+          <input
+            type="checkbox"
+            :checked="triggerEnabled"
+            :disabled="readonly || togglingTrigger"
+            @change="handleTriggerToggle(($event.target as HTMLInputElement).checked)"
+          >
+          <span class="toggle-slider" :class="{ loading: togglingTrigger }"></span>
+        </label>
+        <div class="toggle-label-content">
+          <span class="toggle-label">{{ t('trigger.enabled.label') }}</span>
+          <span class="toggle-description">{{ t('trigger.enabled.description') }}</span>
+        </div>
+        <span v-if="triggerEnabled" class="status-badge enabled">{{ t('common.enabled') }}</span>
+        <span v-else class="status-badge disabled">{{ t('common.disabled') }}</span>
+      </div>
+    </div>
+
     <!-- Type-specific Configuration -->
     <div class="trigger-config-form">
       <!-- Manual - No config needed -->
@@ -449,6 +515,117 @@ const timezoneOptions = [
 .trigger-config-panel {
   display: flex;
   flex-direction: column;
+}
+
+/* Trigger Enable/Disable Toggle */
+.trigger-enabled-section {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: var(--color-surface, #f9fafb);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.trigger-enabled-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.toggle-container {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-container input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-border, #d1d5db);
+  transition: 0.2s;
+  border-radius: 24px;
+}
+
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+.toggle-slider.loading::before {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.toggle-container input:checked + .toggle-slider {
+  background-color: var(--color-primary, #3b82f6);
+}
+
+.toggle-container input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.toggle-container input:disabled + .toggle-slider {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-label-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.toggle-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.toggle-description {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+}
+
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.status-badge.enabled {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success, #10b981);
+}
+
+.status-badge.disabled {
+  background: rgba(107, 114, 128, 0.1);
+  color: var(--color-text-secondary, #6b7280);
 }
 
 /* Trigger Type Section - matches PropertiesPanel .form-group */

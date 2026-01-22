@@ -100,6 +100,7 @@ function handleClose() {
 
   transform: translateX(calc(100% + 24px));
   opacity: 0;
+  pointer-events: none;
   transition:
     transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.3s ease,
@@ -110,6 +111,7 @@ function handleClose() {
 .floating-right-panel.visible {
   transform: translateX(0);
   opacity: 1;
+  pointer-events: auto;
 }
 
 .floating-right-panel.no-transition {

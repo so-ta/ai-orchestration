@@ -1,6 +1,4 @@
 // Block Groups API composable
-// Supports 4 group types: parallel, try_catch, foreach, while
-// Removed: if_else (use condition block), switch_case (use switch block)
 import type {
   BlockGroup,
   Step,

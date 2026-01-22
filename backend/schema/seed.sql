@@ -11,6 +11,57 @@
 
 SET search_path = public;
 
+-- ============================================================================
+-- TRUNCATE ALL TABLES (for db-reset)
+-- ============================================================================
+-- This ensures a clean slate before seeding.
+-- Uses IF EXISTS to work on both initial setup and subsequent resets.
+-- CASCADE handles FK constraints automatically.
+
+DO $$
+DECLARE
+    tables TEXT[] := ARRAY[
+        'copilot_messages',
+        'copilot_sessions',
+        'agent_memory',
+        'agent_chat_sessions',
+        'step_runs',
+        'runs',
+        'run_number_sequences',
+        'edges',
+        'steps',
+        'block_groups',
+        'schedules',
+        'project_versions',
+        'template_reviews',
+        'project_templates',
+        'project_git_sync',
+        'projects',
+        'block_versions',
+        'block_definitions',
+        'custom_block_packages',
+        'credentials',
+        'system_credentials',
+        'secrets',
+        'usage_records',
+        'usage_daily_aggregates',
+        'usage_budgets',
+        'audit_logs',
+        'vector_documents',
+        'vector_collections',
+        'users',
+        'tenants'
+    ];
+    t TEXT;
+BEGIN
+    FOREACH t IN ARRAY tables
+    LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = t) THEN
+            EXECUTE format('TRUNCATE TABLE %I CASCADE', t);
+        END IF;
+    END LOOP;
+END $$;
+
 --
 -- Data for Name: tenants; Type: TABLE DATA; Schema: public; Owner: -
 --

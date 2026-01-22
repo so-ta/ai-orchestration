@@ -17,33 +17,33 @@ type BlockTestCase struct {
 }
 
 // SystemBlockDefinition represents a programmatically-defined system block
+// All text fields support multiple languages through LocalizedText
 type SystemBlockDefinition struct {
 	// Identifiers
 	Slug    string `json:"slug"`
 	Version int    `json:"version"` // Explicit version (increment when IN/OUT schema changes)
 
-	// Basic info
-	Name        string                  `json:"name"`
-	Description string                  `json:"description"`
+	// Basic info (localized)
+	Name        domain.LocalizedText    `json:"name"`
+	Description domain.LocalizedText    `json:"description"`
 	Category    domain.BlockCategory    `json:"category"`
 	Subcategory domain.BlockSubcategory `json:"subcategory,omitempty"`
 	Icon        string                  `json:"icon"`
 
-	// Schema definitions
-	ConfigSchema json.RawMessage     `json:"config_schema"`
-	OutputSchema json.RawMessage     `json:"output_schema,omitempty"`
-	InputPorts   []domain.InputPort  `json:"input_ports"`
-	OutputPorts  []domain.OutputPort `json:"output_ports"`
+	// Schema definitions (localized for config labels/descriptions)
+	ConfigSchema domain.LocalizedConfigSchema `json:"config_schema"`
+	OutputSchema json.RawMessage              `json:"output_schema,omitempty"`
+	OutputPorts  []domain.LocalizedOutputPort `json:"output_ports"`
 
 	// Execution code
 	Code string `json:"code"`
 
-	// UI settings
-	UIConfig json.RawMessage `json:"ui_config"`
+	// UI settings (localized for group titles, etc.)
+	UIConfig domain.LocalizedConfigSchema `json:"ui_config"`
 
-	// Error handling and credentials
-	ErrorCodes          []domain.ErrorCodeDef `json:"error_codes"`
-	RequiredCredentials json.RawMessage       `json:"required_credentials,omitempty"`
+	// Error handling and credentials (localized)
+	ErrorCodes          []domain.LocalizedErrorCodeDef `json:"error_codes"`
+	RequiredCredentials json.RawMessage                `json:"required_credentials,omitempty"`
 
 	// Flags
 	Enabled bool `json:"enabled"`
@@ -74,16 +74,68 @@ type SystemBlockDefinition struct {
 	TestCases []BlockTestCase `json:"-"`
 }
 
-// DefaultInputPorts returns the default single input port
-func DefaultInputPorts() []domain.InputPort {
-	return []domain.InputPort{
-		{Name: "input", Label: "Input", Required: true},
+// DefaultOutputPorts returns the default single output port (localized)
+func DefaultOutputPorts() []domain.LocalizedOutputPort {
+	return []domain.LocalizedOutputPort{
+		{
+			Name:      "output",
+			Label:     domain.L("Output", "出力"),
+			IsDefault: true,
+		},
 	}
 }
 
-// DefaultOutputPorts returns the default single output port
-func DefaultOutputPorts() []domain.OutputPort {
-	return []domain.OutputPort{
-		{Name: "output", Label: "Output", IsDefault: true},
+// Helper functions for creating localized content
+
+// LText creates a LocalizedText with English and Japanese
+func LText(en, ja string) domain.LocalizedText {
+	return domain.L(en, ja)
+}
+
+// LSchema creates a LocalizedConfigSchema with English and Japanese JSON schemas
+func LSchema(en, ja string) domain.LocalizedConfigSchema {
+	return domain.LocalizedConfigSchema{
+		EN: json.RawMessage(en),
+		JA: json.RawMessage(ja),
+	}
+}
+
+// LPort creates a LocalizedOutputPort
+func LPort(name string, labelEN, labelJA string, isDefault bool) domain.LocalizedOutputPort {
+	return domain.LocalizedOutputPort{
+		Name:      name,
+		Label:     domain.L(labelEN, labelJA),
+		IsDefault: isDefault,
+	}
+}
+
+// LPortWithDesc creates a LocalizedOutputPort with description
+func LPortWithDesc(name string, labelEN, labelJA, descEN, descJA string, isDefault bool) domain.LocalizedOutputPort {
+	return domain.LocalizedOutputPort{
+		Name:        name,
+		Label:       domain.L(labelEN, labelJA),
+		Description: domain.L(descEN, descJA),
+		IsDefault:   isDefault,
+	}
+}
+
+// LPortWithSchema creates a LocalizedOutputPort with schema
+func LPortWithSchema(name string, labelEN, labelJA, descEN, descJA string, isDefault bool, schema json.RawMessage) domain.LocalizedOutputPort {
+	return domain.LocalizedOutputPort{
+		Name:        name,
+		Label:       domain.L(labelEN, labelJA),
+		Description: domain.L(descEN, descJA),
+		IsDefault:   isDefault,
+		Schema:      schema,
+	}
+}
+
+// LError creates a LocalizedErrorCodeDef
+func LError(code, nameEN, nameJA, descEN, descJA string, retryable bool) domain.LocalizedErrorCodeDef {
+	return domain.LocalizedErrorCodeDef{
+		Code:        code,
+		Name:        domain.L(nameEN, nameJA),
+		Description: domain.L(descEN, descJA),
+		Retryable:   retryable,
 	}
 }

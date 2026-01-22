@@ -15,7 +15,6 @@ export interface ProposalChange {
   source_id?: string
   target_id?: string
   source_port?: string
-  target_port?: string
 }
 
 /**
@@ -52,7 +51,6 @@ export function toolCallToDraftChange(tool: string, args: Record<string, unknown
         sourceId: (args.source_step_id || args.source_id || args.from) as string,
         targetId: (args.target_step_id || args.target_id || args.to) as string,
         sourcePort: args.source_port as string | undefined,
-        targetPort: args.target_port as string | undefined,
       }
     case 'delete_edge':
       return {
@@ -72,7 +70,6 @@ export function toolCallToDraftChange(tool: string, args: Record<string, unknown
         from?: string
         to?: string
         from_port?: string
-        to_port?: string
       }>
 
       for (const step of steps) {
@@ -95,7 +92,6 @@ export function toolCallToDraftChange(tool: string, args: Record<string, unknown
           sourceId: conn.from || '',
           targetId: conn.to || '',
           sourcePort: conn.from_port,
-          targetPort: conn.to_port,
         })
       }
 
@@ -137,7 +133,6 @@ export function draftChangeToProposalChange(change: DraftChange): ProposalChange
         source_id: change.sourceId,
         target_id: change.targetId,
         source_port: change.sourcePort,
-        target_port: change.targetPort,
       }
     case 'edge:delete':
       return {

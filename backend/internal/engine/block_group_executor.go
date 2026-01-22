@@ -58,8 +58,6 @@ type BlockGroupResult struct {
 }
 
 // ExecuteGroup executes a block group based on its type
-// Supports 4 types: parallel, try_catch, foreach, while
-// Removed: if_else, switch_case (use condition/switch blocks instead)
 func (e *BlockGroupExecutor) ExecuteGroup(ctx context.Context, bgCtx *BlockGroupContext) (json.RawMessage, error) {
 	ctx, span := tracer.Start(ctx, "block_group.execute",
 		trace.WithAttributes(
@@ -1140,7 +1138,7 @@ func (e *BlockGroupExecutor) buildToolsFromChains(toolChains []*ToolChain) []int
 	return tools
 }
 
-// buildToolsFromSteps builds OpenAI-style tool definitions from child steps (legacy, kept for compatibility)
+// buildToolsFromSteps builds OpenAI-style tool definitions from child steps
 func (e *BlockGroupExecutor) buildToolsFromSteps(steps []*domain.Step, bgCtx *BlockGroupContext) []interface{} {
 	var tools []interface{}
 

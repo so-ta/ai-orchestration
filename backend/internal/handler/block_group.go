@@ -75,7 +75,7 @@ func (h *BlockGroupHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Height:        req.Size.Height,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (h *BlockGroupHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	groups, err := h.blockGroupUsecase.List(r.Context(), tenantID, projectID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -113,7 +113,7 @@ func (h *BlockGroupHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	group, err := h.blockGroupUsecase.GetByID(r.Context(), tenantID, projectID, groupID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -184,7 +184,7 @@ func (h *BlockGroupHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	group, err := h.blockGroupUsecase.Update(r.Context(), input)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -204,7 +204,7 @@ func (h *BlockGroupHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.blockGroupUsecase.Delete(r.Context(), tenantID, projectID, groupID); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -247,7 +247,7 @@ func (h *BlockGroupHandler) AddStepToGroup(w http.ResponseWriter, r *http.Reques
 		GroupRole: domain.GroupRole(req.GroupRole),
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (h *BlockGroupHandler) RemoveStepFromGroup(w http.ResponseWriter, r *http.R
 
 	step, err := h.blockGroupUsecase.RemoveStepFromGroup(r.Context(), tenantID, projectID, stepID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -289,7 +289,7 @@ func (h *BlockGroupHandler) GetStepsByGroup(w http.ResponseWriter, r *http.Reque
 
 	steps, err := h.blockGroupUsecase.GetStepsByGroup(r.Context(), tenantID, projectID, groupID)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

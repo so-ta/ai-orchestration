@@ -54,7 +54,7 @@ func main() {
 
 	fmt.Printf("\n✅ All blocks passed validation\n")
 
-	// Validate all projects (using workflow registry for backward compatibility)
+	// Validate all projects
 	projectErrors := validateProjects(workflowRegistry)
 	if len(projectErrors) > 0 {
 		fmt.Printf("\n❌ Project Validation Errors:\n")

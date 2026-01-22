@@ -165,7 +165,7 @@ func (m *AuthMiddleware) setDevContext(ctx context.Context, r *http.Request) con
 		roles = []string{"admin", "user"}
 		email = "admin@example.com"
 	default:
-		// Default to admin for backwards compatibility
+		// Default to admin for development mode
 		roles = []string{"admin", "user"}
 		email = "admin@example.com"
 	}

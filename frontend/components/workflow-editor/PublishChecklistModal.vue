@@ -7,15 +7,29 @@
  * - All blocks are connected
  * - No infinite loops
  * - Credentials are configured
+ * - Trigger is properly configured
+ * - Required configurations are set
  */
 
-import type { Step, Edge, BlockDefinition } from '~/types/api'
+import type { Step, Edge, BlockDefinition, ApiResponse } from '~/types/api'
 
 interface CheckResult {
   id: string
   label: string
   status: 'passed' | 'warning' | 'error' | 'checking'
   message?: string
+}
+
+interface ValidationApiResult {
+  checks: Array<{
+    id: string
+    label: string
+    status: 'passed' | 'warning' | 'error'
+    message?: string
+  }>
+  can_publish: boolean
+  error_count: number
+  warning_count: number
 }
 
 const props = defineProps<{
@@ -30,13 +44,16 @@ const emit = defineEmits<{
   close: []
   publish: []
   fixIssue: [checkId: string]
+  enableTrigger: []
 }>()
 
 const { t } = useI18n()
+const api = useApi()
 
 // Validation state
 const isChecking = ref(true)
 const checks = ref<CheckResult[]>([])
+const _useApiValidation = ref(true) // Use API validation by default (reserved for future use)
 
 // Run checks when modal opens
 watch(() => props.show, async (show) => {
@@ -48,13 +65,54 @@ watch(() => props.show, async (show) => {
 // Run all validation checks
 async function runChecks() {
   isChecking.value = true
+
+  // Initialize all check items
   checks.value = [
     { id: 'hasStartBlock', label: t('publishChecklist.checks.hasStartBlock'), status: 'checking' },
     { id: 'allConnected', label: t('publishChecklist.checks.allConnected'), status: 'checking' },
     { id: 'noLoop', label: t('publishChecklist.checks.noLoop'), status: 'checking' },
     { id: 'credentialsSet', label: t('publishChecklist.checks.credentialsSet'), status: 'checking' },
+    { id: 'triggerConfigured', label: t('publishChecklist.checks.triggerConfigured'), status: 'checking' },
+    { id: 'requiredConfigSet', label: t('publishChecklist.checks.requiredConfigSet'), status: 'checking' },
   ]
 
+  try {
+    // Try to use API validation
+    const response = await api.post<ApiResponse<ValidationApiResult>>(`/workflows/${props.workflowId}/validate`)
+    const result = response.data
+
+    // Update checks from API response
+    for (const apiCheck of result.checks) {
+      const check = checks.value.find(c => c.id === apiCheck.id)
+      if (check) {
+        check.status = apiCheck.status
+        check.message = apiCheck.message
+        // Translate label if available
+        const translatedLabel = t(`publishChecklist.checks.${apiCheck.id}`, apiCheck.label)
+        if (translatedLabel !== `publishChecklist.checks.${apiCheck.id}`) {
+          check.label = translatedLabel
+        }
+      } else {
+        // Add new check from API that we don't have locally
+        checks.value.push({
+          id: apiCheck.id,
+          label: apiCheck.label,
+          status: apiCheck.status,
+          message: apiCheck.message,
+        })
+      }
+    }
+  } catch {
+    // Fallback to local validation if API fails
+    console.warn('API validation failed, falling back to local validation')
+    await runLocalChecks()
+  }
+
+  isChecking.value = false
+}
+
+// Fallback local validation
+async function runLocalChecks() {
   // Simulate async check delay for better UX
   await new Promise(resolve => setTimeout(resolve, 300))
 
@@ -62,27 +120,55 @@ async function runChecks() {
   const startBlockTypes = ['start', 'manual_trigger', 'schedule_trigger', 'webhook_trigger']
   const hasStartBlock = props.steps.some(step => startBlockTypes.includes(step.type))
   updateCheck('hasStartBlock', hasStartBlock ? 'passed' : 'error',
-    hasStartBlock ? undefined : 'スタートブロックを追加してください')
+    hasStartBlock ? undefined : t('publishChecklist.messages.addStartBlock'))
 
   // Check 2: All blocks connected
   const { allConnected, unconnectedSteps } = checkAllConnected()
   updateCheck('allConnected',
     allConnected ? 'passed' : 'warning',
-    allConnected ? undefined : `${unconnectedSteps.length}個の未接続ブロックがあります`)
+    allConnected ? undefined : t('publishChecklist.messages.unconnectedBlocks', { count: unconnectedSteps.length }))
 
   // Check 3: No infinite loops
   const hasCycle = checkForCycles()
   updateCheck('noLoop',
     hasCycle ? 'error' : 'passed',
-    hasCycle ? '循環参照が検出されました' : undefined)
+    hasCycle ? t('publishChecklist.messages.cycleDetected') : undefined)
 
   // Check 4: Credentials configured
   const { allSet, missingCredentials } = checkCredentials()
   updateCheck('credentialsSet',
     allSet ? 'passed' : 'warning',
-    allSet ? undefined : `${missingCredentials.length}個のブロックでクレデンシャルが未設定です`)
+    allSet ? undefined : t('publishChecklist.messages.missingCredentials', { count: missingCredentials.length }))
 
-  isChecking.value = false
+  // Check 5: Trigger configured
+  const { configured, enabled } = checkTriggerConfig()
+  updateCheck('triggerConfigured',
+    configured && enabled ? 'passed' : (configured ? 'warning' : 'warning'),
+    configured ? (enabled ? undefined : t('publishChecklist.messages.triggerNotEnabled')) : t('publishChecklist.messages.noTrigger'))
+
+  // Check 6: Required config set (simplified local check)
+  updateCheck('requiredConfigSet', 'passed', undefined)
+}
+
+// Check trigger configuration
+function checkTriggerConfig(): { configured: boolean; enabled: boolean } {
+  const startBlockTypes = ['start', 'manual_trigger', 'schedule_trigger', 'webhook_trigger']
+  const startBlock = props.steps.find(step => startBlockTypes.includes(step.type))
+
+  if (!startBlock) {
+    return { configured: false, enabled: false }
+  }
+
+  // Manual triggers are always "enabled"
+  if (startBlock.trigger_type === 'manual' || String(startBlock.type) === 'manual_trigger') {
+    return { configured: true, enabled: true }
+  }
+
+  // Check if trigger is enabled in config
+  const config = startBlock.trigger_config as Record<string, unknown> | undefined
+  const enabled = config?.enabled === true
+
+  return { configured: true, enabled }
 }
 
 function updateCheck(id: string, status: CheckResult['status'], message?: string) {

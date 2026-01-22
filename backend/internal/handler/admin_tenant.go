@@ -144,7 +144,7 @@ func (h *AdminTenantHandler) List(w http.ResponseWriter, r *http.Request) {
 	// Get tenants
 	tenants, total, err := h.repo.List(r.Context(), filter)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	existing, err := h.repo.GetBySlug(r.Context(), req.Slug)
 	if err != nil && !errors.Is(err, domain.ErrTenantNotFound) {
 		// Unexpected DB error - return 500
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	if err == nil && existing != nil {
@@ -208,7 +208,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// Create tenant
 	tenant, err := domain.NewTenant(req.Name, req.Slug, plan)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 	tenant.OwnerEmail = req.OwnerEmail
@@ -249,7 +249,7 @@ func (h *AdminTenantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Create(r.Context(), tenant); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -267,7 +267,7 @@ func (h *AdminTenantHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	tenant, err := h.repo.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -301,7 +301,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	// Get existing tenant
 	tenant, err := h.repo.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -314,7 +314,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 		existing, err := h.repo.GetBySlug(r.Context(), req.Slug)
 		if err != nil && !errors.Is(err, domain.ErrTenantNotFound) {
 			// Unexpected DB error - return 500
-			HandleError(w, err)
+			HandleErrorL(w, r, err)
 			return
 		}
 		if err == nil && existing != nil && existing.ID != tenant.ID {
@@ -369,7 +369,7 @@ func (h *AdminTenantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Update(r.Context(), tenant); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -395,7 +395,7 @@ func (h *AdminTenantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.Delete(r.Context(), id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -423,14 +423,14 @@ func (h *AdminTenantHandler) Suspend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.UpdateStatus(r.Context(), id, domain.TenantStatusSuspended, req.Reason); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
 	// Get updated tenant
 	tenant, err := h.repo.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -447,14 +447,14 @@ func (h *AdminTenantHandler) Activate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.repo.UpdateStatus(r.Context(), id, domain.TenantStatusActive, ""); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
 	// Get updated tenant
 	tenant, err := h.repo.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -473,13 +473,13 @@ func (h *AdminTenantHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	// Verify tenant exists
 	_, err = h.repo.GetByID(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
 	stats, err := h.repo.GetStats(r.Context(), id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -493,7 +493,7 @@ func (h *AdminTenantHandler) GetOverviewStats(w http.ResponseWriter, r *http.Req
 		Limit: 10000, // Get all
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 

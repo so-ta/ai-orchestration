@@ -8,8 +8,6 @@ import (
 )
 
 // BlockGroupType represents the type of a block group (control flow construct)
-// Redesigned to 4 types only: parallel, try_catch, foreach, while
-// Removed: if_else (use condition block), switch_case (use switch block)
 type BlockGroupType string
 
 const (
@@ -42,8 +40,6 @@ func (t BlockGroupType) IsValid() bool {
 }
 
 // GroupRole represents the role of a step within a block group
-// Simplified: all groups now only have "body" role
-// Removed: try, catch, finally, then, else, default, case_N
 // Error handling is done via output ports (out, error)
 type GroupRole string
 

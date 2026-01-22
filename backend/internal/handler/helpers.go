@@ -21,6 +21,38 @@ func getTenantID(r *http.Request) uuid.UUID {
 	return middleware.GetTenantID(r.Context())
 }
 
+// RequireTenantID is a middleware that ensures tenant_id is present and valid in the context
+// It rejects requests where tenant_id is uuid.Nil
+func RequireTenantID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tenantID := middleware.GetTenantID(r.Context())
+		if tenantID == uuid.Nil {
+			Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "tenant_id is required", nil)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireValidTenant is a stricter version that also validates tenant exists in DB
+// This is useful for critical operations where tenant validation is essential
+func RequireValidTenant(tenantValidator func(ctx context.Context, tenantID uuid.UUID) bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tenantID := middleware.GetTenantID(r.Context())
+			if tenantID == uuid.Nil {
+				Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "tenant_id is required", nil)
+				return
+			}
+			if tenantValidator != nil && !tenantValidator(r.Context(), tenantID) {
+				Error(w, http.StatusForbidden, "FORBIDDEN", "invalid tenant", nil)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // getUserID extracts user ID from request context
 func getUserID(r *http.Request) uuid.UUID {
 	return middleware.GetUserID(r.Context())
