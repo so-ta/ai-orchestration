@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -39,6 +40,7 @@ func (s *BlocksServiceImpl) List() ([]map[string]interface{}, error) {
 		SELECT id, slug, name, description, category, ui_config, is_system, created_at, updated_at
 		FROM block_definitions
 		WHERE (tenant_id = $1 OR tenant_id IS NULL)
+		  AND enabled = true
 		ORDER BY category, name
 	`
 
@@ -208,9 +210,27 @@ func (s *BlocksServiceImpl) GetWithSchema(slug string) (map[string]interface{}, 
 		}
 	}
 
+	// Extract required fields from config_schema first (needed for defaults completion)
+	requiredFields := s.extractRequiredFields(configSchema)
+	if len(requiredFields) > 0 {
+		block["required_fields"] = requiredFields
+	}
+
 	// Parse config_defaults and resolve inheritance chain
 	resolvedDefaults := s.resolveInheritedDefaults(parentBlockID, configDefaults)
-	if resolvedDefaults != nil {
+	if resolvedDefaults == nil {
+		resolvedDefaults = make(map[string]interface{})
+	}
+
+	// Ensure all required fields are present in resolved_config_defaults
+	// Missing fields are added with nil value to signal to LLM that they need to be provided
+	for _, field := range requiredFields {
+		if _, ok := resolvedDefaults[field]; !ok {
+			resolvedDefaults[field] = nil
+		}
+	}
+
+	if len(resolvedDefaults) > 0 {
 		block["resolved_config_defaults"] = resolvedDefaults
 	}
 
@@ -244,12 +264,6 @@ func (s *BlocksServiceImpl) GetWithSchema(slug string) (map[string]interface{}, 
 		if err := json.Unmarshal(outputPorts, &ports); err == nil {
 			block["output_ports"] = ports
 		}
-	}
-
-	// Extract required fields from config_schema
-	requiredFields := s.extractRequiredFields(configSchema)
-	if len(requiredFields) > 0 {
-		block["required_fields"] = requiredFields
 	}
 
 	return block, nil
@@ -406,11 +420,11 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 		}
 	}
 
-	// Get steps
+	// Get steps (excluding start blocks - AI should use trigger blocks instead)
 	stepsQuery := `
 		SELECT id, name, type, config, position_x, position_y
 		FROM steps
-		WHERE project_id = $1
+		WHERE project_id = $1 AND type != 'start'
 		ORDER BY created_at
 	`
 
@@ -456,6 +470,39 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 	workflow["steps"] = steps
 
 	return workflow, nil
+}
+
+// GetWithStart retrieves a workflow with start step ID (for internal use)
+// This is used to auto-connect trigger blocks to the existing start step
+func (s *WorkflowsServiceImpl) GetWithStart(workflowID string) (map[string]interface{}, error) {
+	wfID, err := uuid.Parse(workflowID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid workflow ID: %w", err)
+	}
+
+	// Find the start step for this workflow
+	startQuery := `
+		SELECT id FROM steps
+		WHERE project_id = $1 AND type = 'start'
+		LIMIT 1
+	`
+
+	var startStepID uuid.UUID
+	err = s.pool.QueryRow(s.ctx, startQuery, wfID).Scan(&startStepID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return map[string]interface{}{
+				"id":            wfID.String(),
+				"start_step_id": nil,
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get start step: %w", err)
+	}
+
+	return map[string]interface{}{
+		"id":            wfID.String(),
+		"start_step_id": startStepID.String(),
+	}, nil
 }
 
 // List retrieves all workflows for the tenant
@@ -1272,7 +1319,7 @@ func (s *StepsServiceImpl) ListByProject(projectID string) ([]map[string]interfa
 	return steps, nil
 }
 
-// Create creates a new step
+// Create creates a new step with automatic default value merging
 func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]interface{}, error) {
 	projectID, _ := data["project_id"].(string)
 	name, _ := data["name"].(string)
@@ -1289,6 +1336,18 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	pID, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	// Merge with block defaults if available
+	config = s.mergeWithBlockDefaults(stepType, config)
+
+	// Validate required fields (log warnings only - don't block creation)
+	if warnings := s.validateRequiredFields(stepType, config); len(warnings) > 0 {
+		slog.Warn("Step config missing required fields",
+			"stepType", stepType,
+			"stepName", name,
+			"warnings", warnings,
+		)
 	}
 
 	var configJSON []byte
@@ -1393,6 +1452,173 @@ func (s *StepsServiceImpl) Delete(stepID string) error {
 
 	return nil
 }
+
+// mergeWithBlockDefaults merges provided config with block definition defaults
+// This ensures that required fields with defaults are always populated
+func (s *StepsServiceImpl) mergeWithBlockDefaults(stepType string, providedConfig interface{}) interface{} {
+	// Get block defaults from block_definitions table
+	query := `
+		SELECT config_defaults, parent_block_id
+		FROM block_definitions
+		WHERE slug = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		LIMIT 1
+	`
+
+	var configDefaults []byte
+	var parentBlockID *uuid.UUID
+
+	err := s.pool.QueryRow(s.ctx, query, stepType, s.tenantID).Scan(&configDefaults, &parentBlockID)
+	if err != nil {
+		// Block not found or no defaults - return original config
+		return providedConfig
+	}
+
+	// Resolve inherited defaults (recursively)
+	defaults := s.resolveConfigDefaults(parentBlockID, configDefaults)
+	if defaults == nil {
+		return providedConfig
+	}
+
+	// Merge defaults with provided config
+	return mergeConfigMaps(defaults, providedConfig)
+}
+
+// resolveConfigDefaults resolves config defaults through the inheritance chain
+func (s *StepsServiceImpl) resolveConfigDefaults(parentBlockID *uuid.UUID, currentDefaults []byte) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	// If there's a parent block, get its defaults first
+	if parentBlockID != nil {
+		query := `
+			SELECT config_defaults, parent_block_id
+			FROM block_definitions
+			WHERE id = $1
+		`
+		var parentDefaults []byte
+		var grandparentID *uuid.UUID
+		err := s.pool.QueryRow(s.ctx, query, *parentBlockID).Scan(&parentDefaults, &grandparentID)
+		if err == nil {
+			// Recursively resolve parent defaults
+			parentResult := s.resolveConfigDefaults(grandparentID, parentDefaults)
+			for k, v := range parentResult {
+				result[k] = v
+			}
+		}
+	}
+
+	// Override with current block's defaults
+	if len(currentDefaults) > 0 {
+		var defaults map[string]interface{}
+		if err := json.Unmarshal(currentDefaults, &defaults); err == nil {
+			for k, v := range defaults {
+				result[k] = v
+			}
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// mergeConfigMaps merges defaults with provided config (provided values take precedence)
+func mergeConfigMaps(defaults map[string]interface{}, provided interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	// Copy defaults first
+	for k, v := range defaults {
+		result[k] = v
+	}
+
+	// Override with provided values
+	if providedMap, ok := provided.(map[string]interface{}); ok {
+		for k, v := range providedMap {
+			result[k] = v
+		}
+	}
+
+	return result
+}
+
+// validateRequiredFields checks if the provided config contains all required fields
+// Returns a list of warning messages for missing or empty required fields
+func (s *StepsServiceImpl) validateRequiredFields(stepType string, config interface{}) []string {
+	var warnings []string
+
+	// Get block schema to find required fields
+	query := `
+		SELECT config_schema
+		FROM block_definitions
+		WHERE slug = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+		LIMIT 1
+	`
+
+	var configSchema []byte
+	err := s.pool.QueryRow(s.ctx, query, stepType, s.tenantID).Scan(&configSchema)
+	if err != nil {
+		// Block not found - skip validation
+		return warnings
+	}
+
+	// Extract required fields from schema
+	requiredFields := extractRequiredFieldsFromSchema(configSchema)
+	if len(requiredFields) == 0 {
+		return warnings
+	}
+
+	// Check if config contains all required fields
+	configMap, ok := config.(map[string]interface{})
+	if !ok {
+		for _, field := range requiredFields {
+			warnings = append(warnings, fmt.Sprintf("required field '%s' is missing (no config provided)", field))
+		}
+		return warnings
+	}
+
+	for _, field := range requiredFields {
+		value, exists := configMap[field]
+		if !exists {
+			warnings = append(warnings, fmt.Sprintf("required field '%s' is missing", field))
+			continue
+		}
+
+		// Check for empty values
+		if isEmptyValue(value) {
+			warnings = append(warnings, fmt.Sprintf("required field '%s' is empty", field))
+		}
+	}
+
+	return warnings
+}
+
+// extractRequiredFieldsFromSchema extracts required field names from a JSON schema
+func extractRequiredFieldsFromSchema(schemaBytes []byte) []string {
+	if len(schemaBytes) == 0 {
+		return nil
+	}
+
+	var schema map[string]interface{}
+	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+		return nil
+	}
+
+	// Extract "required" array from JSON schema
+	required, ok := schema["required"].([]interface{})
+	if !ok {
+		return nil
+	}
+
+	result := make([]string, 0, len(required))
+	for _, r := range required {
+		if s, ok := r.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// Note: isEmptyValue is defined in sandbox.go
 
 // ============================================================================
 // EdgesServiceImpl - Implementation of EdgesService for builder

@@ -111,10 +111,11 @@ output_schema:
       type: number
 
 # 宣言的リクエスト設定
+# Note: {{message}} is from config (template-expanded with input data by engine before sandbox execution)
 request:
   method: POST
   body:
-    text: "{{input.message}}"
+    text: "{{message}}"
     channel: "{{channel}}"
     username: "{{username}}"
     icon_emoji: "{{icon_emoji}}"
@@ -188,10 +189,11 @@ output_schema:
     status:
       type: number
 
+# Note: {{content}} is from config (template-expanded with input data by engine before sandbox execution)
 request:
   method: POST
   body:
-    content: "{{input.content}}"
+    content: "{{content}}"
     username: "{{username}}"
     avatar_url: "{{avatar_url}}"
 
