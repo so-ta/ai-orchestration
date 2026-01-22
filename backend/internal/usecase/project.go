@@ -295,6 +295,27 @@ func (u *ProjectUsecase) Save(ctx context.Context, input SaveProjectInput) (*dom
 	return u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ID)
 }
 
+// Publish publishes a project by creating a new version with current steps and edges.
+// This is a convenience method that fetches current data and calls Save.
+func (u *ProjectUsecase) Publish(ctx context.Context, tenantID, projectID uuid.UUID) (*domain.Project, error) {
+	// Get project with current steps and edges
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, tenantID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Call Save with current data
+	return u.Save(ctx, SaveProjectInput{
+		TenantID:    tenantID,
+		ID:          projectID,
+		Name:        project.Name,
+		Description: project.Description,
+		Variables:   project.Variables,
+		Steps:       project.Steps,
+		Edges:       project.Edges,
+	})
+}
+
 // SaveDraftInput represents input for saving a project as draft
 type SaveDraftInput struct {
 	TenantID    uuid.UUID
@@ -482,28 +503,6 @@ func (u *ProjectUsecase) getProjectWithStepsEdgesFromDB(ctx context.Context, ten
 	return project, nil
 }
 
-// Publish is deprecated - use Save instead
-// Kept for backward compatibility
-func (u *ProjectUsecase) Publish(ctx context.Context, tenantID, id uuid.UUID) (*domain.Project, error) {
-	// Get project with current steps and edges
-	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, tenantID, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use Save with current data (including BlockGroups)
-	return u.Save(ctx, SaveProjectInput{
-		TenantID:    tenantID,
-		ID:          id,
-		Name:        project.Name,
-		Description: project.Description,
-		Variables:   project.Variables,
-		Steps:       project.Steps,
-		Edges:       project.Edges,
-		BlockGroups: project.BlockGroups,
-	})
-}
-
 // GetVersion retrieves a specific version of a project
 func (u *ProjectUsecase) GetVersion(ctx context.Context, tenantID, projectID uuid.UUID, version int) (*domain.ProjectVersion, error) {
 	// First verify the project exists and belongs to the tenant
@@ -665,13 +664,6 @@ func (u *ProjectUsecase) validateEdgePorts(ctx context.Context, steps []domain.S
 				return err
 			}
 		}
-
-		// Validate target port
-		if edge.TargetPort != "" {
-			if err := u.validateTargetPort(ctx, edge.TargetPort, edge.TargetStepID, edge.TargetBlockGroupID, stepMap, groupMap); err != nil {
-				return err
-			}
-		}
 	}
 
 	return nil
@@ -693,10 +685,6 @@ func (u *ProjectUsecase) validateSourcePort(ctx context.Context, sourcePort stri
 	}
 
 	if err != nil {
-		// If block definition not found, skip validation (legacy blocks)
-		if err == domain.ErrBlockDefinitionNotFound {
-			return nil
-		}
 		return err
 	}
 
@@ -714,55 +702,12 @@ func (u *ProjectUsecase) validateSourcePort(ctx context.Context, sourcePort stri
 	return domain.ErrSourcePortNotFound
 }
 
-// validateTargetPort validates that the target port exists in the block definition
-func (u *ProjectUsecase) validateTargetPort(ctx context.Context, targetPort string, targetStepID, targetGroupID *uuid.UUID, stepMap map[uuid.UUID]*domain.Step, groupMap map[uuid.UUID]*domain.BlockGroup) error {
-	// Special case: "group-input" is a virtual port for block groups
-	if targetGroupID != nil && targetPort == "group-input" {
-		return nil
-	}
-
-	var blockDef *domain.BlockDefinition
-	var err error
-
-	if targetStepID != nil {
-		if step, ok := stepMap[*targetStepID]; ok {
-			blockDef, err = u.getBlockDefinitionForStep(ctx, step)
-		}
-	} else if targetGroupID != nil {
-		if group, ok := groupMap[*targetGroupID]; ok {
-			blockDef, err = u.getBlockDefinitionForGroup(ctx, group)
-		}
-	}
-
-	if err != nil {
-		// If block definition not found, skip validation (legacy blocks)
-		if err == domain.ErrBlockDefinitionNotFound {
-			return nil
-		}
-		return err
-	}
-
-	if blockDef == nil {
-		return nil
-	}
-
-	// Check if the target port exists in input ports
-	for _, port := range blockDef.InputPorts {
-		if port.Name == targetPort {
-			return nil
-		}
-	}
-
-	return domain.ErrTargetPortNotFound
-}
-
 // getBlockDefinitionForStep retrieves the block definition for a step
 func (u *ProjectUsecase) getBlockDefinitionForStep(ctx context.Context, step *domain.Step) (*domain.BlockDefinition, error) {
-	if step.BlockDefinitionID != nil {
-		return u.blockRepo.GetByID(ctx, *step.BlockDefinitionID)
+	if step.BlockDefinitionID == nil {
+		return nil, domain.ErrBlockDefinitionNotFound
 	}
-	// Use step type as slug for legacy steps
-	return u.blockRepo.GetBySlug(ctx, nil, string(step.Type))
+	return u.blockRepo.GetByID(ctx, *step.BlockDefinitionID)
 }
 
 // getBlockDefinitionForGroup retrieves the block definition for a block group
@@ -913,6 +858,83 @@ func (u *ProjectUsecase) ValidateForPublish(ctx context.Context, tenantID, proje
 		result.WarningCount++
 	}
 	result.Checks = append(result.Checks, credentialsCheck)
+
+	// Check 5: Trigger configuration
+	triggerCheck := ValidationCheck{
+		ID:     "triggerConfigured",
+		Label:  "Trigger is properly configured",
+		Status: "passed",
+	}
+	triggerConfigured := false
+	triggerEnabled := false
+	for _, step := range project.Steps {
+		if step.Type == domain.StepTypeStart || domain.IsTriggerBlockSlug(string(step.Type)) {
+			triggerConfigured = true
+			if step.TriggerType != nil {
+				// Check if trigger is enabled (for non-manual triggers)
+				if *step.TriggerType == domain.StepTriggerTypeManual {
+					triggerEnabled = true // Manual triggers are always "enabled"
+				} else if len(step.TriggerConfig) > 0 {
+					var config map[string]interface{}
+					if err := json.Unmarshal(step.TriggerConfig, &config); err == nil {
+						if enabled, ok := config["enabled"].(bool); ok && enabled {
+							triggerEnabled = true
+						}
+					}
+				}
+			}
+			break
+		}
+	}
+	if !triggerConfigured {
+		triggerCheck.Status = "warning"
+		triggerCheck.Message = "No trigger block found"
+		result.WarningCount++
+	} else if !triggerEnabled {
+		triggerCheck.Status = "warning"
+		triggerCheck.Message = "Trigger is configured but not enabled"
+		result.WarningCount++
+	}
+	result.Checks = append(result.Checks, triggerCheck)
+
+	// Check 6: Required step config fields (check for empty required fields)
+	configCheck := ValidationCheck{
+		ID:     "requiredConfigSet",
+		Label:  "Required step configurations are set",
+		Status: "passed",
+	}
+	missingConfig := 0
+	for i := range project.Steps {
+		step := &project.Steps[i]
+		blockDef, err := u.getBlockDefinitionForStep(ctx, step)
+		if err != nil || blockDef == nil {
+			continue
+		}
+		// Check if config schema has required fields
+		if blockDef.ConfigSchema != nil {
+			var schema map[string]interface{}
+			if err := json.Unmarshal(blockDef.ConfigSchema, &schema); err == nil {
+				if required, ok := schema["required"].([]interface{}); ok && len(required) > 0 {
+					var stepConfig map[string]interface{}
+					if err := json.Unmarshal(step.Config, &stepConfig); err == nil {
+						for _, reqField := range required {
+							if fieldName, ok := reqField.(string); ok {
+								if _, exists := stepConfig[fieldName]; !exists {
+									missingConfig++
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if missingConfig > 0 {
+		configCheck.Status = "warning"
+		configCheck.Message = fmt.Sprintf("%d step(s) have missing required configuration", missingConfig)
+		result.WarningCount++
+	}
+	result.Checks = append(result.Checks, configCheck)
 
 	return result, nil
 }

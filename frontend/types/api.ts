@@ -34,9 +34,6 @@ export interface Project {
   block_groups?: BlockGroup[]
 }
 
-// Backward compatibility alias
-export type Workflow = Project
-
 export interface Step {
   id: string
   project_id: string
@@ -66,7 +63,6 @@ export type StepType =
   | 'switch'
   | 'map'
   | 'subflow'
-  | 'loop'
   | 'wait'
   | 'function'
   | 'router'
@@ -86,7 +82,6 @@ export interface Edge {
   source_block_group_id?: string | null // Source group (null if from step)
   target_block_group_id?: string | null // Target group (null if to step)
   source_port?: string // Output port name (e.g., "true", "false", "out")
-  target_port?: string // Input port name (e.g., "input", "items", "in")
   condition?: string
   created_at: string
 }
@@ -122,9 +117,6 @@ export interface ProjectVersion {
   saved_at: string
 }
 
-// Backward compatibility alias
-export type WorkflowVersion = ProjectVersion
-
 export interface ProjectDefinition {
   name: string
   description: string
@@ -133,9 +125,6 @@ export interface ProjectDefinition {
   edges: Edge[]
   block_groups?: BlockGroup[]
 }
-
-// Backward compatibility alias
-export type WorkflowDefinition = ProjectDefinition
 
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
 
@@ -187,15 +176,6 @@ export interface ErrorCodeDef {
   retryable: boolean
 }
 
-// Input port for blocks with multiple inputs (e.g., join, aggregate)
-export interface InputPort {
-  name: string        // Unique identifier (e.g., "input", "items", "input_1")
-  label: string       // Display label (e.g., "Input", "Items to process")
-  description?: string
-  required: boolean
-  schema?: object     // Input type schema (JSON Schema)
-}
-
 // Output port for blocks with multiple outputs (e.g., condition: true/false)
 export interface OutputPort {
   name: string        // Unique identifier (e.g., "true", "false", "default")
@@ -226,7 +206,6 @@ export interface BlockDefinition {
   icon?: string
   config_schema: object
   output_schema?: object
-  input_ports: InputPort[]   // Multiple input ports for merging (e.g., join, aggregate)
   output_ports: OutputPort[] // Multiple output ports for branching (e.g., condition, switch)
   error_codes: ErrorCodeDef[]
   // Required credentials for this block (optional)
@@ -264,8 +243,6 @@ export interface BlockListResponse {
 }
 
 // Block Group Types (Control Flow Constructs)
-// 5 types: parallel, try_catch, foreach, while, agent
-// Removed: if_else (use condition block), switch_case (use switch block)
 export type BlockGroupType =
   | 'parallel'     // Parallel execution of different flows
   | 'try_catch'    // Error handling with retry support
@@ -273,8 +250,6 @@ export type BlockGroupType =
   | 'while'        // Condition-based loop
   | 'agent'        // AI Agent with tool calling (child steps = tools)
 
-// Simplified: all groups now only have "body" role
-// Removed: try, catch, finally, then, else, default, case_N
 // Error handling is done via output ports (out, error)
 export type GroupRole = 'body'
 
@@ -617,41 +592,6 @@ export interface UpdateScheduleRequest {
   cron_expression?: string
   timezone?: string
   input?: object
-}
-
-// Webhook Types
-// @deprecated Webhooks are now part of Start block trigger_config in the Multi-Start Project Model.
-// These types are kept for backward compatibility but should not be used for new implementations.
-export interface Webhook {
-  id: string
-  tenant_id: string
-  project_id: string
-  project_version: number
-  name: string
-  description?: string
-  secret: string
-  input_mapping?: object
-  enabled: boolean
-  last_triggered_at?: string
-  trigger_count: number
-  created_by?: string
-  created_at: string
-  updated_at: string
-}
-
-// @deprecated Use Start block trigger_config instead
-export interface CreateWebhookRequest {
-  project_id: string
-  name: string
-  description?: string
-  input_mapping?: object
-}
-
-// @deprecated Use Start block trigger_config instead
-export interface UpdateWebhookRequest {
-  name?: string
-  description?: string
-  input_mapping?: object
 }
 
 // Audit Log Types

@@ -311,8 +311,6 @@
       "routerDesc": "AI-powered dynamic routing",
       "condition": "Condition",
       "conditionDesc": "Branch based on expression",
-      "loop": "Loop",
-      "loopDesc": "Iterate with for/forEach/while",
       "map": "Map",
       "mapDesc": "Process array in parallel",
       "join": "Join",
@@ -390,6 +388,8 @@
     "saved": "Saved",
     "unsavedChanges": "Unsaved changes",
     "saveError": "Save error",
+    "triggerEnabled": "Trigger Enabled",
+    "triggerDisabled": "Trigger Disabled",
     "history": "Run History",
     "openOtherProject": "Open Other Project",
     "createRelease": "Save as Release",
@@ -562,7 +562,84 @@
       "githubToSlack": "Notify team when GitHub PRs are merged"
     },
     "or": "or",
-    "skipToCanvas": "Start with empty canvas"
+    "skipToCanvas": "Start with empty canvas",
+    "tabs": {
+      "describe": "Describe",
+      "templates": "Templates"
+    },
+    "templates": {
+      "webhookNotification": {
+        "title": "Webhook Notification",
+        "description": "Receive external events and notify via Slack or email"
+      },
+      "scheduledReport": {
+        "title": "Scheduled Report",
+        "description": "Periodically collect data and generate reports"
+      },
+      "apiIntegration": {
+        "title": "API Integration",
+        "description": "Connect multiple APIs and sync data"
+      },
+      "llmAssistant": {
+        "title": "AI Assistant",
+        "description": "Handle inquiries and analysis using LLM"
+      }
+    },
+    "useCases": {
+      "periodic": {
+        "label": "Scheduled",
+        "template": "Send [information] to [destination] [frequency]",
+        "examples": {
+          "frequency": ["every morning at 9am", "every Monday", "on the 1st of each month", "every hour"],
+          "information": ["weather forecast", "sales summary", "news", "task list"],
+          "destination": ["Slack", "email", "LINE", "Discord"]
+        }
+      },
+      "event": {
+        "label": "Event-driven",
+        "template": "When [event] happens in [service], [action]",
+        "examples": {
+          "service": ["GitHub", "Slack", "Notion", "Webhook"],
+          "event": ["an Issue is created", "a message arrives", "a page is updated", "data is added"],
+          "action": ["create a task", "send notification", "save data", "categorize and route"]
+        }
+      },
+      "analysis": {
+        "label": "Analysis",
+        "template": "Analyze [data source] and create a report in [destination]",
+        "examples": {
+          "data source": ["sales data", "access logs", "customer data", "social posts"],
+          "destination": ["Slack", "Notion", "Google Sheets", "email"]
+        }
+      },
+      "sync": {
+        "label": "Sync",
+        "template": "Sync [data] from [source] to [destination]",
+        "examples": {
+          "source": ["Notion", "Google Sheets", "Salesforce", "Airtable"],
+          "data": ["tasks", "customer info", "product data", "schedule"],
+          "destination": ["Calendar", "CRM", "Slack", "database"]
+        }
+      },
+      "aiGenerate": {
+        "label": "AI Generate",
+        "template": "Generate [output] from [input]",
+        "examples": {
+          "input": ["meeting notes", "keywords", "requirements", "data"],
+          "output": ["meeting minutes", "article", "proposal", "summary"]
+        }
+      },
+      "freeform": {
+        "label": "Custom",
+        "template": "",
+        "placeholder": "e.g., Send a weather forecast to Slack every morning at 9am",
+        "examples": ["Send a weather forecast to Slack every morning at 9am", "Auto-sync GitHub Issues to Linear", "Classify customer inquiries with AI and route to teams"]
+      }
+    },
+    "examplesFor": "Examples for {label}",
+    "slotInputLabel": "Enter",
+    "slotInputHint": "to continue",
+    "freeformHint": "You can enter freely using the chat input below"
   },
   "publishChecklist": {
     "title": "Pre-publish Checklist",
@@ -579,11 +656,24 @@
       "noLoop": "No infinite loop detected",
       "noLoopError": "Infinite loop detected",
       "credentialsSet": "Required credentials are set",
-      "credentialsSetWarning": "{count} credential(s) not configured"
+      "credentialsSetWarning": "{count} credential(s) not configured",
+      "triggerConfigured": "Trigger is properly configured",
+      "triggerConfiguredError": "Trigger is not enabled",
+      "triggerConfiguredWarning": "Please review trigger configuration",
+      "requiredConfigSet": "All required configurations are set",
+      "requiredConfigSetError": "{count} step(s) have missing required fields"
     },
     "fixIssues": "Fix Issues",
     "ignoreAndPublish": "Ignore warnings and publish",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "messages": {
+      "addStartBlock": "Please add a start block",
+      "unconnectedBlocks": "{count} block(s) are not connected",
+      "cycleDetected": "Infinite loop detected. Please check connections",
+      "missingCredentials": "{count} credential(s) are not configured",
+      "triggerNotEnabled": "Trigger is not enabled",
+      "noTrigger": "No trigger is configured"
+    }
   },
   "copilot": {
     "thinking": "Thinking...",
@@ -811,6 +901,21 @@
       "failedMessage": "Error",
       "confirmRun": "Run test execution?",
       "confirmPublish": "Publish this workflow?"
+    },
+    "errors": {
+      "connection": "Connection error occurred",
+      "connectionHint": "Please check your network connection",
+      "timeout": "Request timed out",
+      "timeoutHint": "Please wait a moment and try again",
+      "credential": "Missing credentials",
+      "credentialHint": "Please configure the required API keys or credentials",
+      "config": "Configuration error",
+      "configHint": "Please check the block configuration",
+      "unknown": "An unexpected error occurred",
+      "unknownHint": "If the problem persists, please contact support",
+      "retry": "Retry",
+      "openCredentials": "Configure Credentials",
+      "checkConfig": "Check Config"
     }
   },
   "stepConfig": {
@@ -858,20 +963,6 @@
       "trueBranchDesc": "When expression evaluates to true",
       "falseBranch": "False",
       "falseBranchDesc": "When expression evaluates to false"
-    },
-    "loop": {
-      "title": "Loop Configuration",
-      "loopType": "Loop Type",
-      "for": "For (Fixed Count)",
-      "forEach": "ForEach (Array)",
-      "while": "While (Condition)",
-      "doWhile": "Do-While (Condition)",
-      "count": "Iteration Count",
-      "inputPath": "Input Array Path",
-      "inputPathPlaceholder": "$.items",
-      "continueCondition": "Continue Condition",
-      "continueConditionPlaceholder": "$.index < 10",
-      "maxIterations": "Max Iterations (Safety Limit)"
     },
     "wait": {
       "title": "Wait Configuration",
@@ -942,8 +1033,7 @@
     },
     "outputPorts": "Output Branches",
     "ioPorts": {
-      "title": "I/O Ports",
-      "inputs": "Input Ports",
+      "title": "Output Ports",
       "outputs": "Output Ports",
       "default": "default"
     },
@@ -1029,10 +1119,8 @@
   "flow": {
     "title": "Flow",
     "noStepSelected": "No step selected",
-    "selectStepHint": "Select a step to configure its I/O ports, scripts, and error handling",
-    "inputPorts": "Input Ports",
+    "selectStepHint": "Select a step to configure its output ports, scripts, and error handling",
     "outputPorts": "Output Ports",
-    "noInputPorts": "No input ports defined",
     "noOutputPorts": "No output ports defined",
     "portName": "Name",
     "portType": "Type",
@@ -1771,6 +1859,14 @@
   },
   "trigger": {
     "title": "Trigger Configuration",
+    "enabled": {
+      "label": "Enable Trigger",
+      "description": "When enabled, this trigger will automatically execute",
+      "enabledMessage": "Trigger enabled",
+      "disabledMessage": "Trigger disabled",
+      "enableFailed": "Failed to enable trigger",
+      "disableFailed": "Failed to disable trigger"
+    },
     "type": {
       "label": "Trigger Type",
       "manual": "Manual",
@@ -2313,6 +2409,7 @@
     "moreRows": "Show more...",
     "selectStep": "Select a step to test",
     "triggerBlockNote": "Trigger blocks cannot be tested directly. Test them by running the workflow.",
+    "resultPanelTitle": "Test Execution Result",
     "usePinned": "Use pinned data",
     "pinnedUsed": "Pinned data set as input",
     "viewMode": {
@@ -2329,5 +2426,80 @@
       "pinned": "Output pinned",
       "unpinned": "Output unpinned"
     }
+  },
+  "validation": {
+    "title": "Workflow Validation",
+    "validating": "Validating...",
+    "readyToPublish": "Ready to publish",
+    "notReadyToPublish": "Please fix issues before publishing",
+    "errors": "errors",
+    "warnings": "warnings",
+    "revalidate": "Re-validate",
+    "clickToValidate": "Click the Validate button to check your workflow",
+    "checks": {
+      "hasStartBlock": "Start block exists",
+      "allConnected": "All blocks are connected",
+      "noLoop": "No infinite loop detected",
+      "credentialsSet": "Required credentials are set",
+      "triggerConfigured": "Trigger is properly configured",
+      "requiredConfigSet": "Required configurations are set"
+    }
+  },
+  "setupWizard": {
+    "title": "Step Setup Wizard",
+    "incompleteFields": "Incomplete fields",
+    "configureNow": "Configure now",
+    "skipAll": "Skip all",
+    "previous": "Previous",
+    "next": "Next",
+    "finish": "Finish",
+    "completed": "All steps have been configured"
+  },
+  "dagEditor": {
+    "incompleteConfig": "Incomplete config: {fields}"
+  },
+  "blockTooltip": {
+    "fields": "Fields",
+    "required": "Required",
+    "category": "Category",
+    "recommendedUse": "Recommended Use",
+    "dragToCanvas": "Drag to canvas"
+  },
+  "fieldValidation": {
+    "required": "This field is required"
+  },
+  "widgets": {
+    "secretKey": {
+      "selectPlaceholder": "Select a key",
+      "customKeyOption": "Enter custom key name...",
+      "customKeyPlaceholder": "Enter secret key name",
+      "backToList": "Back to list",
+      "managedInSettings": "Secrets are managed in settings"
+    },
+    "select": {
+      "placeholder": "Select an option"
+    },
+    "number": {},
+    "variablePicker": {
+      "noVariables": "No variables found",
+      "move": "Move",
+      "expandSelect": "Expand/Select",
+      "collapse": "Collapse",
+      "close": "Close"
+    },
+    "dynamicConfig": {
+      "noSchema": "No config schema defined"
+    },
+    "propertiesPanel": {
+      "configSectionTitle": "{name} Configuration"
+    }
+  },
+  "testSuggestion": {
+    "title": "Test your workflow?",
+    "message": "\"{name}\" has been created.",
+    "hint": "We recommend running a test to verify it works correctly.",
+    "defaultWorkflowName": "New Workflow",
+    "runTest": "Run Test",
+    "skip": "Later"
   }
 }

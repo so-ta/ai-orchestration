@@ -46,7 +46,7 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Variables:   req.Variables,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -80,7 +80,7 @@ func (h *ProjectHandler) List(w http.ResponseWriter, r *http.Request) {
 		Limit:    limit,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *ProjectHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projectUsecase.GetWithDetails(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *ProjectHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Variables:   req.Variables,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -153,7 +153,7 @@ func (h *ProjectHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.projectUsecase.Delete(r.Context(), tenantID, id); err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -206,7 +206,31 @@ func (h *ProjectHandler) Save(w http.ResponseWriter, r *http.Request) {
 		Edges:       edges,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
+		return
+	}
+
+	// Log audit event (publish)
+	logAudit(r.Context(), h.auditService, r, domain.AuditActionProjectPublish, domain.AuditResourceProject, &project.ID, map[string]interface{}{
+		"name":    project.Name,
+		"version": project.Version,
+	})
+
+	JSONData(w, http.StatusOK, project)
+}
+
+// Publish handles POST /api/v1/projects/{id}/publish
+// Publishes the project by creating a new version with current steps and edges
+func (h *ProjectHandler) Publish(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	id, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+
+	project, err := h.projectUsecase.Publish(r.Context(), tenantID, id)
+	if err != nil {
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -253,7 +277,7 @@ func (h *ProjectHandler) SaveDraft(w http.ResponseWriter, r *http.Request) {
 		Edges:       edges,
 	})
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -271,7 +295,7 @@ func (h *ProjectHandler) DiscardDraft(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projectUsecase.DiscardDraft(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -304,33 +328,9 @@ func (h *ProjectHandler) RestoreVersion(w http.ResponseWriter, r *http.Request) 
 
 	project, err := h.projectUsecase.RestoreVersion(r.Context(), tenantID, id, req.Version)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
-
-	JSONData(w, http.StatusOK, project)
-}
-
-// Publish handles POST /api/v1/projects/{id}/publish
-// Deprecated: Use Save instead. Kept for backward compatibility.
-func (h *ProjectHandler) Publish(w http.ResponseWriter, r *http.Request) {
-	tenantID := getTenantID(r)
-	id, ok := parseUUID(w, r, "id", "project ID")
-	if !ok {
-		return
-	}
-
-	project, err := h.projectUsecase.Publish(r.Context(), tenantID, id)
-	if err != nil {
-		HandleError(w, err)
-		return
-	}
-
-	// Log audit event
-	logAudit(r.Context(), h.auditService, r, domain.AuditActionProjectPublish, domain.AuditResourceProject, &project.ID, map[string]interface{}{
-		"name":    project.Name,
-		"version": project.Version,
-	})
 
 	JSONData(w, http.StatusOK, project)
 }
@@ -345,7 +345,7 @@ func (h *ProjectHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 
 	versions, err := h.projectUsecase.ListVersions(r.Context(), tenantID, id)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
@@ -373,9 +373,27 @@ func (h *ProjectHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 
 	projectVersion, err := h.projectUsecase.GetVersion(r.Context(), tenantID, id, version)
 	if err != nil {
-		HandleError(w, err)
+		HandleErrorL(w, r, err)
 		return
 	}
 
 	JSONData(w, http.StatusOK, projectVersion)
+}
+
+// Validate handles POST /api/v1/projects/{id}/validate
+// Returns validation results for the workflow before publishing
+func (h *ProjectHandler) Validate(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantID(r)
+	id, ok := parseUUID(w, r, "id", "project ID")
+	if !ok {
+		return
+	}
+
+	result, err := h.projectUsecase.ValidateForPublish(r.Context(), tenantID, id)
+	if err != nil {
+		HandleErrorL(w, r, err)
+		return
+	}
+
+	JSONData(w, http.StatusOK, result)
 }

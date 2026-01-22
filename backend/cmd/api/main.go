@@ -157,7 +157,6 @@ func main() {
 	blockGroupUsecase := usecase.NewBlockGroupUsecase(projectRepo, blockGroupRepo, stepRepo)
 	blockUsecase := usecase.NewBlockUsecase(blockRepo, blockVersionRepo)
 	credentialUsecase := usecase.NewCredentialUsecase(credentialRepo, encryptor)
-	copilotUsecase := usecase.NewCopilotUsecase(projectRepo, stepRepo, runRepo, stepRunRepo, copilotSessionRepo, blockRepo)
 	usageUsecase := usecase.NewUsageUsecase(usageRepo, budgetRepo)
 
 	// OAuth2 service
@@ -188,7 +187,6 @@ func main() {
 	blockHandler := handler.NewBlockHandler(blockRepo, blockUsecase)
 	blockGroupHandler := handler.NewBlockGroupHandler(blockGroupUsecase)
 	credentialHandler := handler.NewCredentialHandler(credentialUsecase, auditService)
-	copilotHandler := handler.NewCopilotHandler(copilotUsecase, runUsecase)
 	usageHandler := handler.NewUsageHandler(usageUsecase)
 	adminTenantHandler := handler.NewAdminTenantHandler(tenantRepo)
 	variablesHandler := handler.NewVariablesHandler(pool)
@@ -277,11 +275,14 @@ func main() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Tenant-ID", "X-Dev-Role"},
+		AllowedHeaders:   []string{"Accept", "Accept-Language", "Authorization", "Content-Type", "X-Request-ID", "X-Tenant-ID", "X-Dev-Role"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+
+	// Language middleware (extracts Accept-Language header)
+	r.Use(authmw.LanguageMiddleware)
 
 	// Health check
 	r.Get("/health", healthHandler(pool, redisClient))
@@ -310,12 +311,13 @@ func main() {
 
 				// Save and Draft operations
 				r.Post("/save", projectHandler.Save)
+				r.Post("/publish", projectHandler.Publish)
 				r.Post("/draft", projectHandler.SaveDraft)
 				r.Delete("/draft", projectHandler.DiscardDraft)
 				r.Post("/restore", projectHandler.RestoreVersion)
 
-				// Deprecated: kept for backward compatibility
-				r.Post("/publish", projectHandler.Publish)
+				// Validation
+				r.Post("/validate", projectHandler.Validate)
 
 				// Versions
 				r.Route("/versions", func(r chi.Router) {
@@ -338,11 +340,10 @@ func main() {
 					r.Put("/{step_id}/retry-config", stepHandler.UpdateRetryConfig)
 					r.Delete("/{step_id}/retry-config", stepHandler.DeleteRetryConfig)
 
-					// Step-specific Copilot
-					r.Route("/{step_id}/copilot", func(r chi.Router) {
-						r.Post("/suggest", copilotHandler.SuggestForStep)
-						r.Post("/explain", copilotHandler.ExplainStep)
-					})
+					// Trigger enable/disable (for Start blocks)
+					r.Get("/{step_id}/trigger/status", stepHandler.GetTriggerStatus)
+					r.Post("/{step_id}/trigger/enable", stepHandler.EnableTrigger)
+					r.Post("/{step_id}/trigger/disable", stepHandler.DisableTrigger)
 				})
 
 				// Git Sync (N8N-style)
@@ -354,31 +355,13 @@ func main() {
 					r.Post("/sync", gitSyncHandler.TriggerSync)
 				})
 
-				// Workflow-level Copilot (with session management)
+				// Workflow-level Copilot (Agent-based, uses workflow engine)
 				r.Route("/copilot", func(r chi.Router) {
 					// E2E workflow status endpoint
 					r.Get("/status", copilotAgentHandler.GetWorkflowCopilotStatus)
 
-					// Legacy endpoints
-					r.Get("/session", copilotHandler.GetOrCreateSession)
-					r.Post("/sessions/new", copilotHandler.StartNewSession)
-					r.Post("/chat", copilotHandler.ChatWithSession)
-					r.Post("/generate", copilotHandler.GenerateProject)
-
-					// Builder session endpoints (integrated from /builder)
-					r.Get("/sessions", copilotHandler.ListCopilotSessionsByProject)
-					r.Post("/sessions", copilotHandler.StartCopilotSession)
-					r.Route("/sessions/{session_id}", func(r chi.Router) {
-						r.Get("/", copilotHandler.GetCopilotSession)
-						r.Delete("/", copilotHandler.DeleteCopilotSession)
-						r.Get("/messages", copilotHandler.GetSessionMessages)
-						r.Post("/messages", copilotHandler.SendCopilotMessage)
-						r.Post("/construct", copilotHandler.ConstructCopilotWorkflow)
-						r.Post("/refine", copilotHandler.RefineCopilotWorkflow)
-						r.Post("/finalize", copilotHandler.FinalizeCopilotSession)
-					})
-
-					// Agent-based copilot (NEW: autonomous tool-calling agent)
+					// Agent-based copilot (autonomous tool-calling agent)
+					// All copilot logic is implemented in the Copilot workflow (copilot.go)
 					r.Route("/agent", func(r chi.Router) {
 						r.Post("/sessions", copilotAgentHandler.StartAgentSession)
 						r.Get("/sessions/active", copilotAgentHandler.GetActiveAgentSession)
@@ -466,6 +449,7 @@ func main() {
 			r.Get("/{slug}", blockHandler.Get)
 			r.Put("/{slug}", blockHandler.Update)
 			r.Delete("/{slug}", blockHandler.Delete)
+			r.Post("/{slug}/validate-config", blockHandler.ValidateConfig)
 		})
 
 		// Credentials (API keys, tokens, etc.)
@@ -523,28 +507,10 @@ func main() {
 		})
 
 		// Copilot (AI-assisted workflow building)
+		// All copilot functionality is now handled by Agent-based workflow at /workflows/{id}/copilot/agent/*
 		r.Route("/copilot", func(r chi.Router) {
-			// Legacy synchronous endpoints
-			r.Post("/suggest", copilotHandler.Suggest)
-			r.Post("/diagnose", copilotHandler.Diagnose)
-			r.Post("/explain", copilotHandler.Explain)
-			r.Post("/optimize", copilotHandler.Optimize)
-			r.Post("/chat", copilotHandler.Chat)
-
-			// Async endpoints (meta-workflow architecture)
-			r.Route("/async", func(r chi.Router) {
-				r.Post("/generate", copilotHandler.AsyncGenerateProject)
-				r.Post("/suggest", copilotHandler.AsyncSuggest)
-				r.Post("/diagnose", copilotHandler.AsyncDiagnose)
-				r.Post("/optimize", copilotHandler.AsyncOptimize)
-			})
-
-			// Polling endpoint for async results
-			r.Get("/runs/{id}", copilotHandler.GetCopilotRun)
-
 			// Agent tools (list available tools for the agent)
 			r.Get("/agent/tools", copilotAgentHandler.GetAvailableTools)
-
 		})
 
 		// Usage tracking and cost management

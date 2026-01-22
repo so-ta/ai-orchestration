@@ -35,16 +35,15 @@ type Workflow struct {
 }
 
 type Step struct {
-	ID         string          `json:"id"`
-	WorkflowID string          `json:"workflow_id"`
-	Name       string          `json:"name"`
-	Type       string          `json:"type"`
-	Config     json.RawMessage `json:"config"`
+	ID        string          `json:"id"`
+	ProjectID string          `json:"project_id"`
+	Name      string          `json:"name"`
+	Type      string          `json:"type"`
+	Config    json.RawMessage `json:"config"`
 }
 
 type Run struct {
 	ID          string `json:"id"`
-	WorkflowID  string `json:"workflow_id"`  // Deprecated: Use ProjectID
 	ProjectID   string `json:"project_id"`
 	Status      string `json:"status"`
 	TriggeredBy string `json:"triggered_by"`
@@ -146,8 +145,16 @@ func getWorkflowWithSteps(t *testing.T, workflowID string) (string, []Step) {
 }
 
 func findStartStep(steps []Step) *Step {
+	// Check for trigger blocks (manual_trigger, schedule_trigger, webhook_trigger)
+	// or the legacy "start" type
+	triggerTypes := map[string]bool{
+		"start":            true,
+		"manual_trigger":   true,
+		"schedule_trigger": true,
+		"webhook_trigger":  true,
+	}
 	for _, step := range steps {
-		if step.Type == "start" {
+		if triggerTypes[step.Type] {
 			return &step
 		}
 	}
@@ -431,105 +438,3 @@ func TestScheduleManagement(t *testing.T) {
 	makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
 }
 
-func TestWebhookManagement(t *testing.T) {
-	// Skip: Webhook API is not implemented yet
-	t.Skip("Webhook API not implemented")
-
-	// First create a workflow (auto-creates Start step)
-	createReq := map[string]string{
-		"name":        "Webhook Test Workflow " + time.Now().Format("20060102150405"),
-		"description": "For webhook testing",
-	}
-	resp, body := makeRequest(t, "POST", "/api/v1/workflows", createReq)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var createResp struct {
-		Data Workflow `json:"data"`
-	}
-	json.Unmarshal(body, &createResp)
-	workflowID := createResp.Data.ID
-
-	// Get the auto-created Start step
-	_, steps := getWorkflowWithSteps(t, workflowID)
-	startStep := findStartStep(steps)
-	require.NotNil(t, startStep, "Workflow should have auto-created Start step")
-
-	// Add step
-	stepReq := map[string]interface{}{
-		"name":   "Mock Step",
-		"type":   "tool",
-		"config": map[string]string{"adapter_id": "mock"},
-	}
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/steps", workflowID), stepReq)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var stepResp struct {
-		Data Step `json:"data"`
-	}
-	json.Unmarshal(body, &stepResp)
-
-	// Connect Start to step
-	edgeReq := map[string]string{
-		"source_step_id": startStep.ID,
-		"target_step_id": stepResp.Data.ID,
-	}
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/edges", workflowID), edgeReq)
-	require.Equal(t, http.StatusCreated, resp.StatusCode, "Edge create response: %s", string(body))
-
-	// Publish
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/workflows/%s/publish", workflowID), nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "Publish response: %s", string(body))
-
-	// Create webhook
-	webhookReq := map[string]interface{}{
-		"workflow_id": workflowID,
-		"name":        "Test Webhook",
-	}
-	resp, body = makeRequest(t, "POST", "/api/v1/webhooks", webhookReq)
-	require.Equal(t, http.StatusCreated, resp.StatusCode, "Webhook create response: %s", string(body))
-
-	// Response is directly the webhook object (not wrapped in data)
-	var webhook struct {
-		ID     string `json:"id"`
-		Secret string `json:"secret"`
-	}
-	json.Unmarshal(body, &webhook)
-	webhookID := webhook.ID
-	assert.NotEmpty(t, webhookID)
-	assert.NotEmpty(t, webhook.Secret)
-	originalSecret := webhook.Secret
-
-	// List webhooks
-	resp, _ = makeRequest(t, "GET", "/api/v1/webhooks", nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Get webhook
-	resp, _ = makeRequest(t, "GET", fmt.Sprintf("/api/v1/webhooks/%s", webhookID), nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Disable webhook
-	resp, _ = makeRequest(t, "POST", fmt.Sprintf("/api/v1/webhooks/%s/disable", webhookID), nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Enable webhook
-	resp, _ = makeRequest(t, "POST", fmt.Sprintf("/api/v1/webhooks/%s/enable", webhookID), nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Regenerate secret
-	resp, body = makeRequest(t, "POST", fmt.Sprintf("/api/v1/webhooks/%s/regenerate-secret", webhookID), nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var newWebhook struct {
-		Secret string `json:"secret"`
-	}
-	json.Unmarshal(body, &newWebhook)
-	assert.NotEmpty(t, newWebhook.Secret)
-	assert.NotEqual(t, originalSecret, newWebhook.Secret)
-
-	// Delete webhook
-	resp, _ = makeRequest(t, "DELETE", fmt.Sprintf("/api/v1/webhooks/%s", webhookID), nil)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	// Cleanup workflow
-	makeRequest(t, "DELETE", "/api/v1/workflows/"+workflowID, nil)
-}

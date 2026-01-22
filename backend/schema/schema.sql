@@ -7,13 +7,6 @@
 --
 -- This file is the single source of truth for the database schema.
 --
--- MAJOR CHANGE: Workflow → Project with Multi-Start model
--- - workflows table → projects table
--- - workflow_versions → project_versions
--- - webhooks table → removed (integrated into steps.trigger_config)
--- - steps.workflow_id → steps.project_id
--- - steps now has trigger_type/trigger_config for Start blocks
-
 --
 -- PostgreSQL database dump
 --
@@ -99,12 +92,11 @@ CREATE TABLE public.users (
 COMMENT ON COLUMN public.users.variables IS 'Personal variables accessible by {{$personal.xxx}} in templates';
 
 -- ============================================================================
--- Projects (formerly Workflows) - Multi-Start Model
+-- Projects
 -- ============================================================================
 
 --
 -- Name: projects; Type: TABLE; Schema: public; Owner: -
--- NOTE: This replaces the workflows table. Projects contain multiple Start blocks.
 --
 
 CREATE TABLE public.projects (
@@ -126,14 +118,13 @@ CREATE TABLE public.projects (
     CONSTRAINT projects_status_check CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'published'::character varying])::text[])))
 );
 
-COMMENT ON TABLE public.projects IS 'Projects contain DAGs with multiple Start blocks (entry points). Replaces workflows table.';
+COMMENT ON TABLE public.projects IS 'Projects contain DAGs with multiple Start blocks (entry points).';
 COMMENT ON COLUMN public.projects.variables IS 'Shared variables accessible by all steps in the project';
 COMMENT ON COLUMN public.projects.is_system IS 'True for system projects (e.g., Copilot). These are accessible across all tenants.';
 COMMENT ON COLUMN public.projects.system_slug IS 'Unique slug for system projects (e.g., copilot-generate). Used for internal lookups.';
 
 --
 -- Name: project_versions; Type: TABLE; Schema: public; Owner: -
--- NOTE: This replaces workflow_versions table.
 --
 
 CREATE TABLE public.project_versions (
@@ -181,7 +172,6 @@ COMMENT ON COLUMN public.block_groups.parent_group_id IS 'Reference to parent gr
 
 --
 -- Name: steps; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id, added trigger_type/trigger_config for Start blocks
 --
 
 CREATE TABLE public.steps (
@@ -207,7 +197,7 @@ CREATE TABLE public.steps (
     CONSTRAINT steps_trigger_type_check CHECK ((trigger_type IS NULL OR (trigger_type)::text = ANY ((ARRAY['manual'::character varying, 'webhook'::character varying, 'schedule'::character varying, 'slack'::character varying, 'discord'::character varying, 'email'::character varying, 'internal'::character varying, 'api'::character varying])::text[])))
 );
 
-COMMENT ON COLUMN public.steps.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.steps.project_id IS 'Reference to parent project';
 COMMENT ON COLUMN public.steps.block_group_id IS 'Reference to containing block group (NULL if not in a group)';
 COMMENT ON COLUMN public.steps.group_role IS 'Role within block group: body (steps inside the group body)';
 COMMENT ON COLUMN public.steps.credential_bindings IS 'Mapping of credential names to tenant credential IDs';
@@ -220,7 +210,6 @@ COMMENT ON COLUMN public.steps.tool_input_schema IS 'For Agent Group entry point
 
 --
 -- Name: edges; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id
 --
 
 CREATE TABLE public.edges (
@@ -234,12 +223,11 @@ CREATE TABLE public.edges (
     condition text,
     created_at timestamp with time zone DEFAULT now(),
     source_port character varying(50) DEFAULT ''::character varying,
-    target_port character varying(50) DEFAULT ''::character varying,
     CONSTRAINT edges_source_check CHECK ((source_step_id IS NOT NULL OR source_block_group_id IS NOT NULL)),
     CONSTRAINT edges_target_check CHECK ((target_step_id IS NOT NULL OR target_block_group_id IS NOT NULL))
 );
 
-COMMENT ON COLUMN public.edges.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.edges.project_id IS 'Reference to parent project';
 
 -- ============================================================================
 -- Block Definitions (Block Registry)
@@ -265,7 +253,6 @@ CREATE TABLE public.block_definitions (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     output_ports jsonb DEFAULT '[]'::jsonb,
-    input_ports jsonb DEFAULT '[]'::jsonb,
     required_credentials jsonb DEFAULT '[]'::jsonb,
     is_public boolean DEFAULT false,
     code text,
@@ -326,7 +313,6 @@ COMMENT ON TABLE public.block_versions IS 'Version history for block definitions
 
 --
 -- Name: runs; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id, added start_step_id
 --
 
 CREATE TABLE public.runs (
@@ -350,8 +336,8 @@ CREATE TABLE public.runs (
     deleted_at timestamp with time zone
 );
 
-COMMENT ON COLUMN public.runs.project_id IS 'Reference to parent project (formerly workflow_id)';
-COMMENT ON COLUMN public.runs.project_version IS 'Project version that was executed (formerly workflow_version)';
+COMMENT ON COLUMN public.runs.project_id IS 'Reference to parent project';
+COMMENT ON COLUMN public.runs.project_version IS 'Project version that was executed';
 COMMENT ON COLUMN public.runs.start_step_id IS 'Which Start block triggered this run';
 COMMENT ON COLUMN public.runs.trigger_source IS 'Internal trigger source identifier: copilot, audit-system, etc.';
 COMMENT ON COLUMN public.runs.trigger_metadata IS 'Additional metadata about the trigger: feature, user_id, session_id, etc.';
@@ -359,7 +345,6 @@ COMMENT ON COLUMN public.runs.run_number IS 'Sequential run number per project +
 
 --
 -- Name: run_number_sequences; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id
 --
 
 CREATE TABLE public.run_number_sequences (
@@ -400,7 +385,6 @@ COMMENT ON COLUMN public.step_runs.sequence_number IS 'Execution order within th
 
 --
 -- Name: schedules; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id, added start_step_id
 --
 
 CREATE TABLE public.schedules (
@@ -423,7 +407,7 @@ CREATE TABLE public.schedules (
     updated_at timestamp with time zone DEFAULT now()
 );
 
-COMMENT ON COLUMN public.schedules.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.schedules.project_id IS 'Reference to parent project';
 COMMENT ON COLUMN public.schedules.start_step_id IS 'Which Start block to execute when schedule triggers';
 
 -- ============================================================================
@@ -504,7 +488,6 @@ CREATE TABLE public.secrets (
 
 --
 -- Name: usage_records; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id
 --
 
 CREATE TABLE public.usage_records (
@@ -529,7 +512,7 @@ CREATE TABLE public.usage_records (
 );
 
 COMMENT ON TABLE public.usage_records IS 'Individual LLM API call records with token usage and cost';
-COMMENT ON COLUMN public.usage_records.project_id IS 'Reference to parent project (formerly workflow_id)';
+COMMENT ON COLUMN public.usage_records.project_id IS 'Reference to parent project';
 COMMENT ON COLUMN public.usage_records.provider IS 'LLM provider: openai, anthropic, google, etc.';
 COMMENT ON COLUMN public.usage_records.model IS 'Model identifier: gpt-4o, claude-3-opus, etc.';
 COMMENT ON COLUMN public.usage_records.operation IS 'Operation type: chat, completion, embedding, etc.';
@@ -537,7 +520,6 @@ COMMENT ON COLUMN public.usage_records.total_cost_usd IS 'Total cost in USD with
 
 --
 -- Name: usage_daily_aggregates; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id
 --
 
 CREATE TABLE public.usage_daily_aggregates (
@@ -564,7 +546,6 @@ COMMENT ON TABLE public.usage_daily_aggregates IS 'Pre-aggregated daily usage da
 
 --
 -- Name: usage_budgets; Type: TABLE; Schema: public; Owner: -
--- NOTE: workflow_id → project_id
 --
 
 CREATE TABLE public.usage_budgets (
@@ -770,7 +751,6 @@ CREATE INDEX idx_steps_trigger_type ON public.steps USING btree (trigger_type) W
 CREATE INDEX idx_edges_tenant ON public.edges USING btree (tenant_id);
 CREATE INDEX idx_edges_project ON public.edges USING btree (project_id);
 CREATE INDEX idx_edges_source_port ON public.edges USING btree (source_step_id, source_port);
-CREATE INDEX idx_edges_target_port ON public.edges USING btree (target_port) WHERE ((target_port)::text <> ''::text);
 
 -- Block Groups
 CREATE INDEX idx_block_groups_tenant ON public.block_groups USING btree (tenant_id);

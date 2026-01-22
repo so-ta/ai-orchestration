@@ -311,8 +311,6 @@
       "routerDesc": "AI駆動の動的ルーティング",
       "condition": "条件分岐",
       "conditionDesc": "条件式に基づいて分岐",
-      "loop": "ループ",
-      "loopDesc": "for/forEach/whileでイテレーション",
       "map": "マップ",
       "mapDesc": "配列を並列処理",
       "join": "ジョイン",
@@ -390,6 +388,8 @@
     "saved": "保存済み",
     "unsavedChanges": "未保存の変更",
     "saveError": "保存エラー",
+    "triggerEnabled": "トリガー有効",
+    "triggerDisabled": "トリガー無効",
     "history": "実行履歴",
     "openOtherProject": "他のプロジェクトを開く",
     "createRelease": "リリースとして保存",
@@ -562,7 +562,84 @@
       "githubToSlack": "GitHub PRがマージされたらチームに通知"
     },
     "or": "または",
-    "skipToCanvas": "空のキャンバスから始める"
+    "skipToCanvas": "空のキャンバスから始める",
+    "tabs": {
+      "describe": "説明で作成",
+      "templates": "テンプレートから"
+    },
+    "templates": {
+      "webhookNotification": {
+        "title": "Webhook通知",
+        "description": "外部イベントを受けてSlackやメールに通知"
+      },
+      "scheduledReport": {
+        "title": "定期レポート",
+        "description": "定期的にデータを収集してレポートを生成"
+      },
+      "apiIntegration": {
+        "title": "API連携",
+        "description": "複数のAPIを連携させてデータを同期"
+      },
+      "llmAssistant": {
+        "title": "AIアシスタント",
+        "description": "LLMを使った問い合わせ対応や分析"
+      }
+    },
+    "useCases": {
+      "periodic": {
+        "label": "定期通知",
+        "template": "[頻度] に [情報] を [通知先] に送りたい",
+        "examples": {
+          "頻度": ["毎朝9時", "毎週月曜", "毎月1日", "毎時"],
+          "情報": ["天気予報", "売上サマリー", "ニュース", "タスク一覧"],
+          "通知先": ["Slack", "メール", "LINE", "Discord"]
+        }
+      },
+      "event": {
+        "label": "イベント反応",
+        "template": "[サービス] で [イベント] が起きたら [アクション] したい",
+        "examples": {
+          "サービス": ["GitHub", "Slack", "Notion", "Webhook"],
+          "イベント": ["Issueが作成されたら", "メッセージが来たら", "ページが更新されたら", "データが追加されたら"],
+          "アクション": ["タスクを作成", "通知を送る", "データを保存", "分類して振り分け"]
+        }
+      },
+      "analysis": {
+        "label": "分析",
+        "template": "[データソース] を分析して [出力先] にレポートを作りたい",
+        "examples": {
+          "データソース": ["売上データ", "アクセスログ", "顧客データ", "SNS投稿"],
+          "出力先": ["Slack", "Notion", "Google Sheets", "メール"]
+        }
+      },
+      "sync": {
+        "label": "同期",
+        "template": "[ソース] の [データ] を [宛先] に同期したい",
+        "examples": {
+          "ソース": ["Notion", "Google Sheets", "Salesforce", "Airtable"],
+          "データ": ["タスク", "顧客情報", "商品データ", "スケジュール"],
+          "宛先": ["カレンダー", "CRM", "Slack", "データベース"]
+        }
+      },
+      "aiGenerate": {
+        "label": "AI生成",
+        "template": "[入力] から [成果物] を生成したい",
+        "examples": {
+          "入力": ["会議メモ", "キーワード", "要件", "データ"],
+          "成果物": ["議事録", "記事", "提案書", "サマリー"]
+        }
+      },
+      "freeform": {
+        "label": "自由に入力",
+        "template": "",
+        "placeholder": "例: 毎朝9時にSlackで天気予報を通知したい",
+        "examples": ["毎朝9時にSlackで天気予報を通知したい", "GitHubのIssueをLinearに自動同期したい", "顧客からの問い合わせをAIで分類してチームに振り分けたい"]
+      }
+    },
+    "examplesFor": "{label} の例",
+    "slotInputLabel": "を入力",
+    "slotInputHint": "で次へ",
+    "freeformHint": "チャット欄から自由に入力できます"
   },
   "publishChecklist": {
     "title": "公開前チェック",
@@ -579,11 +656,24 @@
       "noLoop": "無限ループの可能性なし",
       "noLoopError": "無限ループが検出されました",
       "credentialsSet": "必要なクレデンシャルが設定されている",
-      "credentialsSetWarning": "{count}個のクレデンシャルが未設定です"
+      "credentialsSetWarning": "{count}個のクレデンシャルが未設定です",
+      "triggerConfigured": "トリガーが正しく設定されている",
+      "triggerConfiguredError": "トリガーが有効化されていません",
+      "triggerConfiguredWarning": "トリガーの設定を確認してください",
+      "requiredConfigSet": "必須の設定がすべて完了している",
+      "requiredConfigSetError": "{count}個のステップで必須設定が未入力です"
     },
     "fixIssues": "問題を修正",
     "ignoreAndPublish": "警告を無視して公開",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "messages": {
+      "addStartBlock": "スタートブロックを追加してください",
+      "unconnectedBlocks": "{count}個のブロックが接続されていません",
+      "cycleDetected": "無限ループが検出されました。接続を確認してください",
+      "missingCredentials": "{count}個のクレデンシャルが未設定です",
+      "triggerNotEnabled": "トリガーが有効化されていません",
+      "noTrigger": "トリガーが設定されていません"
+    }
   },
   "copilot": {
     "thinking": "考え中...",
@@ -811,6 +901,21 @@
       "failedMessage": "エラー",
       "confirmRun": "テスト実行しますか？",
       "confirmPublish": "このワークフローを公開しますか？"
+    },
+    "errors": {
+      "connection": "接続エラーが発生しました",
+      "connectionHint": "ネットワーク接続を確認してください",
+      "timeout": "リクエストがタイムアウトしました",
+      "timeoutHint": "しばらく待ってから再試行してください",
+      "credential": "認証情報が不足しています",
+      "credentialHint": "必要なAPI キーや認証情報を設定してください",
+      "config": "設定にエラーがあります",
+      "configHint": "ブロックの設定を確認してください",
+      "unknown": "予期せぬエラーが発生しました",
+      "unknownHint": "問題が続く場合はサポートにお問い合わせください",
+      "retry": "再試行",
+      "openCredentials": "認証情報を設定",
+      "checkConfig": "設定を確認"
     }
   },
   "stepConfig": {
@@ -858,20 +963,6 @@
       "trueBranchDesc": "条件式がtrueの場合",
       "falseBranch": "False",
       "falseBranchDesc": "条件式がfalseの場合"
-    },
-    "loop": {
-      "title": "ループ設定",
-      "loopType": "ループタイプ",
-      "for": "For（固定回数）",
-      "forEach": "ForEach（配列）",
-      "while": "While（条件）",
-      "doWhile": "Do-While（条件）",
-      "count": "イテレーション回数",
-      "inputPath": "入力配列パス",
-      "inputPathPlaceholder": "$.items",
-      "continueCondition": "継続条件",
-      "continueConditionPlaceholder": "$.index < 10",
-      "maxIterations": "最大イテレーション（安全制限）"
     },
     "wait": {
       "title": "待機設定",
@@ -942,8 +1033,7 @@
     },
     "outputPorts": "出力ブランチ",
     "ioPorts": {
-      "title": "入出力ポート",
-      "inputs": "入力ポート",
+      "title": "出力ポート",
       "outputs": "出力ポート",
       "default": "デフォルト"
     },
@@ -1029,10 +1119,8 @@
   "flow": {
     "title": "フロー",
     "noStepSelected": "ステップが選択されていません",
-    "selectStepHint": "ステップを選択して、I/Oポート、スクリプト、エラーハンドリングを設定",
-    "inputPorts": "入力ポート",
+    "selectStepHint": "ステップを選択して、出力ポート、スクリプト、エラーハンドリングを設定",
     "outputPorts": "出力ポート",
-    "noInputPorts": "入力ポートが定義されていません",
     "noOutputPorts": "出力ポートが定義されていません",
     "portName": "名前",
     "portType": "型",
@@ -1749,6 +1837,14 @@
   },
   "trigger": {
     "title": "トリガー設定",
+    "enabled": {
+      "label": "トリガー有効化",
+      "description": "有効にすると、このトリガーが自動的に実行されます",
+      "enabledMessage": "トリガーを有効にしました",
+      "disabledMessage": "トリガーを無効にしました",
+      "enableFailed": "トリガーの有効化に失敗しました",
+      "disableFailed": "トリガーの無効化に失敗しました"
+    },
     "type": {
       "label": "トリガータイプ",
       "manual": "手動",
@@ -2296,6 +2392,7 @@
     "moreRows": "さらに表示...",
     "selectStep": "テストするステップを選択してください",
     "triggerBlockNote": "トリガーブロックは直接テストできません。ワークフロー実行でテストしてください。",
+    "resultPanelTitle": "テスト実行結果",
     "usePinned": "固定データを使用",
     "pinnedUsed": "固定データを入力にセットしました",
     "viewMode": {
@@ -2312,5 +2409,80 @@
       "pinned": "出力を固定しました",
       "unpinned": "固定を解除しました"
     }
+  },
+  "validation": {
+    "title": "ワークフロー検証",
+    "validating": "検証中...",
+    "readyToPublish": "公開準備完了",
+    "notReadyToPublish": "公開前に問題を解決してください",
+    "errors": "エラー",
+    "warnings": "警告",
+    "revalidate": "再検証",
+    "clickToValidate": "「検証」ボタンをクリックしてワークフローをチェック",
+    "checks": {
+      "hasStartBlock": "スタートブロックが存在する",
+      "allConnected": "すべてのブロックが接続されている",
+      "noLoop": "無限ループが存在しない",
+      "credentialsSet": "必要な認証情報が設定されている",
+      "triggerConfigured": "トリガーが正しく設定されている",
+      "requiredConfigSet": "必須設定が入力されている"
+    }
+  },
+  "setupWizard": {
+    "title": "ステップ設定ウィザード",
+    "incompleteFields": "未設定のフィールド",
+    "configureNow": "今すぐ設定する",
+    "skipAll": "すべてスキップ",
+    "previous": "前へ",
+    "next": "次へ",
+    "finish": "完了",
+    "completed": "すべてのステップの設定が完了しました"
+  },
+  "dagEditor": {
+    "incompleteConfig": "設定が不完全です: {fields}"
+  },
+  "blockTooltip": {
+    "fields": "フィールド数",
+    "required": "必須",
+    "category": "カテゴリ",
+    "recommendedUse": "推奨使用シーン",
+    "dragToCanvas": "キャンバスにドラッグ"
+  },
+  "fieldValidation": {
+    "required": "このフィールドは必須です"
+  },
+  "widgets": {
+    "secretKey": {
+      "selectPlaceholder": "選択してください",
+      "customKeyOption": "カスタムキー名を入力...",
+      "customKeyPlaceholder": "シークレットキー名を入力",
+      "backToList": "リストから選択",
+      "managedInSettings": "シークレットは設定画面で管理されます"
+    },
+    "select": {
+      "placeholder": "選択してください"
+    },
+    "number": {},
+    "variablePicker": {
+      "noVariables": "変数が見つかりません",
+      "move": "移動",
+      "expandSelect": "展開/選択",
+      "collapse": "折りたたみ",
+      "close": "閉じる"
+    },
+    "dynamicConfig": {
+      "noSchema": "設定スキーマが定義されていません"
+    },
+    "propertiesPanel": {
+      "configSectionTitle": "{name} 設定"
+    }
+  },
+  "testSuggestion": {
+    "title": "ワークフローをテストしますか？",
+    "message": "「{name}」の作成が完了しました。",
+    "hint": "テスト実行で動作を確認することをお勧めします。",
+    "defaultWorkflowName": "新しいワークフロー",
+    "runTest": "テストを実行",
+    "skip": "後で"
   }
 }

@@ -41,10 +41,13 @@ func TestCopilotToolInputFix(t *testing.T) {
 	initialStepCount := len(initialProject.Data.Steps)
 	t.Logf("Initial step count: %d", initialStepCount)
 
-	// Find the Start step ID
+	// Find the Start step ID (check for trigger blocks)
 	var startStepID string
+	triggerTypes := map[string]bool{
+		"start": true, "manual_trigger": true, "schedule_trigger": true, "webhook_trigger": true,
+	}
 	for _, step := range initialProject.Data.Steps {
-		if step.Type == "start" {
+		if triggerTypes[step.Type] {
 			startStepID = step.ID
 			break
 		}
@@ -173,13 +176,14 @@ func TestCopilotComplexWorkflow(t *testing.T) {
 		t.Logf("  - %s: %s -> %s", edge.ID, edge.SourceStepID, edge.TargetStepID)
 	}
 
-	// Verify at least Start step exists
+	// Verify at least Start step (trigger block) exists
 	stepTypes := make(map[string]bool)
 	for _, step := range project.Data.Steps {
 		stepTypes[step.Type] = true
 	}
 
-	assert.True(t, stepTypes["start"], "Should have a Start step")
+	hasTriggerBlock := stepTypes["start"] || stepTypes["manual_trigger"] || stepTypes["schedule_trigger"] || stepTypes["webhook_trigger"]
+	assert.True(t, hasTriggerBlock, "Should have a Start step (trigger block)")
 
 	// At minimum, verify we have more than just the Start step
 	assert.Greater(t, len(project.Data.Steps), 1, "Should have created additional steps beyond Start")

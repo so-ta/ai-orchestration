@@ -28,7 +28,6 @@ const (
 	StepTypeError       StepType = "error"       // Stop and error (n8n: Stop And Error)
 	StepTypeNote        StepType = "note"        // Documentation/comment node (n8n: NOOP)
 	StepTypeLog         StepType = "log"         // Log output for debugging
-	// Note: "loop" step type has been removed. Use BlockGroupTypeWhile or BlockGroupTypeForeach instead.
 )
 
 // ValidStepTypes returns all valid step types
@@ -254,26 +253,6 @@ type SubflowStepConfig struct {
 	WorkflowID      uuid.UUID       `json:"workflow_id"`
 	WorkflowVersion int             `json:"workflow_version,omitempty"`
 	InputMapping    json.RawMessage `json:"input_mapping,omitempty"`
-}
-
-// LoopType represents the type of loop
-type LoopType string
-
-const (
-	LoopTypeFor     LoopType = "for"
-	LoopTypeForEach LoopType = "forEach"
-	LoopTypeWhile   LoopType = "while"
-	LoopTypeDoWhile LoopType = "doWhile"
-)
-
-// LoopStepConfig represents configuration for a loop step
-type LoopStepConfig struct {
-	LoopType      LoopType `json:"loop_type"`                 // for, forEach, while, doWhile
-	Count         int      `json:"count,omitempty"`           // for: number of iterations
-	InputPath     string   `json:"input_path,omitempty"`      // forEach: path to array
-	Condition     string   `json:"condition,omitempty"`       // while/doWhile: condition expression
-	MaxIterations int      `json:"max_iterations,omitempty"`  // safety limit (default: 100)
-	AdapterID     string   `json:"adapter_id,omitempty"`      // adapter to execute per iteration
 }
 
 // WaitStepConfig represents configuration for a wait step
