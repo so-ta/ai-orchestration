@@ -33,12 +33,20 @@ tenants
   └── usage_daily_aggregates
   └── usage_budgets
   └── secrets
+  └── credentials
+        └── credential_shares
+        └── oauth2_connections
   └── audit_logs
   └── adapters
   └── block_definitions（※ tenant_id NULL = システムブロック）
         └── block_versions
   └── vector_collections（RAG）
         └── vector_documents（RAG）
+  └── copilot_sessions
+        └── copilot_messages
+
+oauth2_providers（グローバル）
+  └── oauth2_apps（テナント固有）
 ```
 
 > **注記**: `webhooks` テーブルは削除されました。Webhook 機能は Start ブロックの `trigger_type` と `trigger_config` で設定されます。
@@ -562,6 +570,148 @@ RAG 用ベクトルドキュメント。pgvector 拡張を使用。
 インデックス:
 - `idx_audit_logs_tenant` ON (tenant_id)
 - `idx_audit_logs_created` ON (created_at)
+
+### oauth2_providers
+
+OAuth2 プロバイダー設定（プリセットおよびカスタム）。
+
+| カラム | 型 | 制約 | 説明 |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| slug | VARCHAR(50) | NOT NULL, UNIQUE | プロバイダー識別子 (google, github 等) |
+| name | VARCHAR(100) | NOT NULL | 表示名 |
+| icon_url | TEXT | | アイコン URL |
+| authorization_url | TEXT | NOT NULL | OAuth2 認可エンドポイント |
+| token_url | TEXT | NOT NULL | トークンエンドポイント |
+| revoke_url | TEXT | | トークン無効化エンドポイント |
+| userinfo_url | TEXT | | ユーザー情報エンドポイント |
+| pkce_required | BOOLEAN | DEFAULT false | PKCE 必須フラグ |
+| default_scopes | TEXT[] | DEFAULT '{}' | デフォルトスコープ |
+| documentation_url | TEXT | | ドキュメント URL |
+| is_preset | BOOLEAN | DEFAULT false | プリセットプロバイダーフラグ |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+プリセットプロバイダー: Google, GitHub, Slack, Notion, Linear, Microsoft, Discord, Atlassian
+
+### oauth2_apps
+
+テナント固有の OAuth2 アプリケーション設定。
+
+| カラム | 型 | 制約 | 説明 |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| tenant_id | UUID | FK tenants(id), NOT NULL | |
+| provider_id | UUID | FK oauth2_providers(id), NOT NULL | |
+| encrypted_client_id | BYTEA | NOT NULL | AES-256-GCM 暗号化 |
+| encrypted_client_secret | BYTEA | NOT NULL | AES-256-GCM 暗号化 |
+| client_id_nonce | BYTEA | NOT NULL | 暗号化ノンス |
+| client_secret_nonce | BYTEA | NOT NULL | 暗号化ノンス |
+| custom_scopes | TEXT[] | | カスタムスコープ |
+| redirect_uri | TEXT | | リダイレクト URI |
+| status | VARCHAR(20) | DEFAULT 'active' | active, disabled |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+ユニーク: (tenant_id, provider_id)
+
+### oauth2_connections
+
+個別の OAuth2 トークン接続。
+
+| カラム | 型 | 制約 | 説明 |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| credential_id | UUID | FK credentials(id), NOT NULL | |
+| oauth2_app_id | UUID | FK oauth2_apps(id), NOT NULL | |
+| encrypted_access_token | BYTEA | | 暗号化アクセストークン |
+| encrypted_refresh_token | BYTEA | | 暗号化リフレッシュトークン |
+| access_token_nonce | BYTEA | | |
+| refresh_token_nonce | BYTEA | | |
+| token_type | VARCHAR(50) | DEFAULT 'Bearer' | |
+| access_token_expires_at | TIMESTAMPTZ | | |
+| refresh_token_expires_at | TIMESTAMPTZ | | |
+| state | VARCHAR(255) | | OAuth2 フロー用 CSRF state |
+| code_verifier | TEXT | | PKCE コードベリファイア |
+| account_id | TEXT | | 外部アカウント ID |
+| account_email | TEXT | | 外部アカウントメール |
+| account_name | TEXT | | 外部アカウント名 |
+| raw_userinfo | JSONB | | userinfo エンドポイントからの生データ |
+| status | VARCHAR(20) | DEFAULT 'pending' | pending, connected, expired, revoked, error |
+| last_refresh_at | TIMESTAMPTZ | | |
+| last_used_at | TIMESTAMPTZ | | |
+| error_message | TEXT | | |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+インデックス:
+- `idx_oauth2_connections_credential` ON (credential_id)
+- `idx_oauth2_connections_status` ON (status)
+- `idx_oauth2_connections_state` ON (state) WHERE state IS NOT NULL
+- `idx_oauth2_connections_expires` ON (access_token_expires_at) WHERE status = 'connected'
+
+### credential_shares
+
+認証情報のユーザー/プロジェクト間共有設定。
+
+| カラム | 型 | 制約 | 説明 |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| credential_id | UUID | FK credentials(id), NOT NULL | |
+| shared_with_user_id | UUID | FK users(id) | ユーザーとの共有時 |
+| shared_with_project_id | UUID | FK projects(id) | プロジェクトとの共有時 |
+| permission | VARCHAR(20) | NOT NULL DEFAULT 'use' | use, edit, admin |
+| shared_by_user_id | UUID | FK users(id), NOT NULL | 共有元ユーザー |
+| note | TEXT | | 共有メモ |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| expires_at | TIMESTAMPTZ | | 有効期限 |
+
+制約: shared_with_user_id または shared_with_project_id のいずれか一方のみ設定
+
+ユニーク: (credential_id, shared_with_user_id), (credential_id, shared_with_project_id)
+
+### copilot_sessions
+
+AI Copilot セッション。対話型ワークフロー作成/改善用。
+
+| カラム | 型 | 制約 | 説明 |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| tenant_id | UUID | FK tenants(id), NOT NULL | |
+| user_id | VARCHAR(255) | NOT NULL | |
+| context_project_id | UUID | FK projects(id) | セッションのコンテキストプロジェクト |
+| mode | VARCHAR(50) | NOT NULL DEFAULT 'create' | create, enhance, explain |
+| title | VARCHAR(200) | | セッションタイトル |
+| status | VARCHAR(50) | NOT NULL DEFAULT 'hearing' | hearing, building, reviewing, refining, completed, abandoned |
+| hearing_phase | VARCHAR(50) | NOT NULL DEFAULT 'analysis' | analysis, proposal, completed |
+| hearing_progress | INTEGER | NOT NULL DEFAULT 0 | 0-100 |
+| spec | JSONB | | WorkflowSpec DSL |
+| project_id | UUID | FK projects(id) | 生成されたプロジェクト ID |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+| updated_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+インデックス:
+- `idx_copilot_sessions_tenant` ON (tenant_id)
+- `idx_copilot_sessions_user` ON (user_id)
+- `idx_copilot_sessions_context_project` ON (context_project_id)
+
+### copilot_messages
+
+Copilot セッション内のメッセージ。
+
+| カラム | 型 | 制約 | 説明 |
+|--------|------|-------------|-------------|
+| id | UUID | PK, DEFAULT gen_random_uuid() | |
+| session_id | UUID | FK copilot_sessions(id), NOT NULL | |
+| role | VARCHAR(20) | NOT NULL | user, assistant, system |
+| content | TEXT | NOT NULL | メッセージ内容 |
+| phase | VARCHAR(50) | | メッセージ作成時のフェーズ |
+| extracted_data | JSONB | | ユーザーメッセージから抽出されたデータ |
+| suggested_questions | JSONB | | 提案されたフォローアップ質問 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | |
+
+インデックス:
+- `idx_copilot_messages_session` ON (session_id)
 
 ## 正規クエリパターン（必須）
 

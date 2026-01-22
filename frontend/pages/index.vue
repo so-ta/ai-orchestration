@@ -90,6 +90,9 @@ const running = ref(false)
 // Run dialog state
 const showRunDialog = ref(false)
 
+// Welcome dialog state (shows on new project creation)
+const showWelcomeDialog = ref(false)
+
 // Right panel mode: 'block' for properties, 'run' for run details, 'group' for group properties
 type RightPanelMode = 'block' | 'run' | 'group'
 
@@ -217,7 +220,7 @@ async function loadProject(projectId: string) {
 }
 
 // Create new project
-async function createNewProject() {
+async function createNewProject(skipWelcome = false) {
   try {
     const response = await projects.create({
       name: t('editor.untitledProject'),
@@ -227,6 +230,11 @@ async function createNewProject() {
     blockGroups.value = []
     setCurrentProjectId(response.data.id)
     setProjectInUrl(response.data.id)
+
+    // Show welcome dialog for new projects (unless skipped)
+    if (!skipWelcome) {
+      showWelcomeDialog.value = true
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to create project'
     throw e
@@ -1549,6 +1557,23 @@ function handleOpenSettings() {
   console.log('Open settings')
 }
 
+// Welcome dialog handlers
+function handleWelcomeSubmit(prompt: string) {
+  showWelcomeDialog.value = false
+  // Open Copilot sidebar and send the prompt
+  const editorState = useEditorState()
+  editorState.openCopilotSidebar()
+  // Emit a custom event to send the prompt to CopilotTab
+  // We use nextTick to ensure the sidebar is mounted
+  nextTick(() => {
+    window.dispatchEvent(new CustomEvent('copilot-send-prompt', { detail: { prompt } }))
+  })
+}
+
+function handleWelcomeSkip() {
+  showWelcomeDialog.value = false
+}
+
 // Handle Copilot changes applied
 async function handleCopilotChangesApplied(changes: ProposalChange[]) {
   if (!project.value) return
@@ -1668,6 +1693,17 @@ async function handleCopilotChangesApplied(changes: ProposalChange[]) {
 function handleCopilotChangesPreview() {
   // Optional: highlight preview in DAG editor
   // useCopilotDraft().previewState already provides this
+}
+
+// Handle workflow updated by Copilot (refresh data from API)
+async function handleWorkflowUpdated() {
+  if (!project.value) return
+  try {
+    // Reload project data from API to get any backend changes
+    await loadProject(project.value.id)
+  } catch (e) {
+    console.error('Failed to refresh workflow after Copilot update:', e)
+  }
 }
 
 // Keyboard shortcuts
@@ -1805,10 +1841,13 @@ onMounted(async () => {
         @create-project="handleCreateProject"
       />
 
-      <!-- Release Modal -->
+      <!-- Release Modal (with integrated publish checklist) -->
       <ReleaseModal
         :show="showReleaseModal"
         :project-name="project?.name"
+        :steps="project.steps || []"
+        :edges="project.edges || []"
+        :block-definitions="blockDefinitions"
         @close="showReleaseModal = false"
         @create="handleCreateRelease"
       />
@@ -1842,7 +1881,6 @@ onMounted(async () => {
           v-if="rightPanelMode === 'block' && editorState.selectedStep.value"
           :step="editorState.selectedStep.value"
           :workflow-id="project.id"
-          :saving="saving"
           :steps="project.steps || []"
           :edges="project.edges || []"
           :block-definitions="blockDefinitions"
@@ -1925,6 +1963,7 @@ onMounted(async () => {
         :workflow-id="project.id"
         @changes:applied="handleCopilotChangesApplied"
         @changes:preview="handleCopilotChangesPreview"
+        @workflow:updated="handleWorkflowUpdated"
       />
 
       <!-- Environment Variables Modal -->
@@ -1955,6 +1994,14 @@ onMounted(async () => {
         :selected-start-step-id="editorState.selectedStep.value?.type === 'start' ? editorState.selectedStep.value.id : null"
         @close="showRunDialog = false"
         @run="handleRunFromDialog"
+      />
+
+      <!-- Welcome Dialog (Copilot-first onboarding) -->
+      <WelcomeDialog
+        :show="showWelcomeDialog"
+        @submit="handleWelcomeSubmit"
+        @skip-to-canvas="handleWelcomeSkip"
+        @close="handleWelcomeSkip"
       />
     </template>
   </div>

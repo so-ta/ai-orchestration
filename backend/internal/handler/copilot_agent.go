@@ -788,3 +788,202 @@ func (h *CopilotAgentHandler) GetAvailableTools(w http.ResponseWriter, r *http.R
 		"count": len(tools),
 	})
 }
+
+// ============================================================================
+// Workflow Progress Status
+// ============================================================================
+
+// WorkflowCopilotStatusResponse represents the workflow readiness status
+type WorkflowCopilotStatusResponse struct {
+	WorkflowID            string                   `json:"workflowId"`
+	CurrentPhase          string                   `json:"currentPhase"`
+	StepCount             int                      `json:"stepCount"`
+	RequiredCredentials   []RequiredCredentialInfo `json:"requiredCredentials"`
+	Trigger               *TriggerInfo             `json:"trigger,omitempty"`
+	Validation            *ValidationInfo          `json:"validation,omitempty"`
+	IsPublished           bool                     `json:"isPublished"`
+	CanPublish            bool                     `json:"canPublish"`
+}
+
+// RequiredCredentialInfo represents a credential requirement for a step
+type RequiredCredentialInfo struct {
+	ID           string `json:"id"`
+	StepID       string `json:"stepId"`
+	StepName     string `json:"stepName"`
+	Service      string `json:"service"`
+	ServiceName  string `json:"serviceName"`
+	ServiceIcon  string `json:"serviceIcon,omitempty"`
+	IsConfigured bool   `json:"isConfigured"`
+	CredentialID string `json:"credentialId,omitempty"`
+}
+
+// TriggerInfo represents trigger configuration status
+type TriggerInfo struct {
+	Type         string                 `json:"type"`
+	IsConfigured bool                   `json:"isConfigured"`
+	Config       map[string]interface{} `json:"config,omitempty"`
+}
+
+// ValidationInfo represents workflow validation status
+type ValidationInfo struct {
+	IsValid  bool     `json:"isValid"`
+	Errors   []string `json:"errors"`
+	Warnings []string `json:"warnings"`
+}
+
+// GetWorkflowCopilotStatus handles GET /api/v1/workflows/{project_id}/copilot/status
+// Returns the current workflow readiness status for the E2E Copilot experience
+func (h *CopilotAgentHandler) GetWorkflowCopilotStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantID := middleware.GetTenantID(ctx)
+
+	projectID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		Error(w, http.StatusBadRequest, "INVALID_PROJECT_ID", "Invalid project ID", nil)
+		return
+	}
+
+	// Get project with steps
+	project, err := h.projectRepo.GetWithStepsAndEdges(ctx, tenantID, projectID)
+	if err != nil {
+		if errors.Is(err, domain.ErrProjectNotFound) {
+			Error(w, http.StatusNotFound, "PROJECT_NOT_FOUND", "Project not found", nil)
+			return
+		}
+		Error(w, http.StatusInternalServerError, "GET_PROJECT_FAILED", err.Error(), nil)
+		return
+	}
+
+	// Analyze steps
+	steps := project.Steps
+	var startStep *domain.Step
+	for i := range steps {
+		if steps[i].Type == domain.StepTypeStart {
+			startStep = &steps[i]
+			break
+		}
+	}
+
+	// Determine trigger status
+	var trigger *TriggerInfo
+	if startStep != nil {
+		triggerType := "manual"
+		isConfigured := false
+		var config map[string]interface{}
+
+		if startStep.TriggerType != nil {
+			triggerType = string(*startStep.TriggerType)
+			isConfigured = triggerType != "manual"
+		}
+		if startStep.TriggerConfig != nil && len(startStep.TriggerConfig) > 0 {
+			json.Unmarshal(startStep.TriggerConfig, &config)
+		}
+
+		trigger = &TriggerInfo{
+			Type:         triggerType,
+			IsConfigured: isConfigured,
+			Config:       config,
+		}
+	}
+
+	// Find steps requiring credentials
+	integrationTypes := map[string]string{
+		"slack":         "Slack",
+		"discord":       "Discord",
+		"github":        "GitHub",
+		"notion":        "Notion",
+		"google-sheets": "Google Sheets",
+		"email":         "Email",
+		"openai":        "OpenAI",
+		"anthropic":     "Anthropic",
+	}
+
+	requiredCreds := make([]RequiredCredentialInfo, 0)
+	for _, step := range steps {
+		if serviceName, ok := integrationTypes[string(step.Type)]; ok {
+			// Check if step has credential bindings configured
+			hasCredential := false
+			var credentialID string
+			if step.CredentialBindings != nil && len(step.CredentialBindings) > 0 {
+				var bindings map[string]string
+				if err := json.Unmarshal(step.CredentialBindings, &bindings); err == nil && len(bindings) > 0 {
+					hasCredential = true
+					// Get the first credential ID (steps typically have one main credential)
+					for _, v := range bindings {
+						credentialID = v
+						break
+					}
+				}
+			}
+
+			cred := RequiredCredentialInfo{
+				ID:           step.ID.String(),
+				StepID:       step.ID.String(),
+				StepName:     step.Name,
+				Service:      string(step.Type),
+				ServiceName:  serviceName,
+				IsConfigured: hasCredential,
+				CredentialID: credentialID,
+			}
+			requiredCreds = append(requiredCreds, cred)
+		}
+	}
+
+	// Validate workflow
+	var validation *ValidationInfo
+	validationErrors := make([]string, 0)
+	validationWarnings := make([]string, 0)
+
+	if len(steps) == 0 {
+		validationErrors = append(validationErrors, "Workflow has no steps")
+	}
+	if startStep == nil {
+		validationErrors = append(validationErrors, "Workflow has no start step")
+	}
+	for _, cred := range requiredCreds {
+		if !cred.IsConfigured {
+			validationWarnings = append(validationWarnings, fmt.Sprintf("%s requires authentication", cred.ServiceName))
+		}
+	}
+
+	validation = &ValidationInfo{
+		IsValid:  len(validationErrors) == 0,
+		Errors:   validationErrors,
+		Warnings: validationWarnings,
+	}
+
+	// Determine current phase
+	currentPhase := "creation"
+	if len(steps) > 1 {
+		currentPhase = "configuration"
+	}
+	if trigger != nil && trigger.IsConfigured {
+		currentPhase = "setup"
+	}
+	unconfiguredCreds := 0
+	for _, cred := range requiredCreds {
+		if !cred.IsConfigured {
+			unconfiguredCreds++
+		}
+	}
+	if unconfiguredCreds == 0 && trigger != nil && trigger.IsConfigured {
+		currentPhase = "validation"
+	}
+	if project.Status == domain.ProjectStatusPublished {
+		currentPhase = "deploy"
+	}
+
+	// Can publish?
+	canPublish := len(steps) > 0 && startStep != nil && len(validationErrors) == 0
+
+	JSON(w, http.StatusOK, WorkflowCopilotStatusResponse{
+		WorkflowID:          projectID.String(),
+		CurrentPhase:        currentPhase,
+		StepCount:           len(steps),
+		RequiredCredentials: requiredCreds,
+		Trigger:             trigger,
+		Validation:          validation,
+		IsPublished:         project.Status == domain.ProjectStatusPublished,
+		CanPublish:          canPublish,
+	})
+}

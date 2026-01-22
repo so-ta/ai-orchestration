@@ -126,6 +126,70 @@ func (g *BlockGroup) SetParent(parentID *uuid.UUID) {
 	g.UpdatedAt = time.Now().UTC()
 }
 
+// ClearParent removes the parent group reference
+func (g *BlockGroup) ClearParent() {
+	g.ParentGroupID = nil
+	g.UpdatedAt = time.Now().UTC()
+}
+
+// HasParent returns true if this block group has a parent
+func (g *BlockGroup) HasParent() bool {
+	return g.ParentGroupID != nil
+}
+
+// GetConfig unmarshals and returns the config
+func (g *BlockGroup) GetConfig() (map[string]interface{}, error) {
+	if len(g.Config) == 0 {
+		return nil, nil
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(g.Config, &config); err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+// SetConfig marshals and sets the config
+func (g *BlockGroup) SetConfig(config map[string]interface{}) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	g.Config = data
+	g.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+// SetPreProcess sets the pre-process JavaScript code
+func (g *BlockGroup) SetPreProcess(code string) {
+	if code == "" {
+		g.PreProcess = nil
+	} else {
+		g.PreProcess = &code
+	}
+	g.UpdatedAt = time.Now().UTC()
+}
+
+// SetPostProcess sets the post-process JavaScript code
+func (g *BlockGroup) SetPostProcess(code string) {
+	if code == "" {
+		g.PostProcess = nil
+	} else {
+		g.PostProcess = &code
+	}
+	g.UpdatedAt = time.Now().UTC()
+}
+
+// IsLoop returns true if this is a loop-type group (foreach or while)
+func (g *BlockGroup) IsLoop() bool {
+	return g.Type == BlockGroupTypeForeach || g.Type == BlockGroupTypeWhile
+}
+
+// IsErrorHandler returns true if this is an error handling group (try_catch)
+func (g *BlockGroup) IsErrorHandler() bool {
+	return g.Type == BlockGroupTypeTryCatch
+}
+
 // ParallelConfig represents configuration for parallel block group
 // Executes multiple independent flows concurrently within the group
 type ParallelConfig struct {

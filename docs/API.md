@@ -1674,6 +1674,628 @@ POST /admin/blocks/{id}/rollback
 
 ---
 
+## Copilot
+
+AIを活用したワークフロー生成・支援機能。セッションベースの対話型ワークフロー作成をサポートします。
+
+### セッション開始
+```
+POST /projects/{project_id}/copilot/sessions
+```
+
+リクエスト：
+```json
+{
+  "initial_prompt": "string (必須)",
+  "mode": "create|enhance|explain"
+}
+```
+
+| モード | 説明 |
+|--------|-------------|
+| `create` | 新規ワークフロー作成（デフォルト） |
+| `enhance` | 既存ワークフローの改善 |
+| `explain` | ワークフローの説明 |
+
+レスポンス `201`：
+```json
+{
+  "session_id": "uuid",
+  "status": "hearing",
+  "phase": "analysis",
+  "progress": 0,
+  "message": {
+    "id": "uuid",
+    "role": "assistant",
+    "content": "string",
+    "suggested_questions": ["string"]
+  }
+}
+```
+
+### セッション取得
+```
+GET /projects/{project_id}/copilot/sessions/{session_id}
+```
+
+レスポンス `200`：
+```json
+{
+  "id": "uuid",
+  "status": "hearing|building|reviewing|refining|completed|abandoned",
+  "hearing_phase": "analysis|proposal|completed",
+  "hearing_progress": 50,
+  "mode": "create",
+  "context_project_id": "uuid",
+  "project_id": "uuid (生成後)",
+  "messages": [
+    {
+      "id": "uuid",
+      "role": "user|assistant|system",
+      "content": "string",
+      "suggested_questions": ["string"]
+    }
+  ],
+  "created_at": "ISO8601",
+  "updated_at": "ISO8601"
+}
+```
+
+### メッセージ送信
+```
+POST /projects/{project_id}/copilot/sessions/{session_id}/messages
+```
+
+リクエスト：
+```json
+{
+  "content": "string (必須)"
+}
+```
+
+レスポンス `202`：
+```json
+{
+  "run_id": "uuid",
+  "status": "pending"
+}
+```
+
+### ワークフロー構築
+```
+POST /projects/{project_id}/copilot/sessions/{session_id}/construct
+```
+
+制約: `hearing_phase` が `completed` である必要がある
+
+レスポンス `202`：
+```json
+{
+  "run_id": "uuid",
+  "status": "pending"
+}
+```
+
+### ワークフロー改良
+```
+POST /projects/{project_id}/copilot/sessions/{session_id}/refine
+```
+
+リクエスト：
+```json
+{
+  "feedback": "string (必須)"
+}
+```
+
+制約: ワークフローが既に生成されている必要がある
+
+レスポンス `202`：
+```json
+{
+  "run_id": "uuid",
+  "status": "pending"
+}
+```
+
+### セッション終了
+```
+POST /projects/{project_id}/copilot/sessions/{session_id}/finalize
+```
+
+レスポンス `200`：
+```json
+{
+  "status": "completed"
+}
+```
+
+### セッション削除
+```
+DELETE /projects/{project_id}/copilot/sessions/{session_id}
+```
+
+レスポンス `204`: コンテンツなし
+
+### セッション一覧
+```
+GET /projects/{project_id}/copilot/sessions
+```
+
+レスポンス `200`：
+```json
+{
+  "sessions": [
+    {
+      "id": "uuid",
+      "status": "hearing",
+      "hearing_phase": "analysis",
+      "hearing_progress": 50,
+      "mode": "create",
+      "context_project_id": "uuid",
+      "project_id": "uuid",
+      "created_at": "ISO8601",
+      "updated_at": "ISO8601"
+    }
+  ],
+  "total": 5
+}
+```
+
+### 提案取得
+```
+POST /copilot/suggest
+```
+
+リクエスト：
+```json
+{
+  "project_id": "uuid (必須)",
+  "step_id": "uuid (オプション)",
+  "context": "string"
+}
+```
+
+レスポンス `200`: 提案内容
+
+### 診断
+```
+POST /copilot/diagnose
+```
+
+リクエスト：
+```json
+{
+  "run_id": "uuid (必須)",
+  "step_run_id": "uuid (オプション)"
+}
+```
+
+レスポンス `200`: 診断結果
+
+### 説明取得
+```
+POST /copilot/explain
+```
+
+リクエスト：
+```json
+{
+  "project_id": "uuid (必須)",
+  "step_id": "uuid (オプション)"
+}
+```
+
+レスポンス `200`: 説明内容
+
+### 最適化提案
+```
+POST /copilot/optimize
+```
+
+リクエスト：
+```json
+{
+  "project_id": "uuid (必須)"
+}
+```
+
+レスポンス `200`: 最適化提案
+
+### チャット
+```
+POST /copilot/chat
+```
+
+リクエスト：
+```json
+{
+  "project_id": "uuid (オプション)",
+  "message": "string (必須)",
+  "context": "string"
+}
+```
+
+レスポンス `200`: チャット応答
+
+### 非同期生成
+```
+POST /copilot/async/generate
+```
+
+リクエスト：
+```json
+{
+  "prompt": "string (必須)",
+  "session_id": "string (オプション)"
+}
+```
+
+レスポンス `202`：
+```json
+{
+  "run_id": "uuid",
+  "status": "pending"
+}
+```
+
+### 非同期実行結果取得
+```
+GET /copilot/runs/{run_id}
+```
+
+レスポンス `200`：
+```json
+{
+  "run_id": "uuid",
+  "status": "pending|running|completed|failed",
+  "started_at": "ISO8601",
+  "completed_at": "ISO8601",
+  "output": {},
+  "error": "string (失敗時)"
+}
+```
+
+---
+
+## Templates
+
+再利用可能なワークフローテンプレート。マーケットプレイスでの公開・共有をサポートします。
+
+### 作成
+```
+POST /templates
+```
+
+リクエスト：
+```json
+{
+  "name": "string (必須)",
+  "description": "string",
+  "category": "string",
+  "tags": ["string"],
+  "definition": {},
+  "variables": {},
+  "author_name": "string",
+  "visibility": "private|tenant|public"
+}
+```
+
+レスポンス `201`: 作成されたテンプレート
+
+### プロジェクトから作成
+```
+POST /templates/from-project
+```
+
+リクエスト：
+```json
+{
+  "project_id": "uuid (必須)",
+  "name": "string",
+  "description": "string",
+  "category": "string",
+  "tags": ["string"],
+  "author_name": "string",
+  "visibility": "private|tenant|public"
+}
+```
+
+レスポンス `201`: 作成されたテンプレート
+
+### 一覧取得
+```
+GET /templates
+```
+
+クエリ：
+| パラメータ | 型 | デフォルト | 説明 |
+|-------|------|---------|-------------|
+| `page` | int | 1 | ページ番号 |
+| `limit` | int | 20 | 1ページあたりの件数 |
+| `category` | string | - | カテゴリでフィルタ |
+| `search` | string | - | 検索クエリ |
+| `scope` | string | - | `my`, `tenant`, `public` |
+
+レスポンス `200`: ページネーションされたテンプレート一覧
+
+### マーケットプレイス
+```
+GET /templates/marketplace
+```
+
+クエリ：
+| パラメータ | 型 | 説明 |
+|-------|------|-------------|
+| `page` | int | ページ番号 |
+| `limit` | int | 1ページあたりの件数 |
+| `category` | string | カテゴリでフィルタ |
+| `search` | string | 検索クエリ |
+| `featured` | bool | おすすめのみ |
+
+レスポンス `200`: 公開テンプレート一覧
+
+### 取得
+```
+GET /templates/{id}
+```
+
+レスポンス `200`: テンプレート詳細
+
+### 更新
+```
+PUT /templates/{id}
+```
+
+リクエスト：
+```json
+{
+  "name": "string",
+  "description": "string",
+  "category": "string",
+  "tags": ["string"],
+  "definition": {},
+  "variables": {},
+  "visibility": "private|tenant|public"
+}
+```
+
+レスポンス `200`: 更新されたテンプレート
+
+### 削除
+```
+DELETE /templates/{id}
+```
+
+レスポンス `204`: コンテンツなし
+
+### テンプレート使用
+```
+POST /templates/{id}/use
+```
+
+リクエスト：
+```json
+{
+  "project_name": "string"
+}
+```
+
+レスポンス `201`: 作成されたプロジェクト
+
+### レビュー追加
+```
+POST /templates/{id}/reviews
+```
+
+リクエスト：
+```json
+{
+  "rating": 5,
+  "comment": "string"
+}
+```
+
+レスポンス `201`: 作成されたレビュー
+
+### レビュー一覧
+```
+GET /templates/{id}/reviews
+```
+
+レスポンス `200`: レビュー一覧
+
+### カテゴリ一覧
+```
+GET /templates/categories
+```
+
+レスポンス `200`: カテゴリ一覧
+
+---
+
+## Git Sync
+
+プロジェクトとGitリポジトリの同期設定。
+
+### 作成
+```
+POST /git-sync
+```
+
+リクエスト：
+```json
+{
+  "project_id": "uuid (必須)",
+  "repository_url": "string (必須)",
+  "branch": "string",
+  "file_path": "string",
+  "sync_direction": "push|pull|bidirectional",
+  "auto_sync": true,
+  "credentials_id": "uuid (オプション)"
+}
+```
+
+レスポンス `201`: 作成されたGit Sync設定
+
+### 取得
+```
+GET /git-sync/{id}
+```
+
+レスポンス `200`: Git Sync設定
+
+### プロジェクト別取得
+```
+GET /workflows/{project_id}/git-sync
+```
+
+レスポンス `200`: プロジェクトのGit Sync設定
+
+### 一覧取得
+```
+GET /git-sync
+```
+
+レスポンス `200`: Git Sync設定一覧
+
+### 更新
+```
+PUT /git-sync/{id}
+```
+
+リクエスト：
+```json
+{
+  "repository_url": "string",
+  "branch": "string",
+  "file_path": "string",
+  "sync_direction": "push|pull|bidirectional",
+  "auto_sync": true,
+  "credentials_id": "uuid"
+}
+```
+
+レスポンス `200`: 更新されたGit Sync設定
+
+### 削除
+```
+DELETE /git-sync/{id}
+```
+
+レスポンス `204`: コンテンツなし
+
+### 同期トリガー
+```
+POST /git-sync/{id}/sync
+```
+
+リクエスト：
+```json
+{
+  "operation": "push|pull"
+}
+```
+
+レスポンス `202`: 同期操作情報
+
+---
+
+## Block Packages
+
+ブロックのパッケージ管理。複数のブロックをまとめて公開・配布できます。
+
+### 作成
+```
+POST /block-packages
+```
+
+リクエスト：
+```json
+{
+  "name": "string (必須)",
+  "version": "string (必須)",
+  "description": "string",
+  "blocks": [
+    {
+      "slug": "string",
+      "name": "string",
+      "config_schema": {}
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "string",
+      "version": "string"
+    }
+  ]
+}
+```
+
+レスポンス `201`: 作成されたパッケージ
+
+### 取得
+```
+GET /block-packages/{id}
+```
+
+レスポンス `200`: パッケージ詳細
+
+### 一覧取得
+```
+GET /block-packages
+```
+
+クエリ：
+| パラメータ | 型 | 説明 |
+|-------|------|-------------|
+| `page` | int | ページ番号 |
+| `limit` | int | 1ページあたりの件数 |
+| `status` | string | `draft`, `published`, `deprecated` |
+| `search` | string | 検索クエリ |
+
+レスポンス `200`: ページネーションされたパッケージ一覧
+
+### 更新
+```
+PUT /block-packages/{id}
+```
+
+リクエスト：
+```json
+{
+  "description": "string",
+  "blocks": [],
+  "dependencies": [],
+  "bundle_url": "string"
+}
+```
+
+レスポンス `200`: 更新されたパッケージ
+
+### 削除
+```
+DELETE /block-packages/{id}
+```
+
+レスポンス `204`: コンテンツなし
+
+### 公開
+```
+POST /block-packages/{id}/publish
+```
+
+レスポンス `200`: 公開されたパッケージ
+
+### 非推奨化
+```
+POST /block-packages/{id}/deprecate
+```
+
+レスポンス `200`: 非推奨化されたパッケージ
+
+---
+
 ## ヘルス
 
 ### Liveness

@@ -356,7 +356,8 @@
       "flow": "フロー",
       "trigger": "トリガー",
       "copilot": "Copilot",
-      "run": "実行"
+      "run": "実行",
+      "test": "テスト"
     },
     "templatePreview": {
       "title": "テンプレート変数",
@@ -549,6 +550,41 @@
       "scrollToBottom": "最新へスクロール"
     }
   },
+  "welcomeDialog": {
+    "title": "何を自動化しますか？",
+    "subtitle": "作りたいワークフローを教えてください。AIが自動的に構築します。",
+    "placeholder": "例: 毎朝9時にSlackで天気予報を通知したい",
+    "createWithCopilot": "Copilotで作成",
+    "examplesLabel": "例",
+    "examples": {
+      "slackNotification": "GitHubのIssueをSlackに通知",
+      "apiToNotion": "定期的にAPIからデータ取得してNotionに保存",
+      "githubToSlack": "GitHub PRがマージされたらチームに通知"
+    },
+    "or": "または",
+    "skipToCanvas": "空のキャンバスから始める"
+  },
+  "publishChecklist": {
+    "title": "公開前チェック",
+    "subtitle": "ワークフローを公開する前に、以下の項目を確認してください。",
+    "checking": "チェック中...",
+    "allPassed": "すべてのチェックに合格しました",
+    "hasWarnings": "{count}件の警告があります",
+    "hasErrors": "{count}件のエラーがあります",
+    "checks": {
+      "hasStartBlock": "スタートブロックが存在する",
+      "hasStartBlockError": "スタートブロックが必要です",
+      "allConnected": "すべてのブロックが接続されている",
+      "allConnectedWarning": "{count}個のブロックが接続されていません",
+      "noLoop": "無限ループの可能性なし",
+      "noLoopError": "無限ループが検出されました",
+      "credentialsSet": "必要なクレデンシャルが設定されている",
+      "credentialsSetWarning": "{count}個のクレデンシャルが未設定です"
+    },
+    "fixIssues": "問題を修正",
+    "ignoreAndPublish": "警告を無視して公開",
+    "cancel": "キャンセル"
+  },
   "copilot": {
     "thinking": "考え中...",
     "chatWelcome": "Copilotにご質問ください",
@@ -624,7 +660,17 @@
       "deleteFailed": "セッションの削除に失敗しました",
       "agentFailed": "エージェントの実行に失敗しました",
       "networkError": "サーバーへの接続に失敗しました。ネットワーク接続を確認してください。",
-      "timeout": "リクエストがタイムアウトしました。もう一度お試しください。"
+      "timeout": "リクエストがタイムアウトしました。もう一度お試しください。",
+      "triggerConfigFailed": "トリガー設定に失敗しました",
+      "credentialLinkFailed": "認証情報の連携に失敗しました",
+      "testFailed": "テスト実行に失敗しました",
+      "publishFailed": "公開に失敗しました"
+    },
+    "credential": {
+      "linked": "認証情報を連携しました"
+    },
+    "publish": {
+      "success": "ワークフローを公開しました"
     },
     "agent": {
       "mode": "エージェントモード",
@@ -644,6 +690,35 @@
       "calling": "実行中",
       "success": "成功",
       "error": "エラー"
+    },
+    "tools": {
+      "createStep": "ステップ作成",
+      "updateStep": "ステップ更新",
+      "deleteStep": "ステップ削除",
+      "createEdge": "接続作成",
+      "deleteEdge": "接続削除",
+      "createWorkflowStructure": "ワークフロー構造作成",
+      "getWorkflow": "ワークフロー取得",
+      "listSteps": "ステップ一覧取得",
+      "getStep": "ステップ詳細取得",
+      "listBlocks": "ブロック一覧取得",
+      "getBlock": "ブロック詳細取得",
+      "completed": "完了"
+    },
+    "toolArgs": {
+      "category": "カテゴリ: {category}",
+      "stepsAndConnections": "{steps}ステップ, {connections}接続"
+    },
+    "toolResults": {
+      "createComplete": "作成完了",
+      "createCompleteWithId": "作成完了: {id}...",
+      "updateComplete": "更新完了",
+      "deleteComplete": "削除完了",
+      "connectComplete": "接続完了",
+      "workflowInfo": "「{name}」({stepCount}ステップ)",
+      "stepsCount": "{count}件のステップ",
+      "blocksCount": "{count}件のブロック",
+      "structureCreated": "{steps}ステップ, {edges}接続を作成"
     },
     "preview": {
       "title": "変更プレビュー",
@@ -674,6 +749,68 @@
       "newStep": "新規ステップ",
       "connection": "接続",
       "willBeDeleted": "削除されます"
+    },
+    "progress": {
+      "title": "ワークフローの準備状況",
+      "items": {
+        "creation": "ワークフロー構造を作成",
+        "trigger": "トリガーを設定",
+        "credentials": "認証情報を設定",
+        "test": "テスト実行",
+        "publish": "公開"
+      },
+      "configure": "設定する",
+      "runTest": "テストする",
+      "publishNow": "公開する",
+      "later": "後で",
+      "completed": "完了",
+      "inProgress": "進行中",
+      "allComplete": "すべて完了"
+    },
+    "action": {
+      "confirm": "確認",
+      "cancel": "キャンセル",
+      "apply": "設定を適用",
+      "skip": "スキップ",
+      "runTest": "テストする",
+      "publishWorkflow": "公開する",
+      "keepEditing": "まだ変更する"
+    },
+    "trigger": {
+      "title": "トリガータイプを選択してください",
+      "schedule": "スケジュール",
+      "scheduleDesc": "毎日決まった時間に実行",
+      "webhook": "Webhook",
+      "webhookDesc": "外部からのHTTPリクエストで実行",
+      "manual": "手動実行",
+      "manualDesc": "手動でワークフローを開始",
+      "configured": "トリガー設定: {type}",
+      "webhookCreated": "Webhook URLが作成されました",
+      "scheduleSet": "スケジュール設定: {schedule}",
+      "executionTime": "実行時刻",
+      "timezone": "タイムゾーン"
+    },
+    "oauth": {
+      "title": "{service}を連携",
+      "connecting": "接続中...",
+      "connectWith": "{service}で連携する",
+      "or": "または",
+      "selectExisting": "保存済みの認証情報から選択",
+      "connected": "{service}と連携しました",
+      "failed": "連携に失敗しました"
+    },
+    "test": {
+      "title": "テスト実行",
+      "success": "成功",
+      "failed": "失敗",
+      "running": "実行中...",
+      "summary": "合計: {duration}秒",
+      "viewDetails": "詳細を見る",
+      "retest": "再テスト",
+      "passed": "OK",
+      "failedMessage": "エラー",
+      "confirmRun": "テスト実行しますか？",
+      "confirmPublish": "このワークフローを公開しますか？"
     }
   },
   "stepConfig": {
@@ -2091,7 +2228,8 @@
       "syncDirection": "同期方向",
       "autoSync": "自動同期",
       "autoSyncHint": "変更時に自動的にGitと同期します",
-      "credentials": "認証情報"
+      "credentials": "認証情報",
+      "noCredentials": "なし（公開リポジトリ）"
     },
     "direction": {
       "push": "Push (ローカル → Git)",
@@ -2103,7 +2241,9 @@
       "configFailed": "Git連携の設定に失敗しました",
       "syncSuccess": "同期が完了しました",
       "syncFailed": "同期に失敗しました",
-      "deleted": "Git連携を解除しました"
+      "deleted": "Git連携を解除しました",
+      "deleteFailed": "削除に失敗しました",
+      "repositoryRequired": "リポジトリURLは必須です"
     }
   },
   "blockPackages": {
@@ -2139,6 +2279,38 @@
       "publishFailed": "パッケージの公開に失敗しました",
       "deprecateSuccess": "パッケージを非推奨にしました",
       "deleteSuccess": "パッケージを削除しました"
+    }
+  },
+  "test": {
+    "tabTitle": "テスト",
+    "input": "入力データ",
+    "execute": "実行",
+    "result": "実行結果",
+    "executeThisStepOnly": "このステップのみ実行",
+    "executeFromThisStep": "ここから実行",
+    "executing": "実行中...",
+    "success": "成功",
+    "failed": "失敗",
+    "noResult": "まだ実行結果がありません",
+    "noOutput": "出力データがありません",
+    "moreRows": "さらに表示...",
+    "selectStep": "テストするステップを選択してください",
+    "triggerBlockNote": "トリガーブロックは直接テストできません。ワークフロー実行でテストしてください。",
+    "usePinned": "固定データを使用",
+    "pinnedUsed": "固定データを入力にセットしました",
+    "viewMode": {
+      "table": "テーブル",
+      "json": "JSON",
+      "schema": "スキーマ"
+    },
+    "pinData": {
+      "title": "固定データ",
+      "pin": "出力を固定",
+      "unpin": "固定を解除",
+      "edit": "編集",
+      "editTitle": "固定データを編集",
+      "pinned": "出力を固定しました",
+      "unpinned": "固定を解除しました"
     }
   }
 }

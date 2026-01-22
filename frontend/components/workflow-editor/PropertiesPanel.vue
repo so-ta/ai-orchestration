@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import type { Step, StepType, BlockDefinition, Run } from '~/types/api'
+import type { Step, StepType, Run } from '~/types/api'
 import type { GenerateWorkflowResponse } from '~/composables/useCopilot'
 import type { ConfigSchema, UIConfig } from './config/types/config-schema'
 import DynamicConfigForm from './config/DynamicConfigForm.vue'
 import FlowTab from './FlowTab.vue'
 import TriggerConfigPanel from './TriggerConfigPanel.vue'
+import TestTab from './properties/TestTab.vue'
 // Sub-components
 import PropertiesEmptyState from './properties/PropertiesEmptyState.vue'
 import TemplatePreviewSection from './properties/TemplatePreviewSection.vue'
 import AvailableVariablesSection from './properties/AvailableVariablesSection.vue'
 import IOPortsDisplay from './properties/IOPortsDisplay.vue'
+import OutputSchemaPreview from './properties/OutputSchemaPreview.vue'
 import CredentialBindingsSection from '../credentials/CredentialBindingsSection.vue'
+import { useStepTest } from '~/composables/test'
 // Legacy Forms
 import LegacyLlmForm from './properties/legacy/LegacyLlmForm.vue'
 import LegacyToolForm from './properties/legacy/LegacyToolForm.vue'
@@ -27,26 +30,73 @@ import LegacyStartForm from './properties/legacy/LegacyStartForm.vue'
 import LegacyLogForm from './properties/legacy/LegacyLogForm.vue'
 // Composables
 import { useAvailableVariables } from './composables/useAvailableVariables'
+import { AVAILABLE_VARIABLES_KEY, ACTIVE_FIELD_INSERTER_KEY } from './config/variable-picker/useVariableInsertion'
+import {
+  usePropertyForm,
+  useBlockDefinition,
+  useTemplateVariablesExtractor,
+  useFieldInserter,
+  type StepConfig,
+} from './properties/composables/usePropertyForm'
 
 type StartTriggerType = 'manual' | 'webhook' | 'schedule' | 'slack' | 'email'
 
 const { t } = useI18n()
-const blocks = useBlocks()
 const { confirm } = useConfirm()
 
 const props = defineProps<{
   step: Step | null
   workflowId: string
   readonlyMode?: boolean
-  saving?: boolean
   latestRun?: Run | null
   steps?: Step[]
   edges?: Array<{ id: string; source_step_id?: string | null; target_step_id?: string | null }>
-  blockDefinitions?: BlockDefinition[]
+  blockDefinitions?: import('~/types/api').BlockDefinition[]
+}>()
+
+const emit = defineEmits<{
+  'save': [data: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> }]
+  'delete': []
+  'open-settings': []
+  'apply-workflow': [workflow: GenerateWorkflowResponse]
+  'execute': [data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }]
+  'execute-workflow': [triggered_by: 'test' | 'manual', input: object]
+  'update:name': [name: string]
+  'update:trigger': [data: { trigger_type: StartTriggerType; trigger_config: object }]
+  'update:credential-bindings': [bindings: Record<string, string>]
+  'run:created': [run: Run]
 }>()
 
 // Active tab state
-const activeTab = ref<'config' | 'flow' | 'run'>('config')
+const activeTab = ref<'config' | 'test' | 'flow'>('config')
+
+// Step test composable
+const {
+  executing: testExecuting,
+  currentResult: testResult,
+  error: testError,
+  pinnedOutput,
+  executeStepOnly,
+  executeFromStep,
+  clearResult,
+  loadPinnedOutput,
+  pinOutput,
+  unpinOutput,
+  editPinnedOutput,
+} = useStepTest({
+  workflowId: props.workflowId,
+  onTestRunsChanged: () => {
+    // Optionally notify parent to refresh test runs
+  },
+})
+
+// Load pinned output when step changes
+watch(() => props.step?.id, (stepId) => {
+  if (stepId) {
+    loadPinnedOutput(stepId)
+    clearResult()
+  }
+}, { immediate: true })
 
 // Trigger block types
 const TRIGGER_BLOCK_TYPES = ['start', 'manual_trigger', 'schedule_trigger', 'webhook_trigger']
@@ -57,76 +107,9 @@ const isTriggerBlock = computed(() => {
   return stepType ? TRIGGER_BLOCK_TYPES.includes(stepType) : false
 })
 
-const emit = defineEmits<{
-  (e: 'save', data: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> }): void
-  (e: 'delete' | 'open-settings'): void
-  (e: 'apply-workflow', workflow: GenerateWorkflowResponse): void
-  (e: 'execute', data: { stepId: string; input: object; triggered_by: 'test' | 'manual' }): void
-  (e: 'execute-workflow', triggered_by: 'test' | 'manual', input: object): void
-  (e: 'update:name', name: string): void
-  (e: 'update:trigger', data: { trigger_type: StartTriggerType; trigger_config: object }): void
-  (e: 'update:credential-bindings', bindings: Record<string, string>): void
-  (e: 'run:created', run: Run): void
-}>()
-
-// Step config type
-interface StepConfig {
-  provider?: string
-  model?: string
-  system_prompt?: string
-  prompt?: string
-  temperature?: number
-  max_tokens?: number
-  adapter_id?: string
-  url?: string
-  method?: string
-  expression?: string
-  cases?: Array<{ name: string; expression: string; is_default?: boolean }>
-  loop_type?: string
-  count?: number
-  input_path?: string
-  condition?: string
-  max_iterations?: number
-  duration_ms?: number
-  until?: string
-  code?: string
-  timeout_ms?: number
-  routes_json?: string
-  instructions?: string
-  timeout_hours?: number
-  approval_url?: boolean
-  parallel?: number
-  workflow_id?: string
-  message?: string
-  level?: string
-  data?: string
-  output_schema?: object
-  [key: string]: unknown
-}
-
-// Form state
-const formName = ref('')
-const formType = ref<StepType>('tool')
-const formConfig = ref<StepConfig>({})
-
-// Watch for step changes and reset form
-watch(() => props.step, (newStep) => {
-  if (newStep) {
-    formName.value = newStep.name
-    formType.value = newStep.type
-    formConfig.value = { ...(newStep.config as StepConfig) }
-  } else {
-    formName.value = ''
-    formType.value = 'tool'
-    formConfig.value = {}
-  }
-}, { immediate: true, deep: true })
-
-// Emit name changes for reactive updates
-watch(formName, (newName) => {
-  if (props.step && newName !== props.step.name) {
-    emit('update:name', newName)
-  }
+const isStartNode = computed(() => {
+  const stepType = props.step?.type
+  return stepType ? TRIGGER_BLOCK_TYPES.includes(stepType) : false
 })
 
 // Step type colors
@@ -154,90 +137,43 @@ const stepTypeColors: Record<string, string> = {
   log: '#10b981'
 }
 
-const isStartNode = computed(() => {
-  const stepType = props.step?.type
-  return stepType ? TRIGGER_BLOCK_TYPES.includes(stepType) : false
+// Refs for composables
+const stepRef = computed(() => props.step)
+const readonlyRef = computed(() => props.readonlyMode ?? false)
+
+// Use property form composable
+const {
+  formName,
+  formType,
+  formConfig,
+  handleFlowConfigUpdate,
+  handleCredentialBindingsUpdate,
+} = usePropertyForm({
+  step: stepRef,
+  readonlyMode: readonlyRef,
+  onSave: (data) => emit('save', data),
+  onUpdateName: (name) => emit('update:name', name),
+  onUpdateCredentialBindings: (bindings) => emit('update:credential-bindings', bindings),
 })
 
-// Flow config
-const flowConfig = ref<{
-  prescript?: { enabled: boolean; code: string }
-  postscript?: { enabled: boolean; code: string }
-  error_handling?: { enabled: boolean; retry?: object; timeout_seconds?: number; on_error: string; fallback_value?: unknown; enable_error_port?: boolean }
-}>({})
+// Use block definition composable
+const { currentBlockDef } = useBlockDefinition({
+  stepType: formType,
+})
 
-function handleFlowConfigUpdate(config: typeof flowConfig.value) {
-  flowConfig.value = config
-}
+// Use template variables extractor
+const { templateVariables } = useTemplateVariablesExtractor(formConfig)
 
-function handleTriggerUpdate(data: { trigger_type: StartTriggerType; trigger_config: object }) {
-  emit('update:trigger', data)
-}
+// Use field inserter composable
+const {
+  activeFieldId,
+  register: registerFieldInserter,
+  unregister: unregisterFieldInserter,
+  setActive: setActiveFieldInserter,
+  insertVariableIntoActiveField,
+} = useFieldInserter()
 
-function handleSave() {
-  const mergedConfig = { ...formConfig.value, ...flowConfig.value }
-  const saveData: { name: string; type: StepType; config: StepConfig; credential_bindings?: Record<string, string> } = {
-    name: formName.value,
-    type: formType.value,
-    config: mergedConfig
-  }
-  // Include credential_bindings if any are set
-  if (Object.keys(localCredentialBindings.value).length > 0) {
-    saveData.credential_bindings = localCredentialBindings.value
-  }
-  emit('save', saveData)
-}
-
-async function handleDelete() {
-  const confirmed = await confirm({
-    title: t('editor.deleteStepTitle'),
-    message: t('editor.confirmDeleteStep'),
-    confirmText: t('common.delete'),
-    cancelText: t('common.cancel'),
-    variant: 'danger',
-  })
-  if (confirmed) {
-    emit('delete')
-  }
-}
-
-// Credential bindings state
-const localCredentialBindings = ref<Record<string, string>>({})
-
-// Initialize credential bindings from props
-watch(() => props.step?.credential_bindings, (bindings) => {
-  localCredentialBindings.value = { ...bindings }
-}, { immediate: true, deep: true })
-
-function handleCredentialBindingsUpdate(bindings: Record<string, string>) {
-  localCredentialBindings.value = bindings
-  emit('update:credential-bindings', bindings)
-}
-
-function handleOpenSettings() {
-  emit('open-settings')
-}
-
-// Block definition for current step type
-const currentBlockDef = ref<BlockDefinition | null>(null)
-const loadingBlockDef = ref(false)
-
-watch(() => formType.value, async (newType) => {
-  if (newType) {
-    loadingBlockDef.value = true
-    try {
-      const response = await blocks.get(newType)
-      currentBlockDef.value = response.data
-    } catch {
-      currentBlockDef.value = null
-    } finally {
-      loadingBlockDef.value = false
-    }
-  } else {
-    currentBlockDef.value = null
-  }
-}, { immediate: true })
-
+// Config schema computed
 const hasConfigSchema = computed(() => {
   const schema = currentBlockDef.value?.config_schema
   return schema && typeof schema === 'object' && Object.keys(schema).length > 0
@@ -253,28 +189,17 @@ const uiConfig = computed<UIConfig | undefined>(() => {
   return currentBlockDef.value.ui_config as UIConfig
 })
 
-// Template variables
-const templateVariables = computed<string[]>(() => {
-  const variables: Set<string> = new Set()
-  const templateRegex = /\{\{([^}]+)\}\}/g
-
-  function extractFromValue(value: unknown) {
-    if (typeof value === 'string') {
-      let match
-      while ((match = templateRegex.exec(value)) !== null) {
-        variables.add(match[1].trim())
-      }
-    } else if (Array.isArray(value)) {
-      value.forEach(extractFromValue)
-    } else if (value && typeof value === 'object') {
-      Object.values(value).forEach(extractFromValue)
-    }
+// Fixed trigger type from block definition (for inherited trigger blocks)
+const fixedTriggerType = computed<StartTriggerType | undefined>(() => {
+  if (!currentBlockDef.value) return undefined
+  const defaults = currentBlockDef.value.resolved_config_defaults || (currentBlockDef.value as unknown as { config_defaults?: Record<string, unknown> }).config_defaults
+  if (defaults && typeof defaults === 'object' && 'trigger_type' in defaults) {
+    return (defaults as { trigger_type: string }).trigger_type as StartTriggerType
   }
-
-  extractFromValue(formConfig.value)
-  return Array.from(variables)
+  return undefined
 })
 
+// Template block detection
 const isTemplateBlock = computed(() => {
   const templateTypes = ['llm', 'discord', 'slack', 'email_sendgrid', 'log', 'function']
   return templateTypes.includes(formType.value)
@@ -285,10 +210,20 @@ const showTemplatePreview = computed(() => {
 })
 
 // Available variables from previous steps
-const stepRef = computed(() => props.step)
 const stepsRef = computed(() => props.steps)
 const edgesRef = computed(() => props.edges)
-const { availableInputVariables, hasAvailableVariables } = useAvailableVariables(stepRef, stepsRef, edgesRef)
+const { previousSteps, availableInputVariables, hasAvailableVariables } = useAvailableVariables(stepRef, stepsRef, edgesRef)
+
+// Provide available variables to child widgets
+provide(AVAILABLE_VARIABLES_KEY, availableInputVariables)
+
+// Provide field inserter to child widgets
+provide(ACTIVE_FIELD_INSERTER_KEY, {
+  register: registerFieldInserter,
+  unregister: unregisterFieldInserter,
+  setActive: setActiveFieldInserter,
+  activeId: activeFieldId
+})
 
 // Show I/O ports
 const showIOPorts = computed(() => {
@@ -297,6 +232,28 @@ const showIOPorts = computed(() => {
     (currentBlockDef.value.output_ports?.length ?? 0) > 1
   )
 })
+
+// Handlers
+function handleTriggerUpdate(data: { trigger_type: StartTriggerType; trigger_config: object }) {
+  emit('update:trigger', data)
+}
+
+async function handleDelete() {
+  const confirmed = await confirm({
+    title: t('editor.deleteStepTitle'),
+    message: t('editor.confirmDeleteStep'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel'),
+    variant: 'danger',
+  })
+  if (confirmed) {
+    emit('delete')
+  }
+}
+
+function handleOpenSettings() {
+  emit('open-settings')
+}
 </script>
 
 <template>
@@ -329,11 +286,11 @@ const showIOPorts = computed(() => {
         </svg>
         {{ t('editor.tabs.flow') }}
       </button>
-      <button class="tab-button" :class="{ active: activeTab === 'run' }" @click="activeTab = 'run'">
+      <button class="tab-button" :class="{ active: activeTab === 'test' }" @click="activeTab = 'test'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 3 19 12 5 21 5 3"/>
         </svg>
-        {{ t('editor.tabs.run') }}
+        {{ t('editor.tabs.test') }}
       </button>
     </div>
 
@@ -369,24 +326,31 @@ const showIOPorts = computed(() => {
 
         <!-- Trigger Configuration -->
         <div v-if="isTriggerBlock" class="form-section trigger-section">
-          <h4 class="section-title">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-            </svg>
-            {{ t('editor.tabs.trigger') }}
-          </h4>
           <TriggerConfigPanel
             :trigger-type="(step?.trigger_type as StartTriggerType) || 'manual'"
             :trigger-config="step?.trigger_config as object || {}"
             :step-id="step?.id"
+            :workflow-id="workflowId"
             :readonly="readonlyMode"
+            :fixed-trigger-type="fixedTriggerType"
             class="integrated-trigger-panel"
             @update:trigger="handleTriggerUpdate"
           />
         </div>
 
         <!-- Available Variables Section -->
-        <AvailableVariablesSection v-if="hasAvailableVariables && isTemplateBlock" :variables="availableInputVariables" />
+        <AvailableVariablesSection
+          v-if="hasAvailableVariables && isTemplateBlock"
+          :variables="availableInputVariables"
+          @insert="(v) => insertVariableIntoActiveField(v.path)"
+        />
+
+        <!-- Output Schema Preview -->
+        <OutputSchemaPreview
+          v-if="previousSteps.length > 0 && isTemplateBlock"
+          :previous-steps="previousSteps"
+          @insert="insertVariableIntoActiveField"
+        />
 
         <!-- Template Preview Section -->
         <TemplatePreviewSection v-if="showTemplatePreview" :variables="templateVariables" />
@@ -430,30 +394,31 @@ const showIOPorts = computed(() => {
       <FlowTab :step="step" :block-definitions="blockDefinitions" :readonly-mode="readonlyMode" @update:flow-config="handleFlowConfigUpdate" />
     </div>
 
-    <!-- Run Tab Content -->
-    <div v-if="activeTab === 'run'" class="properties-body execution-container">
-      <ExecutionTab
+    <!-- Test Tab Content -->
+    <div v-if="activeTab === 'test'" class="properties-body execution-container">
+      <TestTab
         :step="step"
         :workflow-id="workflowId"
-        :latest-run="latestRun || null"
-        :is-active="activeTab === 'run'"
+        :is-active="activeTab === 'test'"
         :steps="steps || []"
         :edges="edges || []"
-        :blocks="blockDefinitions || []"
-        @execute="(data) => emit('execute', data)"
-        @execute-workflow="(mode, input) => emit('execute-workflow', mode, input)"
-        @run:created="(run) => emit('run:created', run)"
+        :block-definitions="blockDefinitions || []"
+        :executing="testExecuting"
+        :current-result="testResult"
+        :error="testError"
+        :pinned-output="pinnedOutput"
+        @execute-step-only="(step, input) => executeStepOnly(step, input)"
+        @execute-from-step="(step, input) => executeFromStep(step, input)"
+        @pin-output="(output, stepId, stepName) => pinOutput(output, stepId, stepName)"
+        @unpin-output="(stepId) => unpinOutput(stepId)"
+        @edit-pinned="(data, stepId) => editPinnedOutput(data, stepId)"
       />
     </div>
 
-    <!-- Footer -->
-    <div v-if="step" class="properties-footer">
-      <button v-if="!readonlyMode && !isStartNode" class="btn btn-danger-outline" :disabled="saving" @click="handleDelete">
+    <!-- Footer (delete button only - changes are auto-saved) -->
+    <div v-if="step && !readonlyMode && !isStartNode" class="properties-footer">
+      <button class="btn btn-danger-outline" @click="handleDelete">
         {{ t('common.delete') }}
-      </button>
-      <div class="footer-spacer" />
-      <button v-if="!readonlyMode" class="btn btn-primary" :disabled="saving" @click="handleSave">
-        {{ saving ? t('common.saving') : t('common.save') }}
       </button>
     </div>
   </div>

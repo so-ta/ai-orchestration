@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, toRef } from 'vue'
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
+import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
+import VariablePicker from '../variable-picker/VariablePicker.vue'
 
 const props = defineProps<{
   name: string
@@ -20,6 +22,7 @@ const emit = defineEmits<{
 // Internal string representation of JSON
 const jsonText = ref('')
 const parseError = ref<string | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
 
 // Get display title
 const title = computed(() => {
@@ -29,6 +32,46 @@ const title = computed(() => {
 // Get description
 const description = computed(() => {
   return props.property.description
+})
+
+// 変数挿入のセットアップ
+const jsonTextRef = toRef({ value: jsonText.value }, 'value')
+watch(jsonText, (v) => {
+  jsonTextRef.value = v
+}, { immediate: true })
+
+const {
+  pickerVisible,
+  pickerPosition,
+  isDragOver,
+  availableVariables,
+  handleInput: handleVariableInput,
+  handleKeydown: handleVariableKeydown,
+  insertVariable,
+  handleDragEnter,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop
+} = useVariableInsertion({
+  modelValue: computed(() => jsonText.value),
+  emit: (value) => {
+    jsonText.value = value
+    // Try to parse and emit
+    if (value.trim() === '') {
+      parseError.value = null
+      emit('update:modelValue', {})
+      return
+    }
+    try {
+      const parsed = JSON.parse(value)
+      parseError.value = null
+      emit('update:modelValue', parsed)
+    } catch (e) {
+      parseError.value = (e as Error).message
+    }
+  },
+  inputRef: textareaRef,
+  fieldId: props.name
 })
 
 // Initialize JSON text from modelValue
@@ -75,6 +118,14 @@ function handleInput(event: Event) {
   } catch (e) {
     parseError.value = (e as Error).message
   }
+
+  // Handle variable insertion detection
+  handleVariableInput(event)
+}
+
+// Handle keydown
+function handleKeydown(event: KeyboardEvent) {
+  handleVariableKeydown(event)
 }
 
 // Handle blur
@@ -141,6 +192,8 @@ const highlightedJson = computed(() => {
   html = html.replace(/(\[|\])/g, '<span class="json-bracket">$1</span>')
   // Object braces
   html = html.replace(/(\{|\})/g, '<span class="json-brace">$1</span>')
+  // Highlight template variables {{...}}
+  html = html.replace(/(\{\{[^}]+\}\})/g, '<span class="json-variable">$1</span>')
 
   return html
 })
@@ -179,17 +232,19 @@ const highlightedJson = computed(() => {
       {{ description }}
     </p>
 
-    <div class="json-widget-container" :class="{ 'has-error': !!parseError }">
+    <div class="json-widget-container" :class="{ 'has-error': !!parseError, 'drag-over': isDragOver }">
       <div class="json-editor">
         <div class="line-numbers">
           <span v-for="i in jsonText.split('\n').length" :key="i">{{ i }}</span>
         </div>
         <div class="code-area">
           <!-- Highlighted code display -->
+          <!-- eslint-disable-next-line vue/no-v-html -- highlight.jsの安全な出力 -->
           <pre class="code-highlight" v-html="highlightedJson"/>
           <!-- Actual textarea for input -->
           <textarea
             :id="name"
+            ref="textareaRef"
             :value="jsonText"
             :rows="rows"
             :disabled="disabled"
@@ -197,7 +252,12 @@ const highlightedJson = computed(() => {
             spellcheck="false"
             placeholder='{"type": "object", "properties": {...}}'
             @input="handleInput"
+            @keydown="handleKeydown"
             @blur="handleBlur"
+            @dragenter="handleDragEnter"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop"
           />
         </div>
       </div>
@@ -216,12 +276,23 @@ const highlightedJson = computed(() => {
           </svg>
           JSON
         </span>
+        <span v-if="availableVariables.length > 0" class="variable-hint">
+          <kbd>{</kbd><kbd>{</kbd> で変数挿入
+        </span>
       </div>
     </div>
 
     <p v-if="error" class="json-widget-error">
       {{ error }}
     </p>
+
+    <VariablePicker
+      v-if="availableVariables.length > 0"
+      v-model="pickerVisible"
+      :variables="availableVariables"
+      :position="pickerPosition"
+      @select="insertVariable"
+    />
   </div>
 </template>
 
@@ -288,10 +359,16 @@ const highlightedJson = computed(() => {
   border-radius: 6px;
   overflow: hidden;
   background: #1e1e1e;
+  transition: border-color 0.15s;
 }
 
 .json-widget-container.has-error {
   border-color: var(--color-error, #ef4444);
+}
+
+.json-widget-container.drag-over {
+  border-color: var(--color-primary, #3b82f6);
+  box-shadow: 0 0 0 2px var(--color-primary-alpha, rgba(59, 130, 246, 0.2));
 }
 
 .json-editor {
@@ -370,7 +447,8 @@ const highlightedJson = computed(() => {
 
 .json-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   padding: 0.375rem 0.75rem;
   background: #2d2d2d;
   border-top: 1px solid #404040;
@@ -390,6 +468,24 @@ const highlightedJson = computed(() => {
   gap: 0.25rem;
   font-size: 0.625rem;
   color: #4ade80;
+}
+
+.variable-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.625rem;
+  color: #6e7681;
+}
+
+.variable-hint kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.5625rem;
+  background: #404040;
+  border: 1px solid #555;
+  border-radius: 2px;
 }
 
 .json-widget-error {
@@ -421,5 +517,12 @@ const highlightedJson = computed(() => {
 
 :deep(.json-brace) {
   color: #da70d6;
+}
+
+:deep(.json-variable) {
+  color: #4fc1ff;
+  background: rgba(79, 193, 255, 0.1);
+  border-radius: 2px;
+  padding: 0 2px;
 }
 </style>

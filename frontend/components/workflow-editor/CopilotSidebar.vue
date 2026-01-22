@@ -13,6 +13,7 @@ defineProps<{
 const emit = defineEmits<{
   'changes:applied': [changes: ProposalChange[]]
   'changes:preview': []
+  'workflow:updated': []
 }>()
 
 const { t } = useI18n()
@@ -64,6 +65,10 @@ function handleChangesApplied(changes: ProposalChange[]) {
 function handleChangesPreview() {
   emit('changes:preview')
 }
+
+function handleWorkflowUpdated() {
+  emit('workflow:updated')
+}
 </script>
 
 <template>
@@ -105,6 +110,7 @@ function handleChangesPreview() {
             :workflow-id="workflowId"
             @changes:applied="handleChangesApplied"
             @changes:preview="handleChangesPreview"
+            @workflow:updated="handleWorkflowUpdated"
           />
         </div>
       </div>

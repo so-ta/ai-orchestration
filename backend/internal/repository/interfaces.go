@@ -31,6 +31,9 @@ type ProjectFilter struct {
 type StepRepository interface {
 	Create(ctx context.Context, step *domain.Step) error
 	GetByID(ctx context.Context, tenantID, projectID, id uuid.UUID) (*domain.Step, error)
+	// GetByIDOnly retrieves a step by ID only (without tenant/project verification)
+	// Used for webhook triggers where only step ID is known
+	GetByIDOnly(ctx context.Context, id uuid.UUID) (*domain.Step, error)
 	ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error)
 	ListByBlockGroup(ctx context.Context, tenantID, blockGroupID uuid.UUID) ([]*domain.Step, error)
 	// ListStartSteps returns all Start blocks in a project

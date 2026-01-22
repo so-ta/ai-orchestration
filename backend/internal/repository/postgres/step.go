@@ -76,6 +76,43 @@ func (r *StepRepository) GetByID(ctx context.Context, tenantID, projectID, id uu
 	return &s, nil
 }
 
+// GetByIDOnly retrieves a step by ID only (without tenant/project verification)
+// Used for webhook triggers where only step ID is known
+func (r *StepRepository) GetByIDOnly(ctx context.Context, id uuid.UUID) (*domain.Step, error) {
+	query := `
+		SELECT id, tenant_id, project_id, name, type, config, block_group_id, group_role, position_x, position_y,
+			block_definition_id, credential_bindings, trigger_type, trigger_config, tool_name, tool_description, tool_input_schema, created_at, updated_at
+		FROM steps
+		WHERE id = $1
+	`
+	var s domain.Step
+	var groupRole *string
+	var triggerType *string
+	err := r.pool.QueryRow(ctx, query, id).Scan(
+		&s.ID, &s.TenantID, &s.ProjectID, &s.Name, &s.Type, &s.Config,
+		&s.BlockGroupID, &groupRole,
+		&s.PositionX, &s.PositionY,
+		&s.BlockDefinitionID, &s.CredentialBindings,
+		&triggerType, &s.TriggerConfig,
+		&s.ToolName, &s.ToolDescription, &s.ToolInputSchema,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrStepNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if groupRole != nil {
+		s.GroupRole = *groupRole
+	}
+	if triggerType != nil {
+		tt := domain.StepTriggerType(*triggerType)
+		s.TriggerType = &tt
+	}
+	return &s, nil
+}
+
 // ListByProject retrieves all steps for a project
 func (r *StepRepository) ListByProject(ctx context.Context, tenantID, projectID uuid.UUID) ([]*domain.Step, error) {
 	query := `

@@ -95,7 +95,7 @@ function resetForm() {
 
 async function handleSave() {
   if (!formData.value.repository_url) {
-    toast.error('リポジトリURLは必須です')
+    toast.error(t('gitSync.messages.repositoryRequired'))
     return
   }
 
@@ -140,7 +140,7 @@ async function handleDelete() {
     isEditing.value = true
     emit('updated')
   } catch {
-    toast.error('削除に失敗しました')
+    toast.error(t('gitSync.messages.deleteFailed'))
   }
 }
 
@@ -273,7 +273,7 @@ function handleClose() {
           <div class="form-group">
             <label class="form-label">{{ t('gitSync.form.credentials') }}</label>
             <select v-model="formData.credentials_id" class="form-select">
-              <option value="">なし（公開リポジトリ）</option>
+              <option value="">{{ t('gitSync.form.noCredentials') }}</option>
               <option v-for="cred in availableCredentials" :key="cred.id" :value="cred.id">
                 {{ cred.name }}
               </option>

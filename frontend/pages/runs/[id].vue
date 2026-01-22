@@ -178,7 +178,7 @@ function formatTimestamp(dateStr?: string) {
   return date.toLocaleTimeString()
 }
 
-function formatJson(obj: any): string {
+function formatJson(obj: unknown): string {
   if (!obj) return '-'
   return JSON.stringify(obj, null, 2)
 }

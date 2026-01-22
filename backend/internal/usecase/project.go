@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,7 +71,7 @@ func (u *ProjectUsecase) Create(ctx context.Context, input CreateProjectInput) (
 		TenantID:      input.TenantID,
 		ProjectID:     project.ID,
 		Name:          "Start",
-		Type:          domain.StepTypeStart,
+		Type:          domain.StepType("manual_trigger"),
 		Config:        json.RawMessage(`{}`),
 		TriggerType:   &triggerType,
 		TriggerConfig: json.RawMessage(`{}`),
@@ -768,4 +769,150 @@ func (u *ProjectUsecase) getBlockDefinitionForStep(ctx context.Context, step *do
 func (u *ProjectUsecase) getBlockDefinitionForGroup(ctx context.Context, group *domain.BlockGroup) (*domain.BlockDefinition, error) {
 	// Use group type as slug
 	return u.blockRepo.GetBySlug(ctx, nil, string(group.Type))
+}
+
+// ValidationCheck represents a single validation check result
+type ValidationCheck struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Status  string `json:"status"` // "passed", "warning", "error"
+	Message string `json:"message,omitempty"`
+}
+
+// ValidationResult represents the result of ValidateForPublish
+type ValidationResult struct {
+	Checks       []ValidationCheck `json:"checks"`
+	CanPublish   bool              `json:"can_publish"`
+	ErrorCount   int               `json:"error_count"`
+	WarningCount int               `json:"warning_count"`
+}
+
+// ValidateForPublish validates a project before publishing
+// Returns a list of checks with their status
+func (u *ProjectUsecase) ValidateForPublish(ctx context.Context, tenantID, projectID uuid.UUID) (*ValidationResult, error) {
+	// Get project with steps and edges
+	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, tenantID, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &ValidationResult{
+		Checks:     make([]ValidationCheck, 0),
+		CanPublish: true,
+	}
+
+	// Check 1: Start block exists
+	startCheck := ValidationCheck{
+		ID:     "hasStartBlock",
+		Label:  "Start block exists",
+		Status: "passed",
+	}
+	hasStartBlock := false
+	startBlockTypes := []domain.StepType{
+		domain.StepTypeStart,
+		"manual_trigger",
+		"schedule_trigger",
+		"webhook_trigger",
+	}
+	for _, step := range project.Steps {
+		for _, startType := range startBlockTypes {
+			if step.Type == startType {
+				hasStartBlock = true
+				break
+			}
+		}
+		if hasStartBlock {
+			break
+		}
+	}
+	if !hasStartBlock {
+		startCheck.Status = "error"
+		startCheck.Message = "Add a start block to begin the workflow"
+		result.CanPublish = false
+		result.ErrorCount++
+	}
+	result.Checks = append(result.Checks, startCheck)
+
+	// Check 2: All blocks connected
+	connectedCheck := ValidationCheck{
+		ID:     "allConnected",
+		Label:  "All blocks are connected",
+		Status: "passed",
+	}
+	if len(project.Steps) > 1 {
+		connectedIDs := make(map[uuid.UUID]bool)
+		for _, edge := range project.Edges {
+			if edge.SourceStepID != nil {
+				connectedIDs[*edge.SourceStepID] = true
+			}
+			if edge.TargetStepID != nil {
+				connectedIDs[*edge.TargetStepID] = true
+			}
+		}
+		unconnectedCount := 0
+		for _, step := range project.Steps {
+			if !connectedIDs[step.ID] {
+				unconnectedCount++
+			}
+		}
+		if unconnectedCount > 0 {
+			connectedCheck.Status = "warning"
+			connectedCheck.Message = fmt.Sprintf("%d unconnected block(s)", unconnectedCount)
+			result.WarningCount++
+		}
+	}
+	result.Checks = append(result.Checks, connectedCheck)
+
+	// Check 3: No infinite loops
+	loopCheck := ValidationCheck{
+		ID:     "noLoop",
+		Label:  "No infinite loop detected",
+		Status: "passed",
+	}
+	if hasCycle(project.Steps, project.Edges) {
+		loopCheck.Status = "error"
+		loopCheck.Message = "Circular reference detected in the workflow"
+		result.CanPublish = false
+		result.ErrorCount++
+	}
+	result.Checks = append(result.Checks, loopCheck)
+
+	// Check 4: Credentials configured
+	credentialsCheck := ValidationCheck{
+		ID:     "credentialsSet",
+		Label:  "Required credentials are set",
+		Status: "passed",
+	}
+	missingCredentials := 0
+	for i := range project.Steps {
+		step := &project.Steps[i]
+		blockDef, err := u.getBlockDefinitionForStep(ctx, step)
+		if err != nil || blockDef == nil {
+			continue
+		}
+		reqCreds, err := blockDef.GetRequiredCredentials()
+		if err != nil || len(reqCreds) == 0 {
+			continue
+		}
+		bindings, err := step.GetCredentialBindings()
+		if err != nil {
+			continue
+		}
+		for _, required := range reqCreds {
+			if !required.Required {
+				continue
+			}
+			if _, ok := bindings[required.Name]; !ok {
+				missingCredentials++
+			}
+		}
+	}
+	if missingCredentials > 0 {
+		credentialsCheck.Status = "warning"
+		credentialsCheck.Message = fmt.Sprintf("%d missing credential binding(s)", missingCredentials)
+		result.WarningCount++
+	}
+	result.Checks = append(result.Checks, credentialsCheck)
+
+	return result, nil
 }

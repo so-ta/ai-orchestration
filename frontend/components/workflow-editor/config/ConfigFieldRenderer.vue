@@ -77,8 +77,13 @@ function handleBlur() {
 </script>
 
 <template>
+  <!--
+    Dynamic component with type assertion: Each widget has specific modelValue types
+    (string, number, boolean, object, etc.) but WidgetValue is their union type.
+    Vue's dynamic component type inference cannot handle this perfectly.
+  -->
   <component
-    :is="widgetComponent"
+    :is="widgetComponent as any"
     :name="field.name"
     :property="field.property"
     :model-value="normalizedValue"

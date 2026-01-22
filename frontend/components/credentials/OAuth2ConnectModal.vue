@@ -136,7 +136,7 @@ function toggleScope(scope: string) {
           class="form-input"
           :placeholder="t('oauth.form.credentialNamePlaceholder')"
           :disabled="!isConfigured || connecting"
-        />
+        >
       </div>
 
       <!-- Step 2: Scope Selection -->
@@ -154,7 +154,7 @@ function toggleScope(scope: string) {
               type="radio"
               :value="option.value"
               :disabled="!isConfigured || connecting"
-            />
+            >
             <div class="scope-content">
               <span class="scope-label">{{ option.label }}</span>
               <span class="scope-desc">{{ option.description }}</span>
@@ -191,7 +191,7 @@ function toggleScope(scope: string) {
               :checked="selectedScopes.includes(scope)"
               :disabled="!isConfigured || connecting"
               @change="toggleScope(scope)"
-            />
+            >
             <span class="permission-name">{{ scope }}</span>
           </label>
         </div>

@@ -130,6 +130,8 @@ type WorkflowsService interface {
 	Get(workflowID string) (map[string]interface{}, error)
 	// List retrieves all workflows
 	List() ([]map[string]interface{}, error)
+	// GetWithStart retrieves workflow info with start step ID (for trigger auto-connection)
+	GetWithStart(workflowID string) (map[string]interface{}, error)
 }
 
 // RunsService provides run read access to scripts
@@ -496,6 +498,11 @@ func (s *Sandbox) setupGlobals(vm *goja.Runtime, input map[string]interface{}, e
 		}
 		if err := workflowsObj.Set("list", func(call goja.FunctionCall) goja.Value {
 			return s.workflowsList(vm, execCtx.Workflows, call)
+		}); err != nil {
+			return err
+		}
+		if err := workflowsObj.Set("getWithStart", func(call goja.FunctionCall) goja.Value {
+			return s.workflowsGetWithStart(vm, execCtx.Workflows, call)
 		}); err != nil {
 			return err
 		}
@@ -1107,6 +1114,23 @@ func (s *Sandbox) workflowsList(vm *goja.Runtime, service WorkflowsService, call
 	if err != nil {
 		panic(vm.ToValue(fmt.Sprintf("Workflows list failed: %v", err)))
 	}
+	return vm.ToValue(result)
+}
+
+// workflowsGetWithStart handles ctx.workflows.getWithStart(workflowID) calls
+// Returns workflow info with start step ID for auto-connecting trigger blocks
+func (s *Sandbox) workflowsGetWithStart(vm *goja.Runtime, service WorkflowsService, call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) < 1 {
+		panic(vm.ToValue("ctx.workflows.getWithStart requires workflowID argument"))
+	}
+
+	workflowID := call.Arguments[0].String()
+
+	result, err := service.GetWithStart(workflowID)
+	if err != nil {
+		panic(vm.ToValue(fmt.Sprintf("Workflows getWithStart failed: %v", err)))
+	}
+
 	return vm.ToValue(result)
 }
 

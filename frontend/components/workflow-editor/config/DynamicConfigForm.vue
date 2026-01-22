@@ -35,6 +35,7 @@ const props = withDefaults(
     applyDefaults?: boolean; // Whether to auto-apply default values
   }>(),
   {
+    uiConfig: undefined,
     disabled: false,
     applyDefaults: true,
   }

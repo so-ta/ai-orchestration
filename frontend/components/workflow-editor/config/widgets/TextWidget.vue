@@ -1,38 +1,68 @@
 <script setup lang="ts">
-import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema';
+import { ref, computed, toRef } from 'vue'
+import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
+import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
+import VariablePicker from '../variable-picker/VariablePicker.vue'
 
 const props = defineProps<{
-  name: string;
-  property: JSONSchemaProperty;
-  modelValue: string | undefined;
-  override?: FieldOverride;
-  error?: string;
-  disabled?: boolean;
-  required?: boolean;
-}>();
+  name: string
+  property: JSONSchemaProperty
+  modelValue: string | undefined
+  override?: FieldOverride
+  error?: string
+  disabled?: boolean
+  required?: boolean
+}>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string): void;
-  (e: 'blur'): void;
-}>();
+  (e: 'update:modelValue', value: string): void
+  (e: 'blur'): void
+}>()
+
+const inputRef = ref<HTMLInputElement | null>(null)
+const modelValueRef = toRef(props, 'modelValue')
+
+const {
+  pickerVisible,
+  pickerPosition,
+  isDragOver,
+  availableVariables,
+  handleInput: handleVariableInput,
+  handleKeydown: handleVariableKeydown,
+  insertVariable,
+  handleDragEnter,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop
+} = useVariableInsertion({
+  modelValue: modelValueRef,
+  emit: (value) => emit('update:modelValue', value),
+  inputRef,
+  fieldId: props.name
+})
 
 const inputType = computed(() => {
-  if (props.property.format === 'uri') return 'url';
-  if (props.property.format === 'email') return 'email';
-  return 'text';
-});
+  if (props.property.format === 'uri') return 'url'
+  if (props.property.format === 'email') return 'email'
+  return 'text'
+})
 
 const placeholder = computed(() => {
-  return props.override?.placeholder || props.property.description || '';
-});
+  return props.override?.placeholder || props.property.description || ''
+})
 
 function handleInput(event: Event) {
-  const target = event.target as HTMLInputElement;
-  emit('update:modelValue', target.value);
+  const target = event.target as HTMLInputElement
+  emit('update:modelValue', target.value)
+  handleVariableInput(event)
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  handleVariableKeydown(event)
 }
 
 function handleBlur() {
-  emit('blur');
+  emit('blur')
 }
 </script>
 
@@ -46,14 +76,21 @@ function handleBlur() {
 
     <input
       :id="name"
+      ref="inputRef"
       :type="inputType"
       :value="modelValue ?? property.default ?? ''"
       :placeholder="placeholder"
       :maxlength="property.maxLength"
       :disabled="disabled"
-      :class="['field-input', { 'has-error': error }]"
+      autocomplete="off"
+      :class="['field-input', { 'has-error': error, 'drag-over': isDragOver }]"
       @input="handleInput"
+      @keydown="handleKeydown"
       @blur="handleBlur"
+      @dragenter="handleDragEnter"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
     >
 
     <p v-if="property.description && !error" class="field-description">
@@ -63,6 +100,14 @@ function handleBlur() {
     <p v-if="error" class="field-error">
       {{ error }}
     </p>
+
+    <VariablePicker
+      v-if="availableVariables.length > 0"
+      v-model="pickerVisible"
+      :variables="availableVariables"
+      :position="pickerPosition"
+      @select="insertVariable"
+    />
   </div>
 </template>
 
@@ -112,6 +157,11 @@ function handleBlur() {
 
 .field-input.has-error {
   border-color: var(--color-error, #ef4444);
+}
+
+.field-input.drag-over {
+  border-color: var(--color-primary, #3b82f6);
+  background: var(--color-primary-alpha, rgba(59, 130, 246, 0.05));
 }
 
 .field-description {

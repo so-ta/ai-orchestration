@@ -229,6 +229,8 @@ export interface BlockDefinition {
   input_ports: InputPort[]   // Multiple input ports for merging (e.g., join, aggregate)
   output_ports: OutputPort[] // Multiple output ports for branching (e.g., condition, switch)
   error_codes: ErrorCodeDef[]
+  // Required credentials for this block (optional)
+  required_credentials?: string[]
   // Unified Block Model fields
   code?: string              // JavaScript code executed in sandbox
   ui_config?: object         // UI metadata (icon, color, configSchema)

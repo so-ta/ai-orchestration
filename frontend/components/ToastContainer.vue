@@ -24,6 +24,7 @@ function getIcon(type: string) {
           :key="toast.id"
           :class="['toast', `toast-${toast.type}`]"
         >
+          <!-- eslint-disable-next-line vue/no-v-html -- SVGアイコンの安全なレンダリング -->
           <div class="toast-icon" v-html="getIcon(toast.type)"/>
           <div class="toast-content">
             <div class="toast-title">{{ toast.title }}</div>

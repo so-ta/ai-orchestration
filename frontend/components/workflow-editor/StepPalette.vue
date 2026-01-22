@@ -3,9 +3,10 @@ import type { StepType, BlockDefinition, BlockCategory, BlockSubcategory, BlockG
 import {
   categoryConfig,
   subcategoryConfig,
-  getBlockColor,
 } from '~/composables/useBlocks'
 import { useBlockSearchWithCategory } from '~/composables/useBlockSearch'
+import SubcategorySection from './palette/SubcategorySection.vue'
+import GroupItem, { type GroupItemData } from './palette/GroupItem.vue'
 
 const { t } = useI18n()
 const blocksApi = useBlocks()
@@ -15,18 +16,12 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'drag-start', type: StepType): void
-  (e: 'drag-end'): void
+  'drag-start': [type: StepType]
+  'drag-end': []
 }>()
 
 // Block Group definitions for control flow constructs
-const blockGroupTypes: Array<{
-  type: BlockGroupType
-  name: string
-  description: string
-  icon: string
-  color: string
-}> = [
+const blockGroupTypes: GroupItemData[] = [
   { type: 'parallel', name: 'Parallel', description: 'Execute steps in parallel', icon: '⫲', color: '#8b5cf6' },
   { type: 'try_catch', name: 'Try-Catch', description: 'Error handling block', icon: '⚡', color: '#ef4444' },
   { type: 'foreach', name: 'ForEach', description: 'Loop over items', icon: '∀', color: '#22c55e' },
@@ -56,8 +51,9 @@ onMounted(async () => {
   try {
     const response = await blocksApi.list({ enabled: true })
     blocks.value = response.blocks
-    // Expand all subcategories by default (including block groups)
+    // Expand all subcategories by default (including block groups and trigger)
     expandedSubcategories.value.add('__groups__')
+    expandedSubcategories.value.add('trigger')
     for (const block of response.blocks) {
       if (block.subcategory) {
         expandedSubcategories.value.add(block.subcategory)
@@ -108,16 +104,12 @@ function getSubcategoryLabel(subcategory: BlockSubcategory): string {
   return t(subcategoryConfig[subcategory]?.nameKey || `editor.subcategories.${subcategory}`)
 }
 
+// Drag state
 const draggingType = ref<StepType | null>(null)
+const draggingGroupType = ref<BlockGroupType | null>(null)
 
-function handleDragStart(event: DragEvent, block: BlockDefinition) {
-  if (!event.dataTransfer) return
-
+function handleDragStart(_event: DragEvent, block: BlockDefinition) {
   draggingType.value = block.slug as StepType
-  event.dataTransfer.effectAllowed = 'copy'
-  event.dataTransfer.setData('step-type', block.slug)
-  event.dataTransfer.setData('step-name', block.name)
-
   emit('drag-start', block.slug as StepType)
 }
 
@@ -126,16 +118,8 @@ function handleDragEnd() {
   emit('drag-end')
 }
 
-// Drag handlers for block groups
-const draggingGroupType = ref<BlockGroupType | null>(null)
-
-function handleGroupDragStart(event: DragEvent, groupType: { type: BlockGroupType; name: string }) {
-  if (!event.dataTransfer) return
-
+function handleGroupDragStart(_event: DragEvent, groupType: GroupItemData) {
   draggingGroupType.value = groupType.type
-  event.dataTransfer.effectAllowed = 'copy'
-  event.dataTransfer.setData('group-type', groupType.type)
-  event.dataTransfer.setData('group-name', groupType.name)
 }
 
 function handleGroupDragEnd() {
@@ -164,7 +148,7 @@ onUnmounted(() => {
 
 <template>
   <div class="step-palette">
-    <!-- Category Tabs (上部) -->
+    <!-- Category Tabs -->
     <div class="category-tabs">
       <button
         v-for="category in categories"
@@ -221,6 +205,19 @@ onUnmounted(() => {
 
     <!-- Blocks list -->
     <div v-else class="palette-content">
+      <!-- Start/Trigger section (always first when in Flow tab or searching) -->
+      <SubcategorySection
+        v-if="(activeCategory === 'flow' || isSearchActive) && blocksBySubcategory['trigger']?.length"
+        :name="getSubcategoryLabel('trigger')"
+        :blocks="blocksBySubcategory['trigger']"
+        :expanded="expandedSubcategories.has('trigger')"
+        :readonly="readonly"
+        :dragging-type="draggingType"
+        @toggle="toggleSubcategory('trigger')"
+        @drag-start="handleDragStart"
+        @drag-end="handleDragEnd"
+      />
+
       <!-- Control Flow Groups (show in Flow tab or when searching) -->
       <div v-if="(activeCategory === 'flow' || isSearchActive) && filteredBlockGroupTypes.length > 0" class="subcategory-section">
         <button
@@ -243,138 +240,45 @@ onUnmounted(() => {
         </button>
 
         <div v-show="expandedSubcategories.has('__groups__')" class="subcategory-items">
-          <div
+          <GroupItem
             v-for="groupType in filteredBlockGroupTypes"
             :key="groupType.type"
-            :class="[
-              'palette-item',
-              'palette-item-group',
-              {
-                dragging: draggingGroupType === groupType.type,
-                disabled: readonly
-              }
-            ]"
-            :draggable="!readonly"
-            @dragstart="handleGroupDragStart($event, groupType)"
-            @dragend="handleGroupDragEnd"
-          >
-            <div
-              class="item-icon"
-              :style="{ backgroundColor: groupType.color }"
-            >
-              {{ groupType.icon }}
-            </div>
-            <div class="item-content">
-              <div class="item-name">{{ groupType.name }}</div>
-              <div class="item-desc">{{ groupType.description }}</div>
-            </div>
-          </div>
+            :group="groupType"
+            :dragging="draggingGroupType === groupType.type"
+            :disabled="readonly"
+            @drag-start="handleGroupDragStart($event, groupType)"
+            @drag-end="handleGroupDragEnd"
+          />
         </div>
       </div>
 
-      <!-- Subcategory Sections -->
+      <!-- Subcategory Sections (excluding 'trigger' which is shown first in Flow tab) -->
       <template v-for="subcategory in subcategoriesForActiveCategory" :key="subcategory">
-        <div
-          v-if="blocksBySubcategory[subcategory]?.length"
-          class="subcategory-section"
-        >
-          <button
-            class="subcategory-header"
-            @click="toggleSubcategory(subcategory)"
-          >
-            <svg
-              :class="['chevron', { expanded: expandedSubcategories.has(subcategory) }]"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="m9 18 6-6-6-6" />
-            </svg>
-            <span class="subcategory-name">{{ getSubcategoryLabel(subcategory) }}</span>
-            <span class="subcategory-count">{{ blocksBySubcategory[subcategory]?.length || 0 }}</span>
-          </button>
-
-          <div v-show="expandedSubcategories.has(subcategory)" class="subcategory-items">
-            <div
-              v-for="block in blocksBySubcategory[subcategory]"
-              :key="block.slug"
-              :class="[
-                'palette-item',
-                {
-                  dragging: draggingType === block.slug,
-                  disabled: readonly
-                }
-              ]"
-              :draggable="!readonly"
-              @dragstart="handleDragStart($event, block)"
-              @dragend="handleDragEnd"
-            >
-              <div
-                class="item-color"
-                :style="{ backgroundColor: getBlockColor(block.slug) }"
-              />
-              <div class="item-content">
-                <div class="item-name">{{ block.name }}</div>
-                <div class="item-desc">{{ block.description || '' }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <SubcategorySection
+          v-if="blocksBySubcategory[subcategory]?.length && !(subcategory === 'trigger' && (activeCategory === 'flow' || isSearchActive))"
+          :name="getSubcategoryLabel(subcategory)"
+          :blocks="blocksBySubcategory[subcategory]"
+          :expanded="expandedSubcategories.has(subcategory)"
+          :readonly="readonly"
+          :dragging-type="draggingType"
+          @toggle="toggleSubcategory(subcategory)"
+          @drag-start="handleDragStart"
+          @drag-end="handleDragEnd"
+        />
       </template>
 
       <!-- Uncategorized blocks (if any) -->
-      <div
+      <SubcategorySection
         v-if="blocksBySubcategory['other']?.length"
-        class="subcategory-section"
-      >
-        <button
-          class="subcategory-header"
-          @click="toggleSubcategory('other')"
-        >
-          <svg
-            :class="['chevron', { expanded: expandedSubcategories.has('other') }]"
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="m9 18 6-6-6-6" />
-          </svg>
-          <span class="subcategory-name">Other</span>
-          <span class="subcategory-count">{{ blocksBySubcategory['other']?.length || 0 }}</span>
-        </button>
-
-        <div v-show="expandedSubcategories.has('other')" class="subcategory-items">
-          <div
-            v-for="block in blocksBySubcategory['other']"
-            :key="block.slug"
-            :class="[
-              'palette-item',
-              {
-                dragging: draggingType === block.slug,
-                disabled: readonly
-              }
-            ]"
-            :draggable="!readonly"
-            @dragstart="handleDragStart($event, block)"
-            @dragend="handleDragEnd"
-          >
-            <div
-              class="item-color"
-              :style="{ backgroundColor: getBlockColor(block.slug) }"
-            />
-            <div class="item-content">
-              <div class="item-name">{{ block.name }}</div>
-              <div class="item-desc">{{ block.description || '' }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+        name="Other"
+        :blocks="blocksBySubcategory['other']"
+        :expanded="expandedSubcategories.has('other')"
+        :readonly="readonly"
+        :dragging-type="draggingType"
+        @toggle="toggleSubcategory('other')"
+        @drag-start="handleDragStart"
+        @drag-end="handleDragEnd"
+      />
 
       <!-- Empty state -->
       <div v-if="Object.keys(blocksBySubcategory).length === 0" class="empty-state">
@@ -391,7 +295,7 @@ onUnmounted(() => {
   height: 100%;
 }
 
-/* Category Tabs - 横スクロールなし、均等幅 */
+/* Category Tabs */
 .category-tabs {
   display: flex;
   flex-shrink: 0;
@@ -551,7 +455,7 @@ onUnmounted(() => {
   padding: 8px;
 }
 
-/* Subcategory Section */
+/* Subcategory Section (for groups only - blocks use SubcategorySection component) */
 .subcategory-section {
   margin-bottom: 4px;
 }
@@ -606,85 +510,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 3px;
   padding: 4px 0 8px 18px;
-}
-
-/* Palette Item */
-.palette-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: white;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: grab;
-  transition: all 0.15s;
-}
-
-.palette-item:hover:not(.disabled) {
-  border-color: var(--color-primary);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transform: translateY(-1px);
-}
-
-.palette-item:active:not(.disabled) {
-  cursor: grabbing;
-  transform: translateY(0);
-}
-
-.palette-item.dragging {
-  opacity: 0.5;
-  cursor: grabbing;
-}
-
-.palette-item.disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.item-color {
-  width: 4px;
-  height: 28px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.item-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  color: white;
-  flex-shrink: 0;
-}
-
-.palette-item-group {
-  border-style: dashed;
-}
-
-.item-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.item-name {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text);
-  line-height: 1.2;
-}
-
-.item-desc {
-  font-size: 0.6875rem;
-  color: var(--color-text-secondary);
-  line-height: 1.3;
-  margin-top: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Empty state */

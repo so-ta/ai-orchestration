@@ -182,6 +182,7 @@ func main() {
 	stepHandler := handler.NewStepHandler(stepUsecase)
 	edgeHandler := handler.NewEdgeHandler(edgeUsecase)
 	runHandler := handler.NewRunHandler(runUsecase, auditService)
+	webhookHandler := handler.NewWebhookHandler(runUsecase, stepUsecase)
 	scheduleHandler := handler.NewScheduleHandler(scheduleUsecase, auditService)
 	auditHandler := handler.NewAuditHandler(auditService)
 	blockHandler := handler.NewBlockHandler(blockRepo, blockUsecase)
@@ -286,6 +287,10 @@ func main() {
 	r.Get("/health", healthHandler(pool, redisClient))
 	r.Get("/ready", readinessHandler(pool, redisClient))
 
+	// Webhook endpoint (public, no auth required)
+	// POST /projects/{project_id}/webhook/{step_id}
+	r.Post("/projects/{project_id}/webhook/{step_id}", webhookHandler.Trigger)
+
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth middleware
@@ -351,6 +356,9 @@ func main() {
 
 				// Workflow-level Copilot (with session management)
 				r.Route("/copilot", func(r chi.Router) {
+					// E2E workflow status endpoint
+					r.Get("/status", copilotAgentHandler.GetWorkflowCopilotStatus)
+
 					// Legacy endpoints
 					r.Get("/session", copilotHandler.GetOrCreateSession)
 					r.Post("/sessions/new", copilotHandler.StartNewSession)

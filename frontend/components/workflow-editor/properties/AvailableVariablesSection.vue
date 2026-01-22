@@ -1,16 +1,77 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { AvailableVariable } from '../composables/useAvailableVariables'
+import VariableTreeItem from './VariableTreeItem.vue'
 
 const { t } = useI18n()
 
-defineProps<{
+const props = defineProps<{
   variables: AvailableVariable[]
 }>()
+
+const emit = defineEmits<{
+  (e: 'insert', variable: AvailableVariable): void
+}>()
+
+// Expanded state for nested variables
+const expandedSources = ref<Set<string>>(new Set())
+
+// Group variables by source
+const groupedVariables = computed(() => {
+  const groups = new Map<string, AvailableVariable[]>()
+
+  for (const v of props.variables) {
+    const existing = groups.get(v.source) || []
+    existing.push(v)
+    groups.set(v.source, existing)
+  }
+
+  return groups
+})
 
 function formatTemplateVariable(variable: string): string {
   const openBrace = String.fromCharCode(123, 123)
   const closeBrace = String.fromCharCode(125, 125)
   return openBrace + variable + closeBrace
+}
+
+function toggleSource(source: string) {
+  if (expandedSources.value.has(source)) {
+    expandedSources.value.delete(source)
+  } else {
+    expandedSources.value.add(source)
+  }
+  expandedSources.value = new Set(expandedSources.value)
+}
+
+function handleVariableClick(variable: AvailableVariable) {
+  emit('insert', variable)
+}
+
+function handleDragStart(event: DragEvent, variable: AvailableVariable) {
+  const template = formatTemplateVariable(variable.path)
+  event.dataTransfer?.setData('text/plain', template)
+  event.dataTransfer!.effectAllowed = 'copy'
+
+  // Add drag image
+  const dragEl = document.createElement('div')
+  dragEl.textContent = template
+  dragEl.style.cssText = `
+    position: absolute;
+    top: -1000px;
+    padding: 4px 8px;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #166534;
+  `
+  document.body.appendChild(dragEl)
+  event.dataTransfer?.setDragImage(dragEl, 0, 0)
+
+  // Clean up drag element after a short delay
+  setTimeout(() => dragEl.remove(), 0)
 }
 </script>
 
@@ -26,21 +87,40 @@ function formatTemplateVariable(variable: string): string {
     </h4>
     <p class="section-description">
       {{ t('stepConfig.availableVariables.description') }}
+      <span class="hint">クリックまたはドラッグで挿入</span>
     </p>
     <div class="available-variables-list">
-      <div v-for="variable in variables" :key="variable.path" class="available-variable-item">
-        <div class="variable-header">
-          <code class="variable-path">{{ formatTemplateVariable(variable.path) }}</code>
-          <code class="variable-type">{{ variable.type }}</code>
+      <template v-for="[source, vars] in groupedVariables" :key="source">
+        <div class="source-group">
+          <button
+            class="source-header"
+            @click="toggleSource(source)"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              :class="{ expanded: expandedSources.has(source) }"
+            >
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            <span class="source-name">{{ source === 'input' ? 'Workflow Input' : source }}</span>
+            <span class="source-count">{{ vars.length }}</span>
+          </button>
+          <div v-if="expandedSources.has(source)" class="source-variables">
+            <VariableTreeItem
+              v-for="variable in vars"
+              :key="variable.path"
+              :variable="variable"
+              :draggable="true"
+              @click="handleVariableClick"
+              @drag-start="handleDragStart"
+            />
+          </div>
         </div>
-        <div class="variable-meta">
-          <span class="variable-source">{{ variable.source }}</span>
-          <span v-if="variable.title && variable.title !== variable.source" class="variable-title">{{ variable.title }}</span>
-        </div>
-        <div v-if="variable.description" class="variable-description">
-          {{ variable.description }}
-        </div>
-      </div>
+      </template>
     </div>
   </div>
 </template>
@@ -72,6 +152,17 @@ function formatTemplateVariable(variable: string): string {
   color: var(--color-text-secondary);
   margin: 0 0 0.75rem 0;
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-description .hint {
+  font-size: 0.5625rem;
+  color: #15803d;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
 .available-variables-section {
@@ -101,69 +192,76 @@ function formatTemplateVariable(variable: string): string {
 .available-variables-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.7);
   border-radius: 6px;
-  padding: 0.75rem;
-  max-height: 200px;
+  padding: 0.5rem;
+  max-height: 250px;
   overflow-y: auto;
 }
 
-.available-variable-item {
-  padding: 0.5rem;
-  background: white;
+.source-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.source-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.8);
   border: 1px solid #bbf7d0;
   border-radius: 4px;
-}
-
-.variable-header {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-}
-
-.variable-path {
-  font-size: 0.6875rem;
-  font-family: 'SF Mono', Monaco, monospace;
-  background: #dcfce7;
-  color: #166534;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  border: 1px solid #86efac;
-  word-break: break-all;
-}
-
-.variable-type {
-  font-size: 0.5625rem;
-  font-family: 'SF Mono', Monaco, monospace;
-  color: var(--color-text-secondary);
-  background: var(--color-background);
-  padding: 0.125rem 0.25rem;
-  border-radius: 3px;
-}
-
-.variable-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-  font-size: 0.625rem;
-}
-
-.variable-source {
-  color: #15803d;
+  cursor: pointer;
+  font-size: 11px;
   font-weight: 500;
+  color: #166534;
+  transition: background-color 0.1s;
 }
 
-.variable-title {
-  color: var(--color-text-secondary);
+.source-header:hover {
+  background: white;
 }
 
-.variable-description {
-  font-size: 0.5625rem;
-  color: var(--color-text-secondary);
-  margin-top: 0.25rem;
-  line-height: 1.4;
+.source-header svg {
+  color: #22c55e;
+  transition: transform 0.15s;
+}
+
+.source-header svg.expanded {
+  transform: rotate(90deg);
+}
+
+.source-name {
+  flex: 1;
+}
+
+.source-count {
+  font-size: 10px;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.source-variables {
+  margin-left: 16px;
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 1px dashed #86efac;
+}
+
+.available-variables-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.available-variables-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.available-variables-list::-webkit-scrollbar-thumb {
+  background: #86efac;
+  border-radius: 3px;
 }
 </style>

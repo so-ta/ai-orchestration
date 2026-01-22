@@ -38,19 +38,60 @@ const props = defineProps<{
   triggerType?: StartTriggerType
   triggerConfig?: TriggerConfig
   stepId?: string
+  workflowId?: string
   readonly?: boolean
+  /** Block definition's fixed trigger type (from config_defaults) - when set, type selection is disabled */
+  fixedTriggerType?: StartTriggerType
 }>()
+
+// Runtime config for API base URL
+const runtimeConfig = useRuntimeConfig()
+
+// Generate Webhook URL
+const webhookUrl = computed(() => {
+  if (!props.workflowId || !props.stepId) return null
+  const baseUrl = runtimeConfig.public.apiBase || window.location.origin
+  return `${baseUrl}/projects/${props.workflowId}/webhook/${props.stepId}`
+})
+
+// Copy webhook URL to clipboard
+const copied = ref(false)
+async function copyWebhookUrl() {
+  if (!webhookUrl.value) return
+  try {
+    await navigator.clipboard.writeText(webhookUrl.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch {
+    // Fallback for older browsers
+    const textarea = document.createElement('textarea')
+    textarea.value = webhookUrl.value
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  }
+}
 
 const emit = defineEmits<{
   (e: 'update:trigger', data: { trigger_type: StartTriggerType; trigger_config: TriggerConfig }): void
 }>()
 
+// Whether the trigger type is fixed by block definition (inherited blocks)
+const isTypeFixed = computed(() => !!props.fixedTriggerType)
+
+// Get the effective trigger type (fixed type takes precedence)
+const effectiveTriggerType = computed(() => props.fixedTriggerType || props.triggerType || 'manual')
+
 // Local state
-const localTriggerType = ref<StartTriggerType>(props.triggerType || 'manual')
+const localTriggerType = ref<StartTriggerType>(effectiveTriggerType.value)
 const localConfig = ref<TriggerConfig>({ ...(props.triggerConfig || {}) })
 
-// Watch for prop changes
-watch(() => props.triggerType, (newVal) => {
+// Watch for prop changes (fixed type takes precedence)
+watch([() => props.fixedTriggerType, () => props.triggerType], ([fixedType, propType]) => {
+  const newVal = fixedType || propType
   if (newVal && newVal !== localTriggerType.value) {
     localTriggerType.value = newVal
   }
@@ -70,6 +111,11 @@ const triggerTypeOptions = [
   { value: 'slack', label: t('trigger.type.slack'), icon: '#', description: t('trigger.type.slackDesc') },
   { value: 'email', label: t('trigger.type.email'), icon: '✉', description: t('trigger.type.emailDesc') },
 ]
+
+// Get current trigger type's option info
+const currentTriggerOption = computed(() => {
+  return triggerTypeOptions.find(opt => opt.value === localTriggerType.value) || triggerTypeOptions[0]
+})
 
 // Emit changes
 function emitUpdate() {
@@ -174,12 +220,25 @@ const timezoneOptions = [
 
 <template>
   <div class="trigger-config-panel">
-    <!-- Trigger Type Selection -->
+    <!-- Trigger Type Display (Fixed) or Selection -->
     <div class="trigger-type-section">
       <label class="trigger-label">
         {{ t('trigger.type.label') }}
       </label>
-      <div class="trigger-options">
+
+      <!-- Fixed trigger type display (read-only badge) -->
+      <div v-if="isTypeFixed" class="trigger-type-fixed">
+        <div class="trigger-type-badge">
+          <span class="trigger-icon">{{ currentTriggerOption.icon }}</span>
+          <div class="trigger-type-info">
+            <div class="trigger-type-name">{{ currentTriggerOption.label }}</div>
+            <div class="trigger-type-desc">{{ currentTriggerOption.description }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selectable trigger type options (for generic start block) -->
+      <div v-else class="trigger-options">
         <button
           v-for="option in triggerTypeOptions"
           :key="option.value"
@@ -212,6 +271,31 @@ const timezoneOptions = [
 
       <!-- Webhook Config -->
       <div v-else-if="localTriggerType === 'webhook'" class="trigger-form-fields">
+        <!-- Webhook URL Display -->
+        <div v-if="webhookUrl" class="form-group">
+          <label class="form-label">
+            Webhook URL
+          </label>
+          <div class="webhook-url-container">
+            <code class="webhook-url">{{ webhookUrl }}</code>
+            <button
+              type="button"
+              class="copy-button"
+              :class="{ copied }"
+              @click="copyWebhookUrl"
+            >
+              <svg v-if="!copied" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </button>
+          </div>
+          <p class="form-hint">POST リクエストでこの URL を呼び出すとワークフローが実行されます</p>
+        </div>
+
         <div class="form-group">
           <label class="form-label">
             {{ t('trigger.config.webhook.secret') }}
@@ -441,6 +525,91 @@ const timezoneOptions = [
 .trigger-check {
   color: var(--color-primary);
   flex-shrink: 0;
+}
+
+/* Fixed trigger type display (read-only) */
+.trigger-type-fixed {
+  margin-bottom: 0.5rem;
+}
+
+.trigger-type-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface, #f9fafb);
+}
+
+.trigger-type-badge .trigger-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.trigger-type-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.trigger-type-name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.trigger-type-desc {
+  font-size: 0.6875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.125rem;
+}
+
+/* Webhook URL Display */
+.webhook-url-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface, #f9fafb);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.webhook-url {
+  flex: 1;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 0.75rem;
+  color: var(--color-text);
+  word-break: break-all;
+  background: transparent;
+  padding: 0;
+}
+
+.copy-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-background, #fff);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.copy-button:hover {
+  border-color: var(--color-border-hover, #d1d5db);
+  color: var(--color-text);
+}
+
+.copy-button.copied {
+  border-color: var(--color-success, #10B981);
+  color: var(--color-success, #10B981);
+  background: rgba(16, 185, 129, 0.05);
 }
 
 /* Form Fields */

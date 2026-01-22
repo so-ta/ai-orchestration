@@ -28,6 +28,11 @@ type CopilotUsecase struct {
 	httpClient  *http.Client
 	apiKey      string
 	baseURL     string
+
+	// Phase 4: Dynamic prompt optimization components
+	intentClassifier  *IntentClassifier
+	contextBuilder    *ContextBuilder
+	promptGenerator   *DynamicPromptGenerator
 }
 
 // NewCopilotUsecase creates a new CopilotUsecase
@@ -55,6 +60,11 @@ func NewCopilotUsecase(
 		},
 		apiKey:  os.Getenv("OPENAI_API_KEY"),
 		baseURL: baseURL,
+
+		// Initialize Phase 4 components
+		intentClassifier:  NewIntentClassifier(),
+		contextBuilder:    NewContextBuilder(blockRepo, projectRepo),
+		promptGenerator:   NewDynamicPromptGenerator(),
 	}
 }
 
@@ -868,15 +878,30 @@ func (u *CopilotUsecase) ChatWithSession(ctx context.Context, input ChatWithSess
 		}
 	}
 
-	// Get project context
+	// Phase 4: Dynamic prompt optimization
+	// Classify intent and build context
+	intent := u.intentClassifier.Classify(input.Message)
+	mentionedBlocks := u.intentClassifier.ExtractBlockTypes(input.Message)
+
+	contextData, err := u.contextBuilder.Build(ctx, input.TenantID, &input.ProjectID, intent, mentionedBlocks)
+	if err != nil {
+		// Fallback to basic context on error
+		slog.Warn("failed to build context", "error", err)
+		contextData = &ContextData{Intent: intent}
+	}
+
+	// Generate dynamic system prompt
+	dynamicSystemPrompt := u.promptGenerator.GenerateSystemPrompt(contextData)
+
+	// Get project context for additional detail
 	var projectContext string
 	project, err := u.projectRepo.GetWithStepsAndEdges(ctx, input.TenantID, input.ProjectID)
 	if err == nil {
 		projectContext = buildProjectContextString(project)
 	}
 
-	// Build prompt with conversation history
-	prompt := buildChatPromptWithHistory(input.Message, projectContext, input.Context, session.Messages)
+	// Build prompt with conversation history and dynamic system prompt
+	prompt := buildChatPromptWithDynamicContext(input.Message, projectContext, input.Context, session.Messages, dynamicSystemPrompt)
 
 	// Call LLM
 	response, err := u.callLLM(ctx, prompt)
@@ -1210,6 +1235,207 @@ func (u *CopilotUsecase) callLLM(ctx context.Context, prompt string) (string, er
 // processHearingWithLLM processes a hearing message with LLM
 func (u *CopilotUsecase) processHearingWithLLM(ctx context.Context, session *domain.CopilotSession, message string, blocks []*domain.BlockDefinition) (*llmHearingOutput, error) {
 	currentPhase := session.HearingPhase
+
+	// 現在のSpecを取得
+	var currentSpec domain.WorkflowSpec
+	if session.Spec != nil {
+		json.Unmarshal(session.Spec, &currentSpec)
+	}
+
+	// フェーズに応じたプロンプトを構築
+	prompt := u.buildHearingPrompt(currentPhase, &currentSpec, message, blocks)
+
+	// LLM呼び出し
+	llmResponse, err := u.callLLM(ctx, prompt)
+	if err != nil {
+		// フォールバック: 従来のテンプレート応答
+		return u.fallbackHearingResponse(currentPhase)
+	}
+
+	// JSONをパース
+	llmResponse = stripMarkdownCodeBlock(llmResponse)
+
+	var result struct {
+		Response      string `json:"response"`
+		NextPhase     string `json:"next_phase"`
+		ExtractedData struct {
+			Name        string `json:"name,omitempty"`
+			Description string `json:"description,omitempty"`
+			Purpose     string `json:"purpose,omitempty"`
+			Trigger     *struct {
+				Type        string `json:"type"`
+				Schedule    string `json:"schedule,omitempty"`
+				Description string `json:"description,omitempty"`
+			} `json:"trigger,omitempty"`
+			Steps []struct {
+				Name        string                 `json:"name"`
+				Type        string                 `json:"type"`
+				Description string                 `json:"description"`
+				Config      map[string]interface{} `json:"config,omitempty"`
+			} `json:"steps,omitempty"`
+			Integrations []struct {
+				Service   string `json:"service"`
+				Operation string `json:"operation"`
+			} `json:"integrations,omitempty"`
+		} `json:"extracted_data"`
+		SuggestedQuestions []string `json:"suggested_questions"`
+		Confidence         string   `json:"confidence"`
+	}
+
+	if err := json.Unmarshal([]byte(llmResponse), &result); err != nil {
+		// パース失敗時はフォールバック
+		return u.fallbackHearingResponse(currentPhase)
+	}
+
+	// ExtractedDataをmap[string]interface{}に変換
+	var extractedData map[string]interface{}
+	if result.ExtractedData.Name != "" || result.ExtractedData.Trigger != nil || len(result.ExtractedData.Steps) > 0 {
+		extractedData = make(map[string]interface{})
+		if result.ExtractedData.Name != "" {
+			extractedData["name"] = result.ExtractedData.Name
+		}
+		if result.ExtractedData.Description != "" {
+			extractedData["description"] = result.ExtractedData.Description
+		}
+		if result.ExtractedData.Purpose != "" {
+			extractedData["purpose"] = result.ExtractedData.Purpose
+		}
+		if result.ExtractedData.Trigger != nil {
+			extractedData["trigger"] = result.ExtractedData.Trigger
+		}
+		if len(result.ExtractedData.Steps) > 0 {
+			extractedData["steps"] = result.ExtractedData.Steps
+		}
+		if len(result.ExtractedData.Integrations) > 0 {
+			extractedData["integrations"] = result.ExtractedData.Integrations
+		}
+	}
+
+	// NextPhaseを決定
+	nextPhase := currentPhase
+	switch result.NextPhase {
+	case "proposal":
+		nextPhase = domain.CopilotPhaseProposal
+	case "completed":
+		nextPhase = domain.CopilotPhaseCompleted
+	case "analysis":
+		nextPhase = domain.CopilotPhaseAnalysis
+	default:
+		// フェーズ指定がない場合は自動遷移
+		nextPhase = domain.NextPhase(currentPhase)
+	}
+
+	return &llmHearingOutput{
+		Response:           result.Response,
+		ExtractedData:      extractedData,
+		SuggestedQuestions: result.SuggestedQuestions,
+		NextPhase:          nextPhase,
+		Confidence:         result.Confidence,
+	}, nil
+}
+
+// buildHearingPrompt builds the prompt for hearing phase based on current phase
+func (u *CopilotUsecase) buildHearingPrompt(phase domain.CopilotPhase, spec *domain.WorkflowSpec, message string, blocks []*domain.BlockDefinition) string {
+	// ブロック情報をフォーマット
+	var blockList []string
+	for _, b := range blocks {
+		blockList = append(blockList, fmt.Sprintf("- %s (%s): %s", b.Slug, b.Name, b.Description))
+	}
+	blocksText := joinStrings(blockList, "\n")
+
+	// 現在のSpec情報
+	specInfo := ""
+	if spec.Name != "" {
+		specInfo += fmt.Sprintf("名前: %s\n", spec.Name)
+	}
+	if spec.Description != "" {
+		specInfo += fmt.Sprintf("説明: %s\n", spec.Description)
+	}
+	if spec.Purpose != "" {
+		specInfo += fmt.Sprintf("目的: %s\n", spec.Purpose)
+	}
+	if spec.Trigger != nil {
+		specInfo += fmt.Sprintf("トリガー: %s (%s)\n", spec.Trigger.Type, spec.Trigger.Description)
+	}
+	if len(spec.Steps) > 0 {
+		specInfo += "ステップ:\n"
+		for _, s := range spec.Steps {
+			specInfo += fmt.Sprintf("  - %s (%s): %s\n", s.Name, s.Type, s.Description)
+		}
+	}
+
+	var phaseInstruction string
+	switch phase {
+	case domain.CopilotPhaseAnalysis:
+		phaseInstruction = `あなたは分析フェーズにいます。
+ユーザーの要望を分析し、以下を抽出してください:
+- ワークフローの名前と目的
+- トリガー（いつ実行されるか）
+- 必要なステップ
+- 連携サービス
+
+情報が十分に集まったら next_phase を "proposal" にしてください。
+不明点があれば質問を生成してください。`
+
+	case domain.CopilotPhaseProposal:
+		phaseInstruction = `あなたは提案フェーズにいます。
+収集した情報を基に、具体的なワークフロー構成を提案してください:
+- 具体的なステップ構成
+- 各ステップのタイプと設定
+- トリガー設定
+
+ユーザーが承認したら next_phase を "completed" にしてください。
+修正が必要な場合は "proposal" のまま継続してください。`
+
+	default:
+		phaseInstruction = "ヒアリングを継続してください。"
+	}
+
+	return fmt.Sprintf(`あなたはワークフロー自動化の専門家です。
+ユーザーの要望をヒアリングし、ワークフローを設計してください。
+
+## 現在のフェーズ
+%s
+
+## 現在の理解
+%s
+
+## ユーザーのメッセージ
+%s
+
+## 利用可能なブロック
+%s
+
+## 回答形式（必ずJSON形式で回答）
+{
+  "response": "ユーザーへの応答メッセージ（日本語）",
+  "next_phase": "analysis" | "proposal" | "completed",
+  "extracted_data": {
+    "name": "ワークフロー名",
+    "description": "説明",
+    "purpose": "目的",
+    "trigger": {
+      "type": "manual" | "schedule" | "webhook",
+      "schedule": "毎日9時など（scheduleの場合）",
+      "description": "トリガーの説明"
+    },
+    "steps": [
+      {"name": "ステップ名", "type": "input|transform|decision|notification|ai|integration", "description": "説明"}
+    ],
+    "integrations": [
+      {"service": "Slack", "operation": "メッセージ送信"}
+    ]
+  },
+  "suggested_questions": ["追加の質問1", "追加の質問2"],
+  "confidence": "high" | "medium" | "low"
+}
+
+extracted_data は新しく理解した情報のみを含めてください。既存の情報は含めないでください。
+`, phaseInstruction, specInfo, message, blocksText)
+}
+
+// fallbackHearingResponse returns a fallback response when LLM fails
+func (u *CopilotUsecase) fallbackHearingResponse(currentPhase domain.CopilotPhase) (*llmHearingOutput, error) {
 	nextPhase := domain.NextPhase(currentPhase)
 
 	var response string
@@ -1235,7 +1461,7 @@ func (u *CopilotUsecase) processHearingWithLLM(ctx context.Context, session *dom
 		ExtractedData:      nil,
 		SuggestedQuestions: suggestedQuestions,
 		NextPhase:          nextPhase,
-		Confidence:         "high",
+		Confidence:         "medium",
 	}, nil
 }
 
@@ -1259,7 +1485,7 @@ func (u *CopilotUsecase) mapStepsToBlocks(ctx context.Context, spec *domain.Work
 		matched := false
 		switch step.Type {
 		case "input":
-			mapping.Block = "start"
+			mapping.Block = "manual_trigger"
 			mapping.Confidence = "high"
 			matched = true
 		case "transform":
@@ -1315,6 +1541,171 @@ func (u *CopilotUsecase) processRefinement(ctx context.Context, session *domain.
 	return []string{"フィードバックを受け付けました"}, nil
 }
 
+// generateStepConfig generates recommended config for a step using LLM
+func (u *CopilotUsecase) generateStepConfig(ctx context.Context, stepSpec domain.StepSpec, blockDef *domain.BlockDefinition) (json.RawMessage, error) {
+	if blockDef == nil {
+		return json.RawMessage(`{}`), nil
+	}
+
+	// Start with effective defaults from block definition
+	defaults := blockDef.GetEffectiveConfigDefaults()
+	if defaults != nil && len(defaults) > 0 {
+		// Parse defaults
+		var defaultConfig map[string]interface{}
+		if err := json.Unmarshal(defaults, &defaultConfig); err == nil && len(defaultConfig) > 0 {
+			// Already have defaults, merge with step's existing config if any
+			if stepSpec.Config != nil {
+				for k, v := range stepSpec.Config {
+					defaultConfig[k] = v
+				}
+			}
+			result, _ := json.Marshal(defaultConfig)
+			return result, nil
+		}
+	}
+
+	// If no defaults, try to generate config with LLM
+	if blockDef.ConfigSchema == nil || len(blockDef.ConfigSchema) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+
+	prompt := fmt.Sprintf(`ステップの目的と設定スキーマから、最適な設定値を生成してください。
+
+## ステップ情報
+- 名前: %s
+- 説明: %s
+- タイプ: %s
+
+## ブロック: %s
+説明: %s
+
+## 設定スキーマ
+%s
+
+## 回答形式（JSONのみ）
+設定値をJSONで返してください。スキーマで定義されているフィールドのみを含めてください。
+`, stepSpec.Name, stepSpec.Description, stepSpec.Type, blockDef.Name, blockDef.Description, string(blockDef.ConfigSchema))
+
+	response, err := u.callLLM(ctx, prompt)
+	if err != nil {
+		// Fallback: return empty config
+		return json.RawMessage(`{}`), nil
+	}
+
+	// Clean up response
+	response = stripMarkdownCodeBlock(response)
+
+	// Validate JSON
+	var config map[string]interface{}
+	if err := json.Unmarshal([]byte(response), &config); err != nil {
+		return json.RawMessage(`{}`), nil
+	}
+
+	return json.RawMessage(response), nil
+}
+
+// mapStepsToBlocksWithLLM maps workflow spec steps to available blocks using LLM
+func (u *CopilotUsecase) mapStepsToBlocksWithLLM(ctx context.Context, spec *domain.WorkflowSpec, blocks []*domain.BlockDefinition) ([]domain.StepMappingResult, []domain.CustomRequirement, error) {
+	// Build block descriptions for prompt
+	var blockDescriptions []string
+	for _, b := range blocks {
+		blockDescriptions = append(blockDescriptions, fmt.Sprintf("- %s (%s): %s [カテゴリ: %s]",
+			b.Slug, b.Name, b.Description, b.Category))
+	}
+
+	// Build step descriptions for prompt
+	var stepDescriptions []string
+	for i, step := range spec.Steps {
+		stepDescriptions = append(stepDescriptions, fmt.Sprintf("%d. %s: %s (タイプ: %s)",
+			i+1, step.Name, step.Description, step.Type))
+	}
+
+	prompt := fmt.Sprintf(`ワークフローのステップを利用可能なブロックにマッピングしてください。
+
+## 利用可能なブロック
+%s
+
+## マッピングするステップ
+%s
+
+## 回答形式（JSONのみ）
+{
+  "mappings": [
+    {
+      "step_index": 0,
+      "block_slug": "ブロックのslug",
+      "confidence": "high" | "medium" | "low",
+      "reason": "選択理由"
+    }
+  ],
+  "warnings": ["警告メッセージ（あれば）"]
+}
+
+適切なブロックがない場合は block_slug を "custom" としてください。
+`, joinStrings(blockDescriptions, "\n"), joinStrings(stepDescriptions, "\n"))
+
+	response, err := u.callLLM(ctx, prompt)
+	if err != nil {
+		// Fallback to rule-based mapping
+		return u.mapStepsToBlocks(ctx, spec, blocks)
+	}
+
+	response = stripMarkdownCodeBlock(response)
+
+	var result struct {
+		Mappings []struct {
+			StepIndex  int    `json:"step_index"`
+			BlockSlug  string `json:"block_slug"`
+			Confidence string `json:"confidence"`
+			Reason     string `json:"reason"`
+		} `json:"mappings"`
+		Warnings []string `json:"warnings"`
+	}
+
+	if err := json.Unmarshal([]byte(response), &result); err != nil {
+		// Fallback to rule-based mapping
+		return u.mapStepsToBlocks(ctx, spec, blocks)
+	}
+
+	// Build mapping results
+	var mappings []domain.StepMappingResult
+	var customRequirements []domain.CustomRequirement
+
+	// Create block lookup map
+	blockMap := make(map[string]*domain.BlockDefinition)
+	for _, b := range blocks {
+		blockMap[b.Slug] = b
+	}
+
+	for _, m := range result.Mappings {
+		if m.StepIndex >= len(spec.Steps) {
+			continue
+		}
+
+		step := spec.Steps[m.StepIndex]
+		mapping := domain.StepMappingResult{
+			Name:       step.Name,
+			Block:      m.BlockSlug,
+			Confidence: m.Confidence,
+			Reason:     m.Reason,
+		}
+
+		if m.BlockSlug == "custom" || blockMap[m.BlockSlug] == nil {
+			mapping.CustomRequired = true
+			mapping.Reason = m.Reason
+			customRequirements = append(customRequirements, domain.CustomRequirement{
+				Name:            step.Name,
+				Description:     step.Description,
+				EstimatedEffort: "medium",
+			})
+		}
+
+		mappings = append(mappings, mapping)
+	}
+
+	return mappings, customRequirements, nil
+}
+
 // ============================================================================
 // Helper functions
 // ============================================================================
@@ -1347,14 +1738,94 @@ func joinStrings(strs []string, sep string) string {
 
 // mergeExtractedData merges extracted data into the workflow spec
 func mergeExtractedData(spec *domain.WorkflowSpec, data map[string]interface{}) {
-	if name, ok := data["name"].(string); ok {
+	// 基本情報のマージ
+	if name, ok := data["name"].(string); ok && name != "" {
 		spec.Name = name
 	}
-	if desc, ok := data["description"].(string); ok {
+	if desc, ok := data["description"].(string); ok && desc != "" {
 		spec.Description = desc
 	}
-	if purpose, ok := data["purpose"].(string); ok {
+	if purpose, ok := data["purpose"].(string); ok && purpose != "" {
 		spec.Purpose = purpose
+	}
+
+	// トリガーのマージ
+	if triggerData, ok := data["trigger"].(map[string]interface{}); ok {
+		trigger := &domain.TriggerSpec{}
+		if t, ok := triggerData["type"].(string); ok {
+			trigger.Type = t
+		}
+		if s, ok := triggerData["schedule"].(string); ok {
+			trigger.Schedule = s
+		}
+		if d, ok := triggerData["description"].(string); ok {
+			trigger.Description = d
+		}
+		if trigger.Type != "" {
+			spec.Trigger = trigger
+		}
+	}
+
+	// ステップのマージ（既存ステップに追加）
+	if stepsData, ok := data["steps"].([]interface{}); ok {
+		for _, stepItem := range stepsData {
+			if stepMap, ok := stepItem.(map[string]interface{}); ok {
+				step := domain.StepSpec{}
+				if name, ok := stepMap["name"].(string); ok {
+					step.Name = name
+				}
+				if t, ok := stepMap["type"].(string); ok {
+					step.Type = t
+				}
+				if desc, ok := stepMap["description"].(string); ok {
+					step.Description = desc
+				}
+				if config, ok := stepMap["config"].(map[string]interface{}); ok {
+					step.Config = config
+				}
+
+				// 重複チェック（同名ステップがあればスキップ）
+				duplicate := false
+				for _, existingStep := range spec.Steps {
+					if existingStep.Name == step.Name {
+						duplicate = true
+						break
+					}
+				}
+				if !duplicate && step.Name != "" {
+					// IDを生成
+					step.ID = uuid.New().String()
+					spec.Steps = append(spec.Steps, step)
+				}
+			}
+		}
+	}
+
+	// インテグレーションのマージ
+	if integrationsData, ok := data["integrations"].([]interface{}); ok {
+		for _, intItem := range integrationsData {
+			if intMap, ok := intItem.(map[string]interface{}); ok {
+				integration := domain.IntegrationSpec{}
+				if service, ok := intMap["service"].(string); ok {
+					integration.Service = service
+				}
+				if op, ok := intMap["operation"].(string); ok {
+					integration.Operation = op
+				}
+
+				// 重複チェック
+				duplicate := false
+				for _, existing := range spec.Integrations {
+					if existing.Service == integration.Service && existing.Operation == integration.Operation {
+						duplicate = true
+						break
+					}
+				}
+				if !duplicate && integration.Service != "" {
+					spec.Integrations = append(spec.Integrations, integration)
+				}
+			}
+		}
 	}
 }
 
@@ -1594,6 +2065,58 @@ func buildChatPromptWithHistory(message, projectContext, additionalContext strin
 	return sb.String()
 }
 
+// buildChatPromptWithDynamicContext builds the prompt with dynamic system context
+// This is the Phase 4 optimized version that includes intent-aware context
+func buildChatPromptWithDynamicContext(message, projectContext, additionalContext string, history []domain.CopilotMessage, dynamicSystemPrompt string) string {
+	var sb strings.Builder
+
+	// Use dynamic system prompt instead of generic one
+	sb.WriteString(dynamicSystemPrompt)
+	sb.WriteString("\n")
+
+	if projectContext != "" {
+		sb.WriteString("## Current Project Details\n")
+		sb.WriteString(projectContext)
+		sb.WriteString("\n\n")
+	}
+
+	if additionalContext != "" {
+		sb.WriteString("## Additional Context\n")
+		sb.WriteString(additionalContext)
+		sb.WriteString("\n\n")
+	}
+
+	// Add conversation history (limited to last 6 messages for token efficiency)
+	if len(history) > 0 {
+		sb.WriteString("## Recent Conversation\n")
+		start := 0
+		if len(history) > 6 {
+			start = len(history) - 6
+		}
+		for _, msg := range history[start:] {
+			if msg.Role == "user" {
+				sb.WriteString(fmt.Sprintf("User: %s\n", msg.Content))
+			} else {
+				// Truncate long assistant responses
+				content := msg.Content
+				if len(content) > 200 {
+					content = content[:200] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("Assistant: %s\n", content))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("## Current Message\n")
+	sb.WriteString(message)
+	sb.WriteString("\n\n")
+
+	sb.WriteString("Respond in the same language as the user. Return JSON with 'response' field.")
+
+	return sb.String()
+}
+
 // buildProjectGenerationPrompt creates a prompt for project generation
 func buildProjectGenerationPrompt(description, projectContext string) string {
 	var sb strings.Builder
@@ -1607,7 +2130,7 @@ func buildProjectGenerationPrompt(description, projectContext string) string {
 	}
 
 	sb.WriteString("## Available Step Types (ONLY use these exact types)\n")
-	sb.WriteString("- start: Entry point (required, exactly one)\n")
+	sb.WriteString("- manual_trigger: Manual trigger entry point (required, exactly one)\n")
 	sb.WriteString("- llm: LLM/AI call (config: provider, model, system_prompt, user_prompt)\n")
 	sb.WriteString("- tool: External tool/adapter (config: adapter_id)\n")
 	sb.WriteString("- condition: Binary branching true/false (config: expression)\n")
@@ -1639,7 +2162,7 @@ func buildProjectGenerationPrompt(description, projectContext string) string {
     {
       "temp_id": "step_1",
       "name": "Step Name",
-      "type": "start|llm|tool|condition|switch|map|join|subflow|wait|function|router|human_in_loop|filter|split|aggregate|error|note|log",
+      "type": "manual_trigger|llm|tool|condition|switch|map|join|subflow|wait|function|router|human_in_loop|filter|split|aggregate|error|note|log",
       "description": "What this step does",
       "config": { ... },
       "position_x": 400,
@@ -1659,7 +2182,7 @@ func buildProjectGenerationPrompt(description, projectContext string) string {
 	sb.WriteString("\n\n")
 
 	sb.WriteString("## Instructions\n")
-	sb.WriteString("1. ALWAYS include exactly one 'start' step as the entry point\n")
+	sb.WriteString("1. ALWAYS include exactly one 'manual_trigger' step as the entry point\n")
 	sb.WriteString("2. The project ends when the last step(s) complete - no 'end' step needed\n")
 	sb.WriteString("3. Position steps vertically with 150px spacing\n")
 	sb.WriteString("4. Use descriptive step names in the user's language\n")
@@ -1690,23 +2213,23 @@ func assignPositions(output *GenerateProjectOutput) {
 // filterInvalidSteps removes steps with invalid types and their related edges
 func filterInvalidSteps(output GenerateProjectOutput) GenerateProjectOutput {
 	validTypes := map[string]bool{
-		"start":         true,
-		"llm":           true,
-		"tool":          true,
-		"condition":     true,
-		"switch":        true,
-		"map":           true,
-		"subflow":       true,
-		"wait":          true,
-		"function":      true,
-		"router":        true,
-		"human_in_loop": true,
-		"filter":        true,
-		"split":         true,
-		"aggregate":     true,
-		"error":         true,
-		"note":          true,
-		"log":           true,
+		"manual_trigger": true,
+		"llm":            true,
+		"tool":           true,
+		"condition":      true,
+		"switch":         true,
+		"map":            true,
+		"subflow":        true,
+		"wait":           true,
+		"function":       true,
+		"router":         true,
+		"human_in_loop":  true,
+		"filter":         true,
+		"split":          true,
+		"aggregate":      true,
+		"error":          true,
+		"note":           true,
+		"log":            true,
 	}
 
 	validTempIDs := make(map[string]bool)
@@ -1752,7 +2275,7 @@ func (u *CopilotUsecase) mockLLMResponse(prompt string) string {
 		return `{
   "response": "サンプルプロジェクトを生成しました。これはモックレスポンスです。OPENAI_API_KEYを設定すると、AIが実際にプロジェクトを生成します。",
   "steps": [
-    {"temp_id": "step_start", "name": "開始", "type": "start", "description": "プロジェクトの開始点", "config": {}, "position_x": 400, "position_y": 50},
+    {"temp_id": "step_start", "name": "開始", "type": "manual_trigger", "description": "プロジェクトの開始点", "config": {}, "position_x": 400, "position_y": 50},
     {"temp_id": "step_llm", "name": "LLM処理", "type": "llm", "description": "入力をLLMで処理", "config": {"provider": "openai", "model": "gpt-4o-mini", "system_prompt": "You are a helpful assistant.", "user_prompt": "Process the input: {{$.input}}"}, "position_x": 400, "position_y": 200},
     {"temp_id": "step_log", "name": "結果をログ", "type": "log", "description": "処理結果をログに出力", "config": {"message": "Processing complete", "level": "info"}, "position_x": 400, "position_y": 350}
   ],

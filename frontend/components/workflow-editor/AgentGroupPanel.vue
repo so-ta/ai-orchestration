@@ -111,7 +111,7 @@ watch(localConfig, () => {
             type="text"
             placeholder="e.g., claude-sonnet-4-20250514"
             :disabled="readonly"
-          />
+          >
         </div>
       </div>
 
@@ -143,7 +143,7 @@ watch(localConfig, () => {
               min="1"
               max="50"
               :disabled="readonly"
-            />
+            >
             <span class="slider-value">{{ localConfig.max_iterations }}</span>
           </div>
         </div>
@@ -159,7 +159,7 @@ watch(localConfig, () => {
               max="2"
               step="0.1"
               :disabled="readonly"
-            />
+            >
             <span class="slider-value">{{ localConfig.temperature?.toFixed(1) }}</span>
           </div>
         </div>
@@ -192,7 +192,7 @@ watch(localConfig, () => {
               v-model="localConfig.enable_memory"
               type="checkbox"
               :disabled="readonly"
-            />
+            >
             Enable Conversation Memory
           </label>
         </div>
@@ -207,7 +207,7 @@ watch(localConfig, () => {
               min="1"
               max="100"
               :disabled="readonly"
-            />
+            >
             <span class="slider-value">{{ localConfig.memory_window }} messages</span>
           </div>
         </div>

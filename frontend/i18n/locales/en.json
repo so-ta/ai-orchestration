@@ -356,7 +356,8 @@
       "flow": "Flow",
       "trigger": "Trigger",
       "copilot": "Copilot",
-      "run": "Run"
+      "run": "Run",
+      "test": "Test"
     },
     "templatePreview": {
       "title": "Template Variables",
@@ -549,6 +550,41 @@
       "scrollToBottom": "Scroll to latest"
     }
   },
+  "welcomeDialog": {
+    "title": "What do you want to automate?",
+    "subtitle": "Describe the workflow you want to build. AI will create it for you.",
+    "placeholder": "e.g., Send a weather forecast to Slack every morning at 9am",
+    "createWithCopilot": "Create with Copilot",
+    "examplesLabel": "Examples",
+    "examples": {
+      "slackNotification": "Notify Slack when GitHub Issues are created",
+      "apiToNotion": "Periodically fetch API data and save to Notion",
+      "githubToSlack": "Notify team when GitHub PRs are merged"
+    },
+    "or": "or",
+    "skipToCanvas": "Start with empty canvas"
+  },
+  "publishChecklist": {
+    "title": "Pre-publish Checklist",
+    "subtitle": "Please verify the following before publishing your workflow.",
+    "checking": "Checking...",
+    "allPassed": "All checks passed",
+    "hasWarnings": "{count} warning(s)",
+    "hasErrors": "{count} error(s)",
+    "checks": {
+      "hasStartBlock": "Start block exists",
+      "hasStartBlockError": "Start block is required",
+      "allConnected": "All blocks are connected",
+      "allConnectedWarning": "{count} block(s) are not connected",
+      "noLoop": "No infinite loop detected",
+      "noLoopError": "Infinite loop detected",
+      "credentialsSet": "Required credentials are set",
+      "credentialsSetWarning": "{count} credential(s) not configured"
+    },
+    "fixIssues": "Fix Issues",
+    "ignoreAndPublish": "Ignore warnings and publish",
+    "cancel": "Cancel"
+  },
   "copilot": {
     "thinking": "Thinking...",
     "chatWelcome": "Ask Copilot anything",
@@ -624,7 +660,17 @@
       "deleteFailed": "Failed to delete session",
       "agentFailed": "Agent execution failed",
       "networkError": "Failed to connect to server. Please check your network connection.",
-      "timeout": "Request timed out. Please try again."
+      "timeout": "Request timed out. Please try again.",
+      "triggerConfigFailed": "Failed to configure trigger",
+      "credentialLinkFailed": "Failed to link credential",
+      "testFailed": "Test execution failed",
+      "publishFailed": "Failed to publish workflow"
+    },
+    "credential": {
+      "linked": "Credential linked successfully"
+    },
+    "publish": {
+      "success": "Workflow published successfully"
     },
     "agent": {
       "mode": "Agent Mode",
@@ -644,6 +690,35 @@
       "calling": "Running",
       "success": "Success",
       "error": "Error"
+    },
+    "tools": {
+      "createStep": "Create Step",
+      "updateStep": "Update Step",
+      "deleteStep": "Delete Step",
+      "createEdge": "Create Edge",
+      "deleteEdge": "Delete Edge",
+      "createWorkflowStructure": "Create Workflow Structure",
+      "getWorkflow": "Get Workflow",
+      "listSteps": "List Steps",
+      "getStep": "Get Step Details",
+      "listBlocks": "List Blocks",
+      "getBlock": "Get Block Details",
+      "completed": "Completed"
+    },
+    "toolArgs": {
+      "category": "Category: {category}",
+      "stepsAndConnections": "{steps} steps, {connections} connections"
+    },
+    "toolResults": {
+      "createComplete": "Created",
+      "createCompleteWithId": "Created: {id}...",
+      "updateComplete": "Updated",
+      "deleteComplete": "Deleted",
+      "connectComplete": "Connected",
+      "workflowInfo": "\"{name}\" ({stepCount} steps)",
+      "stepsCount": "{count} steps",
+      "blocksCount": "{count} blocks",
+      "structureCreated": "{steps} steps, {edges} connections created"
     },
     "preview": {
       "title": "Change Preview",
@@ -674,6 +749,68 @@
       "newStep": "New Step",
       "connection": "Connection",
       "willBeDeleted": "Will be deleted"
+    },
+    "progress": {
+      "title": "Workflow Preparation Status",
+      "items": {
+        "creation": "Create workflow structure",
+        "trigger": "Configure trigger",
+        "credentials": "Set up credentials",
+        "test": "Run test",
+        "publish": "Publish"
+      },
+      "configure": "Configure",
+      "runTest": "Run Test",
+      "publishNow": "Publish Now",
+      "later": "Later",
+      "completed": "Completed",
+      "inProgress": "In Progress",
+      "allComplete": "All Complete"
+    },
+    "action": {
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "apply": "Apply Settings",
+      "skip": "Skip",
+      "runTest": "Run Test",
+      "publishWorkflow": "Publish",
+      "keepEditing": "Keep Editing"
+    },
+    "trigger": {
+      "title": "Select trigger type",
+      "schedule": "Schedule",
+      "scheduleDesc": "Run at a specific time each day",
+      "webhook": "Webhook",
+      "webhookDesc": "Triggered by HTTP requests",
+      "manual": "Manual",
+      "manualDesc": "Start workflow manually",
+      "configured": "Trigger configured: {type}",
+      "webhookCreated": "Webhook URL created",
+      "scheduleSet": "Schedule set: {schedule}",
+      "executionTime": "Execution Time",
+      "timezone": "Timezone"
+    },
+    "oauth": {
+      "title": "Connect {service}",
+      "connecting": "Connecting...",
+      "connectWith": "Connect with {service}",
+      "or": "or",
+      "selectExisting": "Select from saved credentials",
+      "connected": "Connected to {service}",
+      "failed": "Connection failed"
+    },
+    "test": {
+      "title": "Test Execution",
+      "success": "Success",
+      "failed": "Failed",
+      "running": "Running...",
+      "summary": "Total: {duration}s",
+      "viewDetails": "View Details",
+      "retest": "Retest",
+      "passed": "OK",
+      "failedMessage": "Error",
+      "confirmRun": "Run test execution?",
+      "confirmPublish": "Publish this workflow?"
     }
   },
   "stepConfig": {
@@ -2108,7 +2245,8 @@
       "syncDirection": "Sync Direction",
       "autoSync": "Auto Sync",
       "autoSyncHint": "Automatically sync with Git when changes are made",
-      "credentials": "Credentials"
+      "credentials": "Credentials",
+      "noCredentials": "None (public repository)"
     },
     "direction": {
       "push": "Push (Local → Git)",
@@ -2120,7 +2258,9 @@
       "configFailed": "Failed to configure Git sync",
       "syncSuccess": "Sync completed",
       "syncFailed": "Sync failed",
-      "deleted": "Git sync disabled"
+      "deleted": "Git sync disabled",
+      "deleteFailed": "Failed to delete",
+      "repositoryRequired": "Repository URL is required"
     }
   },
   "blockPackages": {
@@ -2156,6 +2296,38 @@
       "publishFailed": "Failed to publish package",
       "deprecateSuccess": "Package deprecated",
       "deleteSuccess": "Package deleted"
+    }
+  },
+  "test": {
+    "tabTitle": "Test",
+    "input": "Input Data",
+    "execute": "Execute",
+    "result": "Result",
+    "executeThisStepOnly": "Execute This Step Only",
+    "executeFromThisStep": "Execute From This Step",
+    "executing": "Executing...",
+    "success": "Success",
+    "failed": "Failed",
+    "noResult": "No result yet",
+    "noOutput": "No output data",
+    "moreRows": "Show more...",
+    "selectStep": "Select a step to test",
+    "triggerBlockNote": "Trigger blocks cannot be tested directly. Test them by running the workflow.",
+    "usePinned": "Use pinned data",
+    "pinnedUsed": "Pinned data set as input",
+    "viewMode": {
+      "table": "Table",
+      "json": "JSON",
+      "schema": "Schema"
+    },
+    "pinData": {
+      "title": "Pinned Data",
+      "pin": "Pin Output",
+      "unpin": "Unpin",
+      "edit": "Edit",
+      "editTitle": "Edit Pinned Data",
+      "pinned": "Output pinned",
+      "unpinned": "Output unpinned"
     }
   }
 }

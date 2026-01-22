@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
@@ -233,6 +234,13 @@ func (u *EdgeUsecase) validateSourcePort(ctx context.Context, sourcePort string,
 		return nil
 	}
 
+	// Special case: "error" port is valid if enable_error_port is true in step config
+	if sourcePort == "error" && step != nil && step.Config != nil {
+		if u.getConfigBool(step.Config, "enable_error_port") {
+			return nil
+		}
+	}
+
 	var blockDef *domain.BlockDefinition
 	var err error
 
@@ -320,4 +328,19 @@ func (u *EdgeUsecase) getBlockDefinitionForStep(ctx context.Context, step *domai
 func (u *EdgeUsecase) getBlockDefinitionForGroup(ctx context.Context, group *domain.BlockGroup) (*domain.BlockDefinition, error) {
 	// Use group type as slug
 	return u.blockDefinitionRepo.GetBySlug(ctx, nil, string(group.Type))
+}
+
+// getConfigBool extracts a boolean value from a JSON config
+func (u *EdgeUsecase) getConfigBool(config json.RawMessage, key string) bool {
+	if config == nil {
+		return false
+	}
+	var configMap map[string]interface{}
+	if err := json.Unmarshal(config, &configMap); err != nil {
+		return false
+	}
+	if val, ok := configMap[key].(bool); ok {
+		return val
+	}
+	return false
 }

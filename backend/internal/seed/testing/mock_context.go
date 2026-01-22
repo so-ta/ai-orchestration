@@ -272,9 +272,10 @@ func (m *MockBlocksService) GetWithSchema(slug string) (map[string]interface{}, 
 
 // MockWorkflowsService mocks the Workflows service
 type MockWorkflowsService struct {
-	GetResponse  map[string]interface{}
-	ListResponse []map[string]interface{}
-	Error        error
+	GetResponse          map[string]interface{}
+	ListResponse         []map[string]interface{}
+	GetWithStartResponse map[string]interface{}
+	Error                error
 }
 
 func (m *MockWorkflowsService) Get(workflowID string) (map[string]interface{}, error) {
@@ -300,6 +301,19 @@ func (m *MockWorkflowsService) List() ([]map[string]interface{}, error) {
 	return []map[string]interface{}{
 		{"id": "wf-1", "name": "Workflow 1"},
 		{"id": "wf-2", "name": "Workflow 2"},
+	}, nil
+}
+
+func (m *MockWorkflowsService) GetWithStart(workflowID string) (map[string]interface{}, error) {
+	if m.Error != nil {
+		return nil, m.Error
+	}
+	if m.GetWithStartResponse != nil {
+		return m.GetWithStartResponse, nil
+	}
+	return map[string]interface{}{
+		"id":            workflowID,
+		"start_step_id": "mock-start-step-id",
 	}, nil
 }
 

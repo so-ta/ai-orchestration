@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onUnmounted, toRef } from 'vue'
 import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
+import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
+import VariablePicker from '../variable-picker/VariablePicker.vue'
 
 // DOMPurify is loaded dynamically for SSR compatibility
 const purify = ref<typeof import('dompurify')['default'] | null>(null)
@@ -34,6 +36,27 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: string): void
   (e: 'blur'): void
 }>()
+
+const modelValueRef = toRef(props, 'modelValue')
+
+const {
+  pickerVisible,
+  pickerPosition,
+  isDragOver,
+  availableVariables,
+  handleInput: handleVariableInput,
+  handleKeydown: handleVariableKeydown,
+  insertVariable,
+  handleDragEnter,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop
+} = useVariableInsertion({
+  modelValue: modelValueRef,
+  emit: (value) => emit('update:modelValue', value),
+  inputRef: textareaRef,
+  fieldId: props.name
+})
 
 // Determine language from property or override
 const language = computed(() => {
@@ -111,7 +134,13 @@ watch(
 function handleInput(event: Event) {
   const target = event.target as HTMLTextAreaElement
   emit('update:modelValue', target.value)
+  handleVariableInput(event)
   nextTick(() => calculateHeight())
+}
+
+// Handle keydown
+function handleKeydown(event: KeyboardEvent) {
+  handleVariableKeydown(event)
 }
 
 // Handle blur
@@ -473,6 +502,7 @@ const highlightedCode = computed(() => {
         <!-- eslint-disable vue/html-self-closing -->
         <div class="code-area">
           <!-- Highlighted code display (read-only visual layer) -->
+          <!-- eslint-disable-next-line vue/no-v-html -- highlight.jsの安全な出力 -->
           <pre class="code-highlight" v-html="highlightedCode"></pre>
           <!-- Actual textarea for input -->
           <textarea
@@ -481,11 +511,17 @@ const highlightedCode = computed(() => {
             :value="modelValue || ''"
             :rows="rows"
             :disabled="disabled"
-            :class="{ 'has-error': !!error }"
+            :class="{ 'has-error': !!error, 'drag-over': isDragOver }"
             class="code-input"
             spellcheck="false"
+            autocomplete="off"
             @input="handleInput"
+            @keydown="handleKeydown"
             @blur="handleBlur"
+            @dragenter="handleDragEnter"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop"
           ></textarea>
         </div>
         <!-- eslint-enable vue/html-self-closing -->
@@ -509,6 +545,14 @@ const highlightedCode = computed(() => {
     <p v-if="error" class="code-widget-error">
       {{ error }}
     </p>
+
+    <VariablePicker
+      v-if="availableVariables.length > 0"
+      v-model="pickerVisible"
+      :variables="availableVariables"
+      :position="pickerPosition"
+      @select="insertVariable"
+    />
   </div>
 </template>
 
@@ -615,6 +659,11 @@ const highlightedCode = computed(() => {
 
 .code-input.has-error {
   border-color: var(--color-error);
+}
+
+.code-input.drag-over {
+  background: rgba(59, 130, 246, 0.1);
+  caret-color: var(--color-primary);
 }
 
 .code-input:disabled {

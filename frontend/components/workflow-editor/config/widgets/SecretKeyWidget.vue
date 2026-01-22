@@ -151,7 +151,7 @@ onMounted(() => {
         placeholder="シークレットキー名を入力"
         @input="handleCustomInput"
         @blur="handleBlur"
-      />
+      >
       <button
         type="button"
         class="back-button"

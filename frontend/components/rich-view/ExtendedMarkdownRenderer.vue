@@ -84,11 +84,13 @@ function escapeHtml(str: string): string {
   <div class="extended-markdown">
     <template v-for="(block, index) in parsedBlocks" :key="index">
       <!-- Regular HTML content -->
+      <!-- eslint-disable vue/no-v-html -- sanitize済みMarkdownのレンダリング -->
       <div
         v-if="block.type === 'html'"
         class="markdown-content"
         v-html="block.content"
       />
+      <!-- eslint-enable vue/no-v-html -->
 
       <!-- Chart block -->
       <ChartBlock

@@ -1,34 +1,64 @@
 <script setup lang="ts">
-import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema';
+import { ref, computed, toRef } from 'vue'
+import type { JSONSchemaProperty, FieldOverride } from '../types/config-schema'
+import { useVariableInsertion } from '../variable-picker/useVariableInsertion'
+import VariablePicker from '../variable-picker/VariablePicker.vue'
 
 const props = defineProps<{
-  name: string;
-  property: JSONSchemaProperty;
-  modelValue: string | undefined;
-  override?: FieldOverride;
-  error?: string;
-  disabled?: boolean;
-  required?: boolean;
-}>();
+  name: string
+  property: JSONSchemaProperty
+  modelValue: string | undefined
+  override?: FieldOverride
+  error?: string
+  disabled?: boolean
+  required?: boolean
+}>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string): void;
-  (e: 'blur'): void;
-}>();
+  (e: 'update:modelValue', value: string): void
+  (e: 'blur'): void
+}>()
 
-const rows = computed(() => props.override?.rows || 4);
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const modelValueRef = toRef(props, 'modelValue')
+
+const {
+  pickerVisible,
+  pickerPosition,
+  isDragOver,
+  availableVariables,
+  handleInput: handleVariableInput,
+  handleKeydown: handleVariableKeydown,
+  insertVariable,
+  handleDragEnter,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop
+} = useVariableInsertion({
+  modelValue: modelValueRef,
+  emit: (value) => emit('update:modelValue', value),
+  inputRef: textareaRef,
+  fieldId: props.name
+})
+
+const rows = computed(() => props.override?.rows || 4)
 
 const placeholder = computed(() => {
-  return props.override?.placeholder || props.property.description || '';
-});
+  return props.override?.placeholder || props.property.description || ''
+})
 
 function handleInput(event: Event) {
-  const target = event.target as HTMLTextAreaElement;
-  emit('update:modelValue', target.value);
+  const target = event.target as HTMLTextAreaElement
+  emit('update:modelValue', target.value)
+  handleVariableInput(event)
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  handleVariableKeydown(event)
 }
 
 function handleBlur() {
-  emit('blur');
+  emit('blur')
 }
 </script>
 
@@ -41,14 +71,21 @@ function handleBlur() {
 
     <textarea
       :id="name"
+      ref="textareaRef"
       :value="modelValue ?? (property.default as string) ?? ''"
       :placeholder="placeholder"
       :rows="rows"
       :maxlength="property.maxLength"
       :disabled="disabled"
-      :class="['field-textarea', { 'has-error': error }]"
+      autocomplete="off"
+      :class="['field-textarea', { 'has-error': error, 'drag-over': isDragOver }]"
       @input="handleInput"
+      @keydown="handleKeydown"
       @blur="handleBlur"
+      @dragenter="handleDragEnter"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
     />
 
     <div class="field-footer">
@@ -62,6 +99,14 @@ function handleBlur() {
         {{ (modelValue || '').length }} / {{ property.maxLength }}
       </span>
     </div>
+
+    <VariablePicker
+      v-if="availableVariables.length > 0"
+      v-model="pickerVisible"
+      :variables="availableVariables"
+      :position="pickerPosition"
+      @select="insertVariable"
+    />
   </div>
 </template>
 
@@ -109,6 +154,11 @@ function handleBlur() {
 
 .field-textarea.has-error {
   border-color: var(--color-error, #ef4444);
+}
+
+.field-textarea.drag-over {
+  border-color: var(--color-primary, #3b82f6);
+  background: var(--color-primary-alpha, rgba(59, 130, 246, 0.05));
 }
 
 .field-footer {

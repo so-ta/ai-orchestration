@@ -9,6 +9,8 @@
  * - 変数の参照方法ガイド表示
  */
 
+import { useVariableEditor, type VariableEntry } from './env-variables/composables/useVariableEditor'
+
 const { t } = useI18n()
 const toast = useToast()
 
@@ -30,6 +32,7 @@ const activeTab = ref<TabType>('organization')
 // Composables
 const tenantVars = useTenantVariables()
 const userVars = useUserVariables()
+const variableEditor = useVariableEditor()
 
 // Loading state
 const loading = computed(() => tenantVars.loading.value || userVars.loading.value)
@@ -42,17 +45,6 @@ const localProjectVariables = ref<Record<string, unknown>>({})
 
 // Editor mode
 const editorMode = ref<'form' | 'json'>('form')
-
-// Variable entries for form mode
-interface VariableEntry {
-  key: string
-  value: string
-  type: 'string' | 'number' | 'boolean' | 'json'
-}
-
-const entries = ref<VariableEntry[]>([])
-const jsonContent = ref('')
-const jsonError = ref<string | null>(null)
 
 // Get current variables based on active tab
 const currentVariables = computed((): Record<string, unknown> => {
@@ -78,111 +70,32 @@ watch(() => props.show, async (show) => {
 
 // Load all variables
 async function loadAllVariables() {
-  // Load each scope independently to handle partial failures gracefully
   const results = await Promise.allSettled([
     tenantVars.fetchVariables(),
     userVars.fetchVariables(),
   ])
 
-  // Check for any failures and log them, but continue with available data
   const hasErrors = results.some(r => r.status === 'rejected')
   if (hasErrors) {
     console.warn('Some variables failed to load:', results)
   }
 
-  // Use loaded values or empty objects for failed requests
   orgVariables.value = { ...tenantVars.variables.value }
   personalVariables.value = { ...userVars.variables.value }
   localProjectVariables.value = { ...(props.projectVariables || {}) }
-  initEntriesFromCurrentTab()
-}
-
-// Initialize entries from current tab
-function initEntriesFromCurrentTab() {
-  const vars = currentVariables.value
-  entries.value = Object.entries(vars).map(([key, value]) => ({
-    key,
-    value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-    type: detectType(value),
-  }))
-  jsonContent.value = JSON.stringify(vars, null, 2)
-  jsonError.value = null
+  variableEditor.initFromVariables(currentVariables.value)
 }
 
 // Watch tab changes
 watch(activeTab, () => {
-  initEntriesFromCurrentTab()
+  variableEditor.initFromVariables(currentVariables.value)
 })
-
-// Detect value type
-function detectType(value: unknown): VariableEntry['type'] {
-  if (typeof value === 'boolean') return 'boolean'
-  if (typeof value === 'number') return 'number'
-  if (typeof value === 'object') return 'json'
-  return 'string'
-}
-
-// Convert entry to proper value
-function convertValue(entry: VariableEntry): unknown {
-  switch (entry.type) {
-    case 'number':
-      return parseFloat(entry.value) || 0
-    case 'boolean':
-      return entry.value === 'true'
-    case 'json':
-      try {
-        return JSON.parse(entry.value)
-      } catch {
-        return entry.value
-      }
-    default:
-      return entry.value
-  }
-}
-
-// Build variables object from entries
-function buildVariablesFromEntries(): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  for (const entry of entries.value) {
-    if (entry.key.trim()) {
-      result[entry.key.trim()] = convertValue(entry)
-    }
-  }
-  return result
-}
-
-// Add new entry
-function addEntry() {
-  entries.value.push({
-    key: '',
-    value: '',
-    type: 'string',
-  })
-}
-
-// Remove entry
-function removeEntry(index: number) {
-  entries.value.splice(index, 1)
-  updateLocalState()
-}
-
-// Update entry
-function updateEntry(index: number, field: keyof VariableEntry, value: string) {
-  entries.value[index][field] = value as never
-  updateLocalState()
-}
 
 // Update local state based on current tab
 function updateLocalState() {
   const vars = editorMode.value === 'form'
-    ? buildVariablesFromEntries()
-    : (() => {
-        try {
-          return JSON.parse(jsonContent.value)
-        } catch {
-          return currentVariables.value
-        }
-      })()
+    ? variableEditor.buildVariablesFromEntries()
+    : (variableEditor.parseJsonContent() ?? currentVariables.value)
 
   switch (activeTab.value) {
     case 'organization':
@@ -197,20 +110,28 @@ function updateLocalState() {
   }
 }
 
+// Handle entry operations with local state update
+function handleRemoveEntry(index: number) {
+  variableEditor.removeEntry(index)
+  updateLocalState()
+}
+
+function handleUpdateEntry(index: number, field: keyof VariableEntry, value: string) {
+  variableEditor.updateEntry(index, field, value)
+  updateLocalState()
+}
+
+function handleJsonInput(e: Event) {
+  variableEditor.handleJsonInput((e.target as HTMLTextAreaElement).value)
+  updateLocalState()
+}
+
 // Switch editor mode
 function switchMode(mode: 'form' | 'json') {
   if (mode === 'json' && editorMode.value === 'form') {
-    jsonContent.value = JSON.stringify(buildVariablesFromEntries(), null, 2)
+    variableEditor.syncEntriesToJson()
   } else if (mode === 'form' && editorMode.value === 'json') {
-    try {
-      const parsed = JSON.parse(jsonContent.value)
-      entries.value = Object.entries(parsed).map(([key, value]) => ({
-        key,
-        value: typeof value === 'object' ? JSON.stringify(value) : String(value),
-        type: detectType(value),
-      }))
-      jsonError.value = null
-    } catch {
+    if (!variableEditor.syncJsonToEntries()) {
       toast.error(t('variables.invalidJson'))
       return
     }
@@ -218,36 +139,20 @@ function switchMode(mode: 'form' | 'json') {
   editorMode.value = mode
 }
 
-// Handle JSON input
-function handleJsonInput(e: Event) {
-  jsonContent.value = (e.target as HTMLTextAreaElement).value
-  try {
-    JSON.parse(jsonContent.value)
-    jsonError.value = null
-    updateLocalState()
-  } catch (err) {
-    jsonError.value = err instanceof Error ? err.message : 'Invalid JSON'
-  }
-}
-
 // Save all changes
 async function save() {
   saving.value = true
   try {
-    // Ensure local state is up to date
     updateLocalState()
 
-    // Save organization variables
     if (JSON.stringify(orgVariables.value) !== JSON.stringify(tenantVars.variables.value)) {
       await tenantVars.updateVariables(orgVariables.value)
     }
 
-    // Save personal variables
     if (JSON.stringify(personalVariables.value) !== JSON.stringify(userVars.variables.value)) {
       await userVars.updateVariables(personalVariables.value)
     }
 
-    // Emit project variables update
     if (JSON.stringify(localProjectVariables.value) !== JSON.stringify(props.projectVariables || {})) {
       emit('update:project-variables', localProjectVariables.value)
     }
@@ -280,12 +185,10 @@ const currentTabPrefix = computed(() => {
   return tab?.prefix || ''
 })
 
-// Example syntax for current tab
 const currentExample = computed(() => {
   return `{{${currentTabPrefix.value}.${t('variables.exampleKey')}}}`
 })
 
-// Example syntax for each scope
 function getScopeExample(prefix: string): string {
   return `{{${prefix}.KEY}}`
 }
@@ -348,7 +251,7 @@ function getScopeExample(prefix: string): string {
         <!-- Form Mode -->
         <div v-if="editorMode === 'form'" class="form-editor">
           <!-- Empty state -->
-          <div v-if="entries.length === 0" class="empty-state">
+          <div v-if="variableEditor.entries.value.length === 0" class="empty-state">
             <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
               <line x1="3" y1="9" x2="21" y2="9" />
@@ -360,18 +263,18 @@ function getScopeExample(prefix: string): string {
 
           <!-- Entries list -->
           <div v-else class="entries-list">
-            <div v-for="(entry, index) in entries" :key="index" class="entry-row">
+            <div v-for="(entry, index) in variableEditor.entries.value" :key="index" class="entry-row">
               <input
                 :value="entry.key"
                 type="text"
                 class="entry-key"
                 :placeholder="t('variables.keyPlaceholder')"
-                @input="updateEntry(index, 'key', ($event.target as HTMLInputElement).value)"
+                @input="handleUpdateEntry(index, 'key', ($event.target as HTMLInputElement).value)"
               >
               <select
                 :value="entry.type"
                 class="entry-type"
-                @change="updateEntry(index, 'type', ($event.target as HTMLSelectElement).value)"
+                @change="handleUpdateEntry(index, 'type', ($event.target as HTMLSelectElement).value)"
               >
                 <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
@@ -381,7 +284,7 @@ function getScopeExample(prefix: string): string {
                 <select
                   :value="entry.value"
                   class="entry-value"
-                  @change="updateEntry(index, 'value', ($event.target as HTMLSelectElement).value)"
+                  @change="handleUpdateEntry(index, 'value', ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="true">true</option>
                   <option value="false">false</option>
@@ -393,7 +296,7 @@ function getScopeExample(prefix: string): string {
                   class="entry-value entry-value-json"
                   :placeholder="t('variables.jsonPlaceholder')"
                   rows="2"
-                  @input="updateEntry(index, 'value', ($event.target as HTMLTextAreaElement).value)"
+                  @input="handleUpdateEntry(index, 'value', ($event.target as HTMLTextAreaElement).value)"
                 />
               </template>
               <template v-else>
@@ -402,14 +305,14 @@ function getScopeExample(prefix: string): string {
                   :type="entry.type === 'number' ? 'number' : 'text'"
                   class="entry-value"
                   :placeholder="t('variables.valuePlaceholder')"
-                  @input="updateEntry(index, 'value', ($event.target as HTMLInputElement).value)"
+                  @input="handleUpdateEntry(index, 'value', ($event.target as HTMLInputElement).value)"
                 >
               </template>
               <button
                 type="button"
                 class="btn-icon btn-danger"
                 :title="t('common.delete')"
-                @click="removeEntry(index)"
+                @click="handleRemoveEntry(index)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
@@ -423,7 +326,7 @@ function getScopeExample(prefix: string): string {
           <button
             type="button"
             class="btn-ghost add-btn"
-            @click="addEntry"
+            @click="variableEditor.addEntry"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
@@ -436,19 +339,19 @@ function getScopeExample(prefix: string): string {
         <!-- JSON Mode -->
         <div v-else class="json-editor">
           <textarea
-            :value="jsonContent"
+            :value="variableEditor.jsonContent.value"
             class="json-textarea"
             :placeholder="t('variables.jsonPlaceholder')"
             rows="12"
             @input="handleJsonInput"
           />
-          <div v-if="jsonError" class="json-error">
+          <div v-if="variableEditor.jsonError.value" class="json-error">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            {{ jsonError }}
+            {{ variableEditor.jsonError.value }}
           </div>
         </div>
 
