@@ -465,6 +465,8 @@ func (s *WorkflowsServiceImpl) Get(workflowID string) (map[string]interface{}, e
 
 // GetWithStart retrieves a workflow with start step ID (for internal use)
 // This is used to auto-connect trigger blocks to the existing start step
+// NOTE: Only returns a start_step_id if there's a true 'start' type step (system workflows)
+// User-created workflows use trigger types directly, so auto-connection should not apply
 func (s *WorkflowsServiceImpl) GetWithStart(workflowID string) (map[string]interface{}, error) {
 	wfID, err := uuid.Parse(workflowID)
 	if err != nil {
@@ -472,6 +474,8 @@ func (s *WorkflowsServiceImpl) GetWithStart(workflowID string) (map[string]inter
 	}
 
 	// Find the start step for this workflow
+	// Only look for true 'start' type steps (system workflows)
+	// Trigger types (manual_trigger, etc.) should NOT trigger auto-connection
 	startQuery := `
 		SELECT id FROM steps
 		WHERE project_id = $1 AND type = 'start'
@@ -1324,16 +1328,23 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 		return nil, fmt.Errorf("project_id, name, and type are required")
 	}
 
+	// Normalize trigger block types to "start" (consistent with usecase layer)
+	// Trigger blocks (manual_trigger, schedule_trigger, webhook_trigger) should have type "start"
+	originalType := stepType
+	if stepType == "manual_trigger" || stepType == "schedule_trigger" || stepType == "webhook_trigger" {
+		stepType = "start"
+	}
+
 	pID, err := uuid.Parse(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid project ID: %w", err)
 	}
 
-	// Merge with block defaults if available
-	config = s.mergeWithBlockDefaults(stepType, config)
+	// Merge with block defaults if available (use original type for block lookup)
+	config = s.mergeWithBlockDefaults(originalType, config)
 
 	// Validate required fields (log warnings only - don't block creation)
-	if warnings := s.validateRequiredFields(stepType, config); len(warnings) > 0 {
+	if warnings := s.validateRequiredFields(originalType, config); len(warnings) > 0 {
 		slog.Warn("Step config missing required fields",
 			"stepType", stepType,
 			"stepName", name,
@@ -1346,13 +1357,17 @@ func (s *StepsServiceImpl) Create(data map[string]interface{}) (map[string]inter
 		configJSON, _ = json.Marshal(config)
 	}
 
-	// Look up block_definition_id from slug if provided
+	// Look up block_definition_id from slug if provided, or use original type
 	var blockDefID *uuid.UUID
-	if blockSlug != "" {
+	lookupSlug := blockSlug
+	if lookupSlug == "" {
+		lookupSlug = originalType
+	}
+	if lookupSlug != "" {
 		var bdID uuid.UUID
 		err := s.pool.QueryRow(s.ctx,
 			"SELECT id FROM block_definitions WHERE slug = $1 AND (tenant_id = $2 OR tenant_id IS NULL) LIMIT 1",
-			blockSlug, s.tenantID,
+			lookupSlug, s.tenantID,
 		).Scan(&bdID)
 		if err == nil {
 			blockDefID = &bdID
@@ -1712,6 +1727,40 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 		sourcePort = "output"
 	}
 
+	// Verify source step exists
+	var sourceExists bool
+	err = s.pool.QueryRow(s.ctx,
+		"SELECT EXISTS(SELECT 1 FROM steps WHERE id = $1 AND tenant_id = $2)",
+		ssID, s.tenantID,
+	).Scan(&sourceExists)
+	if err != nil {
+		return map[string]interface{}{
+			"error": fmt.Sprintf("failed to verify source step: %v", err),
+		}, nil
+	}
+	if !sourceExists {
+		return map[string]interface{}{
+			"error": fmt.Sprintf("source step not found: %s", sourceStepID),
+		}, nil
+	}
+
+	// Verify target step exists
+	var targetExists bool
+	err = s.pool.QueryRow(s.ctx,
+		"SELECT EXISTS(SELECT 1 FROM steps WHERE id = $1 AND tenant_id = $2)",
+		tsID, s.tenantID,
+	).Scan(&targetExists)
+	if err != nil {
+		return map[string]interface{}{
+			"error": fmt.Sprintf("failed to verify target step: %v", err),
+		}, nil
+	}
+	if !targetExists {
+		return map[string]interface{}{
+			"error": fmt.Sprintf("target step not found: %s", targetStepID),
+		}, nil
+	}
+
 	query := `
 		INSERT INTO edges (tenant_id, project_id, source_step_id, target_step_id, source_port)
 		VALUES ($1, $2, $3, $4, $5)
@@ -1721,6 +1770,14 @@ func (s *EdgesServiceImpl) Create(data map[string]interface{}) (map[string]inter
 	var id uuid.UUID
 	err = s.pool.QueryRow(s.ctx, query, s.tenantID, pID, ssID, tsID, sourcePort).Scan(&id)
 	if err != nil {
+		// Handle duplicate key errors gracefully (return in map, don't throw)
+		errStr := err.Error()
+		if strings.Contains(errStr, "duplicate key") || strings.Contains(errStr, "unique constraint") {
+			return map[string]interface{}{
+				"error":     "duplicate edge already exists",
+				"duplicate": true,
+			}, nil
+		}
 		return nil, fmt.Errorf("failed to create edge: %w", err)
 	}
 

@@ -35,7 +35,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 		SystemSlug:  "copilot",
 		Name:        "Copilot AI Assistant",
 		Description: "AI assistant for workflow building and platform guidance",
-		Version:     25,
+		Version:     37,
 		IsSystem:    true,
 		Steps: []SystemStepDefinition{
 			// ============================
@@ -387,17 +387,15 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionY:        340,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
-					"code": "if (!input.step_id) return { error: 'step_id is required' }; const updates = {}; if (input.name) updates.name = input.name; if (input.config) updates.config = input.config; if (input.position_x !== undefined) updates.position_x = input.position_x; if (input.position_y !== undefined) updates.position_y = input.position_y; const step = ctx.steps.update(input.step_id, updates); return step;",
-					"description": "Update an existing step's configuration or position",
+					"code": "if (!input.step_id) return { error: 'step_id is required' }; const updates = {}; if (input.name) updates.name = input.name; if (input.config) updates.config = input.config; const step = ctx.steps.update(input.step_id, updates); return step;",
+					"description": "Update an existing step's name or configuration",
 					"input_schema": {
 						"type": "object",
 						"required": ["step_id"],
 						"properties": {
 							"step_id": {"type": "string", "description": "The step's UUID"},
 							"name": {"type": "string", "description": "New name for the step"},
-							"config": {"type": "object", "description": "Updated configuration"},
-							"position_x": {"type": "integer", "description": "New X position"},
-							"position_y": {"type": "integer", "description": "New Y position"}
+							"config": {"type": "object", "description": "Updated configuration"}
 						}
 					}
 				}`),
@@ -422,6 +420,17 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				}`),
 			},
 
+			// Step Creation Tool (Single-step with automatic edge creation)
+			{
+				TempID:           "add_step",
+				Name:             "add_step",
+				Type:             "function",
+				PositionX:        300,
+				PositionY:        340,
+				BlockGroupTempID: "copilot_agent_group",
+				Config:           json.RawMessage(addStepToolConfig()),
+			},
+
 			// Edge Tools
 			{
 				TempID:           "delete_edge",
@@ -442,16 +451,15 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 					}
 				}`),
 			},
-
-			// Unified Workflow Structure Creation - Single API for steps + connections
+			// Edge Creation Tool (For special cases: merging, loops, additional connections)
 			{
-				TempID:           "create_workflow_structure",
-				Name:             "create_workflow_structure",
+				TempID:           "add_edge",
+				Name:             "add_edge",
 				Type:             "function",
 				PositionX:        620,
 				PositionY:        440,
 				BlockGroupTempID: "copilot_agent_group",
-				Config:           json.RawMessage(createWorkflowStructureToolConfig()),
+				Config:           json.RawMessage(addEdgeToolConfig()),
 			},
 
 			// Documentation Search (using RAG if available)
@@ -573,7 +581,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionY:        640,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
-					"code": "const wfId = ctx.targetProjectId; if (!wfId) return { error: 'No target project' }; const wf = ctx.workflows.get(wfId); if (!wf) return { error: 'Workflow not found' }; const steps = wf.steps || []; const startSteps = steps.filter(s => s.type === 'start'); const hasStart = startSteps.length > 0; const startStep = startSteps[0]; let triggerType = null; let triggerConfigured = false; if (startStep && startStep.trigger_type) { triggerType = startStep.trigger_type; triggerConfigured = startStep.trigger_type !== 'manual'; } const integrationSteps = steps.filter(s => ['slack', 'discord', 'github', 'notion', 'google-sheets', 'email'].includes(s.type)); const requiredCredentials = integrationSteps.map(s => ({ stepId: s.id, stepName: s.name, service: s.type, isConfigured: !!s.credential_id })); const unconfiguredCreds = requiredCredentials.filter(c => !c.isConfigured); let phase = 'creation'; if (steps.length > 1) phase = 'configuration'; if (triggerConfigured) phase = 'setup'; if (unconfiguredCreds.length === 0 && triggerConfigured) phase = 'validation'; if (wf.status === 'published') phase = 'deploy'; return { workflowId: wfId, name: wf.name, status: wf.status, currentPhase: phase, stepCount: steps.length, hasTrigger: hasStart, triggerType: triggerType, triggerConfigured: triggerConfigured, requiredCredentials: requiredCredentials, unconfiguredCredentialsCount: unconfiguredCreds.length, isPublished: wf.status === 'published', canPublish: steps.length > 0 && hasStart };",
+					"code": "const wfId = ctx.targetProjectId; if (!wfId) return { error: 'No target project' }; const wf = ctx.workflows.get(wfId); if (!wf) return { error: 'Workflow not found' }; const steps = wf.steps || []; const startSteps = steps.filter(s => s.type === 'start'); const hasStart = startSteps.length > 0; const startStep = startSteps[0]; let triggerType = null; let triggerConfigured = false; if (startStep && startStep.trigger_type) { triggerType = startStep.trigger_type; triggerConfigured = startStep.trigger_type !== 'manual'; } const integrationSteps = steps.filter(s => ['slack', 'discord', 'github', 'notion', 'gsheets_read', 'email'].includes(s.type)); const requiredCredentials = integrationSteps.map(s => ({ stepId: s.id, stepName: s.name, service: s.type, isConfigured: !!s.credential_id })); const unconfiguredCreds = requiredCredentials.filter(c => !c.isConfigured); let phase = 'creation'; if (steps.length > 1) phase = 'configuration'; if (triggerConfigured) phase = 'setup'; if (unconfiguredCreds.length === 0 && triggerConfigured) phase = 'validation'; if (wf.status === 'published') phase = 'deploy'; return { workflowId: wfId, name: wf.name, status: wf.status, currentPhase: phase, stepCount: steps.length, hasTrigger: hasStart, triggerType: triggerType, triggerConfigured: triggerConfigured, requiredCredentials: requiredCredentials, unconfiguredCredentialsCount: unconfiguredCreds.length, isPublished: wf.status === 'published', canPublish: steps.length > 0 && hasStart };",
 					"description": "Get current workflow status including phase, trigger configuration, and required credentials. Use this to track progress and determine next steps.",
 					"input_schema": {
 						"type": "object",
@@ -615,7 +623,7 @@ func CopilotWorkflow() *SystemWorkflowDefinition {
 				PositionY:        640,
 				BlockGroupTempID: "copilot_agent_group",
 				Config: json.RawMessage(`{
-					"code": "const wfId = ctx.targetProjectId; if (!wfId) return { error: 'No target project' }; const wf = ctx.workflows.get(wfId); if (!wf) return { error: 'Workflow not found' }; const steps = wf.steps || []; const integrationTypes = ['slack', 'discord', 'github', 'notion', 'google-sheets', 'email', 'openai', 'anthropic']; const integrationSteps = steps.filter(s => integrationTypes.includes(s.type) || (s.config && s.config.requires_credential)); const credentials = integrationSteps.map(s => ({ stepId: s.id, stepName: s.name, service: s.type, serviceName: s.type.charAt(0).toUpperCase() + s.type.slice(1), isConfigured: !!s.credential_id, credentialId: s.credential_id || null })); const configured = credentials.filter(c => c.isConfigured); const unconfigured = credentials.filter(c => !c.isConfigured); return { total: credentials.length, configured: configured.length, unconfigured: unconfigured.length, credentials: credentials };",
+					"code": "const wfId = ctx.targetProjectId; if (!wfId) return { error: 'No target project' }; const wf = ctx.workflows.get(wfId); if (!wf) return { error: 'Workflow not found' }; const steps = wf.steps || []; const integrationTypes = ['slack', 'discord', 'github', 'notion', 'gsheets_read', 'email', 'openai', 'anthropic']; const integrationSteps = steps.filter(s => integrationTypes.includes(s.type) || (s.config && s.config.requires_credential)); const credentials = integrationSteps.map(s => ({ stepId: s.id, stepName: s.name, service: s.type, serviceName: s.type.charAt(0).toUpperCase() + s.type.slice(1), isConfigured: !!s.credential_id, credentialId: s.credential_id || null })); const configured = credentials.filter(c => c.isConfigured); const unconfigured = credentials.filter(c => !c.isConfigured); return { total: credentials.length, configured: configured.length, unconfigured: unconfigured.length, credentials: credentials };",
 					"description": "List all credentials required by the workflow and their configuration status.",
 					"input_schema": {
 						"type": "object",
@@ -798,7 +806,7 @@ func copilotAgentGroupConfig() string {
 	config := map[string]interface{}{
 		"provider":       "anthropic",
 		"model":          "claude-3-5-haiku-20241022",
-		"max_iterations": 15,
+		"max_iterations": 50, // Increased for complex workflow generation (each tool call is 1 iteration)
 		"temperature":    0.7,
 		"enable_memory":  true,
 		"memory_window":  30,
@@ -831,8 +839,9 @@ Use these to optimize your response strategy.
 ## Intent-Based Behavior
 
 **When intent = "create"**:
-→ Immediately use create_workflow_structure with detected_blocks
+→ Use add_step one step at a time with detected_blocks
 → Call get_block_schema first to ensure proper config
+→ Use 'from' parameter to automatically create edges
 
 **When intent = "explain"**:
 → Use search_documentation and get_block_schema
@@ -857,10 +866,10 @@ Use these to optimize your response strategy.
 ## When to Use Tools vs Text
 
 USE TOOLS when the user:
-- Asks to add, create, update, or delete anything → Use create_workflow_structure, update_step, delete_step, delete_edge
+- Asks to add, create, update, or delete anything → Use add_step, update_step, delete_step, delete_edge
 - Asks to see or list anything → Use list_blocks, list_workflows, get_workflow
 - Asks about a specific block or feature → Use get_block_schema, search_documentation
-- Asks to build a workflow → Use create_workflow_structure (single API call for steps and connections)
+- Asks to build a workflow → Use add_step repeatedly (one step at a time)
 
 RESPOND WITH TEXT ONLY when:
 - Explaining what you just did (after tool calls complete)
@@ -871,18 +880,33 @@ RESPOND WITH TEXT ONLY when:
 
 **NEVER call list_workflows unless the user explicitly asks about workflows.**
 
-**IMPORTANT: When adding blocks, ALWAYS use create_workflow_structure. It works for both single and multiple steps.**
+**IMPORTANT: Use add_step for adding blocks. ALWAYS specify 'from' to connect to previous step.**
 
 **NOTE: All tools automatically operate on the current workflow. You do NOT need to specify project_id.**
 
-### Preset Blocks (use with create_workflow_structure)
+### CRITICAL: Multiple Workflow Requests
+
+**Copilot can only modify the CURRENT workflow.** If user requests multiple workflows:
+1. **Acknowledge**: "2つのワークフローが必要ですね。現在のワークフローで1つ目を作成します。2つ目は別のワークフローを作成してから設定してください。"
+2. **Focus on ONE**: Build the first/primary workflow only
+3. **Guide user**: After completion, tell them to create a new workflow for the second one
+
+### CRITICAL: Complex Workflow Requests
+
+When user describes a complex workflow with multiple steps:
+1. **Break it down**: Identify each distinct step/block needed
+2. **Clarify unknowns**: If a service (like freee) is not a preset, use web_search FIRST
+3. **Build step by step**: Use add_step for each step, always specifying 'from' to connect
+
+### Preset Blocks (use with add_step)
 These services have preset blocks - use type directly:
-- **Trigger Blocks**: schedule-trigger, manual-trigger, webhook-trigger (REQUIRED as first step in new workflows)
-- **Integrations**: discord, slack, http, email, notion, github, google-sheets
-- **AI/LLM**: llm, llm-chat, llm-structured, agent
-- **Control Flow**: condition, switch, loop, map, filter
-- **Data Processing**: function, set-variables, template, json-path
-- **Utility**: log, delay
+- **Trigger Blocks**: schedule_trigger, manual_trigger, webhook_trigger (REQUIRED as first step in new workflows)
+- **Integrations**: discord, slack, http, email_sendgrid, notion_query_db, notion_create_page, github_create_issue, github_add_comment, gsheets_read, gsheets_append, web_search
+- **AI/LLM**: llm, llm-json, llm-structured, agent-group
+- **RAG/Vector**: rag-query, vector-upsert, vector-search, embedding, doc-loader, text-splitter
+- **Control Flow**: condition, switch, foreach, while, map, filter
+- **Data Processing**: function, set-variables, code
+- **Utility**: log, wait
 
 ### External APIs (MUST use web_search BEFORE creating blocks)
 **CRITICAL: Before creating ANY block for a service NOT in the preset list, you MUST:**
@@ -905,12 +929,14 @@ You must use type="http" and configure it based on the API documentation.
 **Correct flow for "freeeで仕訳を取得":**
 1. **web_search("freee 会計API 仕訳 ドキュメント")** → Find developer.freee.co.jp
 2. **fetch_url("https://developer.freee.co.jp/docs/accounting/reference")** → Read API spec
-3. **create_workflow_structure** with single http step configured for freee API
+3. **add_step** with http type configured for freee API
 
 When user asks to ADD/CREATE a block (e.g., "Discordブロックを追加して"):
-→ IMMEDIATELY call create_workflow_structure with:
-  - steps: [{"temp_id": "discord", "name": "Discord通知", "type": "discord", "position": {"x": 300, "y": 200}}]
-  - connections: [] (or connect to existing step using its UUID)
+→ IMMEDIATELY call add_step with:
+  - name: "Discord通知"
+  - type: "discord"
+  - config: {channel_id: "...", message: "通知メッセージ"}
+  - from: "前のステップ名" (if connecting to existing step)
 → Do NOT call list_blocks first - you already know common block slugs
 
 When user asks to SEE/LIST blocks:
@@ -919,109 +945,127 @@ When user asks to SEE/LIST blocks:
 When user explicitly asks about workflows:
 → ONLY THEN call list_workflows
 
-## Building Workflows with create_workflow_structure
+## Building Workflows with add_step
 
-**ALWAYS use create_workflow_structure when creating multiple steps and connections.**
+**Use add_step to create steps one at a time. Edges are created automatically via the 'from' parameter.**
 
-This is the PREFERRED tool for building workflows because:
-- Single API call (faster, fewer errors)
-- Uses temp_id pattern for easy step referencing
+This is the PREFERRED approach for building workflows because:
+- Step-by-step building (easier to understand)
+- Automatic edge creation via 'from' parameter
+- Idempotent - same name returns existing step
+- No orphan step issues - edges are always created
 - Automatic port resolution for condition/switch blocks
-- Transactional: all-or-nothing (no partial failures)
-- Automatic project_id (no need to specify)
 
 ### IMPORTANT: Trigger Block Selection
 
 **Every new workflow MUST start with a trigger block.** Choose based on execution pattern:
-- **schedule-trigger**: For scheduled/periodic execution (e.g., "毎日", "毎週", "every hour")
-- **manual-trigger**: For user-initiated execution (e.g., "手動で実行", "ボタンで実行")
-- **webhook-trigger**: For external API triggers (e.g., "Webhookで", "外部から呼び出し")
+- **schedule_trigger**: For scheduled/periodic execution (e.g., "毎日", "毎週", "every hour")
+- **manual_trigger**: For user-initiated execution (e.g., "手動で実行", "ボタンで実行")
+- **webhook_trigger**: For external API triggers (e.g., "Webhookで", "外部から呼び出し")
 
 **NEVER use type="start"** - always use one of the trigger blocks above.
 
-### Example Usage (ALWAYS include config!)
+### CRITICAL: Always Connect Non-Trigger Steps
 
-` + "`" + `` + "`" + `` + "`" + `json
-{
-  "steps": [
-    {
-      "temp_id": "trigger",
-      "name": "スケジュール実行",
-      "type": "schedule-trigger",
-      "position": {"x": 100, "y": 200},
-      "config": {"schedule": "0 9 * * *", "timezone": "Asia/Tokyo"}
-    },
-    {
-      "temp_id": "http_step",
-      "name": "API呼び出し",
-      "type": "http",
-      "position": {"x": 300, "y": 200},
-      "config": {"url": "https://api.example.com/data", "method": "GET"}
-    },
-    {
-      "temp_id": "condition_step",
-      "name": "ステータス確認",
-      "type": "condition",
-      "position": {"x": 500, "y": 200},
-      "config": {"expression": "{{status}} === 200"}
-    },
-    {
-      "temp_id": "success_notify",
-      "name": "成功通知",
-      "type": "slack",
-      "position": {"x": 700, "y": 100},
-      "config": {"channel": "#notifications", "message": "成功: {{data}}"}
-    },
-    {
-      "temp_id": "error_notify",
-      "name": "エラー通知",
-      "type": "discord",
-      "position": {"x": 700, "y": 300},
-      "config": {"channel_id": "123456789", "message": "エラー発生: {{error}}"}
-    }
-  ],
-  "connections": [
-    {"from": "trigger", "to": "http_step"},
-    {"from": "http_step", "to": "condition_step"},
-    {"from": "condition_step", "to": "success_notify", "from_port": "true"},
-    {"from": "condition_step", "to": "error_notify", "from_port": "false"}
-  ]
-}
-` + "`" + `` + "`" + `` + "`" + `
+Non-trigger steps (everything except schedule_trigger, manual_trigger, webhook_trigger) **MUST specify the 'from' parameter**.
 
-### Port Auto-Resolution
+❌ BAD: Non-trigger step without 'from' → Creates orphan step
+` + "```" + `
+add_step(name="トリガー", type="manual_trigger")
+add_step(name="HTTP取得", type="http")  // ← 'from' がない！孤立ステップになる
+` + "```" + `
 
-- **condition blocks**: Use "true" or "false" for from_port
-- **switch blocks**: Use case values or "default" for from_port
-- **other blocks**: Default from_port is "output"
+✅ GOOD: Always specify 'from'
+` + "```" + `
+add_step(name="トリガー", type="manual_trigger")
+add_step(name="HTTP取得", type="http", from="トリガー")  // ← 正しく接続
+` + "```" + `
 
-## Common Block Slugs (use with create_workflow_structure)
+### CRITICAL: Never Connect TO Trigger Steps
 
-- **Triggers**: schedule-trigger, manual-trigger, webhook-trigger (REQUIRED as first step)
-- discord, slack, http, email, notion, github, google-sheets
-- llm, llm-chat, llm-structured, agent
-- condition, switch, loop, map, filter
-- function, set-variables, template, log, delay
+Trigger steps are entry points. **NEVER create edges that point TO a trigger**.
+
+❌ BAD: Edge to a trigger (invalid)
+` + "```" + `
+add_edge(from="処理", to="トリガー")  // ← トリガーへの接続は禁止
+` + "```" + `
+
+✅ GOOD: Edges always point FROM triggers TO other steps
+` + "```" + `
+add_step(name="処理", type="http", from="トリガー")  // ← トリガーから他のステップへ
+` + "```" + `
+
+### Example: Building a 5-Step Workflow
+
+` + "```" + `
+// Step 1: Create trigger (no 'from' needed)
+add_step(name="スケジュール実行", type="schedule_trigger", config={schedule: "0 9 * * *", timezone: "Asia/Tokyo"})
+→ Returns: {step_id: "abc-123", step_created: true}
+
+// Step 2: HTTP step connected to trigger
+add_step(name="API呼び出し", type="http", from="スケジュール実行", config={url: "https://api.example.com/data", method: "GET"})
+→ Returns: {step_id: "def-456", step_created: true, edges: [{edge_id: "...", from: "スケジュール実行"}]}
+
+// Step 3: Condition step
+add_step(name="ステータス確認", type="condition", from="API呼び出し", config={expression: "{{status}} === 200"})
+
+// Step 4: Success notification (from condition's "true" port)
+add_step(name="成功通知", type="slack", from="ステータス確認", from_port="true", config={channel: "#notifications", message: "成功: {{data}}"})
+
+// Step 5: Error notification (from condition's "false" port)
+add_step(name="エラー通知", type="discord", from="ステータス確認", from_port="false", config={channel_id: "123456789", message: "エラー発生: {{error}}"})
+` + "```" + `
+
+### Using add_edge (Special Cases Only)
+
+Use **add_edge** for special cases like:
+- Adding connections after steps are created
+- Creating loop structures
+- Merging multiple paths into one step
+
+` + "```" + `
+// Example: Create a loop (retry pattern)
+add_edge(from="エラー処理", to="API呼び出し")
+
+// Example: Merge two branches
+add_edge(from="分岐A", to="合流ステップ")
+add_edge(from="分岐B", to="合流ステップ")
+` + "```" + `
+
+### Port Specification
+
+- **condition blocks**: Use from_port="true" or from_port="false"
+- **switch blocks**: Use from_port with case name (e.g., "case_1", "default")
+- **other blocks**: Default is "output" (no need to specify)
+
+## Common Block Slugs (use with add_step)
+
+- **Triggers**: schedule_trigger, manual_trigger, webhook_trigger (REQUIRED as first step)
+- **Integrations**: discord, slack, http, email_sendgrid, notion_query_db, notion_create_page, github_create_issue, github_add_comment, gsheets_read, web_search
+- **AI/LLM**: llm, llm-json, llm-structured, agent-group
+- **RAG/Vector**: rag-query, vector-upsert, vector-search, embedding, doc-loader, text-splitter
+- **Control**: condition, switch, foreach, while, map, filter
+- **Data**: function, set-variables, code, log, wait
 
 ## Action Examples (ALWAYS include config!)
 
 - "Discordブロックを追加して":
   1. get_block_schema("discord") → get required fields
-  2. create_workflow_structure({steps: [{temp_id: "discord", name: "Discord通知", type: "discord", config: {channel_id: "...", message: "通知メッセージ"}}], connections: []})
+  2. add_step(name="Discord通知", type="discord", config={channel_id: "...", message: "通知メッセージ"})
 
 - "LLMブロックを追加":
   1. get_block_schema("llm") → get required fields
-  2. create_workflow_structure({steps: [{temp_id: "llm", name: "AI処理", type: "llm", config: {provider: "openai", model: "gpt-4o", user_prompt: "{{input}}を処理してください"}}], connections: []})
+  2. add_step(name="AI処理", type="llm", config={provider: "openai", model: "gpt-4o", user_prompt: "{{input}}を処理してください"})
 
 - "Slackに通知を送るブロックを追加":
   1. get_block_schema("slack") → get required fields
-  2. create_workflow_structure({steps: [{temp_id: "slack", name: "Slack通知", type: "slack", config: {channel: "#general", message: "{{result}}"}}], connections: []})
+  2. add_step(name="Slack通知", type="slack", config={channel: "#general", message: "{{result}}"})
 
 - "ブロック一覧を見せて" → Call list_blocks
 
 - "ワークフローを作成して" →
   1. Get schemas for each block type needed
-  2. Call create_workflow_structure with steps (including config) and connections
+  2. Call add_step for each step (always specifying 'from' to connect)
 
 ## Your Capabilities
 
@@ -1029,7 +1073,7 @@ This is the PREFERRED tool for building workflows because:
 When the classified intent is "create":
 1. Check detected_blocks for block types the user mentioned
 2. Use get_block_schema to understand required configuration
-3. Use create_workflow_structure to create steps with proper config
+3. Use add_step for each step (always with 'from' to connect)
 4. If unclear, ask ONE specific question while showing progress
 
 ### Platform Guidance (intent = "explain")
@@ -1064,37 +1108,52 @@ Use this reference for fast access to common blocks. For detailed configuration,
 
 ### AI/LLM Blocks
 - **llm** (slug: llm): Text generation with AI models. Supports OpenAI, Anthropic, Google, etc.
-- **llm-chat** (slug: llm-chat): Conversational AI with message history support.
-- **llm-structured** (slug: llm-structured): AI with structured JSON output.
+- **llm-json** (slug: llm-json): AI with JSON output parsing.
+- **llm-structured** (slug: llm-structured): AI with structured JSON output using schema.
+- **agent-group** (slug: agent-group): Agent group for multi-step AI workflows.
 
 ### Tool/Integration Blocks
 - **http** (slug: http): Make HTTP requests to external APIs.
 - **slack** (slug: slack): Send messages to Slack channels.
 - **discord** (slug: discord): Send messages to Discord channels.
-- **email** (slug: email): Send emails via SMTP.
-- **notion** (slug: notion): Interact with Notion databases and pages.
+- **email_sendgrid** (slug: email_sendgrid): Send emails via SendGrid.
+- **notion_query_db** (slug: notion_query_db): Query Notion databases.
+- **notion_create_page** (slug: notion_create_page): Create Notion pages.
+- **github_create_issue** (slug: github_create_issue): Create GitHub issues.
+- **github_add_comment** (slug: github_add_comment): Add comments to GitHub issues/PRs.
+- **gsheets_read** (slug: gsheets_read): Read from Google Sheets.
+- **gsheets_append** (slug: gsheets_append): Append to Google Sheets.
 
 ### Control Flow Blocks
 - **condition** (slug: condition): If/else branching based on expressions. Ports: true, false
 - **switch** (slug: switch): Multi-way branching with multiple cases. Ports: case values, default
-- **loop** (slug: loop): Iterate with count or condition.
+- **foreach** (slug: foreach): Iterate over array items.
+- **while** (slug: while): Loop while condition is true.
 - **map** (slug: map): Transform each item in an array.
 - **filter** (slug: filter): Filter array items by condition.
 
 ### Data Processing Blocks
 - **function** (slug: function): Execute custom JavaScript code.
 - **set-variables** (slug: set-variables): Set and transform variables.
-- **template** (slug: template): Generate text from templates.
-- **json-path** (slug: json-path): Extract data using JSONPath expressions.
+- **code** (slug: code): Execute custom code blocks.
 
 ### Trigger Blocks (REQUIRED as first step in workflows)
-- **schedule-trigger** (slug: schedule-trigger): Time-based trigger. Use for scheduled/periodic workflows.
-- **manual-trigger** (slug: manual-trigger): Manual execution trigger. Use when user triggers manually.
-- **webhook-trigger** (slug: webhook-trigger): HTTP webhook trigger. Use for external API callbacks.
+- **schedule_trigger** (slug: schedule_trigger): Time-based trigger. Use for scheduled/periodic workflows.
+- **manual_trigger** (slug: manual_trigger): Manual execution trigger. Use when user triggers manually.
+- **webhook_trigger** (slug: webhook_trigger): HTTP webhook trigger. Use for external API callbacks.
 
 ### Utility Blocks
 - **log** (slug: log): Log messages for debugging.
-- **delay** (slug: delay): Wait for a specified time.
+- **wait** (slug: wait): Wait for a specified time.
+- **web_search** (slug: web_search): Search the web for information.
+
+### RAG/Vector Blocks (for knowledge retrieval)
+- **rag-query** (slug: rag-query): Query a RAG knowledge base for relevant documents.
+- **vector-upsert** (slug: vector-upsert): Store documents/embeddings in vector database.
+- **vector-search** (slug: vector-search): Search vector database for similar documents.
+- **embedding** (slug: embedding): Generate embeddings from text.
+- **doc-loader** (slug: doc-loader): Load documents from various sources.
+- **text-splitter** (slug: text-splitter): Split text into chunks for embedding.
 
 ## CRITICAL: Config Generation Rules
 
@@ -1112,77 +1171,54 @@ When creating steps:
 → get_block_schema("llm")
 ← Returns: {required_fields: ["provider", "model", "user_prompt"], resolved_config_defaults: {"temperature": 0.7, ...}}
 
-**Step 2: Create step with config**
-→ create_workflow_structure({
-    steps: [{
-      temp_id: "llm",
-      name: "LLM処理",
-      type: "llm",
-      config: {
-        provider: "openai",
-        model: "gpt-4o",
-        user_prompt: "{{input}}を分析してください",
-        temperature: 0.7
-      }
-    }]
-  })
+**Step 2: Create step with add_step**
+→ add_step(
+    name="LLM処理",
+    type="llm",
+    from="前のステップ",
+    config={
+      provider: "openai",
+      model: "gpt-4o",
+      user_prompt: "{{input}}を分析してください",
+      temperature: 0.7
+    }
+  )
 
 ### Config Examples by Block Type
 
 **LLM Block:**
-` + "```" + `json
-{
-  "temp_id": "llm",
-  "name": "AI分析",
-  "type": "llm",
-  "config": {
-    "provider": "openai",
-    "model": "gpt-4o",
-    "user_prompt": "{{data}}を分析してください",
-    "system_prompt": "あなたは分析アシスタントです",
-    "temperature": 0.7
-  }
-}
+` + "```" + `
+add_step(
+  name="AI分析", type="llm", from="トリガー",
+  config={provider: "openai", model: "gpt-4o",
+          user_prompt: "{{data}}を分析してください",
+          system_prompt: "あなたは分析アシスタントです", temperature: 0.7})
 ` + "```" + `
 
 **HTTP Block:**
-` + "```" + `json
-{
-  "temp_id": "http",
-  "name": "API呼び出し",
-  "type": "http",
-  "config": {
-    "url": "https://api.example.com/v1/data",
-    "method": "POST",
-    "headers": {"Content-Type": "application/json"},
-    "body": "{\"query\": \"{{input}}\"}"
-  }
-}
+` + "```" + `
+add_step(
+  name="API呼び出し", type="http", from="前のステップ",
+  config={url: "https://api.example.com/v1/data", method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: "{\"query\": \"{{input}}\"}"})
 ` + "```" + `
 
 **Slack Block:**
-` + "```" + `json
-{
-  "temp_id": "slack",
-  "name": "Slack通知",
-  "type": "slack",
-  "config": {
-    "channel": "#notifications",
-    "message": "処理完了: {{result}}"
-  }
-}
+` + "```" + `
+add_step(
+  name="Slack通知", type="slack", from="LLM処理",
+  config={channel: "#notifications", message: "処理完了: {{result}}"})
 ` + "```" + `
 
 **Condition Block:**
-` + "```" + `json
-{
-  "temp_id": "check",
-  "name": "条件分岐",
-  "type": "condition",
-  "config": {
-    "expression": "{{status}} === 'success'"
-  }
-}
+` + "```" + `
+add_step(
+  name="条件分岐", type="condition", from="データ取得",
+  config={expression: "{{status}} === 'success'"})
+// Then add branches:
+add_step(name="成功処理", type="log", from="条件分岐", from_port="true")
+add_step(name="失敗処理", type="log", from="条件分岐", from_port="false")
 ` + "```" + `
 
 ## Available Tools
@@ -1197,16 +1233,17 @@ When creating steps:
 ### Workflow Tools
 - **list_workflows**: List user's workflows
 - **get_workflow**: Get workflow details including steps and edges
-- **update_step**: Update an existing step's config or position
+- **add_step**: Add a step with automatic edge creation via 'from' parameter (PREFERRED for step creation)
+- **add_edge**: Create an edge between steps (for special cases: loops, merging)
+- **update_step**: Update an existing step's name or config
 - **delete_step**: Delete a step
 - **delete_edge**: Remove a connection
-- **create_workflow_structure**: Create steps and connections in one call (auto project_id) - works for single or multiple steps
 - **check_workflow_readiness**: Check if all steps have required fields configured (CALL AFTER creating steps!)
 - **search_documentation**: Search platform documentation
 - **validate_workflow**: Validate workflow structure
 
 ### Auto-Fix & Validation Tools
-- **fix_block_type**: Fix invalid block types by finding similar valid ones (e.g., "gpt" → "llm", "trigger" → "manual-trigger")
+- **fix_block_type**: Fix invalid block types by finding similar valid ones (e.g., "gpt" → "llm", "trigger" → "manual_trigger")
 - **auto_fix_errors**: Analyze validation errors and get suggested fixes
 - **check_security**: Check code/text for security issues (dangerous commands, sensitive data patterns)
 - **get_relevant_examples**: Get workflow examples based on intent and keywords (use for reference when creating workflows)
@@ -1227,17 +1264,14 @@ When the user asks for something and you're not sure which block to use:
    → get_block_schema("slack")
    ← Returns: {required_fields: ["channel", "message"], config_schema: {...}}
 
-3. **create_workflow_structure** with full config
-   → create_workflow_structure({steps: [{type: "slack", config: {...}}], ...})
+3. **add_step** with full config
+   → add_step(name="Slack通知", type="slack", from="前のステップ", config={...})
 
 4. **check_workflow_readiness** to verify configuration
    → check_workflow_readiness()
    ← If issues found, fix with update_step, then re-check
 
 This four-step pattern ensures you always use the right block with correct configuration.
-   → create_workflow_structure({steps: [{type: "slack", config: {...}}], ...})
-
-This three-step pattern ensures you always use the right block with correct configuration.
 
 ## Fetching External API Documentation
 
@@ -1261,7 +1295,7 @@ When the user wants to integrate with a service that doesn't have a preset block
 Example: "Stripe API で決済を作成するHTTPブロックを追加"
 → web_search("Stripe API create payment documentation")
 → fetch_url("https://docs.stripe.com/api/charges/create")
-→ create_workflow_structure with HTTP block configured for Stripe Charges API
+→ add_step(name="Stripe決済", type="http", from="前のステップ", config={...})
 
 ## CRITICAL: Template Variables & Data Flow
 
@@ -1338,50 +1372,30 @@ Slack message: "Result: {{summary}}"             // Previous step output has 'su
 
 This is a complete, working example for "LLMでテキスト分析してSlackに通知" request:
 
-` + "```" + `json
-{
-  "steps": [
-    {
-      "temp_id": "trigger",
-      "name": "手動実行",
-      "type": "manual-trigger",
-      "position": {"x": 100, "y": 200},
-      "config": {}
-    },
-    {
-      "temp_id": "analyze",
-      "name": "LLM分析",
-      "type": "llm",
-      "position": {"x": 300, "y": 200},
-      "config": {
-        "provider": "openai",
-        "model": "gpt-4o",
-        "user_prompt": "以下のテキストを分析してください:\n{{text}}",
-        "system_prompt": "あなたは優秀な分析アシスタントです。簡潔に要点をまとめてください。"
-      }
-    },
-    {
-      "temp_id": "notify",
-      "name": "Slack通知",
-      "type": "slack",
-      "position": {"x": 500, "y": 200},
-      "config": {
-        "channel": "#notifications",
-        "message": "分析結果:\n{{content}}"
-      }
-    }
-  ],
-  "connections": [
-    {"from": "trigger", "to": "analyze"},
-    {"from": "analyze", "to": "notify"}
-  ]
-}
+` + "```" + `
+// Step 1: Create trigger (no 'from' - it's the first step)
+add_step(name="手動実行", type="manual_trigger", config={})
+
+// Step 2: LLM analysis connected to trigger
+add_step(
+  name="LLM分析", type="llm", from="手動実行",
+  config={
+    provider: "openai", model: "gpt-4o",
+    user_prompt: "以下のテキストを分析してください:\n{{text}}",
+    system_prompt: "あなたは優秀な分析アシスタントです。簡潔に要点をまとめてください."
+  })
+
+// Step 3: Slack notification connected to LLM
+add_step(
+  name="Slack通知", type="slack", from="LLM分析",
+  config={channel: "#notifications", message: "分析結果:\n{{content}}"})
 ` + "```" + `
 
 **Key points:**
 - ` + "`" + `{{text}}` + "`" + ` in LLM prompt references the input field from trigger
 - ` + "`" + `{{content}}` + "`" + ` in Slack message references the LLM output field (llm block outputs ` + "`" + `{"content": "..."}` + "`" + `)
-- Each config includes all required fields for the block type
+- Each step uses 'from' to automatically create edges
+- No need to specify connections separately
 
 ## Auto-Fix Workflow (MANDATORY)
 
@@ -1422,14 +1436,13 @@ After creating workflow steps, you MUST:
 ## Workflow Building Guidelines
 
 1. ALWAYS call get_block_schema BEFORE creating steps to understand required fields
-2. ALWAYS use create_workflow_structure for adding blocks (works for single or multiple steps)
+2. ALWAYS use add_step for adding blocks (always specify 'from' to connect)
 3. ALWAYS include config in step definitions - block defaults are merged automatically but you should provide user-specific values
 4. Create steps with meaningful, descriptive names
-5. Position steps logically on the canvas (increment x by ~200 for horizontal flow)
-6. For condition blocks, always specify from_port as "true" or "false"
-7. Validate the workflow after major changes
-8. **IMPORTANT: Reuse existing Start step** - When connecting to an existing step, use its UUID in connections.from
-9. For external APIs without preset blocks, use web_search/fetch_url to find documentation
+5. For condition blocks, always specify from_port as "true" or "false"
+6. Validate the workflow after major changes
+7. **IMPORTANT: Reference existing steps** - Use step names in 'from' parameter to connect to existing steps
+8. For external APIs without preset blocks, use web_search/fetch_url to find documentation
 
 **Note on Config Defaults:**
 - Block definition defaults are automatically merged with your provided config
@@ -1449,56 +1462,51 @@ After creating workflow steps, you MUST:
 `
 }
 
-// createWorkflowStructureToolConfig returns the configuration for the create_workflow_structure tool
-// This tool creates multiple steps and connections in a single API call with:
-// - temp_id pattern for easy step referencing
-// - Automatic port resolution based on block type
-// - Transactional behavior (all-or-nothing)
-// - Automatic project_id from ctx.targetProjectId (no need to specify)
-func createWorkflowStructureToolConfig() string {
+// addStepToolConfig returns the configuration for the add_step tool
+// This tool creates a single step with automatic edge creation via the 'from' parameter
+// Advantages:
+// - Simpler, step-by-step workflow building
+// - Automatic edge creation - no need to specify connections separately
+// - Idempotent - same name returns existing step
+// - No orphan check needed - edge is always created when from is specified
+func addStepToolConfig() string {
 	return `{
-		"code": "if (!ctx.targetProjectId) return { error: 'No target project - Copilot must be opened from a workflow' }; const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s); const TRIGGER_TYPES = ['schedule-trigger', 'manual-trigger', 'webhook-trigger']; const projectId = ctx.targetProjectId; const tempIdToRealId = {}; const createdStepIds = []; const stepTypes = {}; let triggerStepId = null; for (const stepConfig of (input.steps || [])) { if (!stepConfig.temp_id || !stepConfig.name || !stepConfig.type) { for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Each step requires temp_id, name, and type' }; } const pos = stepConfig.position || {}; const step = ctx.steps.create({ project_id: projectId, name: stepConfig.name, type: stepConfig.type, config: stepConfig.config || {}, position_x: pos.x || 0, position_y: pos.y || 0, block_definition_id: stepConfig.block_definition_id }); if (!step || step.error) { for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Failed to create step: ' + stepConfig.name + (step && step.error ? ' - ' + step.error : '') }; } tempIdToRealId[stepConfig.temp_id] = step.id; createdStepIds.push(step.id); stepTypes[stepConfig.temp_id] = stepConfig.type; if (TRIGGER_TYPES.includes(stepConfig.type)) { triggerStepId = step.id; } } const createdEdgeIds = []; if (triggerStepId) { const wf = ctx.workflows.getWithStart(projectId); if (wf && wf.start_step_id) { const autoEdge = ctx.edges.create({ project_id: projectId, source_step_id: wf.start_step_id, target_step_id: triggerStepId, source_port: 'output' }); if (autoEdge && autoEdge.id) { createdEdgeIds.push(autoEdge.id); } } } for (const conn of (input.connections || [])) { let sourceId = tempIdToRealId[conn.from]; let targetId = tempIdToRealId[conn.to]; if (!sourceId && isUUID(conn.from)) { sourceId = conn.from; } if (!targetId && isUUID(conn.to)) { targetId = conn.to; } if (!sourceId) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Invalid step reference: ' + conn.from }; } if (!targetId) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Invalid step reference: ' + conn.to }; } let fromPort = conn.from_port; if (!fromPort) { const sourceType = stepTypes[conn.from]; if (sourceType === 'condition') { fromPort = 'true'; } else if (sourceType === 'switch') { fromPort = 'default'; } else { fromPort = 'output'; } } const edge = ctx.edges.create({ project_id: projectId, source_step_id: sourceId, target_step_id: targetId, source_port: fromPort }); if (!edge || edge.error) { for (const id of createdEdgeIds) { try { ctx.edges.delete(id); } catch(e) {} } for (const id of createdStepIds) { try { ctx.steps.delete(id); } catch(e) {} } return { error: 'Failed to create connection from ' + conn.from + ' to ' + conn.to + (edge && edge.error ? ' - ' + edge.error : '') }; } createdEdgeIds.push(edge.id); } return { success: true, steps_created: createdStepIds.length, edges_created: createdEdgeIds.length, step_id_mapping: tempIdToRealId };",
-		"description": "Create multiple steps and connections in a single API call. Project ID is automatically set. Uses temp_id for new steps. Connections can reference temp_ids OR existing step UUIDs (e.g., to connect to an existing Start step). Transactional: all-or-nothing. Automatic port resolution: condition='true', switch='default', others='output'. IMPORTANT: Block defaults are automatically merged with provided config - but you should still call get_block_schema first to understand required fields and provide appropriate values.",
+		"code": "if (!ctx.targetProjectId) return { error: 'No target project - Copilot must be opened from a workflow' }; if (!input.name || !input.type) return { error: 'name and type are required' }; const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s); const TRIGGER_TYPES = ['schedule_trigger', 'manual_trigger', 'webhook_trigger', 'start']; const isTriggerType = (type) => TRIGGER_TYPES.includes(type); const projectId = ctx.targetProjectId; const existingSteps = ctx.steps.listByProject(projectId) || []; const existingEdges = ctx.edges.listByProject(projectId) || []; const findStepByNameOrId = (ref) => { if (!ref) return null; if (isUUID(ref)) { const byId = existingSteps.find(s => s.id === ref); if (byId) return byId; } const byName = existingSteps.find(s => s.name === ref); if (byName) return byName; const byType = existingSteps.find(s => s.type === ref); if (byType) return byType; return null; }; const findExistingEdge = (srcId, tgtId) => existingEdges.find(e => e.source_step_id === srcId && e.target_step_id === tgtId); if (input.from && isTriggerType(input.type)) { return { error: 'Cannot connect to a trigger step. Triggers are entry points and should not receive input from other steps. Remove the from parameter for trigger type: ' + input.type }; } const result = { step_id: null, step_created: false, edges: [] }; const existing = existingSteps.find(s => s.name === input.name); if (existing) { result.step_id = existing.id; result.step_created = false; result.message = 'Step already exists with name: ' + input.name; } else { const step = ctx.steps.create({ project_id: projectId, name: input.name, type: input.type, config: input.config || {}, position_x: 0, position_y: 0 }); if (!step || step.error) { return { error: 'Failed to create step: ' + input.name + (step && step.error ? ' - ' + step.error : '') }; } result.step_id = step.id; result.step_created = true; } if (input.from) { const froms = Array.isArray(input.from) ? input.from : [input.from]; for (const fromRef of froms) { const sourceStep = findStepByNameOrId(fromRef); if (!sourceStep) { return { error: 'Source step not found: ' + fromRef + '. Available steps: ' + existingSteps.map(s => s.name).join(', ') }; } const existingConn = findExistingEdge(sourceStep.id, result.step_id); if (existingConn) { result.edges.push({ edge_id: existingConn.id, edge_created: false, from: sourceStep.name }); continue; } let fromPort = input.from_port || 'output'; if (!input.from_port) { if (sourceStep.type === 'condition') fromPort = 'true'; else if (sourceStep.type === 'switch') fromPort = 'default'; } const edge = ctx.edges.create({ project_id: projectId, source_step_id: sourceStep.id, target_step_id: result.step_id, source_port: fromPort }); if (!edge || edge.error) { if (edge && edge.duplicate) { result.edges.push({ edge_id: null, edge_created: false, from: sourceStep.name, duplicate: true }); continue; } return { error: 'Failed to create edge from ' + sourceStep.name + ': ' + (edge && edge.error ? edge.error : 'unknown error') }; } result.edges.push({ edge_id: edge.id, edge_created: true, from: sourceStep.name }); } } if (!input.from && result.step_created && TRIGGER_TYPES.includes(input.type)) { const wf = ctx.workflows.getWithStart(projectId); if (wf && wf.start_step_id) { const existingAutoEdge = findExistingEdge(wf.start_step_id, result.step_id); if (!existingAutoEdge) { const autoEdge = ctx.edges.create({ project_id: projectId, source_step_id: wf.start_step_id, target_step_id: result.step_id, source_port: 'output' }); if (autoEdge && autoEdge.id) { result.edges.push({ edge_id: autoEdge.id, edge_created: true, from: 'start', auto_connected: true }); } } } } if (!input.from && result.step_created && !TRIGGER_TYPES.includes(input.type)) { result.warning = 'Step created without connection (no from parameter). Non-trigger steps should be connected to the workflow. Use add_edge to connect this step, or it will be orphaned and never executed.'; } return result;",
+		"description": "Add a step to the workflow. If 'from' is specified, automatically creates an edge from the source step. Use step names or UUIDs for 'from'. Idempotent: returns existing step if name matches. ALWAYS use this tool to add steps one at a time.",
 		"input_schema": {
 			"type": "object",
-			"required": ["steps"],
+			"required": ["name", "type"],
 			"properties": {
-				"steps": {
-					"type": "array",
-					"description": "Array of step configurations to create",
-					"items": {
-						"type": "object",
-						"required": ["temp_id", "name", "type"],
-						"properties": {
-							"temp_id": {"type": "string", "description": "Temporary ID for referencing in connections (e.g., 'step_1', 'http_request')"},
-							"name": {"type": "string", "description": "Step name"},
-							"type": {"type": "string", "description": "Step type (llm, http, condition, etc.)"},
-							"config": {"type": "object", "description": "Step configuration"},
-							"position": {
-								"type": "object",
-								"description": "Position on canvas",
-								"properties": {
-									"x": {"type": "integer", "description": "X position"},
-									"y": {"type": "integer", "description": "Y position"}
-								}
-							},
-							"block_definition_id": {"type": "string", "description": "Block definition UUID (optional)"}
-						}
-					}
+				"name": {"type": "string", "description": "Step name (must be unique in the workflow)"},
+				"type": {"type": "string", "description": "Block type (e.g., 'llm', 'http', 'discord', 'manual_trigger')"},
+				"config": {"type": "object", "description": "Step configuration (merged with block defaults)"},
+				"from": {
+					"oneOf": [
+						{"type": "string", "description": "Source step name or UUID to connect from"},
+						{"type": "array", "items": {"type": "string"}, "description": "Multiple source steps (for merging)"}
+					],
+					"description": "Connect from this step (creates edge automatically)"
 				},
-				"connections": {
-					"type": "array",
-					"description": "Array of connections between steps using temp_ids",
-					"items": {
-						"type": "object",
-						"required": ["from", "to"],
-						"properties": {
-							"from": {"type": "string", "description": "Source step temp_id"},
-							"to": {"type": "string", "description": "Target step temp_id"},
-							"from_port": {"type": "string", "description": "Source port (auto-resolved: condition='true', switch='default', others='output')"}
-						}
-					}
-				}
+				"from_port": {"type": "string", "description": "Source port for condition/switch blocks (e.g., 'true', 'false', 'case_1', 'default')"}
+			}
+		}
+	}`
+}
+
+// addEdgeToolConfig returns the configuration for the add_edge tool
+// This tool creates edges for special cases (merging, loops, additional connections)
+// Normally, edges are created automatically via add_step's 'from' parameter
+func addEdgeToolConfig() string {
+	return `{
+		"code": "if (!ctx.targetProjectId) return { error: 'No target project - Copilot must be opened from a workflow' }; if (!input.from || !input.to) return { error: 'from and to are required' }; const TRIGGER_TYPES = ['schedule_trigger', 'manual_trigger', 'webhook_trigger']; const isTrigger = (step) => TRIGGER_TYPES.includes(step.type) || step.type === 'start'; const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s); const projectId = ctx.targetProjectId; const existingSteps = ctx.steps.listByProject(projectId) || []; const existingEdges = ctx.edges.listByProject(projectId) || []; const findStepByNameOrId = (ref) => { if (!ref) return null; if (isUUID(ref)) { const byId = existingSteps.find(s => s.id === ref); if (byId) return byId; } const byName = existingSteps.find(s => s.name === ref); if (byName) return byName; return null; }; const sourceStep = findStepByNameOrId(input.from); if (!sourceStep) { return { error: 'Source step not found: ' + input.from + '. Available steps: ' + existingSteps.map(s => s.name).join(', ') }; } const targetStep = findStepByNameOrId(input.to); if (!targetStep) { return { error: 'Target step not found: ' + input.to + '. Available steps: ' + existingSteps.map(s => s.name).join(', ') }; } if (isTrigger(targetStep)) { return { error: 'Cannot connect to a trigger step. Triggers are entry points and should not receive input from other steps. Target: ' + targetStep.name + ' (' + targetStep.type + ')' }; } const existingConn = existingEdges.find(e => e.source_step_id === sourceStep.id && e.target_step_id === targetStep.id); if (existingConn) { return { edge_id: existingConn.id, created: false, message: 'Edge already exists' }; } let fromPort = input.from_port || 'output'; if (!input.from_port) { if (sourceStep.type === 'condition') fromPort = 'true'; else if (sourceStep.type === 'switch') fromPort = 'default'; } const edge = ctx.edges.create({ project_id: projectId, source_step_id: sourceStep.id, target_step_id: targetStep.id, source_port: fromPort }); if (!edge || edge.error) { return { error: 'Failed to create edge: ' + (edge && edge.error ? edge.error : 'unknown error') }; } return { edge_id: edge.id, created: true, from: sourceStep.name, to: targetStep.name, from_port: fromPort };",
+		"description": "Create an edge (connection) between two existing steps. Use this for special cases like: (1) adding connections after steps are created, (2) creating loops, (3) merging multiple paths. For normal step creation, use add_step with 'from' parameter instead.",
+		"input_schema": {
+			"type": "object",
+			"required": ["from", "to"],
+			"properties": {
+				"from": {"type": "string", "description": "Source step name or UUID"},
+				"to": {"type": "string", "description": "Target step name or UUID"},
+				"from_port": {"type": "string", "description": "Source port (e.g., 'output', 'true', 'false', 'case_1', 'default'). Auto-resolved if not specified."}
 			}
 		}
 	}`
@@ -1509,7 +1517,7 @@ func createWorkflowStructureToolConfig() string {
 // and returns a list of issues that need to be fixed
 func checkWorkflowReadinessToolConfig() string {
 	return `{
-		"code": "const wfId = ctx.targetProjectId; if (!wfId) return { error: 'No target project' }; const wf = ctx.workflows.get(wfId); if (!wf) return { error: 'Workflow not found' }; const issues = []; const steps = wf.steps || []; for (const step of steps) { if (step.type === 'start') continue; const schema = ctx.blocks.getWithSchema(step.type); if (!schema) continue; const required = schema.required_fields || []; const config = step.config || {}; for (const field of required) { const value = config[field]; if (value === undefined || value === null || value === '') { issues.push({ step_id: step.id, step_name: step.name, step_type: step.type, field: field, current_value: value, message: 'Required field is empty or missing' }); } } } return { ready: issues.length === 0, issues: issues, step_count: steps.length, suggestion: issues.length > 0 ? 'Use update_step to fix each issue. Generate appropriate values based on step context and the examples in the system prompt.' : null };",
+		"code": "const wfId = ctx.targetProjectId; if (!wfId) return { error: 'No target project' }; const wf = ctx.workflows.get(wfId); if (!wf) return { error: 'Workflow not found' }; const TRIGGER_TYPES = ['schedule_trigger', 'manual_trigger', 'webhook_trigger']; const isTrigger = (step) => TRIGGER_TYPES.includes(step.type) || step.type === 'start'; const issues = []; const steps = wf.steps || []; const edges = wf.edges || []; const edgeTargets = new Set(edges.map(e => e.target_step_id)); const triggerIds = new Set(steps.filter(s => isTrigger(s)).map(s => s.id)); for (const step of steps) { if (step.type === 'start') continue; if (!isTrigger(step) && !edgeTargets.has(step.id)) { issues.push({ step_id: step.id, step_name: step.name, step_type: step.type, issue_type: 'orphan_step', message: 'Step has no incoming edges and will not be executed. Use add_edge to connect it to the workflow.' }); } const schema = ctx.blocks.getWithSchema(step.type); if (!schema) continue; const required = schema.required_fields || []; const config = step.config || {}; for (const field of required) { const value = config[field]; if (value === undefined || value === null || value === '') { issues.push({ step_id: step.id, step_name: step.name, step_type: step.type, field: field, current_value: value, issue_type: 'missing_field', message: 'Required field is empty or missing' }); } } } for (const edge of edges) { const targetStep = steps.find(s => s.id === edge.target_step_id); if (targetStep && isTrigger(targetStep)) { issues.push({ edge_id: edge.id, target_step_id: targetStep.id, target_step_name: targetStep.name, issue_type: 'invalid_trigger_connection', message: 'Edge connects to a trigger step, which is invalid. Triggers should not receive input from other steps.' }); } } return { ready: issues.length === 0, issues: issues, step_count: steps.length, suggestion: issues.length > 0 ? 'Fix each issue: For orphan_step, use add_edge to connect it. For missing_field, use update_step. For invalid_trigger_connection, use delete_edge to remove the invalid connection.' : null };",
 		"description": "Check if workflow is ready for execution. Returns issues with step_id for fixing. IMPORTANT: After creating steps, ALWAYS call this to verify configuration. If issues are found, fix them using update_step before reporting success to the user.",
 		"input_schema": {
 			"type": "object",
@@ -1541,11 +1549,12 @@ func intentClassificationConfig() string {
 
 ## Block Types to Detect
 
-Integration: slack, discord, notion, github, http, email, google-sheets
-AI/LLM: llm, llm-chat, llm-structured, agent
-Control: condition, switch, loop, map, filter
-Data: function, set-variables, template, json-path
-Trigger: schedule-trigger, manual-trigger, webhook-trigger
+Integration: slack, discord, notion_query_db, notion_create_page, github_create_issue, github_add_comment, http, email_sendgrid, gsheets_read, web_search
+AI/LLM: llm, llm-json, llm-structured, agent-group
+RAG/Vector: rag-query, vector-upsert, vector-search, embedding, doc-loader, text-splitter
+Control: condition, switch, foreach, while, map, filter
+Data: function, set-variables, code
+Trigger: schedule_trigger, manual_trigger, webhook_trigger
 
 ## Required Output Format
 Respond with a JSON object containing these fields:
@@ -1604,7 +1613,7 @@ Example:
 // This migrates the hardcoded findSimilarBlockType() from copilot_autofix.go
 func fixBlockTypeToolConfig() string {
 	return `{
-		"code": "if (!input.invalid_type) return { error: 'invalid_type is required' }; const invalidLower = input.invalid_type.toLowerCase(); const mappings = { 'trigger': 'manual-trigger', 'start': 'manual-trigger', 'begin': 'manual-trigger', 'ai': 'llm', 'gpt': 'llm', 'openai': 'llm', 'claude': 'llm', 'anthropic': 'llm', 'if': 'condition', 'branch': 'condition', 'conditional': 'condition', 'case': 'switch', 'delay': 'delay', 'sleep': 'delay', 'timer': 'delay', 'api': 'http', 'request': 'http', 'cron': 'schedule-trigger', 'schedule': 'schedule-trigger', 'scheduled': 'schedule-trigger', 'debug': 'log', 'print': 'log', 'console': 'log', 'parallel': 'map', 'foreach': 'map', 'loop': 'loop', 'merge': 'join', 'aggregate': 'aggregate', 'collect': 'join', 'human': 'human-in-loop', 'approval': 'human-in-loop', 'human_approval': 'human-in-loop' }; if (mappings[invalidLower]) { const mapped = mappings[invalidLower]; const block = ctx.blocks.getWithSchema(mapped); if (block) return { fixed: true, original_type: input.invalid_type, suggested_type: mapped, block_name: block.name, block_description: block.description }; } const blocks = ctx.blocks.list(); for (const block of blocks) { const slugLower = block.slug.toLowerCase(); if (slugLower.includes(invalidLower) || invalidLower.includes(slugLower)) { return { fixed: true, original_type: input.invalid_type, suggested_type: block.slug, block_name: block.name, block_description: block.description }; } } return { fixed: false, original_type: input.invalid_type, error: 'No similar block type found', available_types: blocks.slice(0, 20).map(b => b.slug) };",
+		"code": "if (!input.invalid_type) return { error: 'invalid_type is required' }; const invalidLower = input.invalid_type.toLowerCase(); const mappings = { 'trigger': 'manual_trigger', 'start': 'manual_trigger', 'begin': 'manual_trigger', 'ai': 'llm', 'gpt': 'llm', 'openai': 'llm', 'claude': 'llm', 'anthropic': 'llm', 'if': 'condition', 'branch': 'condition', 'conditional': 'condition', 'case': 'switch', 'delay': 'delay', 'sleep': 'delay', 'timer': 'delay', 'api': 'http', 'request': 'http', 'cron': 'schedule_trigger', 'schedule': 'schedule_trigger', 'scheduled': 'schedule_trigger', 'debug': 'log', 'print': 'log', 'console': 'log', 'parallel': 'map', 'foreach': 'map', 'loop': 'loop', 'merge': 'join', 'aggregate': 'aggregate', 'collect': 'join', 'human': 'human-in-loop', 'approval': 'human-in-loop', 'human_approval': 'human-in-loop' }; if (mappings[invalidLower]) { const mapped = mappings[invalidLower]; const block = ctx.blocks.getWithSchema(mapped); if (block) return { fixed: true, original_type: input.invalid_type, suggested_type: mapped, block_name: block.name, block_description: block.description }; } const blocks = ctx.blocks.list(); for (const block of blocks) { const slugLower = block.slug.toLowerCase(); if (slugLower.includes(invalidLower) || invalidLower.includes(slugLower)) { return { fixed: true, original_type: input.invalid_type, suggested_type: block.slug, block_name: block.name, block_description: block.description }; } } return { fixed: false, original_type: input.invalid_type, error: 'No similar block type found', available_types: blocks.slice(0, 20).map(b => b.slug) };",
 		"description": "Find a valid block type similar to an invalid one. Uses a mapping table and fuzzy matching to suggest corrections. This replaces hardcoded mappings in copilot_autofix.go.",
 		"input_schema": {
 			"type": "object",
@@ -1673,7 +1682,7 @@ func checkSecurityToolConfig() string {
 // This migrates the hardcoded keywordToCategory and WorkflowExamples from copilot_examples.go
 func getRelevantExamplesToolConfig() string {
 	return `{
-		"code": "const intent = input.intent || 'general'; const message = (input.message || '').toLowerCase(); const keywordToCategory = { 'loop': ['並列', '配列', 'ループ', '繰り返し', 'map', 'join', 'each', 'foreach', 'イテレート'], 'llm_chain': ['連鎖', 'チェーン', '多段', '順番', 'chain', 'パイプライン', '連続'], 'nested_condition': ['ネスト', '入れ子', '複数条件', '条件の中に条件', '優先度', '複合条件'], 'retry': ['リトライ', '再試行', '失敗時', 'エラー時', 'retry', '再実行', 'リカバリ'], 'data_pipeline': ['変換', 'フィルター', '集計', 'データ処理', 'パイプライン', 'etl', 'aggregate'], 'webhook_response': ['webhook', '外部連携', 'api呼び出し', 'リクエスト', 'レスポンス', 'コールバック'] }; const examples = { 'basic': { description: '基本的なワークフロー（トリガー → LLM → ログ）', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual-trigger' }, { temp_id: 'step_2', name: 'AI処理', type: 'llm', config: { provider: 'openai', model: 'gpt-4o-mini', user_prompt: '{{$.message}}' } }, { temp_id: 'step_3', name: '結果をログ', type: 'log', config: { message: '処理完了: {{content}}' } }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }] }, 'condition': { description: '条件分岐を含むワークフロー', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual-trigger' }, { temp_id: 'step_2', name: '条件チェック', type: 'condition', config: { expression: '{{value}} > 100' } }, { temp_id: 'step_3', name: '高値処理', type: 'log' }, { temp_id: 'step_4', name: '通常処理', type: 'log' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3', from_port: 'true' }, { from: 'step_2', to: 'step_4', from_port: 'false' }] }, 'integration': { description: '外部連携ワークフロー（Slack通知）', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual-trigger' }, { temp_id: 'step_2', name: 'メッセージ生成', type: 'llm' }, { temp_id: 'step_3', name: 'Slack通知', type: 'slack', config: { channel: '#general' } }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }] }, 'loop': { description: '配列データの並列処理（map/join使用）', steps: [{ temp_id: 'step_1', name: 'トリガー', type: 'manual-trigger' }, { temp_id: 'step_2', name: '配列展開', type: 'map' }, { temp_id: 'step_3', name: '各要素処理', type: 'llm' }, { temp_id: 'step_4', name: '結果集約', type: 'join' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }, { from: 'step_3', to: 'step_4' }] }, 'retry': { description: 'リトライパターン（エラー時の再試行）', steps: [{ temp_id: 'step_1', name: 'トリガー', type: 'manual-trigger' }, { temp_id: 'step_2', name: 'API呼び出し', type: 'http' }, { temp_id: 'step_3', name: '成功チェック', type: 'condition' }, { temp_id: 'step_4', name: '成功処理', type: 'log' }, { temp_id: 'step_5', name: '待機', type: 'delay' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }, { from: 'step_3', to: 'step_4', from_port: 'true' }, { from: 'step_3', to: 'step_5', from_port: 'false' }] } }; const result = []; const intentCategories = { 'create': ['basic', 'integration'], 'enhance': ['condition', 'retry'], 'debug': ['condition', 'retry'], 'general': ['basic'] }; const baseCategories = intentCategories[intent] || ['basic']; for (const cat of baseCategories) { if (examples[cat]) result.push(examples[cat]); } for (const [category, keywords] of Object.entries(keywordToCategory)) { for (const keyword of keywords) { if (message.includes(keyword) && examples[category] && !result.find(e => e.description === examples[category].description)) { result.push(examples[category]); break; } } } return { examples: result.slice(0, 3), count: result.length, intent: intent, matched_keywords: [] };",
+		"code": "const intent = input.intent || 'general'; const message = (input.message || '').toLowerCase(); const keywordToCategory = { 'loop': ['並列', '配列', 'ループ', '繰り返し', 'map', 'join', 'each', 'foreach', 'イテレート'], 'llm_chain': ['連鎖', 'チェーン', '多段', '順番', 'chain', 'パイプライン', '連続'], 'nested_condition': ['ネスト', '入れ子', '複数条件', '条件の中に条件', '優先度', '複合条件'], 'retry': ['リトライ', '再試行', '失敗時', 'エラー時', 'retry', '再実行', 'リカバリ'], 'data_pipeline': ['変換', 'フィルター', '集計', 'データ処理', 'パイプライン', 'etl', 'aggregate'], 'webhook_response': ['webhook', '外部連携', 'api呼び出し', 'リクエスト', 'レスポンス', 'コールバック'] }; const examples = { 'basic': { description: '基本的なワークフロー（トリガー → LLM → ログ）', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual_trigger' }, { temp_id: 'step_2', name: 'AI処理', type: 'llm', config: { provider: 'openai', model: 'gpt-4o-mini', user_prompt: '{{$.message}}' } }, { temp_id: 'step_3', name: '結果をログ', type: 'log', config: { message: '処理完了: {{content}}' } }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }] }, 'condition': { description: '条件分岐を含むワークフロー', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual_trigger' }, { temp_id: 'step_2', name: '条件チェック', type: 'condition', config: { expression: '{{value}} > 100' } }, { temp_id: 'step_3', name: '高値処理', type: 'log' }, { temp_id: 'step_4', name: '通常処理', type: 'log' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3', from_port: 'true' }, { from: 'step_2', to: 'step_4', from_port: 'false' }] }, 'integration': { description: '外部連携ワークフロー（Slack通知）', steps: [{ temp_id: 'step_1', name: '開始', type: 'manual_trigger' }, { temp_id: 'step_2', name: 'メッセージ生成', type: 'llm' }, { temp_id: 'step_3', name: 'Slack通知', type: 'slack', config: { channel: '#general' } }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }] }, 'loop': { description: '配列データの並列処理（map/join使用）', steps: [{ temp_id: 'step_1', name: 'トリガー', type: 'manual_trigger' }, { temp_id: 'step_2', name: '配列展開', type: 'map' }, { temp_id: 'step_3', name: '各要素処理', type: 'llm' }, { temp_id: 'step_4', name: '結果集約', type: 'join' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }, { from: 'step_3', to: 'step_4' }] }, 'retry': { description: 'リトライパターン（エラー時の再試行）', steps: [{ temp_id: 'step_1', name: 'トリガー', type: 'manual_trigger' }, { temp_id: 'step_2', name: 'API呼び出し', type: 'http' }, { temp_id: 'step_3', name: '成功チェック', type: 'condition' }, { temp_id: 'step_4', name: '成功処理', type: 'log' }, { temp_id: 'step_5', name: '待機', type: 'delay' }], edges: [{ from: 'step_1', to: 'step_2' }, { from: 'step_2', to: 'step_3' }, { from: 'step_3', to: 'step_4', from_port: 'true' }, { from: 'step_3', to: 'step_5', from_port: 'false' }] } }; const result = []; const intentCategories = { 'create': ['basic', 'integration'], 'enhance': ['condition', 'retry'], 'debug': ['condition', 'retry'], 'general': ['basic'] }; const baseCategories = intentCategories[intent] || ['basic']; for (const cat of baseCategories) { if (examples[cat]) result.push(examples[cat]); } for (const [category, keywords] of Object.entries(keywordToCategory)) { for (const keyword of keywords) { if (message.includes(keyword) && examples[category] && !result.find(e => e.description === examples[category].description)) { result.push(examples[category]); break; } } } return { examples: result.slice(0, 3), count: result.length, intent: intent, matched_keywords: [] };",
 		"description": "Get relevant workflow examples based on intent and keywords in the user message. Returns up to 3 examples that match the context. Use these examples as templates when creating workflows.",
 		"input_schema": {
 			"type": "object",

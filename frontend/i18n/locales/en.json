@@ -404,7 +404,11 @@
     "releaseCreateFailed": "Failed to create release",
     "undo": "Undo",
     "redo": "Redo",
-    "recentActions": "Recent Actions"
+    "recentActions": "Recent Actions",
+    "projectSettings": "Project Settings",
+    "projectName": "Project Name",
+    "projectDescription": "Description",
+    "projectDescriptionPlaceholder": "Enter a description for this project..."
   },
   "projectPicker": {
     "title": "Select Project",
@@ -838,7 +842,8 @@
     "change": {
       "newStep": "New Step",
       "connection": "Connection",
-      "willBeDeleted": "Will be deleted"
+      "willBeDeleted": "Will be deleted",
+      "andMore": "and {count} more settings..."
     },
     "progress": {
       "title": "Workflow Preparation Status",

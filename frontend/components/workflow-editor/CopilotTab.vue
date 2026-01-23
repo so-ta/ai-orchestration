@@ -27,9 +27,17 @@ function renderMarkdown(content: string): string {
   }
 }
 
+// Step type for lookup
+interface StepInfo {
+  id: string
+  name: string
+  type: string
+}
+
 const props = defineProps<{
   workflowId: string
   stepCount?: number
+  steps?: StepInfo[]
 }>()
 
 const emit = defineEmits<{
@@ -392,11 +400,23 @@ const showAgentStreaming = computed(() => {
     agentStreamState.value.error
 })
 
-// Show welcome panel when chat is empty OR workflow has 1 or fewer blocks
+// Build step lookup map for proposal cards
+const stepLookupMap = computed(() => {
+  const map = new Map<string, { name: string; type: string }>()
+  if (props.steps) {
+    for (const step of props.steps) {
+      map.set(step.id, { name: step.name, type: step.type })
+    }
+  }
+  return map
+})
+
+// Show welcome panel only when chat is empty AND workflow has no steps
+// If workflow already has steps, skip the tutorial/welcome panel
 const showWelcomePanel = computed(() => {
   const hasNoChat = chatHistory.value.length === 0
-  const hasMinimalWorkflow = (props.stepCount ?? 0) <= 1
-  return hasNoChat || hasMinimalWorkflow
+  const hasNoSteps = (props.steps?.length ?? 0) === 0
+  return hasNoChat && hasNoSteps
 })
 
 function updateProposalStatus(proposalId: string, status: 'applied' | 'discarded') {
@@ -460,20 +480,6 @@ function handleTestRerun() {
   copilotActions.runTest()
 }
 
-// Template prompt mapping for quick start templates
-const templatePrompts: Record<string, string> = {
-  'webhook-notification': 'Webhookを受信してSlackに通知するワークフローを作成してください',
-  'scheduled-report': '定期的にデータを収集してレポートを生成するワークフローを作成してください',
-  'api-integration': '複数のAPIを連携してデータを同期するワークフローを作成してください',
-  'llm-assistant': 'LLMを使った問い合わせ対応ワークフローを作成してください',
-}
-
-// Handle template selection from CopilotWelcomePanel
-async function handleTemplateSelect(templateId: string) {
-  const prompt = templatePrompts[templateId] || `${templateId}のワークフローを作成してください`
-  chatMessage.value = prompt
-  await sendAgentMessage()
-}
 </script>
 
 <template>
@@ -485,7 +491,6 @@ async function handleTemplateSelect(templateId: string) {
           <CopilotWelcomePanel
             compact
             @submit="handleStructuredPromptSubmit"
-            @select-template="handleTemplateSelect"
           />
         </div>
         <div v-for="(msg, idx) in chatHistory" :key="idx" class="chat-message" :class="msg.role">
@@ -510,7 +515,7 @@ async function handleTemplateSelect(templateId: string) {
           <CopilotInlineAction v-if="msg.inlineAction" :action="msg.inlineAction" @result="(result: InlineActionResult) => handleInlineActionResult(msg.inlineAction!.id, result)"/>
           <CopilotTestResultCard v-if="msg.testResult" :result="msg.testResult" @retest="handleTestRerun" @view-details="() => {}"/>
           <!-- Proposal Card -->
-          <CopilotProposalCard v-if="msg.proposal" :proposal="msg.proposal" :message-id="msg.messageId" @apply="handleApplyProposal" @discard="handleDiscardProposal" @modify="handleModifyProposal"/>
+          <CopilotProposalCard v-if="msg.proposal" :proposal="msg.proposal" :message-id="msg.messageId" :step-lookup="stepLookupMap" @apply="handleApplyProposal" @discard="handleDiscardProposal" @modify="handleModifyProposal"/>
         </div>
 
         <div v-if="showAgentStreaming" class="agent-streaming">

@@ -69,6 +69,20 @@ watch(localConfig, () => {
     debouncedSave()
   }
 }, { deep: true })
+
+// Helper to check if a step has input schema defined
+function hasInputSchema(step: Step): boolean {
+  // Check tool_input_schema field first
+  if (step.tool_input_schema && Object.keys(step.tool_input_schema).length > 0) {
+    return true
+  }
+  // Fallback: check config.input_schema
+  const config = step.config as Record<string, unknown> | undefined
+  if (config?.input_schema && typeof config.input_schema === 'object') {
+    return true
+  }
+  return false
+}
 </script>
 
 <template>
@@ -224,6 +238,10 @@ watch(localConfig, () => {
           <div v-for="step in childSteps" :key="step.id" class="tool-item">
             <Icon name="lucide:function" size="14" />
             <span class="tool-name">{{ step.name }}</span>
+            <span v-if="!hasInputSchema(step)" class="schema-warning" title="Tool has no input schema defined. LLM may not pass correct parameters.">
+              <Icon name="lucide:alert-triangle" size="12" />
+              <span>No Schema</span>
+            </span>
             <span class="tool-type">{{ step.type }}</span>
           </div>
         </div>
@@ -428,6 +446,18 @@ watch(localConfig, () => {
   background: var(--color-bg-tertiary);
   padding: 2px 6px;
   border-radius: 4px;
+}
+
+.schema-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: help;
 }
 
 .tools-empty {

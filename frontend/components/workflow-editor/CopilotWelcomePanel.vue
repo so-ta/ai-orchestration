@@ -8,23 +8,48 @@
  */
 import { useSnippetInput } from '~/composables/useSnippetInput'
 
-defineProps<{
+const props = defineProps<{
   /** Compact mode for smaller spaces like Copilot sidebar */
   compact?: boolean
   /** Show skip to canvas button */
   showSkipButton?: boolean
+  /** Auto focus first input on mount and use case change */
+  autoFocus?: boolean
 }>()
 
 const emit = defineEmits<{
   submit: [prompt: string]
-  selectTemplate: [templateId: string]
   skip: []
 }>()
 
 const { t, locale } = useI18n()
 
-// Tab state
-const activeTab = ref<'prompt' | 'templates'>('prompt')
+// Slot examples data (matching i18n structure but kept here for reliable access)
+const slotExamplesData: Record<string, Record<string, string[]>> = {
+  periodic: {
+    頻度: ['毎朝9時', '毎週月曜', '毎月1日', '毎時'],
+    情報: ['天気予報', '売上サマリー', 'ニュース', 'タスク一覧'],
+    通知先: ['Slack', 'メール', 'LINE', 'Discord'],
+  },
+  event: {
+    サービス: ['GitHub', 'Slack', 'Notion', 'Webhook'],
+    イベント: ['Issueが作成されたら', 'メッセージが来たら', 'ページが更新されたら', 'データが追加されたら'],
+    アクション: ['タスクを作成', '通知を送る', 'データを保存', '分類して振り分け'],
+  },
+  analysis: {
+    データソース: ['売上データ', 'アクセスログ', '顧客データ', 'SNS投稿'],
+    出力先: ['Slack', 'Notion', 'Google Sheets', 'メール'],
+  },
+  sync: {
+    ソース: ['Notion', 'Google Sheets', 'Salesforce', 'Airtable'],
+    データ: ['タスク', '顧客情報', '商品データ', 'スケジュール'],
+    宛先: ['カレンダー', 'CRM', 'Slack', 'データベース'],
+  },
+  aiGenerate: {
+    入力: ['会議メモ', 'キーワード', '要件', 'データ'],
+    成果物: ['議事録', '記事', '提案書', 'サマリー'],
+  },
+}
 
 // Use case keys
 const useCaseKeys = ['periodic', 'event', 'analysis', 'sync', 'aiGenerate', 'freeform'] as const
@@ -32,53 +57,24 @@ type UseCaseKey = (typeof useCaseKeys)[number]
 
 // Use case state
 const selectedUseCase = ref<UseCaseKey>('periodic')
-const slotInputValue = ref('')
-const slotInputRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null)
 
 // Snippet input composable
 const {
   templateParts,
   slots,
-  currentSlotLabel,
   allSlotsFilled,
   hasSlots,
   finalPrompt,
   setTemplate,
   selectSlot,
-  fillCurrentSlot,
+  fillSlot,
   getSlotValue,
   isSlotFilled,
   getSlotIndex,
-  selectNextSlot,
 } = useSnippetInput()
 
-// Pre-defined templates for quick start
-const templates = computed(() => [
-  {
-    id: 'webhook-notification',
-    icon: '&#128276;',
-    title: t('welcomeDialog.templates.webhookNotification.title'),
-    description: t('welcomeDialog.templates.webhookNotification.description'),
-  },
-  {
-    id: 'scheduled-report',
-    icon: '&#128197;',
-    title: t('welcomeDialog.templates.scheduledReport.title'),
-    description: t('welcomeDialog.templates.scheduledReport.description'),
-  },
-  {
-    id: 'api-integration',
-    icon: '&#128640;',
-    title: t('welcomeDialog.templates.apiIntegration.title'),
-    description: t('welcomeDialog.templates.apiIntegration.description'),
-  },
-  {
-    id: 'llm-assistant',
-    icon: '&#129302;',
-    title: t('welcomeDialog.templates.llmAssistant.title'),
-    description: t('welcomeDialog.templates.llmAssistant.description'),
-  },
-])
+// Track focused slot
+const focusedSlot = ref<string | null>(null)
 
 // Use case options for dropdown
 const useCaseOptions = computed(() =>
@@ -88,17 +84,20 @@ const useCaseOptions = computed(() =>
   }))
 )
 
-// Get examples for current slot
-const currentExamples = computed((): string[] => {
-  if (selectedUseCase.value === 'freeform') return []
-  if (!currentSlotLabel.value) return []
 
-  const examplesObj = t(`welcomeDialog.useCases.${selectedUseCase.value}.examples`)
-  if (typeof examplesObj !== 'object' || examplesObj === null) return []
-
-  const examples = (examplesObj as Record<string, string[]>)[currentSlotLabel.value]
-  return Array.isArray(examples) ? examples : []
-})
+// Focus first slot helper
+function focusFirstSlot() {
+  if (!props.autoFocus) return
+  nextTick(() => {
+    const firstSlot = slots.value[0]
+    if (firstSlot) {
+      focusedSlot.value = firstSlot.content
+      nextTick(() => {
+        slotInputRefs.value[firstSlot.content]?.focus()
+      })
+    }
+  })
+}
 
 // Watch for use case changes
 watch(
@@ -109,8 +108,10 @@ watch(
     } else {
       const template = t(`welcomeDialog.useCases.${newCase}.template`) || ''
       setTemplate(template)
+      // Focus first slot when use case changes (after template is set)
+      focusFirstSlot()
     }
-    slotInputValue.value = ''
+    focusedSlot.value = null
   },
   { immediate: true }
 )
@@ -123,13 +124,35 @@ watch(locale, () => {
   }
 })
 
-// Focus input when slot changes
-watch(currentSlotLabel, () => {
-  slotInputValue.value = ''
-  nextTick(() => {
-    const inputEl = Array.isArray(slotInputRef.value) ? slotInputRef.value[0] : slotInputRef.value
-    inputEl?.focus()
-  })
+// Auto focus on mount
+onMounted(() => {
+  if (props.autoFocus && selectedUseCase.value !== 'freeform') {
+    focusFirstSlot()
+  }
+})
+
+// Get the first unfilled slot label for showing examples
+const activeSlotForExamples = computed((): string | null => {
+  // If a slot is focused, use that
+  if (focusedSlot.value) return focusedSlot.value
+  // Otherwise, find the first unfilled slot
+  for (const slot of slots.value) {
+    if (!isSlotFilled(slot.content)) {
+      return slot.content
+    }
+  }
+  return null
+})
+
+// Get examples for the active slot
+const activeSlotExamples = computed((): string[] => {
+  if (selectedUseCase.value === 'freeform') return []
+  if (!activeSlotForExamples.value) return []
+
+  const useCaseExamples = slotExamplesData[selectedUseCase.value]
+  if (!useCaseExamples) return []
+
+  return useCaseExamples[activeSlotForExamples.value] || []
 })
 
 // Handle submit
@@ -140,93 +163,148 @@ function handleSubmit() {
   emit('submit', prompt)
   setTemplate('')
   selectedUseCase.value = 'periodic'
-  slotInputValue.value = ''
+  focusedSlot.value = null
 }
 
 // Flag to prevent blur from interfering with example click
 const isClickingExample = ref(false)
 
-// Handle example click - fill slot and move to next
+// Handle example click - fill the slot and move to next
 function handleExampleClick(example: string) {
+  const slotLabel = activeSlotForExamples.value
+  if (!slotLabel) return
+
   isClickingExample.value = true
-  fillCurrentSlot(example)
-  slotInputValue.value = ''
+  fillSlot(slotLabel, example)
   nextTick(() => {
     isClickingExample.value = false
-    getInputEl()?.focus()
+    // Move to next unfilled slot
+    const currentIdx = getSlotIndex(slotLabel)
+    for (let i = 1; i <= slots.value.length; i++) {
+      const nextIdx = (currentIdx + i) % slots.value.length
+      const nextSlot = slots.value[nextIdx]
+      if (!isSlotFilled(nextSlot.content)) {
+        focusedSlot.value = nextSlot.content
+        nextTick(() => {
+          const inputEl = slotInputRefs.value[nextSlot.content]
+          inputEl?.focus()
+        })
+        return
+      }
+    }
+    // All filled
+    focusedSlot.value = null
   })
 }
 
-// Handle input blur - save value if not empty
-function handleInputBlur() {
-  // Don't process blur if clicking example
-  if (isClickingExample.value) return
-
-  if (slotInputValue.value.trim()) {
-    fillCurrentSlot(slotInputValue.value.trim())
-    slotInputValue.value = ''
-  }
+// Handle slot input change
+function handleSlotInput(label: string, value: string) {
+  fillSlot(label, value)
 }
 
-// Handle slot click - select slot and focus input
-function handleSlotClick(label: string) {
+// Handle slot focus
+function handleSlotFocus(label: string) {
+  focusedSlot.value = label
   const index = getSlotIndex(label)
   if (index >= 0) {
     selectSlot(index)
-    slotInputValue.value = getSlotValue(label) || ''
-    nextTick(() => {
-      // slotInputRef is an array in v-for, get first element
-      const inputEl = Array.isArray(slotInputRef.value) ? slotInputRef.value[0] : slotInputRef.value
-      inputEl?.focus()
-      inputEl?.select()
-    })
   }
 }
 
-// Helper to get input element from ref
-function getInputEl(): HTMLInputElement | null {
-  return Array.isArray(slotInputRef.value) ? slotInputRef.value[0] : slotInputRef.value
+// Handle slot blur
+function handleSlotBlur() {
+  // Don't clear focused slot if clicking example
+  if (isClickingExample.value) return
+  focusedSlot.value = null
 }
 
-// Handle input keydown
-function handleInputKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && slotInputValue.value.trim()) {
+// Refs for all slot inputs
+const slotInputRefs = ref<Record<string, HTMLInputElement | null>>({})
+
+// Set input ref for a slot
+function setSlotInputRef(el: HTMLInputElement | null, label: string) {
+  if (el) {
+    slotInputRefs.value[label] = el
+  }
+}
+
+// Calculate input width based on value or placeholder
+// Japanese characters are roughly 2ch wide, ASCII is 1ch
+function getSlotInputWidth(label: string): string {
+  const value = getSlotValue(label) || ''
+
+  // Calculate width considering character width (Japanese ~2ch, ASCII ~1ch)
+  const calcWidth = (str: string) => {
+    let width = 0
+    for (const char of str) {
+      // Check if character is ASCII (single-byte) or not (multi-byte like Japanese)
+      width += char.charCodeAt(0) > 127 ? 2 : 1
+    }
+    return width
+  }
+
+  const minWidth = calcWidth(label)
+  const contentWidth = calcWidth(value)
+  // Use the larger of placeholder width or value width, plus some padding
+  const width = Math.max(minWidth, contentWidth) + 1
+  return `${width}ch`
+}
+
+// Handle input keydown for a specific slot
+function handleSlotKeydown(e: KeyboardEvent, slotLabel: string) {
+  // Cmd/Ctrl+Enter: always submit
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
-    fillCurrentSlot(slotInputValue.value.trim())
-    slotInputValue.value = ''
+    handleSubmit()
+    return
+  }
+
+  if (e.key === 'Enter') {
+    e.preventDefault()
     // If all slots filled, submit
-    nextTick(() => {
-      if (allSlotsFilled.value) {
-        handleSubmit()
-      } else {
-        getInputEl()?.focus()
+    if (allSlotsFilled.value) {
+      handleSubmit()
+    } else {
+      // Move to next unfilled slot
+      const currentIdx = getSlotIndex(slotLabel)
+      for (let i = 1; i <= slots.value.length; i++) {
+        const nextIdx = (currentIdx + i) % slots.value.length
+        const nextSlot = slots.value[nextIdx]
+        if (!isSlotFilled(nextSlot.content)) {
+          focusedSlot.value = nextSlot.content
+          nextTick(() => {
+            slotInputRefs.value[nextSlot.content]?.focus()
+          })
+          return
+        }
       }
-    })
+    }
   } else if (e.key === 'Tab' && !e.shiftKey) {
     e.preventDefault()
-    if (slotInputValue.value.trim()) {
-      fillCurrentSlot(slotInputValue.value.trim())
-      slotInputValue.value = ''
-    }
-    selectNextSlot()
-    nextTick(() => getInputEl()?.focus())
-  } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    // Move to next slot
+    const currentIdx = getSlotIndex(slotLabel)
+    const nextIdx = (currentIdx + 1) % slots.value.length
+    const nextSlot = slots.value[nextIdx]
+    focusedSlot.value = nextSlot.content
+    nextTick(() => {
+      slotInputRefs.value[nextSlot.content]?.focus()
+    })
+  } else if (e.key === 'Tab' && e.shiftKey) {
     e.preventDefault()
-    if (slotInputValue.value.trim()) {
-      fillCurrentSlot(slotInputValue.value.trim())
-    }
-    nextTick(() => handleSubmit())
+    // Move to previous slot
+    const currentIdx = getSlotIndex(slotLabel)
+    const prevIdx = currentIdx <= 0 ? slots.value.length - 1 : currentIdx - 1
+    const prevSlot = slots.value[prevIdx]
+    focusedSlot.value = prevSlot.content
+    nextTick(() => {
+      slotInputRefs.value[prevSlot.content]?.focus()
+    })
   }
 }
 
 // Handle use case selection
 function handleUseCaseSelect(useCase: UseCaseKey) {
   selectedUseCase.value = useCase
-}
-
-// Handle template selection
-function handleTemplateSelect(templateId: string) {
-  emit('selectTemplate', templateId)
 }
 
 // Handle skip
@@ -237,13 +315,6 @@ function handleSkip() {
 // Check if submit is possible
 const canSubmit = computed(() => {
   return allSlotsFilled.value
-})
-
-// Progress indicator
-const progress = computed(() => {
-  if (!hasSlots.value) return { current: 0, total: 0 }
-  const filled = slots.value.filter((s) => isSlotFilled(s.content)).length
-  return { current: filled, total: slots.value.length }
 })
 
 </script>
@@ -271,36 +342,8 @@ const progress = computed(() => {
       <p class="header-subtitle">{{ t('welcomeDialog.subtitle') }}</p>
     </div>
 
-    <!-- Tab Switcher -->
-    <div class="tab-switcher">
-      <button :class="['tab-btn', { active: activeTab === 'prompt' }]" @click="activeTab = 'prompt'">
-        {{ t('welcomeDialog.tabs.describe') }}
-      </button>
-      <button :class="['tab-btn', { active: activeTab === 'templates' }]" @click="activeTab = 'templates'">
-        {{ t('welcomeDialog.tabs.templates') }}
-      </button>
-    </div>
-
-    <!-- Templates Section -->
-    <div v-if="activeTab === 'templates'" class="templates-section">
-      <div :class="['templates-grid', { compact }]">
-        <button
-          v-for="template in templates"
-          :key="template.id"
-          class="template-card"
-          @click="handleTemplateSelect(template.id)"
-        >
-          <span class="template-icon" v-html="template.icon" />
-          <div class="template-content">
-            <span class="template-title">{{ template.title }}</span>
-            <span class="template-description">{{ template.description }}</span>
-          </div>
-        </button>
-      </div>
-    </div>
-
     <!-- Prompt Section -->
-    <div v-if="activeTab === 'prompt'" class="prompt-section">
+    <div class="prompt-section">
       <!-- Use Case Button Group -->
       <div class="usecase-buttons">
         <button
@@ -315,11 +358,6 @@ const progress = computed(() => {
 
       <!-- Template Builder -->
       <div v-if="selectedUseCase !== 'freeform' && hasSlots" class="template-builder">
-        <!-- Progress Indicator -->
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: `${(progress.current / progress.total) * 100}%` }" />
-        </div>
-
         <!-- Template Display -->
         <div class="template-display">
           <template v-for="(part, idx) in templateParts" :key="idx">
@@ -328,38 +366,34 @@ const progress = computed(() => {
               {{ part.content }}
             </span>
 
-            <!-- Slot: Input when active, Chip when inactive -->
-            <template v-else>
-              <!-- Active Slot: Show Input -->
-              <input
-                v-if="currentSlotLabel === part.content"
-                ref="slotInputRef"
-                v-model="slotInputValue"
-                type="text"
-                class="slot-inline-input"
-                :placeholder="part.content"
-                @keydown="handleInputKeydown"
-                @blur="handleInputBlur"
-              >
-              <!-- Inactive Slot: Show Chip -->
-              <button
-                v-else
-                :class="['slot-chip', { 'slot-filled': isSlotFilled(part.content) }]"
-                @click="handleSlotClick(part.content)"
-              >
-                <span class="slot-value">
-                  {{ getSlotValue(part.content) || part.content }}
-                </span>
-              </button>
-            </template>
+            <!-- Slot: Always show as input -->
+            <input
+              v-else
+              :ref="(el) => setSlotInputRef(el as HTMLInputElement, part.content)"
+              type="text"
+              :class="[
+                'slot-input',
+                {
+                  'slot-input--filled': isSlotFilled(part.content),
+                  'slot-input--focused': focusedSlot === part.content,
+                },
+              ]"
+              :style="{ width: getSlotInputWidth(part.content) }"
+              :value="getSlotValue(part.content) || ''"
+              :placeholder="focusedSlot === part.content ? '' : part.content"
+              @input="handleSlotInput(part.content, ($event.target as HTMLInputElement).value)"
+              @focus="handleSlotFocus(part.content)"
+              @blur="handleSlotBlur"
+              @keydown="handleSlotKeydown($event, part.content)"
+            >
           </template>
         </div>
 
         <!-- Examples for Active Slot -->
-        <div v-if="currentSlotLabel && currentExamples.length > 0" class="examples-section">
+        <div v-if="activeSlotForExamples && activeSlotExamples.length > 0" class="examples-section">
           <div class="examples-list">
             <button
-              v-for="(example, idx) in currentExamples"
+              v-for="(example, idx) in activeSlotExamples"
               :key="idx"
               class="example-chip"
               @mousedown.prevent
@@ -475,145 +509,6 @@ const progress = computed(() => {
   line-height: 1.4;
 }
 
-/* Tab Switcher */
-.tab-switcher {
-  display: flex;
-  gap: 0.5rem;
-  padding: 4px;
-  background: var(--color-background);
-  border-radius: 10px;
-}
-
-.compact .tab-switcher {
-  gap: 0.375rem;
-  padding: 3px;
-  border-radius: 8px;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 0.625rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.compact .tab-btn {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
-  border-radius: 6px;
-}
-
-.tab-btn:hover {
-  color: var(--color-text);
-}
-
-.tab-btn.active {
-  background: white;
-  color: var(--color-text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.compact .tab-btn.active {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* Templates Section */
-.templates-section {
-  margin-bottom: 0.25rem;
-}
-
-.templates-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
-}
-
-.templates-grid.compact {
-  grid-template-columns: 1fr;
-  gap: 0.5rem;
-}
-
-.template-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s;
-}
-
-.compact .template-card {
-  gap: 0.625rem;
-  padding: 0.75rem;
-  border-radius: 10px;
-}
-
-.template-card:hover {
-  border-color: var(--color-primary);
-  background: white;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.compact .template-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-.template-icon {
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
-.compact .template-icon {
-  font-size: 1.25rem;
-}
-
-.template-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.compact .template-content {
-  gap: 0.125rem;
-}
-
-.template-title {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.compact .template-title {
-  font-size: 0.8125rem;
-}
-
-.template-description {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-}
-
-.compact .template-description {
-  font-size: 0.6875rem;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
 /* Prompt Section */
 .prompt-section {
   display: flex;
@@ -669,36 +564,22 @@ const progress = computed(() => {
   gap: 0.75rem;
 }
 
-.progress-bar {
-  height: 4px;
-  background: var(--color-border);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), #8b5cf6);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
 .template-display {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   gap: 0.25rem;
   padding: 1rem;
   background: var(--color-background);
   border-radius: 12px;
   font-size: 0.9375rem;
-  line-height: 2;
+  line-height: 2.2;
 }
 
 .compact .template-display {
   padding: 0.75rem;
   font-size: 0.8125rem;
-  line-height: 1.8;
+  line-height: 2;
 }
 
 .template-text {
@@ -706,76 +587,42 @@ const progress = computed(() => {
   white-space: pre;
 }
 
-.slot-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-primary);
-  background: white;
-  border: 2px dashed var(--color-primary);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.compact .slot-chip {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-}
-
-.slot-chip:hover {
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.slot-chip.slot-filled {
-  color: var(--color-text);
-  background: white;
-  border: 2px solid var(--color-success, #10b981);
-}
-
-.slot-value {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compact .slot-value {
-  max-width: 100px;
-}
-
-/* Inline Slot Input - matches slot-chip size */
-.slot-inline-input {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
+/* Slot Input - unified input style for all states */
+.slot-input {
+  padding: 0.375rem 0.625rem;
+  font-size: inherit;
   font-weight: 500;
   font-family: inherit;
   color: var(--color-primary);
   background: white;
-  border: 2px solid var(--color-primary);
-  border-radius: 8px;
+  border: 1.5px dashed var(--color-primary);
+  border-radius: 6px;
   outline: none;
-  min-width: 80px;
-  max-width: 200px;
   box-sizing: border-box;
-  transition: box-shadow 0.15s;
+  transition:
+    border 0.15s,
+    box-shadow 0.15s,
+    color 0.15s,
+    width 0.1s;
 }
 
-.compact .slot-inline-input {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  min-width: 60px;
-  max-width: 150px;
+.compact .slot-input {
+  padding: 0.125rem 0.375rem;
 }
 
-.slot-inline-input:focus {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+/* Filled: solid border */
+.slot-input--filled {
+  color: var(--color-text);
+  border: 1.5px solid var(--color-primary);
 }
 
-.slot-inline-input::placeholder {
+/* Focused: solid primary border with shadow */
+.slot-input--focused {
+  border: 1.5px solid var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.slot-input::placeholder {
   color: var(--color-text-tertiary);
   font-weight: 400;
 }

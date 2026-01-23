@@ -6,9 +6,17 @@ import {
 import { useBottomOffset } from '~/composables/useFloatingLayout'
 import type { ProposalChange } from './CopilotProposalCard.vue'
 
+// Step type for lookup
+interface StepInfo {
+  id: string
+  name: string
+  type: string
+}
+
 const props = defineProps<{
   workflowId: string
   stepCount?: number
+  steps?: StepInfo[]
 }>()
 
 const emit = defineEmits<{
@@ -107,9 +115,12 @@ function handleWorkflowUpdated() {
 
         <!-- Copilot Content -->
         <div class="sidebar-body">
+          <!-- key ensures CopilotTab is NOT remounted when steps/stepCount change within same workflow -->
           <CopilotTab
+            :key="props.workflowId"
             :workflow-id="props.workflowId"
             :step-count="props.stepCount"
+            :steps="props.steps"
             @changes:applied="handleChangesApplied"
             @changes:preview="handleChangesPreview"
             @workflow:updated="handleWorkflowUpdated"

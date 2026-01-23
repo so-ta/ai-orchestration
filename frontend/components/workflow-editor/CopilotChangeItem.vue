@@ -13,8 +13,15 @@ import type { ProposalChange } from './CopilotProposalCard.vue'
 
 const { t } = useI18n()
 
+// Step lookup info type
+export interface StepLookupInfo {
+  name: string
+  type: string
+}
+
 const props = defineProps<{
   change: ProposalChange
+  stepLookup?: Map<string, StepLookupInfo>
 }>()
 
 // Get display class for change type
@@ -51,15 +58,21 @@ const iconType = computed(() => {
   }
 })
 
+// Get step name from lookup
+function getStepName(stepId: string): string {
+  const stepInfo = props.stepLookup?.get(stepId)
+  return stepInfo?.name || truncateId(stepId)
+}
+
 // Get primary label
 const label = computed(() => {
   switch (props.change.type) {
     case 'step:create':
       return props.change.name || t('copilot.change.newStep')
     case 'step:update':
-      return truncateId(props.change.step_id || '')
+      return getStepName(props.change.step_id || '')
     case 'step:delete':
-      return truncateId(props.change.step_id || '')
+      return getStepName(props.change.step_id || '')
     case 'edge:create':
       return t('copilot.change.connection')
     case 'edge:delete':
@@ -93,13 +106,25 @@ function truncateId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id
 }
 
-// Helper: get step type label
+// Helper: get step type label with human-readable formatting
 function getStepTypeLabel(stepType: string): string {
   if (!stepType) return ''
-  // Try to get translated label, fallback to stepType
+  // Try to get translated label first
   const key = `blockTypes.${stepType}`
   const translated = t(key)
-  return translated !== key ? translated : stepType
+  if (translated !== key) return translated
+  // Fallback: format slug to human-readable text
+  // discord_send_message → Discord Send Message
+  return formatBlockSlug(stepType)
+}
+
+// Helper: format block slug to human-readable text
+function formatBlockSlug(slug: string): string {
+  if (!slug) return ''
+  return slug
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
 }
 
 // Helper: format patch object for display
@@ -118,21 +143,31 @@ const hasConfigPreview = computed(() => {
   return props.change.type === 'step:create' && props.change.config
 })
 
-// Get config preview items (limited)
+// Maximum items to show in preview
+const MAX_PREVIEW_ITEMS = 5
+const MAX_VALUE_LENGTH = 50
+
+// Get config preview items (limited to 5 items)
 const configPreviewItems = computed(() => {
   if (!hasConfigPreview.value || !props.change.config) return []
   const entries = Object.entries(props.change.config)
-  return entries.slice(0, 3).map(([key, value]) => ({
+  return entries.slice(0, MAX_PREVIEW_ITEMS).map(([key, value]) => ({
     key,
-    value: formatConfigValue(value),
+    value: formatConfigValue(value, MAX_VALUE_LENGTH),
   }))
 })
 
+// Count remaining config items not shown
+const remainingConfigCount = computed(() => {
+  if (!props.change.config) return 0
+  return Math.max(0, Object.keys(props.change.config).length - MAX_PREVIEW_ITEMS)
+})
+
 // Helper: format config value for display
-function formatConfigValue(value: unknown): string {
+function formatConfigValue(value: unknown, maxLength = 50): string {
   if (value === null || value === undefined) return 'null'
   if (typeof value === 'string') {
-    return value.length > 30 ? value.slice(0, 30) + '...' : value
+    return value.length > maxLength ? value.slice(0, maxLength) + '...' : value
   }
   if (typeof value === 'number' || typeof value === 'boolean') {
     return String(value)
@@ -145,10 +180,31 @@ function formatConfigValue(value: unknown): string {
   }
   return String(value)
 }
+
+// Expand/Collapse state
+const isExpanded = ref(false)
+
+// Check if this item has expandable details
+const hasDetails = computed(() => {
+  return props.change.type === 'step:create' && props.change.config && Object.keys(props.change.config).length > 0
+})
+
+// Formatted config for expanded view
+const formattedConfig = computed(() => {
+  if (!props.change.config) return ''
+  return JSON.stringify(props.change.config, null, 2)
+})
+
+// Toggle expand state
+function toggleExpand() {
+  if (hasDetails.value) {
+    isExpanded.value = !isExpanded.value
+  }
+}
 </script>
 
 <template>
-  <div class="change-item" :class="changeClass">
+  <div class="change-item" :class="[changeClass, { expanded: isExpanded, clickable: hasDetails }]" @click="toggleExpand">
     <span class="change-icon">
       <!-- Plus icon -->
       <svg v-if="iconType === 'plus'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -178,13 +234,21 @@ function formatConfigValue(value: unknown): string {
     </span>
 
     <div class="change-content">
-      <div class="change-main">
-        <span class="change-label">{{ label }}</span>
-        <span v-if="detail" class="change-detail">{{ detail }}</span>
+      <div class="change-header">
+        <div class="change-main">
+          <span class="change-label">{{ label }}</span>
+          <span v-if="detail" class="change-detail">{{ detail }}</span>
+        </div>
+        <!-- Expand toggle button -->
+        <button v-if="hasDetails" class="expand-toggle" @click.stop="toggleExpand">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" :class="{ rotated: isExpanded }">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
       </div>
 
-      <!-- Config preview for step:create -->
-      <div v-if="hasConfigPreview && configPreviewItems.length > 0" class="config-preview">
+      <!-- Config preview for step:create (collapsed view) -->
+      <div v-if="hasConfigPreview && configPreviewItems.length > 0 && !isExpanded" class="config-preview">
         <div
           v-for="item in configPreviewItems"
           :key="item.key"
@@ -193,7 +257,17 @@ function formatConfigValue(value: unknown): string {
           <span class="config-key">{{ item.key }}:</span>
           <span class="config-value">{{ item.value }}</span>
         </div>
+        <div v-if="remainingConfigCount > 0" class="config-more">
+          {{ t('copilot.change.andMore', { count: remainingConfigCount }) }}
+        </div>
       </div>
+
+      <!-- Expanded config details -->
+      <Transition name="expand">
+        <div v-if="isExpanded && hasDetails" class="change-details">
+          <pre class="config-json">{{ formattedConfig }}</pre>
+        </div>
+      </Transition>
     </div>
   </div>
 </template>
@@ -206,6 +280,15 @@ function formatConfigValue(value: unknown): string {
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   font-size: 0.8125rem;
+  transition: background 0.15s ease;
+}
+
+.change-item.clickable {
+  cursor: pointer;
+}
+
+.change-item.clickable:hover {
+  filter: brightness(0.97);
 }
 
 .change-item.added {
@@ -252,11 +335,20 @@ function formatConfigValue(value: unknown): string {
   min-width: 0;
 }
 
+.change-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .change-main {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .change-label {
@@ -268,6 +360,36 @@ function formatConfigValue(value: unknown): string {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   margin-left: auto;
+}
+
+/* Expand toggle */
+.expand-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.expand-toggle:hover {
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.expand-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.expand-toggle svg.rotated {
+  transform: rotate(180deg);
 }
 
 /* Config preview */
@@ -289,6 +411,7 @@ function formatConfigValue(value: unknown): string {
 
 .config-key {
   color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 .config-value {
@@ -296,5 +419,53 @@ function formatConfigValue(value: unknown): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.config-more {
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  margin-top: 0.125rem;
+}
+
+/* Expanded details */
+.change-details {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border);
+}
+
+.config-json {
+  margin: 0;
+  padding: 0.5rem;
+  background: var(--color-background);
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--color-text);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Expand transition */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  opacity: 1;
+  max-height: 300px;
 }
 </style>

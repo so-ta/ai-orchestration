@@ -12,8 +12,10 @@
 import type { Project } from '~/types/api'
 import { onClickOutside } from '@vueuse/core'
 import UndoRedoControls from './UndoRedoControls.vue'
+import ProjectSettingsModal from './ProjectSettingsModal.vue'
 
 const { t } = useI18n()
+const projectsApi = useProjects()
 
 const props = defineProps<{
   project: Project | null
@@ -29,6 +31,7 @@ const emit = defineEmits<{
   openVariables: []
   selectProject: [id: string]
   createProject: []
+  updateProject: [data: { name: string; description: string }]
 }>()
 
 // Tools menu state
@@ -40,6 +43,9 @@ const showProjectPicker = ref(false)
 
 // Run history modal state
 const showRunHistory = ref(false)
+
+// Project settings modal state
+const showProjectSettings = ref(false)
 
 // Close menu when clicking outside
 onClickOutside(toolsMenuRef, () => {
@@ -68,6 +74,21 @@ function handleOpenHistory() {
 function handleOpenVariables() {
   emit('openVariables')
   showToolsMenu.value = false
+}
+
+function handleOpenProjectSettings() {
+  showProjectSettings.value = true
+  showToolsMenu.value = false
+}
+
+async function handleProjectSettingsSave(data: { name: string; description: string }) {
+  if (!props.project) return
+  try {
+    await projectsApi.update(props.project.id, data)
+    emit('updateProject', data)
+  } finally {
+    showProjectSettings.value = false
+  }
 }
 
 // Save status display
@@ -113,6 +134,14 @@ const saveStatusText = computed(() => {
       <!-- Tools Menu Dropdown -->
       <Transition name="dropdown">
         <div v-if="showToolsMenu" class="tools-menu">
+          <button class="menu-item" @click="handleOpenProjectSettings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            {{ t('editor.projectSettings') }}
+          </button>
+          <div class="menu-divider" />
           <button class="menu-item" @click="handleCreateRelease">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
@@ -169,6 +198,14 @@ const saveStatusText = computed(() => {
       :show="showRunHistory"
       :project-id="project?.id"
       @close="showRunHistory = false"
+    />
+
+    <!-- Project Settings Modal -->
+    <ProjectSettingsModal
+      :show="showProjectSettings"
+      :project="project"
+      @close="showProjectSettings = false"
+      @save="handleProjectSettingsSave"
     />
   </header>
 </template>

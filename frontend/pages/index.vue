@@ -292,6 +292,13 @@ async function handleCreateProject() {
   }
 }
 
+// Update project name/description
+function handleUpdateProject(data: { name: string; description: string }) {
+  if (!project.value) return
+  project.value.name = data.name
+  project.value.description = data.description
+}
+
 // Trigger block mapping: block slug -> trigger_type
 const triggerBlockMap: Record<string, 'manual' | 'webhook' | 'schedule'> = {
   'manual_trigger': 'manual',
@@ -1558,6 +1565,96 @@ async function handleAutoLayout() {
   }
 }
 
+// Layout only specific steps (for Copilot-created steps)
+// Positions new steps relative to their source steps without affecting existing layout
+async function layoutNewSteps(newStepIds: string[]) {
+  if (!project.value || newStepIds.length === 0) return
+
+  const steps = project.value.steps || []
+  const edges = project.value.edges || []
+
+  const STEP_SPACING_X = 200
+  const STEP_SPACING_Y = 100
+  const DEFAULT_X = 200
+  const DEFAULT_Y = 200
+
+  // Build a map of step positions
+  const stepPositions = new Map<string, { x: number; y: number }>()
+  for (const step of steps) {
+    stepPositions.set(step.id, { x: step.position_x, y: step.position_y })
+  }
+
+  // Build a map of incoming edges for each step
+  const incomingEdges = new Map<string, { sourceId: string; port: string }[]>()
+  for (const edge of edges) {
+    if (!edge.target_step_id || !edge.source_step_id) continue
+    const incoming = incomingEdges.get(edge.target_step_id) || []
+    incoming.push({ sourceId: edge.source_step_id, port: edge.source_port || 'output' })
+    incomingEdges.set(edge.target_step_id, incoming)
+  }
+
+  // Calculate positions for new steps
+  const updates: { stepId: string; x: number; y: number }[] = []
+
+  for (const stepId of newStepIds) {
+    const incoming = incomingEdges.get(stepId) || []
+
+    if (incoming.length === 0) {
+      // No source - place at default position (this is likely a trigger)
+      // Find rightmost existing position to avoid overlap
+      let maxX = 0
+      for (const pos of stepPositions.values()) {
+        if (pos.x > maxX) maxX = pos.x
+      }
+      const newPos = { x: maxX > 0 ? maxX + STEP_SPACING_X : DEFAULT_X, y: DEFAULT_Y }
+      stepPositions.set(stepId, newPos)
+      updates.push({ stepId, ...newPos })
+    } else {
+      // Has source(s) - position relative to the first source
+      const sourcePos = stepPositions.get(incoming[0].sourceId)
+      if (sourcePos) {
+        // Count how many steps already connect from this source at this level
+        let offsetY = 0
+        for (const [id, pos] of stepPositions.entries()) {
+          if (id !== stepId && Math.abs(pos.x - (sourcePos.x + STEP_SPACING_X)) < 50) {
+            // Step at same X level - check Y offset
+            if (pos.y >= sourcePos.y) {
+              offsetY = Math.max(offsetY, pos.y - sourcePos.y + STEP_SPACING_Y)
+            }
+          }
+        }
+        const newPos = { x: sourcePos.x + STEP_SPACING_X, y: sourcePos.y + offsetY }
+        stepPositions.set(stepId, newPos)
+        updates.push({ stepId, ...newPos })
+      } else {
+        // Fallback
+        const newPos = { x: DEFAULT_X, y: DEFAULT_Y }
+        stepPositions.set(stepId, newPos)
+        updates.push({ stepId, ...newPos })
+      }
+    }
+  }
+
+  // Apply updates
+  try {
+    for (const update of updates) {
+      // Update local state
+      const step = project.value.steps?.find(s => s.id === update.stepId)
+      if (step) {
+        step.position_x = update.x
+        step.position_y = update.y
+      }
+
+      // Persist to backend
+      await projects.updateStep(project.value.id, update.stepId, {
+        position: { x: update.x, y: update.y },
+      })
+    }
+  } catch (e) {
+    console.error('Failed to layout new steps:', e)
+  }
+}
+
 // Zoom handlers
 function handleZoomIn() {
   dagEditorRef.value?.zoomIn()
@@ -1718,6 +1815,12 @@ async function handleCopilotChangesApplied(changes: ProposalChange[]) {
           showSetupWizard.value = true
         })
       }
+    }
+
+    // 7. Layout only the newly created steps
+    if (creates.length > 0) {
+      const newStepIds = Array.from(tempIdToRealId.values())
+      await layoutNewSteps(newStepIds)
     }
 
   } catch (e) {
@@ -1918,6 +2021,7 @@ onMounted(async () => {
         @open-variables="showVariablesModal = true"
         @select-project="handleSelectProject"
         @create-project="handleCreateProject"
+        @update-project="handleUpdateProject"
       />
 
       <!-- Release Modal (with integrated publish checklist) -->
@@ -2056,6 +2160,7 @@ onMounted(async () => {
       <CopilotSidebar
         :workflow-id="project.id"
         :step-count="project.steps?.length ?? 0"
+        :steps="project.steps || []"
         @changes:applied="handleCopilotChangesApplied"
         @changes:preview="handleCopilotChangesPreview"
         @workflow:updated="handleWorkflowUpdated"

@@ -144,6 +144,82 @@ func TestChainBuilder_BuildToolChains(t *testing.T) {
 		assert.Equal(t, "search_blocks", tc.ToolName)
 		assert.Equal(t, "search_blocks", tc.Description)
 	})
+
+	t.Run("fallback to config.input_schema when ToolInputSchema is empty", func(t *testing.T) {
+		// This tests the fallback behavior for steps like copilot.go tools
+		// where input_schema is defined inside Config instead of ToolInputSchema field
+		step1 := &domain.Step{
+			ID:           uuid.New(),
+			Name:         "get_block_schema",
+			BlockGroupID: &groupID,
+			Config: json.RawMessage(`{
+				"code": "return ctx.blocks.getWithSchema(input.slug);",
+				"description": "Get the detailed configuration schema for a specific block",
+				"input_schema": {
+					"type": "object",
+					"required": ["slug"],
+					"properties": {
+						"slug": {"type": "string", "description": "The block's slug identifier"}
+					}
+				}
+			}`),
+		}
+
+		cb := NewChainBuilder([]*domain.Step{step1}, nil)
+		toolChains := cb.BuildToolChains(groupID)
+
+		require.Len(t, toolChains, 1)
+		tc := toolChains[0]
+
+		assert.Equal(t, "get_block_schema", tc.ToolName)
+		assert.NotNil(t, tc.InputSchema, "InputSchema should be extracted from config.input_schema")
+
+		// Verify the schema content
+		schemaBytes, ok := tc.InputSchema.(json.RawMessage)
+		require.True(t, ok, "InputSchema should be json.RawMessage")
+
+		var schema map[string]interface{}
+		err := json.Unmarshal(schemaBytes, &schema)
+		require.NoError(t, err)
+
+		assert.Equal(t, "object", schema["type"])
+		required, ok := schema["required"].([]interface{})
+		require.True(t, ok)
+		assert.Contains(t, required, "slug")
+	})
+
+	t.Run("ToolInputSchema takes precedence over config.input_schema", func(t *testing.T) {
+		// When both are defined, ToolInputSchema should be used
+		step1 := &domain.Step{
+			ID:              uuid.New(),
+			Name:            "test_tool",
+			BlockGroupID:    &groupID,
+			ToolInputSchema: json.RawMessage(`{"type": "object", "required": ["explicit_field"]}`),
+			Config: json.RawMessage(`{
+				"input_schema": {
+					"type": "object",
+					"required": ["config_field"]
+				}
+			}`),
+		}
+
+		cb := NewChainBuilder([]*domain.Step{step1}, nil)
+		toolChains := cb.BuildToolChains(groupID)
+
+		require.Len(t, toolChains, 1)
+		tc := toolChains[0]
+
+		schemaBytes, ok := tc.InputSchema.(json.RawMessage)
+		require.True(t, ok)
+
+		var schema map[string]interface{}
+		err := json.Unmarshal(schemaBytes, &schema)
+		require.NoError(t, err)
+
+		required, ok := schema["required"].([]interface{})
+		require.True(t, ok)
+		assert.Contains(t, required, "explicit_field", "Should use ToolInputSchema, not config.input_schema")
+	})
 }
 
 func TestChainBuilder_ValidateEntryPointCount(t *testing.T) {

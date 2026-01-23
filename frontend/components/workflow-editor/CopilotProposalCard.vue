@@ -9,7 +9,7 @@
  * - Apply/Modify/Discard buttons
  * - Status indicator (applied/discarded)
  */
-import CopilotChangeItem from './CopilotChangeItem.vue'
+import CopilotChangeItem, { type StepLookupInfo } from './CopilotChangeItem.vue'
 
 const { t } = useI18n()
 
@@ -43,6 +43,7 @@ export interface Proposal {
 const props = defineProps<{
   proposal: Proposal
   messageId?: string
+  stepLookup?: Map<string, StepLookupInfo>
 }>()
 
 const emit = defineEmits<{
@@ -164,6 +165,7 @@ watch(() => props.proposal.status, (newStatus) => {
         v-for="(change, idx) in proposal.changes"
         :key="idx"
         :change="change"
+        :step-lookup="stepLookup"
       />
     </div>
 

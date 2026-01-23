@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"encoding/json"
+
 	"github.com/google/uuid"
 	"github.com/souta/ai-orchestration/internal/domain"
 )
@@ -155,9 +157,20 @@ func (cb *ChainBuilder) BuildToolChains(groupID uuid.UUID) []*ToolChain {
 		}
 
 		// Get input schema
+		// Priority: ToolInputSchema field > Config.input_schema
 		var inputSchema interface{}
 		if len(ep.ToolInputSchema) > 0 {
 			inputSchema = ep.ToolInputSchema
+		} else if len(ep.Config) > 0 {
+			// Fallback: extract input_schema from config
+			var configMap map[string]interface{}
+			if err := json.Unmarshal(ep.Config, &configMap); err == nil {
+				if schema, ok := configMap["input_schema"]; ok {
+					if schemaBytes, err := json.Marshal(schema); err == nil {
+						inputSchema = json.RawMessage(schemaBytes)
+					}
+				}
+			}
 		}
 
 		toolChains = append(toolChains, &ToolChain{

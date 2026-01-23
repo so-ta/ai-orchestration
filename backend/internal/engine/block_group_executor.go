@@ -885,23 +885,37 @@ func (e *BlockGroupExecutor) executeAgent(ctx context.Context, bgCtx *BlockGroup
 			var toolResult interface{}
 			var isError bool
 			if toolChain, ok := toolChainMap[toolName]; ok {
-				toolInput, _ := json.Marshal(toolArgs)
-				output, err := e.executeToolChain(ctx, bgCtx, toolChain, toolInput)
-				if err != nil {
+				// Validate tool arguments against schema before execution
+				if validationErr := validateToolArgs(toolArgs, toolChain.InputSchema); validationErr != nil {
+					e.logger.Warn("Tool argument validation failed",
+						"tool_name", toolName,
+						"missing_fields", validationErr.MissingFields,
+					)
 					toolResult = map[string]interface{}{
-						"error": err.Error(),
+						"error":          validationErr.Message,
+						"missing_fields": validationErr.MissingFields,
+						"suggestion":     "Please provide all required parameters and retry the tool call.",
 					}
 					isError = true
 				} else {
-					if err := json.Unmarshal(output, &toolResult); err != nil {
-						toolResult = string(output)
-					}
-					// Check if the tool output contains an error field
-					// This handles cases where the tool execution succeeded but returned an error message
-					// (e.g., validation errors from create_step like "project_id, name, and type are required")
-					if resultMap, ok := toolResult.(map[string]interface{}); ok {
-						if _, hasError := resultMap["error"]; hasError {
-							isError = true
+					toolInput, _ := json.Marshal(toolArgs)
+					output, err := e.executeToolChain(ctx, bgCtx, toolChain, toolInput)
+					if err != nil {
+						toolResult = map[string]interface{}{
+							"error": err.Error(),
+						}
+						isError = true
+					} else {
+						if err := json.Unmarshal(output, &toolResult); err != nil {
+							toolResult = string(output)
+						}
+						// Check if the tool output contains an error field
+						// This handles cases where the tool execution succeeded but returned an error message
+						// (e.g., validation errors from create_step like "project_id, name, and type are required")
+						if resultMap, ok := toolResult.(map[string]interface{}); ok {
+							if _, hasError := resultMap["error"]; hasError {
+								isError = true
+							}
 						}
 					}
 				}
@@ -1197,4 +1211,62 @@ func (e *BlockGroupExecutor) buildToolsFromSteps(steps []*domain.Step, bgCtx *Bl
 	}
 
 	return tools
+}
+
+// SchemaValidationError represents an error from validating tool arguments against a schema
+type SchemaValidationError struct {
+	Message       string   `json:"message"`
+	MissingFields []string `json:"missing_fields,omitempty"`
+	InvalidFields []string `json:"invalid_fields,omitempty"`
+}
+
+func (e *SchemaValidationError) Error() string {
+	return e.Message
+}
+
+// validateToolArgs validates tool arguments against a JSON Schema
+// Returns nil if validation passes, or a SchemaValidationError if validation fails
+func validateToolArgs(args map[string]interface{}, schema interface{}) *SchemaValidationError {
+	if schema == nil {
+		return nil
+	}
+
+	// Parse schema
+	var schemaMap map[string]interface{}
+	switch s := schema.(type) {
+	case map[string]interface{}:
+		schemaMap = s
+	case json.RawMessage:
+		if err := json.Unmarshal(s, &schemaMap); err != nil {
+			return nil // Can't parse schema, skip validation
+		}
+	default:
+		return nil // Unknown schema type, skip validation
+	}
+
+	// Check required fields
+	var missingFields []string
+	if required, ok := schemaMap["required"].([]interface{}); ok {
+		for _, req := range required {
+			fieldName, ok := req.(string)
+			if !ok {
+				continue
+			}
+			if _, exists := args[fieldName]; !exists {
+				missingFields = append(missingFields, fieldName)
+			} else if args[fieldName] == nil || args[fieldName] == "" {
+				// Also treat null or empty string as missing for required fields
+				missingFields = append(missingFields, fieldName)
+			}
+		}
+	}
+
+	if len(missingFields) > 0 {
+		return &SchemaValidationError{
+			Message:       fmt.Sprintf("Missing required fields: %s", strings.Join(missingFields, ", ")),
+			MissingFields: missingFields,
+		}
+	}
+
+	return nil
 }

@@ -15,7 +15,6 @@ const emit = defineEmits<{
   close: []
   submit: [prompt: string]
   skipToCanvas: []
-  selectTemplate: [templateId: string]
 }>()
 
 function handleSubmit(prompt: string) {
@@ -25,21 +24,23 @@ function handleSubmit(prompt: string) {
 function handleSkip() {
   emit('skipToCanvas')
 }
-
-function handleTemplateSelect(templateId: string) {
-  emit('selectTemplate', templateId)
-}
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="dialog">
-      <div v-if="show" class="welcome-dialog-overlay" @click.self="handleSkip">
+      <div v-if="show" class="welcome-dialog-overlay">
         <div class="welcome-dialog">
+          <button class="close-button" type="button" @click="handleSkip">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
           <CopilotWelcomePanel
             show-skip-button
+            auto-focus
             @submit="handleSubmit"
-            @select-template="handleTemplateSelect"
             @skip="handleSkip"
           />
         </div>
@@ -62,12 +63,35 @@ function handleTemplateSelect(templateId: string) {
 }
 
 .welcome-dialog {
+  position: relative;
   width: 100%;
   max-width: 580px;
   background: white;
   border-radius: 16px;
   padding: 2rem;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.close-button {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.close-button:hover {
+  background: var(--color-background);
+  color: var(--color-text);
 }
 
 /* Dialog Transition */
